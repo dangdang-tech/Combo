@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agora · Creator Builder</title>
+<style>
+:root{--ink:#14141A;--ink80:rgba(20,20,26,.82);--ink60:#6F6860;--ink40:rgba(20,20,26,.4);--ember:#A73718;--ember-soft:rgba(167,55,24,.08);--neutral:#F7F3EC;--paper:#FBF9F4;--muted:#F4F0E7;--raised:#FFFDF9;--line:#E1D8CA;--success:#0E6D52;--gold:#B8893A;--serif:"Georgia","Noto Serif SC",serif;--sans:-apple-system,"PingFang SC",sans-serif;--mono:ui-monospace,Menlo,monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);background:var(--neutral);color:var(--ink);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.serif{font-family:var(--serif)}.mono{font-family:var(--mono)}
+/* top bar */
+.top{height:62px;background:var(--paper);border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 32px;position:sticky;top:0;z-index:20}
+.top .wm{font-family:var(--serif);font-size:20px;color:var(--ember)}
+.top .sep{color:var(--ink40);margin:0 12px}.top .cb{font-size:15px;font-weight:600}
+.top .right{margin-left:auto;display:flex;align-items:center;gap:14px}
+.top .save{border:1px solid var(--line);background:var(--raised);border-radius:7px;padding:7px 14px;font-size:12.5px;cursor:pointer}
+.top .av{width:32px;height:32px;border-radius:50%;background:var(--ember);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px}
+.wrap{max-width:1000px;margin:0 auto;padding:30px 32px 70px}
+/* rail */
+.rail{display:flex;align-items:center;margin-bottom:30px}
+.rstep{display:flex;align-items:center;gap:8px}.rline{flex:1;height:1px;background:var(--line);margin:0 6px}
+.rdot{width:26px;height:26px;border-radius:50%;background:var(--raised);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:12px;flex:none;color:var(--ink60)}
+.rstep.on .rdot{background:var(--ember);color:#fff;border-color:var(--ember)}
+.rstep.done .rdot{background:var(--ember);color:#fff;border-color:var(--ember);opacity:.55}
+.rlabel{font-size:13px;color:var(--ink60)}.rstep.on .rlabel{color:var(--ink);font-weight:600}
+/* step */
+.eyebrow{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--ember);margin-bottom:8px}
+h1{font-family:var(--serif);font-size:34px;font-weight:400;line-height:1.25}
+.lede{color:var(--ink60);margin-top:8px;font-size:14px;max-width:640px}
+.imported{display:flex;align-items:center;gap:14px;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-top:22px}
+.imported .ck{width:34px;height:34px;border-radius:50%;background:var(--success);color:#fff;display:flex;align-items:center;justify-content:center;flex:none}
+.imported .it b{font-size:15px}.imported .it div{font-size:12.5px;color:var(--ink60)}
+.imported .re{margin-left:auto;color:var(--ember);font-size:12.5px;cursor:pointer;font-weight:600}
+.lbl{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--ink40);margin:24px 0 10px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.stat{background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:16px}
+.stat .n{font-family:var(--serif);font-size:26px}.stat .l{font-size:12px;color:var(--ink60);margin-top:2px}
+textarea,input.ti{width:100%;border:1px solid var(--line);background:var(--raised);border-radius:8px;padding:11px 13px;font-size:13.5px;font-family:var(--sans);resize:vertical}
+textarea:focus,input.ti:focus{outline:none;border-color:var(--ember)}
+.banner{background:var(--muted);border-radius:8px;padding:12px 14px;font-size:13px;margin:22px 0 14px}.banner b{color:var(--success)}
+/* candidate card */
+.cand{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:flex;align-items:center;gap:14px;margin-bottom:10px;cursor:pointer}
+.cand:hover{border-color:var(--ember)}
+.cand .ic{width:40px;height:40px;border-radius:8px;background:var(--muted);display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:16px;flex:none;color:var(--ink60)}
+.cand .cn{font-family:var(--serif);font-size:17px;display:flex;align-items:center;gap:8px}
+.cand .cd{font-size:12.5px;color:var(--ink60);margin-top:2px}
+.cand .from{margin-left:auto;font-size:12px;color:var(--ink40);font-family:var(--mono);flex:none}
+.badge{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:5px}
+.b-hi{background:rgba(14,109,82,.12);color:var(--success)}.b-mid{background:rgba(184,137,58,.15);color:var(--gold)}.b-ty{background:var(--muted);color:var(--ink60)}
+/* select radio */
+.radio{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:flex;align-items:center;gap:13px;margin-bottom:10px;cursor:pointer}
+.radio .rc{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--line);flex:none;display:flex;align-items:center;justify-content:center}
+.radio.on{border-color:var(--ember);background:var(--ember-soft)}
+.radio.on .rc{background:var(--ember);border-color:var(--ember);color:#fff}
+.radio .rn{font-family:var(--serif);font-size:16px}.radio .rd{font-size:12px;color:var(--ink60)}
+.radio .sel{margin-left:auto;background:var(--ember);color:#fff;font-size:11px;border-radius:5px;padding:3px 9px}
+/* structured draft */
+.draftcard{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:22px;margin-top:20px}
+.grid2{display:grid;grid-template-columns:1fr 1.4fr;gap:16px}
+.fld{margin-bottom:16px}.fld .fl{font-size:13px;font-weight:600;margin-bottom:7px;display:flex;align-items:center;gap:8px}
+.fld .ft{font-family:var(--mono);font-size:9.5px;background:var(--muted);color:var(--ink40);padding:2px 6px;border-radius:4px}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);background:var(--raised);border-radius:999px;padding:5px 11px;font-size:12.5px}
+.chip .x{color:var(--ink40);cursor:pointer}.chip.add{color:var(--ember);border-style:dashed;cursor:pointer;font-weight:600}
+.qrow{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--raised);border-radius:8px;padding:9px 12px;margin-bottom:8px}
+.qrow .qi{font-family:var(--mono);font-size:11px;color:var(--ember);flex:none}
+.qrow input{border:none;background:none;flex:1;font-size:13px;font-family:var(--sans)}.qrow input:focus{outline:none}
+.addq{color:var(--ember);font-size:12.5px;cursor:pointer;font-weight:600;margin-top:4px;display:inline-block}
+/* step5 */
+.pub{display:grid;grid-template-columns:300px 1fr;gap:20px;margin-top:20px}
+.pcard{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+.pcap{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.pcap .pic{width:40px;height:40px;border-radius:8px;background:var(--muted);display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:16px}
+.pcap .pn{font-family:var(--serif);font-size:17px}.pcap .pt{font-size:11px;color:var(--ink60)}
+.eval b{color:var(--success)}.echk{font-size:12.5px;color:var(--ink80);padding:3px 0;display:flex;gap:8px}.echk .y{color:var(--success)}
+.share input{font-family:var(--mono);font-size:12px;width:calc(100% - 56px)}
+.scope{display:flex;gap:8px;margin-top:10px}.scope button{flex:1;padding:8px;border:1px solid var(--line);background:var(--raised);border-radius:8px;cursor:pointer;font-size:12.5px}
+.scope button.on{border-color:var(--ember);color:var(--ember);background:var(--ember-soft)}
+.scope button .d{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ember);margin-right:5px}
+.publishbtn{width:100%;background:var(--ember);color:#fff;border:none;border-radius:8px;padding:13px;font-weight:700;font-size:14px;cursor:pointer}
+/* browser frame preview */
+.browser{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--raised)}
+.bbar{background:var(--muted);padding:9px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line)}
+.bbar .dot{width:9px;height:9px;border-radius:50%}.bbar .u{margin-left:8px;font-family:var(--mono);font-size:11px;color:var(--ink60);background:var(--raised);border-radius:5px;padding:3px 10px}
+.bbody{padding:18px}
+/* buttons / footer */
+.foot{display:flex;align-items:center;margin-top:26px}.foot .fl2{color:var(--ink40);font-size:12.5px}
+.btn{margin-left:auto;background:var(--ember);color:#fff;border:none;border-radius:8px;padding:12px 20px;font-size:13.5px;font-weight:700;cursor:pointer}
+.btn:disabled{opacity:.4;cursor:wait}.btn.ghost{background:var(--muted);color:var(--ink)}
+.spin{color:var(--ember);font-size:13px;display:flex;gap:8px;align-items:center}
+.dots{display:inline-flex;gap:3px}.dots i{width:5px;height:5px;border-radius:50%;background:var(--ember);animation:b 1s infinite}.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+@keyframes b{0%,100%{opacity:.25}50%{opacity:1}}
+.art{white-space:pre-wrap;font-size:13px;line-height:1.7}
+.cfield{margin-bottom:12px}.cfield label{display:block;font-size:12.5px;color:var(--ink60);margin-bottom:5px}
+.err{color:var(--ember);font-size:12.5px;margin-top:8px}
+.hidden{display:none!important}
+</style></head>
+<body>
+<div id="root"></div>
+<script>
+const $=s=>document.querySelector(s);
+// 客户端超时:fetch 本身不会超时,后端若重启/卡住,await 会无限挂起 → 前端永远转圈。
+// 用 AbortController 兜底,超时/网络错返回 {error},让各步落到"重试"态而不是干等。
+const api=async(p,b,timeoutMs=70000)=>{
+  const ctl=new AbortController(); const timer=setTimeout(()=>ctl.abort(),timeoutMs);
+  try{
+    const r=await fetch(p,{signal:ctl.signal,...(b?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}:{})});
+    return await r.json();
+  }catch(e){
+    return {error: e.name==="AbortError" ? "前端等待超时("+Math.round(timeoutMs/1000)+"s 没等到后端,后端可能重启了)——点重试" : "网络错误:"+(e.message||e), _clientFail:true};
+  }finally{clearTimeout(timer);}
+};
+const esc=s=>(s==null?"":String(s)).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+const token=new URLSearchParams(location.search).get("token");
+const S={step:1,id:null,candidates:[],selected:0,draft:null,manifest:null,evalRes:null,pub:null,scope:"market"};
+
+/* ===================== 消费侧 ===================== */
+async function consumer(){
+  const a=await api("/api/app?token="+encodeURIComponent(token));
+  document.body.style.background="var(--neutral)";
+  if(a.error){$("#root").innerHTML='<div class="wrap"><h1 class="serif">找不到这个应用</h1></div>';return}
+  $("#root").innerHTML=`<div class="top"><span class="wm serif">Agora</span></div><div class="wrap" style="max-width:720px">${miniAppGUI(a,token)}</div>`;
+  wireMini(a,{token});
+}
+function miniAppGUI(a){
+  return `<div class="eyebrow">Agora · Mini App</div><h1 class="serif">${esc(a.title)}</h1><div class="lede">${esc(a.tagline||a.role||"")}</div>
+   <div class="pcard" style="margin-top:22px"><div style="font-size:13px;font-weight:600;margin-bottom:12px">填几个，它来帮你</div>
+     <div id="cform">${(a.questions||[]).map((q,i)=>`<div class="cfield"><label>${esc(q)}</label><input class="ti" data-k="${esc(a.required_context[i]||('q'+i))}" placeholder="你的回答"></div>`).join("")}</div>
+     <button class="publishbtn" id="crun">生成产物</button><div id="cout"></div></div>`;
+}
+function wireMini(a,ctx){
+  $("#crun").onclick=async()=>{const b=$("#crun");b.disabled=true;b.textContent="Pi 跑中…";
+    const ans={};document.querySelectorAll('#cform input').forEach(i=>ans[i.dataset.k]=i.value);
+    const r=await api("/api/run",{...ctx,answers:ans},90000);b.disabled=false;b.textContent="再生成一份";
+    $("#cout").innerHTML=r.error?`<div class="err">${esc(r.error)}</div>`:`<div class="pcard" style="margin-top:14px"><div class="eyebrow">${esc((a.tags||[]).join(" · "))||"产物"}</div><div class="art">${esc(r.artifact)}</div></div>`;};
+}
+
+/* ===================== 创作者 5 步 ===================== */
+function shell(inner){
+  const steps=["导入","提取","选择","结构化","发布"];
+  return `<div class="top"><span class="wm serif">Agora</span><span class="sep">/</span><span class="cb">Creator Builder</span>
+    <div class="right"><button class="save">保存草稿</button><div class="av">林</div></div></div>
+   <div class="wrap"><div class="rail">${steps.map((s,i)=>{const n=i+1;const cls=S.step>n?"done":S.step===n?"on":"";return `<div class="rstep ${cls}"><div class="rdot">${S.step>n?"✓":n}</div><div class="rlabel">${s}</div></div>${i<4?'<div class="rline"></div>':""}`}).join("")}</div>
+   <div id="step">${inner}</div></div>`;
+}
+function render(){({1:step1,2:step2,3:step3,4:step4,5:step5})[S.step]();}
+
+function step1(){
+  $("#root").innerHTML=shell(`<div class="eyebrow">STEP 1 · 导入</div><h1 class="serif">导入你的对话历史</h1>
+   <div class="lede">先把你的完整对话历史一键导入,生成一份可供萃取的 raw data。整个过程仅你可见。</div>
+   <div id="imp"><div style="margin-top:22px;display:flex;gap:12px;align-items:center">
+       <button class="btn" id="bimport" style="margin-left:0">⚡ 一键导入全部对话历史(Claude · Codex · opencode)</button>
+       <span class="fl2">或在下方粘贴一段</span></div>
+     <textarea id="raw" rows="4" placeholder="(可选)粘贴一段对话/工作记录" style="margin-top:12px"></textarea>
+     <div class="foot"><span class="fl2">raw data 仅你可见 · 第 1 步,共 5 步</span><button class="btn ghost" id="b1">用粘贴的导入 →</button></div></div>`);
+  $("#bimport").onclick=async()=>{const b=$("#bimport");b.disabled=true;b.innerHTML='扫描你的会话历史中… <span class="dots"><i></i><i></i><i></i></span>';
+    const r=await api("/api/import-history",{});if(r.error){b.disabled=false;b.textContent="导入失败:"+r.error;return}
+    S.id=r.id;showImported(r.stats,r.sessions,"已导入全部对话历史(多 agent)");};
+  $("#b1").onclick=async()=>{const raw=$("#raw").value.trim();if(!raw)return;const b=$("#b1");b.disabled=true;b.textContent="导入中…";
+    const r=await api("/api/import",{text:raw});S.id=r.id;showImported(r.stats,null,"已导入对话历史");};
+}
+function showImported(st,sessions,title){
+  const SRC={claude:"#C96442",codex:"#10a37f",opencode:"#6e56cf",hermes:"#b8860b"};
+  const tag=s=>s.source?`<span class="mono" style="font-size:9px;padding:1px 5px;border-radius:4px;flex:none;color:#fff;background:${SRC[s.source]||"#888"}">${esc(s.source)}</span>`:"";
+  const bs=st.by_source||{};
+  const chips=Object.keys(bs).filter(k=>bs[k]>0).map(k=>`<span style="display:inline-flex;align-items:center;gap:5px;margin-right:12px;font-size:12px"><i style="width:8px;height:8px;border-radius:2px;background:${SRC[k]||"#888"};display:inline-block"></i>${esc(k)} <b>${bs[k]}</b></span>`).join("");
+  const list=sessions&&sessions.length?`<div class="lbl">导入的原始会话(节选)</div><div class="pcard" style="padding:0">
+    ${sessions.map(s=>`<div style="display:flex;gap:14px;align-items:center;padding:11px 16px;border-bottom:1px solid var(--line)"><span class="mono" style="font-size:11px;color:var(--ink40);flex:none">${esc(s.date.slice(5))}</span>${tag(s)}<span style="flex:1;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.title)}</span><span class="mono" style="font-size:11px;color:var(--ink40);flex:none">${s.count} 条</span></div>`).join("")}</div>`:"";
+  $("#imp").innerHTML=`<div class="imported"><div class="ck">✓</div><div class="it"><b>${esc(title)}</b><div>生成了一份 raw data 快照,下一步从中提取能力项。</div></div><span class="re" onclick="step1()">重新导入</span></div>
+    <div class="lbl">RAW DATA</div><div class="stats">
+      <div class="stat"><div class="n">${st.segments}</div><div class="l">段会话</div></div>
+      <div class="stat"><div class="n">${st.messages.toLocaleString()}</div><div class="l">条消息</div></div>
+      <div class="stat"><div class="n" style="font-size:20px">${esc(st.span)}</div><div class="l">时间跨度</div></div>
+      <div class="stat"><div class="n">${st.projects}</div><div class="l">涉及项目</div></div></div>
+    ${chips?`<div style="margin:6px 0 2px;color:var(--ink60)">来源:${chips}</div>`:""}
+    ${list}
+    <div class="foot"><span class="fl2">raw data 仅你可见 · 第 1 步,共 5 步</span><button class="btn" id="b1b">下一步:提取能力项 →</button></div>`;
+  $("#b1b").onclick=()=>{S.step=2;render();step2load();};
+}
+function step2(){$("#root").innerHTML=shell(`<div class="eyebrow">STEP 2 · 提取</div><h1 class="serif">从 raw data 提取能力项</h1>
+   <div class="lede">AI 扫描你的 raw data,识别出反复出现、值得打包成 mini-app 的能力。下一步你来选要发哪个。</div>
+   <div id="o2"><div class="spin" style="margin-top:24px">Pi 在反推这段 raw data 里藏着哪些能力 <span class="dots"><i></i><i></i><i></i></span></div></div>`);}
+async function step2load(){step2();const r=await api("/api/extract",{id:S.id},200000);if(r.error){$("#o2").innerHTML=`<div class="err">${esc(r.error)}</div>`;return}
+  S.candidates=r.candidates;
+  $("#o2").innerHTML=`<div class="banner"><b>✓ 已分析 raw data</b> 识别出 ${r.candidates.length} 个能力项,按可打包度排序:</div>
+    ${r.candidates.map((c,i)=>`<div class="cand"><div class="ic serif">${esc((c.name||"?")[0])}</div>
+      <div><div class="cn serif">${esc(c.name)} <span class="badge ${c.confidence==="高"?"b-hi":"b-mid"}">置信 ${esc(c.confidence)}</span> <span class="badge b-ty">${esc(c.type)}</span></div><div class="cd">${esc(c.tagline)}</div></div>
+      <div class="from">来自 ${c.from_segments||"?"} 段</div></div>`).join("")}
+    <div class="foot"><span class="fl2">识别 ${r.candidates.length} 个 · 第 2 步,共 5 步</span><button class="btn" id="b2">下一步:选择发布内容 →</button></div>`;
+  $("#b2").onclick=()=>{S.step=3;render();};
+}
+function step3(){const c=S.candidates;
+  $("#root").innerHTML=shell(`<div class="eyebrow">STEP 3 · 选择</div><h1 class="serif">选择你想发布的能力</h1>
+   <div class="lede">用一段话说清你想发的东西,再从提取出的能力项里选定一个目标——AI 会据此把它结构化。</div>
+   <div class="fld" style="margin-top:22px"><div class="fl">用一段话描述你想发布的东西</div>
+     <textarea id="desc" rows="3">${esc("我想把「"+c[0].name+"」发出去 —— "+c[0].tagline+"。语气专业但不啰嗦,产出可直接拿走。")}</textarea></div>
+   <div class="fld"><div class="fl">选定一个目标能力（来自第 2 步提取）</div>
+     ${c.map((x,i)=>`<div class="radio ${i===S.selected?'on':''}" data-i="${i}"><div class="rc">${i===S.selected?"✓":""}</div><div><div class="rn serif">${esc(x.name)}</div><div class="rd">${esc(x.tagline)}</div></div>${i===S.selected?'<span class="sel">已选</span>':""}</div>`).join("")}</div>
+   <div class="foot"><span class="fl2">已选 1 个目标 · 第 3 步,共 5 步</span><button class="btn" id="b3">下一步:结构化描述 →</button></div>`);
+  document.querySelectorAll('.radio').forEach(r=>r.onclick=()=>{S.selected=+r.dataset.i;step3();});
+  $("#b3").onclick=()=>{S.step=4;render();step4load($("#desc").value);};
+}
+function step4(){$("#root").innerHTML=shell(`<div class="eyebrow">STEP 4 · 结构化</div><h1 class="serif">正在生成结构化描述…</h1>
+   <div class="lede">结构化是整条流里最重的一次生成(名称 + 目标用户 + 4–6 个输入问题 + 输出规范,都是数组)。稍等几秒。</div>
+   <div id="o4"><div class="spin" style="margin-top:24px"><span id="gentimer">Pi 在把它结构化</span> <span class="dots"><i></i><i></i><i></i></span></div></div>`);
+  S._t0=Date.now();S._tick=setInterval(()=>{const el=$("#gentimer");if(el)el.textContent="Pi 在把它结构化 · 已 "+Math.round((Date.now()-S._t0)/1000)+"s";},1000);}
+async function step4load(desc){S._desc=desc;S.structRetries=S.structRetries||0;step4();
+  const r=await api("/api/structure",{id:S.id,index:S.selected,description:desc});
+  clearInterval(S._tick);
+  if(r.partial){structureSlow(r);return}              // 超时/解析失败 → 兜底退路(绝不卡死)
+  if(r.error){structureError(r.error);return}
+  S.draft=r.draft;S.manifest=r.manifest;renderDraftShell();}
+function structureSlow(r){const secs=Math.round((Date.now()-S._t0)/1000);const p=r.partial;
+  $("#root").innerHTML=shell(`<div class="eyebrow">↓ 加载态 · 久了 / 超时恢复(有退路)</div>
+   <h1 class="serif">⚠ 这一步比平时久了… <span style="font-size:13px;font-family:var(--mono);color:var(--gold)">已 ${secs}s</span></h1>
+   <div class="lede">结构化是整条流里最重的一次生成。偶尔会卡——别干等,下面三条路任选,<b>已生成的字段不会丢</b>。</div>
+   <div class="draftcard" style="margin-top:18px"><div style="display:flex;justify-content:space-between;margin-bottom:12px"><div style="font-size:13px;font-weight:600">已生成的字段（保留）</div><div class="fl2">${(r.generated||[]).length} / 6 完成</div></div>
+     <div class="echk"><span class="y">✓</span> 名称　<b style="margin-left:8px">${esc(p.name)}</b></div>
+     <div class="echk"><span class="y">✓</span> 一句话定位　<span style="margin-left:8px;color:var(--ink60)">${esc(p.tagline)}</span></div>
+     <div class="echk" style="color:var(--gold)">◐ 输入问题　<span style="margin-left:8px">卡在生成中</span></div>
+     <div class="echk" style="color:var(--ink40)">⚠ 输出产物规范　<span style="margin-left:8px">未开始</span></div></div>
+   <div style="font-size:13px;font-weight:600;margin:18px 0 10px">接下来怎么走</div>
+   <div class="radio on" id="r_skel"><div class="rc">🖊</div><div><div class="rn serif">用已生成的部分继续,剩下手动填</div><div class="rd">带着已好的字段直接进下一步,问题与输出规范你来补——最快不卡。</div></div></div>
+   <div class="radio" id="r_retry"><div class="rc">↻</div><div><div class="rn serif">只重生成一次</div><div class="rd">保留已好的,重跑这次结构化,通常几秒就好。</div></div></div>
+   <div class="radio" id="r_wait"><div class="rc">⏳</div><div><div class="rn serif">再等等</div><div class="rd">继续等待这次生成。</div></div></div>
+   <div class="banner" style="margin-top:14px;border:1px solid var(--line)">⚠ 若重试 2 次仍失败 → 落「生成失败」错误态(重试 / 改输入 / 转人工),绝不停在转圈。</div>`);
+  $("#r_skel").onclick=()=>{S.draft=p;renderDraftShell();};   // 用骨架,进可编辑表单
+  $("#r_retry").onclick=()=>{S.structRetries++;if(S.structRetries>=2){structureError("模型超时");return}step4load(S._desc);};
+  $("#r_wait").onclick=()=>{step4load(S._desc);};
+}
+function structureError(msg){$("#root").innerHTML=shell(`<div class="eyebrow">STEP 4 · 结构化</div><h1 class="serif">生成失败:${esc(msg)}</h1>
+   <div class="lede">这次结构化没成功。你可以重试、改一下描述再试,或先用骨架手动填。</div>
+   <div style="margin-top:18px;display:flex;gap:10px"><button class="btn" style="margin:0" onclick="S.structRetries=0;step4load(S._desc)">重试</button>
+     <button class="btn ghost" onclick="S.step=3;render()">改输入</button>
+     <button class="btn ghost" onclick="S.draft={name:S.candidates[S.selected].name,tagline:S.candidates[S.selected].tagline,target_users:[],questions:['','','',''],output_spec:'',tags:[],instructions:'你是'+S.candidates[S.selected].role+'。输入1:{answer.a} 输入2:{answer.b} 输入3:{answer.c} 输入4:{answer.d}'};renderDraftShell()">手动填</button></div>`);}
+function renderDraftShell(){$("#root").innerHTML=shell(`<div class="eyebrow">STEP 4 · 结构化</div><h1 class="serif">把它整理成结构化规范</h1>
+   <div class="lede">名称、目标用户、输入问题、输出规范都是可改的字段。补完进下一步。</div><div id="o4"></div>`);renderDraft();}
+function renderDraft(){const d=S.draft;
+  $("#o4").innerHTML=`<div class="draftcard">
+    <div class="grid2"><div class="fld"><div class="fl">名称</div><input class="ti" id="d_name" value="${esc(d.name)}"></div>
+      <div class="fld"><div class="fl">一句话定位</div><input class="ti" id="d_tag" value="${esc(d.tagline)}"></div></div>
+    <div class="fld"><div class="fl">目标用户 <span class="ft">string[]</span></div><div class="chips" id="d_users">${(d.target_users||[]).map(u=>chip(u)).join("")}<span class="chip add" onclick="addChip('d_users')">+ 添加</span></div></div>
+    <div class="fld"><div class="fl">输入问题 · 运行时会问用户 <span class="ft">Question[]</span></div><div id="d_qs">${(d.questions||[]).map((q,i)=>qrow(q,i)).join("")}</div><span class="addq" onclick="addQ()">+ 添加问题（建议 4–6 个）</span></div>
+    <div class="fld"><div class="fl">输出产物规范</div><input class="ti" id="d_out" value="${esc(d.output_spec||"")}"></div>
+    <div class="fld"><div class="fl">标签 <span class="ft">string[]</span></div><div class="chips" id="d_tags">${(d.tags||[]).map(t=>chip(t)).join("")}<span class="chip add" onclick="addChip('d_tags')">+ 添加</span></div></div>
+  </div>
+  <div class="foot"><span class="fl2">${(d.questions||[]).length} 个问题 · 第 4 步,共 5 步</span><button class="btn" id="b4">下一步:发布与试用 →</button></div>`;
+  $("#b4").onclick=saveAndGo5;
+}
+const chip=t=>`<span class="chip">${esc(t)} <span class="x" onclick="this.parentNode.remove()">×</span></span>`;
+const qrow=(q,i)=>`<div class="qrow"><span class="qi">[${i}]</span><input value="${esc(q)}"></div>`;
+window.addChip=id=>{const v=prompt("添加");if(v){const add=$("#"+id+" .add");add.insertAdjacentHTML("beforebegin",chip(v));}};
+window.addQ=()=>{const n=document.querySelectorAll("#d_qs .qrow").length;$("#d_qs").insertAdjacentHTML("beforeend",qrow("",n));};
+async function saveAndGo5(){
+  const draft={name:$("#d_name").value,tagline:$("#d_tag").value,output_spec:$("#d_out").value,
+    target_users:[...document.querySelectorAll('#d_users .chip:not(.add)')].map(c=>c.textContent.replace("×","").trim()),
+    tags:[...document.querySelectorAll('#d_tags .chip:not(.add)')].map(c=>c.textContent.replace("×","").trim()),
+    questions:[...document.querySelectorAll('#d_qs .qrow input')].map(i=>i.value).filter(Boolean)};
+  // 重新生成 instructions 让槽与问题对齐(简单:保留原 instructions)
+  draft.instructions=S.draft.instructions;
+  const r=await api("/api/save-draft",{id:S.id,draft});S.manifest=r.manifest;S.draft={...S.draft,...draft};
+  S.step=5;render();step5load();
+}
+function step5(){$("#root").innerHTML=shell(`<div class="eyebrow">STEP 5 · 发布与试用</div><h1 class="serif">发成 mini-app，先在这里完整试用</h1>
+   <div class="lede">它本身就带 GUI——右侧是真实可交互的 mini-app,发布前用真实输入跑一遍、确认产物没问题,再一键发布。</div>
+   <div id="o5"><div class="spin" style="margin-top:24px">Pi 在做 Auto-Eval(校验 + 试跑一次) <span class="dots"><i></i><i></i><i></i></span></div></div>`);}
+async function step5load(){step5();
+  const ev=await api("/api/eval",{id:S.id},90000);S.evalRes=ev;
+  const app=await api("/api/app?id="+S.id);
+  const slug=(S.manifest.manifest.mini_app_id);
+  $("#o5").innerHTML=`<div class="pub">
+    <div><div class="pcard"><div class="pcap"><div class="pic serif">${esc(S.draft.name[0])}</div><div><div class="pn serif">${esc(S.draft.name)}</div><div class="pt">${esc((S.draft.tags||[])[0]||"Mini App")}</div></div></div>
+      <div class="eval"><b>Auto-Eval ✓ 通过</b>${(ev.checks||[]).map(c=>`<div class="echk"><span class="y">✓</span> ${esc(c)}</div>`).join("")}</div></div>
+      <div class="pcard share"><div style="font-size:13px;font-weight:600;margin-bottom:8px">分享链接</div>
+        <div style="display:flex;gap:8px"><input class="ti" value="agora.app/a/${esc(slug)}" readonly><button class="save" id="copy">复制</button></div>
+        <div class="scope"><button class="on" data-s="market"><span class="d"></span>列入市集</button><button data-s="private">仅私享</button></div></div>
+      <button class="publishbtn" id="pub">🚀 发布</button>
+      <div class="fl2" style="margin-top:10px;font-size:11.5px">发布后进入人工评审(Alpha);试用不计入对外数据。</div></div>
+    <div><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="font-size:13px;font-weight:600">试用 · 发布前完整体验</div><span style="font-family:var(--mono);font-size:10px;color:var(--success)">● LIVE</span></div>
+      <div class="browser"><div class="bbar"><span class="dot" style="background:#e06c5b"></span><span class="dot" style="background:#e0b95b"></span><span class="dot" style="background:#7bb87b"></span><span class="u">agora.app/a/${esc(slug)}</span></div>
+        <div class="bbody">${miniAppGUI(app)}</div></div></div></div>`;
+  wireMini(app,{id:S.id});
+  $("#copy").onclick=()=>navigator.clipboard.writeText("agora.app/a/"+slug);
+  document.querySelectorAll('.scope button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.scope button').forEach(x=>x.classList.toggle('on',x===b));S.scope=b.dataset.s;});
+  $("#pub").onclick=async()=>{const b=$("#pub");b.disabled=true;b.textContent="发布中…";const r=await api("/api/publish",{id:S.id,scope:S.scope});
+    b.textContent="✓ 已发布:agora.app/a/"+r.slug;b.style.background="var(--success)";};
+}
+token?consumer():(render());
+</script>
+</body></html>
