@@ -566,7 +566,7 @@ const server = http.createServer(async (req, res) => {
     // ① 一键导入全部历史(真扫 ~/.claude/projects)
     if (u.pathname === "/api/import-history" && req.method === "POST") {
       const h = importHistory();
-      if (!h) return json(res, 404, { error: "未找到 Claude 历史目录" });
+      if (!h) return json(res, 404, { error: "未找到任何本地 AI 历史(Claude/Codex/opencode)。可在下方用『粘贴』方式喂一段对话。" });
       const id = uid();
       const digest = h.sessions.slice(0, 80).map((s) => `[${s.count}条] ${s.title}`).join("\n"); // 粘贴/降级用
       // sessionIndex(带 path)给提取 agent 用工具读真实内容

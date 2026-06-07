@@ -1,10 +1,12 @@
 {
   "name": "mvp",
   "version": "1.0.0",
-  "description": "",
+  "description": "Agora — 把 AI 对话历史锚定成能力 → 打包成 agentic mini-app",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "bash start.sh",
+    "doctor": "bash doctor.sh",
+    "test": "node test-unit.mjs"
   },
   "keywords": [],
   "author": "",
