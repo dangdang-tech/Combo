@@ -237,6 +237,28 @@ const findPublished = (token) => {
   return null;
 };
 
+// 把上传/本机助手送来的精简会话,建/追加成一个 app(import-uploaded 与 connect/upload 共用)
+function buildUploadedApp(sessions, appendTo) {
+  const arr = (Array.isArray(sessions) ? sessions : []).filter((s) => s && s.content && (s.count || 0) >= 2);
+  if (!arr.length) return null;
+  const mapped = arr.map((s) => ({ title: s.title || "(无标题会话)", count: s.count || 0, date: (s.date || new Date().toISOString()).slice(0, 10), path: "upload:" + uid(), source: s.source || "upload", project: s.project || "upload", content: String(s.content).slice(0, 6000) }));
+  const base = (appendTo && apps[appendTo]) ? (apps[appendTo].sessionIndex || []) : [];
+  const seen = new Map(base.map((s) => [s.title + "|" + s.count + "|" + s.project, s]));
+  mapped.forEach((s) => seen.set(s.title + "|" + s.count + "|" + s.project, s));
+  const idx = [...seen.values()].sort((a, b) => b.count - a.count).slice(0, 400);
+  const totalMsgs = idx.reduce((n, s) => n + s.count, 0);
+  const times = idx.map((s) => Date.parse(s.date)).filter((n) => n); const fmt = (t) => new Date(t).toISOString().slice(0, 7);
+  const bySrc = {}; idx.forEach((s) => bySrc[s.source] = (bySrc[s.source] || 0) + 1);
+  const stats = { segments: idx.length, messages: totalMsgs, span: times.length ? fmt(Math.min(...times)) + "–" + fmt(Math.max(...times)) : "—", projects: new Set(idx.map((s) => s.project)).size, by_source: bySrc };
+  const id = (appendTo && apps[appendTo]) ? appendTo : uid();
+  apps[id] = { ...(apps[id] || {}), id, raw: idx.slice(0, 80).map((s) => `[${s.count}条] ${s.title}`).join("\n"), status: "imported", stats, sessions: idx.slice(0, 8), sessionIndex: idx, source: "upload", draft: undefined, createdAt: apps[id]?.createdAt || Date.now() }; save();
+  return { id, stats, sessions: idx.slice(0, 6) };
+}
+// 连接本机:一次性配对码(创作者已解锁时铸,本机助手凭码上传,网页轮询取 app)
+const connect = new Map(); // code -> { id, stats, ts }
+const connectCode = () => { const a = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; let s = ""; for (let i = 0; i < 6; i++) s += a[Math.floor(Math.random() * a.length)]; return s; };
+const connectGC = () => { const now = Date.now(); for (const [k, v] of connect) if (now - v.ts > 20 * 60 * 1000) connect.delete(k); };
+
 // ============================================================================
 // Agentic mini-app(消费侧)—— 每会话一个常驻 Agent,SSE 推事件流,多轮有状态。
 // ============================================================================
@@ -605,7 +627,8 @@ const server = http.createServer(async (req, res) => {
       return json(res, 401, { ok: false, error: "访问码不对" });
     }
     if (ACCESS && !unlocked(req)) {
-      const consumerSurface = u.pathname === "/miniapp" || u.pathname === "/consume" || u.pathname.startsWith("/api/miniapp/");
+      // 消费侧 + 本机助手(脚本公开、上传凭一次性配对码)无需 cookie;创作者面其余需解锁
+      const consumerSurface = u.pathname === "/miniapp" || u.pathname === "/consume" || u.pathname.startsWith("/api/miniapp/") || u.pathname === "/connect.mjs" || u.pathname === "/api/connect/upload";
       if (!consumerSurface) {
         if (u.pathname.startsWith("/api/")) return json(res, 401, { error: "需要访问码(创作者面已锁)" });
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }); return res.end(UNLOCK_HTML);
@@ -629,22 +652,37 @@ const server = http.createServer(async (req, res) => {
     // ① 上传导入(公网):客户端就地解析 Claude/Codex,只传精简数据。appendTo 可追加第二个来源。
     if (u.pathname === "/api/import-uploaded" && req.method === "POST") {
       const { sessions, appendTo } = await readBody(req);
-      const arr = (Array.isArray(sessions) ? sessions : []).filter((s) => s && s.content && (s.count || 0) >= 2);
-      if (!arr.length) return json(res, 400, { error: "没解析到可用会话(需 ≥2 条用户消息;支持 Claude / Codex 的 .jsonl)" });
-      const mapped = arr.map((s) => ({ title: s.title || "(无标题会话)", count: s.count || 0, date: (s.date || new Date().toISOString()).slice(0, 10), path: "upload:" + uid(), source: s.source || "upload", project: s.project || "upload", content: String(s.content).slice(0, 6000) }));
-      // 追加合并(同一 app 加第二个来源,如先 Claude 再 Codex)
-      const base = (appendTo && apps[appendTo]) ? (apps[appendTo].sessionIndex || []) : [];
-      const seen = new Map(base.map((s) => [s.title + "|" + s.count + "|" + s.project, s]));
-      mapped.forEach((s) => seen.set(s.title + "|" + s.count + "|" + s.project, s));   // 去重(标题+条数+项目)
-      const idx = [...seen.values()].sort((a, b) => b.count - a.count).slice(0, 400);
-      const totalMsgs = idx.reduce((n, s) => n + s.count, 0);
-      const times = idx.map((s) => Date.parse(s.date)).filter((n) => n); const fmt = (t) => new Date(t).toISOString().slice(0, 7);
-      const bySrc = {}; idx.forEach((s) => bySrc[s.source] = (bySrc[s.source] || 0) + 1);
-      const stats = { segments: idx.length, messages: totalMsgs, span: times.length ? fmt(Math.min(...times)) + "–" + fmt(Math.max(...times)) : "—", projects: new Set(idx.map((s) => s.project)).size, by_source: bySrc };
-      const id = (appendTo && apps[appendTo]) ? appendTo : uid();
-      apps[id] = { ...(apps[id] || {}), id, raw: idx.slice(0, 80).map((s) => `[${s.count}条] ${s.title}`).join("\n"), status: "imported", stats, sessions: idx.slice(0, 8), sessionIndex: idx, source: "upload", draft: undefined, createdAt: apps[id]?.createdAt || Date.now() }; save();
-      log(`上传导入 ${id} · ${idx.length} 段 · ${JSON.stringify(bySrc)}`);
-      return json(res, 200, { id, stats, sessions: idx.slice(0, 6) });
+      const r = buildUploadedApp(sessions, appendTo);
+      if (!r) return json(res, 400, { error: "没解析到可用会话(需 ≥2 条用户消息;支持 Claude / Codex 的 .jsonl)" });
+      log(`上传导入 ${r.id} · ${r.stats.segments} 段 · ${JSON.stringify(r.stats.by_source)}`);
+      return json(res, 200, r);
+    }
+    // ① 连接本机:创作者(已解锁)铸配对码 → 本机助手凭码上传 → 网页轮询取 app
+    if (u.pathname === "/api/connect/new" && req.method === "POST") {
+      connectGC(); const code = connectCode(); connect.set(code, { id: null, stats: null, ts: Date.now() });
+      log(`连接本机·铸码 ${code}`); return json(res, 200, { code });
+    }
+    if (u.pathname === "/api/connect/poll") {
+      const code = (u.searchParams.get("code") || "").toUpperCase(); const c = connect.get(code);
+      if (!c) return json(res, 404, { error: "配对码失效,请重新生成" });
+      return json(res, 200, { ready: !!c.id, id: c.id, stats: c.stats });
+    }
+    if (u.pathname === "/api/connect/upload" && req.method === "POST") {   // 本机助手调用(无 cookie,凭码)
+      const { code, sessions } = await readBody(req);
+      const c = connect.get(String(code || "").toUpperCase());
+      if (!c) return json(res, 403, { error: "配对码无效或已过期,回网页重新生成" });
+      const r = buildUploadedApp(sessions, null);
+      if (!r) return json(res, 400, { error: "没解析到可用会话" });
+      c.id = r.id; c.stats = r.stats; c.ts = Date.now();
+      log(`连接本机·上传 ${r.id} · ${r.stats.segments} 段 · ${JSON.stringify(r.stats.by_source)}`);
+      return json(res, 200, { ok: true, segments: r.stats.segments, by_source: r.stats.by_source });
+    }
+    if (u.pathname === "/connect.mjs") {   // 本机助手脚本(注入 BASE,公开可取)
+      const proto = (req.headers["x-forwarded-proto"] || "http").split(",")[0];
+      const host = req.headers["host"] || ("localhost:" + PORT);
+      let js; try { js = fs.readFileSync(path.join(__dir, "connect-helper.mjs"), "utf8"); } catch { return json(res, 500, { error: "helper 缺失" }); }
+      js = js.replace(/__BASE__/g, proto + "://" + host);
+      res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8" }); return res.end(js);
     }
     // ① 导入(粘贴)
     if (u.pathname === "/api/import" && req.method === "POST") {
