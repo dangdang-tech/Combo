@@ -254,6 +254,9 @@ function buildUploadedApp(sessions, appendTo) {
   apps[id] = { ...(apps[id] || {}), id, raw: idx.slice(0, 80).map((s) => `[${s.count}条] ${s.title}`).join("\n"), status: "imported", stats, sessions: idx.slice(0, 8), sessionIndex: idx, source: "upload", draft: undefined, createdAt: apps[id]?.createdAt || Date.now() }; save();
   return { id, stats, sessions: idx.slice(0, 6) };
 }
+// 提取进度的 SSE 总线:id -> Set<res>。runExtraction 经 onProgress 推阶段/进度,网页订阅显示加载态。
+const extractBus = new Map();
+function extractEmit(id, event, data) { const set = extractBus.get(id); if (!set) return; const line = `event: ${event}\ndata: ${JSON.stringify(data || {})}\n\n`; for (const res of set) { try { res.write(line); } catch {} } }
 // 连接本机:一次性配对码(创作者已解锁时铸,本机助手凭码上传,网页轮询取 app)
 const connect = new Map(); // code -> { id, stats, ts }
 const connectCode = () => { const a = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; let s = ""; for (let i = 0; i < 6; i++) s += a[Math.floor(Math.random() * a.length)]; return s; };
@@ -431,31 +434,39 @@ async function classifyRound(obs, T, k, meter) {
 }
 
 // S1 共享:全量精读 → observations(含 input_features),并发缓存。runExtraction 与 runDraft 共用。
-async function readObservations(idx, meter) {
+async function readObservations(idx, meter, onRead) {
+  let done = 0;
   const obsRaw = await pool(idx, 8, async (s, i) => {
     const body = readSessionContent(s, 4000);
     const r = meterAdd(meter, await run({ label: `S1#${i}`, temperature: 0, systemPrompt: "你只输出 JSON。", userInput: S1_PROMPT(s, body), timeoutMs: 90000 }));
     const o = firstJson(r.text);
+    if (onRead) onRead(++done, idx.length);
     return { session_ref: { path: s.path, title: s.title, source: s.source, project: s.project, date: s.date, count: s.count }, goal: o.goal, steps: o.steps, inputs_user_gave: o.inputs_user_gave, artifact: o.artifact, success_signal: o.success_signal, input_features: o.input_features || {} };
   });
   return obsRaw.filter(Boolean);
 }
 
-async function runExtraction(a, { rounds = 3, sampleN = 120, minSupport = 2 } = {}) {
+async function runExtraction(a, { rounds = 3, sampleN = 120, minSupport = 2, onProgress } = {}) {
+  const prog = typeof onProgress === "function" ? onProgress : () => {};
   const meter = newMeter(); const t0 = Date.now();
   const idx = a.sessionIndex.slice(0, sampleN);
   log(`提取 v3(锚定)▶ ${idx.length} 段 · ${rounds} 轮 · minSup ${minSupport} · ${process.env.MODEL}`);
   // S1 全量精读(并发,缓存)
-  const obs = await readObservations(idx, meter);
+  prog("phase", { k: "read" });
+  const obs = await readObservations(idx, meter, (d, t) => prog("progress", { phase: "read", done: d, total: t }));
   log(`S1 精读: ${obs.length}/${idx.length} 段 · 累计 ${meter.total}tok`);
   if (obs.length < 3) throw new Error("有效观察过少(" + obs.length + ")");
   // 建一次固定 taxonomy(命名只发生这一次)
+  prog("phase", { k: "taxonomy" });
   const T = await buildTaxonomy(obs, meter);
   log(`Taxonomy: ${T.length} 个 · [${T.map((t) => t.name).join(" / ")}] · 累计 ${meter.total}tok`);
   if (!T.length) throw new Error("taxonomy 为空");
+  prog("taxonomy", { count: T.length });
   // K 轮分类(命名零漂移,只是把 id 重新打到观察上)
+  prog("phase", { k: "verify" });
   const hits = [];
-  for (let k = 0; k < rounds; k++) { const h = await classifyRound(obs, T, k, meter); hits.push(h); log(`第${k + 1}轮分类: ${[...h].filter(([, s]) => s.size >= minSupport).length} 个能力≥${minSupport}段 · 累计 ${meter.total}tok`); }
+  for (let k = 0; k < rounds; k++) { prog("round", { k: k + 1, total: rounds }); const h = await classifyRound(obs, T, k, meter); hits.push(h); log(`第${k + 1}轮分类: ${[...h].filter(([, s]) => s.size >= minSupport).length} 个能力≥${minSupport}段 · 累计 ${meter.total}tok`); }
+  prog("phase", { k: "rank" });
   // present 集合(支持≥minSupport)→ 确定性 Jaccard(对固定 tid 集合,无 LLM 噪声)
   const present = hits.map((h) => new Set([...h].filter(([, s]) => s.size >= minSupport).map(([id]) => id)));
   const anyPresent = present.some((s) => s.size > 0);             // 全空 = 没有能力达到支持门槛(退化,非稳定)
@@ -693,12 +704,22 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { id, stats: apps[id].stats });
     }
     // ② 提取 v2:有真实历史 → 走 LLM 抽取管线(S1~S5,共识+Jaccard);否则/失败 → 单次补全降级。
+    if (u.pathname === "/api/extract/progress") {   // SSE 进度通道(网页订阅显示加载态;创作者面,需 cookie)
+      const id = u.searchParams.get("id");
+      res.writeHead(200, { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no" });
+      res.write(": ok\n\n");
+      let set = extractBus.get(id); if (!set) { set = new Set(); extractBus.set(id, set); } set.add(res);
+      const ping = setInterval(() => { try { res.write(": ping\n\n"); } catch {} }, 20000);
+      req.on("close", () => { clearInterval(ping); set.delete(res); if (!set.size) extractBus.delete(id); });
+      return;
+    }
     if (u.pathname === "/api/extract" && req.method === "POST") {
       const { id, rounds, sampleN } = await readBody(req); const a = apps[id]; if (!a) return json(res, 404, { error: "no app" });
       if (Array.isArray(a.sessionIndex) && a.sessionIndex.length) {
         try {
-          const out = await runExtraction(a, { rounds: rounds || 3, sampleN: sampleN || 120 });
+          const out = await runExtraction(a, { rounds: rounds || 3, sampleN: sampleN || 120, onProgress: (ev, d) => extractEmit(id, ev, d) });
           a.candidates = out.candidates; a.extraction = out; a.observedPaths = out.observedPaths; a.status = "extracted"; save();
+          extractEmit(id, "done", { candidates: out.candidates.length, unstable: out.unstable.length });
           return json(res, 200, { candidates: out.candidates, unstable: out.unstable, stability: out.stability, metrics: out.metrics });
         } catch (e) {
           console.error("[extract v2] 失败 →", e && (e.stack || e.message || e)); // 落到下方降级,永不 500

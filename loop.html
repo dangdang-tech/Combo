@@ -126,6 +126,12 @@ const api=async(p,b,timeoutMs=70000)=>{
   const ctl=new AbortController(); const timer=setTimeout(()=>ctl.abort(),timeoutMs);
   try{
     const r=await fetch(p,{signal:ctl.signal,...(b?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}:{})});
+    const ct=r.headers.get("content-type")||"";
+    if(!ct.includes("application/json")){   // 网关 HTML(502/503 重启中)/ 非 JSON → 给可读错误,不抛 "<!DOCTYPE"
+      const t=await r.text().catch(()=>"");
+      const restarting=r.status===502||r.status===503||r.status===504||/<!doctype|<html/i.test(t);
+      return {error: restarting?"服务暂时不可用(可能正在重启)——等几秒点重试":"服务器返回异常("+r.status+")——点重试", _clientFail:true, _status:r.status};
+    }
     return await r.json();
   }catch(e){
     return {error: e.name==="AbortError" ? "前端等待超时("+Math.round(timeoutMs/1000)+"s 没等到后端,后端可能重启了)——点重试" : "网络错误:"+(e.message||e), _clientFail:true};
@@ -225,6 +231,30 @@ function importLoader(phaseDefs){
   };
 }
 
+// 萃取加载态(慢 LLM 多阶段):精读→归纳→多轮校验→排序,带已用时计时器 + 实时状态
+function extractLoader(){
+  const host=$("#o2"); if(!host) return null;
+  const PH=[{k:'read',label:'精读会话'},{k:'taxonomy',label:'归纳能力图谱'},{k:'verify',label:'多轮校验(稳定性)'},{k:'rank',label:'排序产出'}];
+  host.innerHTML=`<div class="ldr" style="margin-top:24px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline"><div class="ldr-t" style="margin:0">正在萃取你的能力项</div><div class="ldr-cnt" id="x-el" style="margin:0">已用 0s</div></div>
+    <div class="ldr-ph" style="margin-top:14px">${PH.map(p=>`<div class="ph" data-k="${p.k}"><i class="phi">○</i><span>${p.label}</span></div>`).join("")}</div>
+    <div class="ldr-bar indet" style="margin-top:14px"><i></i></div>
+    <div class="ldr-cnt" id="x-stat">准备中…</div>
+    <div class="ldr-priv">🔎 在读你的真实会话、归纳反复出现的模式 —— 只基于真实历史,不编造</div></div>`;
+  const q=(s)=>host.querySelector(s);
+  const setPh=(k,st)=>{const el=host.querySelector(`.ph[data-k="${k}"]`);if(!el)return;el.classList.remove("active","done");if(st)el.classList.add(st);el.querySelector(".phi").textContent=st==="done"?"✓":st==="active"?"⟳":"○"};
+  const t0=Date.now();
+  const tick=setInterval(()=>{const el=q("#x-el");if(el)el.textContent="已用 "+Math.round((Date.now()-t0)/1000)+"s"; else clearInterval(tick);},1000);
+  return {
+    enter(k){let passed=false;for(const p of PH){if(p.k===k){setPh(k,"active");passed=true}else if(!passed)setPh(p.k,"done")}},
+    progress(done,total){const bar=q(".ldr-bar"),fill=q(".ldr-bar i");if(total>0){bar.classList.remove("indet");fill.style.width=Math.min(100,Math.round(done/total*100))+"%";const s=q("#x-stat");if(s)s.textContent=`精读 ${done}/${total} 段`}},
+    stat(t){const s=q("#x-stat");if(s)s.textContent=t},
+    indet(){const bar=q(".ldr-bar");if(bar)bar.classList.add("indet")},
+    stop(){clearInterval(tick)},
+    fail(msg){clearInterval(tick);const c=q(".ldr");if(c)c.classList.add("err");const t=q(".ldr-t");if(t)t.textContent="萃取出了点问题";const b=q(".ldr-bar");if(b){b.classList.remove("indet");b.querySelector("i").style.width="100%"}const s=q("#x-stat");if(s)s.textContent=msg;
+      if(c&&!c.querySelector(".ldr-retry"))c.insertAdjacentHTML("beforeend",`<div style="margin-top:14px"><button class="btn ghost ldr-retry">↻ 重试</button></div>`);const rb=c&&c.querySelector(".ldr-retry");if(rb)rb.onclick=()=>step2load();}
+  };
+}
 function step1(){
   $("#root").innerHTML=shell(`<div class="eyebrow">STEP 1 · 导入</div><h1 class="serif">导入你的对话历史</h1>
    <div class="lede">先把你的完整对话历史一键导入,生成一份可供萃取的 raw data。整个过程仅你可见。</div>
@@ -363,9 +393,25 @@ function showImported(st,sessions,title){
 }
 function step2(){$("#root").innerHTML=shell(`<div class="eyebrow">STEP 2 · 提取</div><h1 class="serif">从 raw data 提取能力项</h1>
    <div class="lede">AI 扫描你的 raw data,识别出反复出现、值得打包成 mini-app 的能力。下一步你来选要发哪个。</div>
-   <div id="o2"><div class="spin" style="margin-top:24px">Pi 在反推这段 raw data 里藏着哪些能力 <span class="dots"><i></i><i></i><i></i></span></div></div>`);}
-async function step2load(){step2();const r=await api("/api/extract",{id:S.id},200000);if(r.error){$("#o2").innerHTML=`<div class="err">${esc(r.error)}</div>`;return}
+   <div id="o2"></div>`);}
+async function step2load(){
+  step2();
+  const L=extractLoader();
+  let es=null;
+  try{
+    es=new EventSource("/api/extract/progress?id="+encodeURIComponent(S.id));
+    await new Promise((r)=>{es.onopen=r;es.onerror=r;setTimeout(r,600);});   // 确保订阅就绪再发起萃取
+    es.addEventListener("phase",(e)=>{const d=JSON.parse(e.data);if(!L)return;L.enter(d.k);if(d.k==="read")L.stat("精读会话中…");else{L.indet();L.stat(d.k==="taxonomy"?"归纳能力图谱…":d.k==="verify"?"多轮校验中…":"排序产出…");}});
+    es.addEventListener("progress",(e)=>{const d=JSON.parse(e.data);if(L&&d.phase==="read")L.progress(d.done,d.total);});
+    es.addEventListener("taxonomy",(e)=>{const d=JSON.parse(e.data);if(L){L.indet();L.stat("归纳出 "+d.count+" 类能力,开始校验…");}});
+    es.addEventListener("round",(e)=>{const d=JSON.parse(e.data);if(L){L.indet();L.stat("多轮校验 第 "+d.k+"/"+d.total+" 轮(稳定性)…");}});
+    es.addEventListener("done",()=>{try{es.close()}catch{}});
+  }catch{}
+  const r=await api("/api/extract",{id:S.id},240000);
+  if(es){try{es.close()}catch{}} if(L)L.stop();
+  if(r.error){if(L)L.fail(r.error);else $("#o2").innerHTML=`<div class="err">${esc(r.error)}</div>`;return}
   S.candidates=r.candidates;
+  if(!r.candidates||!r.candidates.length){$("#o2").innerHTML=`<div class="banner" style="border-color:var(--gold)"><b>这批 raw data 没萃取出足够稳定的能力项</b>${r.fallback?"":" —— 多导入一些历史(Claude+Codex 都导),或换更聚焦的会话再试。"}</div><div class="foot"><span class="fl2">第 2 步,共 5 步</span><button class="btn ghost" id="b2back">← 回去多导一些</button></div>`;const bb=$("#b2back");if(bb)bb.onclick=()=>{S.step=1;render();};return;}
   $("#o2").innerHTML=`<div class="banner"><b>✓ 已分析 raw data</b> 识别出 ${r.candidates.length} 个能力项,按可打包度排序:</div>
     ${r.candidates.map((c,i)=>`<div class="cand"><div class="ic serif">${esc((c.name||"?")[0])}</div>
       <div><div class="cn serif">${esc(c.name)} <span class="badge ${c.confidence==="高"?"b-hi":"b-mid"}">置信 ${esc(c.confidence)}</span> <span class="badge b-ty">${esc(c.type)}</span></div><div class="cd">${esc(c.tagline)}</div></div>
