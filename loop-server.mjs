@@ -574,21 +574,24 @@ const server = http.createServer(async (req, res) => {
       apps[id] = { id, raw: digest, status: "imported", stats: h.stats, sessions: h.sessions.slice(0, 8), sessionIndex: h.sessions.slice(0, 300), source: "history", createdAt: Date.now() }; save();
       return json(res, 200, { id, stats: h.stats, sessions: h.sessions.slice(0, 6) });
     }
-    // ① 上传导入(公网):客户端已就地解析 ~/.claude,只传精简数据(标题/条数/日期/用户消息文本)。
+    // ① 上传导入(公网):客户端就地解析 Claude/Codex,只传精简数据。appendTo 可追加第二个来源。
     if (u.pathname === "/api/import-uploaded" && req.method === "POST") {
-      const { sessions } = await readBody(req);
+      const { sessions, appendTo } = await readBody(req);
       const arr = (Array.isArray(sessions) ? sessions : []).filter((s) => s && s.content && (s.count || 0) >= 2);
-      if (!arr.length) return json(res, 400, { error: "没解析到可用会话(需 ≥2 条用户消息的 .jsonl)" });
-      // 统一成与本地导入同构的 sessionIndex(source=upload,带 content;path 仅作去重键)
-      const idx = arr.map((s, i) => ({ title: s.title || "(无标题会话)", count: s.count || 0, date: (s.date || new Date().toISOString()).slice(0, 10), path: "upload:" + i, source: "upload", project: s.project || "upload", content: String(s.content).slice(0, 6000) }))
-        .sort((a, b) => b.count - a.count).slice(0, 300);
+      if (!arr.length) return json(res, 400, { error: "没解析到可用会话(需 ≥2 条用户消息;支持 Claude / Codex 的 .jsonl)" });
+      const mapped = arr.map((s) => ({ title: s.title || "(无标题会话)", count: s.count || 0, date: (s.date || new Date().toISOString()).slice(0, 10), path: "upload:" + uid(), source: s.source || "upload", project: s.project || "upload", content: String(s.content).slice(0, 6000) }));
+      // 追加合并(同一 app 加第二个来源,如先 Claude 再 Codex)
+      const base = (appendTo && apps[appendTo]) ? (apps[appendTo].sessionIndex || []) : [];
+      const seen = new Map(base.map((s) => [s.title + "|" + s.count + "|" + s.project, s]));
+      mapped.forEach((s) => seen.set(s.title + "|" + s.count + "|" + s.project, s));   // 去重(标题+条数+项目)
+      const idx = [...seen.values()].sort((a, b) => b.count - a.count).slice(0, 400);
       const totalMsgs = idx.reduce((n, s) => n + s.count, 0);
       const times = idx.map((s) => Date.parse(s.date)).filter((n) => n); const fmt = (t) => new Date(t).toISOString().slice(0, 7);
-      const projects = new Set(idx.map((s) => s.project));
-      const stats = { segments: idx.length, messages: totalMsgs, span: times.length ? fmt(Math.min(...times)) + "–" + fmt(Math.max(...times)) : "—", projects: projects.size, by_source: { upload: idx.length } };
-      const id = uid();
-      apps[id] = { id, raw: idx.slice(0, 80).map((s) => `[${s.count}条] ${s.title}`).join("\n"), status: "imported", stats, sessions: idx.slice(0, 8), sessionIndex: idx, source: "upload", createdAt: Date.now() }; save();
-      log(`上传导入 ${id} · ${idx.length} 段`);
+      const bySrc = {}; idx.forEach((s) => bySrc[s.source] = (bySrc[s.source] || 0) + 1);
+      const stats = { segments: idx.length, messages: totalMsgs, span: times.length ? fmt(Math.min(...times)) + "–" + fmt(Math.max(...times)) : "—", projects: new Set(idx.map((s) => s.project)).size, by_source: bySrc };
+      const id = (appendTo && apps[appendTo]) ? appendTo : uid();
+      apps[id] = { ...(apps[id] || {}), id, raw: idx.slice(0, 80).map((s) => `[${s.count}条] ${s.title}`).join("\n"), status: "imported", stats, sessions: idx.slice(0, 8), sessionIndex: idx, source: "upload", draft: undefined, createdAt: apps[id]?.createdAt || Date.now() }; save();
+      log(`上传导入 ${id} · ${idx.length} 段 · ${JSON.stringify(bySrc)}`);
       return json(res, 200, { id, stats, sessions: idx.slice(0, 6) });
     }
     // ① 导入(粘贴)
