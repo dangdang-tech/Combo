@@ -13,7 +13,8 @@ body{font-family:var(--sans);background:var(--neutral);color:var(--ink);font-siz
 .top .right{margin-left:auto;display:flex;align-items:center;gap:14px}
 .top .save{border:1px solid var(--line);background:var(--raised);border-radius:7px;padding:7px 14px;font-size:12.5px;cursor:pointer}
 .top .av{width:32px;height:32px;border-radius:50%;background:var(--ember);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px}
-.wrap{max-width:1000px;margin:0 auto;padding:30px 32px 70px}
+.wrap{max-width:1280px;margin:0 auto;padding:34px 48px 80px}
+@media(max-width:900px){.wrap{padding:24px 18px 60px}}
 /* rail */
 .rail{display:flex;align-items:center;margin-bottom:30px}
 .rstep{display:flex;align-items:center;gap:8px}.rline{flex:1;height:1px;background:var(--line);margin:0 6px}
@@ -43,6 +44,42 @@ textarea:focus,input.ti:focus{outline:none;border-color:var(--ember)}
 .cand .cn{font-family:var(--serif);font-size:17px;display:flex;align-items:center;gap:8px}
 .cand .cd{font-size:12.5px;color:var(--ink60);margin-top:2px}
 .cand .from{margin-left:auto;font-size:12px;color:var(--ink40);font-family:var(--mono);flex:none}
+/* 导入:两张大选项卡 */
+.impgrid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:26px}
+@media(max-width:760px){.impgrid{grid-template-columns:1fr}}
+.impcard{background:var(--raised);border:1px solid var(--line);border-radius:16px;padding:26px 26px 22px;display:flex;flex-direction:column;min-height:210px;transition:border-color .2s,box-shadow .2s}
+.impcard:hover{border-color:var(--ember);box-shadow:0 4px 18px rgba(167,55,24,.06)}
+.impcard .ich{font-size:30px;line-height:1}
+.impcard .ity{font-size:21px;margin-top:14px;color:var(--ink)}
+.impcard .idesc{font-size:14px;color:var(--ink60);margin-top:9px;line-height:1.6;flex:1}
+.impcard .btn{margin:16px 0 0;align-self:flex-start}
+.impcard .ibadge{font-size:11.5px;color:var(--ink40);margin-top:12px;font-family:var(--mono)}
+.impcard.reco{border-color:#d9b48a}
+.impcard .tag{display:inline-block;font-size:11px;color:var(--ember);background:rgba(167,55,24,.08);border-radius:20px;padding:2px 10px;margin-left:8px;vertical-align:middle}
+/* 导入引导(选哪个文件夹)*/
+.guide{background:var(--muted);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-top:22px;max-width:680px}
+.guide ol{margin:10px 0 0;padding-left:20px}.guide li{font-size:14px;color:var(--ink80);margin:7px 0;line-height:1.6}
+.pathchip{display:inline-flex;align-items:center;gap:8px;background:var(--raised);border:1px solid var(--line);border-radius:8px;padding:4px 6px 4px 12px;font-family:var(--mono);font-size:13px;color:var(--ember);margin:0 2px}
+.pathchip button{font-size:11px;border:0;background:var(--ember);color:#fff;border-radius:6px;padding:4px 9px;cursor:pointer;font-family:var(--sans)}
+/* 萃取结果:Personal Context + 三列能力卡 */
+.pctx{background:var(--raised);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin:6px 0 20px}
+.pctx-h{font-family:var(--serif);font-size:17px;color:var(--ink);margin-bottom:14px}.pctx-h span{font-size:12px;color:var(--ink40);font-family:var(--sans);margin-left:8px;font-weight:400}
+.pctx-grid{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:22px}
+@media(max-width:760px){.pctx-grid{grid-template-columns:1fr}}
+.pctx .pl{font-size:11.5px;color:var(--ink40);text-transform:uppercase;letter-spacing:.04em;margin-bottom:9px;font-family:var(--mono)}
+.pctx .ptag{display:inline-block;font-size:13px;background:var(--muted);border:1px solid var(--line);border-radius:7px;padding:4px 10px;margin:0 6px 6px 0;color:var(--ink80)}
+.pctx .pstat{font-size:14px;color:var(--ink80);line-height:1.9}.pctx .pstat b{color:var(--ink);font-family:var(--mono)}
+.candgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:6px}
+@media(max-width:980px){.candgrid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:640px){.candgrid{grid-template-columns:1fr}}
+.candg{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:8px;transition:border-color .2s}
+.candg:hover{border-color:var(--ember)}
+.candg .ch{display:flex;align-items:center;gap:10px}
+.candg .cic{width:34px;height:34px;border-radius:8px;background:var(--muted);display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:15px;flex:none;color:var(--ink60)}
+.candg .cnm{font-family:var(--serif);font-size:16px;line-height:1.25;color:var(--ink)}
+.candg .cdesc{font-size:12.5px;color:var(--ink60);line-height:1.55;flex:1}
+.candg .cfoot{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:11px}
+.candg .cfrom{margin-left:auto;font-family:var(--mono);color:var(--ink40)}
 .badge{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:5px}
 .b-hi{background:rgba(14,109,82,.12);color:var(--success)}.b-mid{background:rgba(184,137,58,.15);color:var(--gold)}.b-ty{background:var(--muted);color:var(--ink60)}
 /* select radio */
@@ -246,22 +283,34 @@ function extractLoader(){
   };
 }
 function step1(){
-  $("#root").innerHTML=shell(`<div class="eyebrow">STEP 1 · 导入</div><h1 class="serif">导入你的对话历史</h1>
-   <div class="lede">先把你的完整对话历史一键导入,生成一份可供萃取的 raw data。整个过程仅你可见。</div>
-   <div id="imp"><div style="margin-top:22px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-       <button class="btn" id="bimport" style="margin-left:0">⚡ 一键导入 Claude + Codex 历史</button>
-       <button class="btn ghost" id="bupload" style="margin-left:0">📁 选文件夹导入</button>
-       <button class="btn ghost" id="bconnect" style="margin-left:0;display:none">🔌 连接本机(零选择)</button>
-       <span class="fl2">或下方粘贴</span></div>
-     <div id="imphint" class="fl2" style="margin-top:8px;font-size:12px"></div>
-     <textarea id="raw" rows="4" placeholder="(可选)粘贴一段对话/工作记录" style="margin-top:12px"></textarea>
-     <div class="foot"><span class="fl2">raw data 仅你可见 · 第 1 步,共 5 步</span><button class="btn ghost" id="b1">用粘贴的导入 →</button></div></div>`);
   const HOSTED=!/^(localhost|127(\.|$)|0\.0\.0\.0|\[?::1|::1)$/.test(location.hostname);
   const FS_OK=!!window.showDirectoryPicker;
-  const PICK_MSG='选你本机的 <b>~/.claude/projects</b>(Claude Code)或 <b>~/.codex/sessions</b>(Codex)文件夹 —— Finder 里 <b>⌘⇧G</b> 粘路径直达。两种格式自动识别;导入完一个会提示「➕ 再导入另一个」。解析在你浏览器本地完成,只上传提取后的文本。';
+  const descA=!HOSTED?"直接扫描这台机器上的 ~/.claude 与 ~/.codex,全自动,无需选文件夹。":(FS_OK?"在浏览器里授权一次本地文件夹,自动读取你的 Claude / Codex 历史。会一步步教你选哪个。":"你的浏览器不支持(建议 Chrome / Edge)。请用右边的「CURL 命令」方式。");
+  $("#root").innerHTML=shell(`<div class="eyebrow">STEP 1 · 导入</div><h1 class="serif">导入你的对话历史</h1>
+   <div class="lede">把你真实的 AI 对话历史(Claude Code / Codex)导进来,Agora 从中萃取你反复在做的能力。整个过程仅你可见。</div>
+   <div id="imp">
+     <div class="impgrid">
+       <div class="impcard reco">
+         <div class="ich">⚡</div>
+         <div class="ity serif">一键导入本地历史<span class="tag">推荐</span></div>
+         <div class="idesc">${descA}</div>
+         <button class="btn" id="bimport">开始导入 →</button>
+         <div class="ibadge">浏览器内解析 · 原始日志不出本机</div>
+       </div>
+       <div class="impcard">
+         <div class="ich">🖥</div>
+         <div class="ity serif">通过 CURL 命令导入</div>
+         <div class="idesc">复制一行命令到终端运行,自动读取并上传你的全部历史 —— <b>一个文件夹都不用选</b>,最稳。</div>
+         <button class="btn ghost" id="bconnect">生成命令 →</button>
+         <div class="ibadge">零选择 · 任何系统 · 需本机已装 Node</div>
+       </div>
+     </div>
+     <div id="imphint" class="fl2" style="margin-top:16px;font-size:12.5px;max-width:760px;line-height:1.7"></div>
+   </div>`);
+  const PICK_MSG='选你本机的 <b>~/.claude/projects</b>(Claude Code)或 <b>~/.codex/sessions</b>(Codex)文件夹 —— Finder 里 <b>⌘⇧G</b> 粘路径直达。两种格式自动识别;导入完一个会提示「➕ 再导入另一个」。';
   const PHASES_FS=[{k:'auth',label:'授权读取'},{k:'scan',label:'扫描 ~/.claude · ~/.codex'},{k:'parse',label:'解析会话'},{k:'upload',label:'上传'}];
-  const bimport=$("#bimport"),bupload=$("#bupload"),bconnect=$("#bconnect");
-  const FS_LABEL="⚡ 一键导入(授权读取 Claude + Codex)";
+  const bimport=$("#bimport"),bconnect=$("#bconnect");
+  const isMac=/Mac|iPhone|iPad/i.test(navigator.platform||navigator.userAgent);
 
   // 选文件夹(动态 input,不依赖常驻 DOM)→ 解析 → 上传,全程走加载态
   const openPicker=(msg)=>{const hint=$("#imphint");if(hint&&msg)hint.innerHTML=msg;const inp=document.createElement("input");inp.type="file";inp.webkitdirectory=true;inp.multiple=true;inp.style.display="none";inp.onchange=(e)=>handleDirFiles([...e.target.files]);document.body.appendChild(inp);inp.click();setTimeout(()=>inp.remove(),1000);};
@@ -350,32 +399,45 @@ function step1(){
     }catch(e){ const m="读取出错:"+(e&&e.name==="NotAllowedError"?"授权已失效":(e?.message||e))+"。点「重新开始」再来。"; if(L)L.fail(m); else{step1();const t=$("#imphint");if(t)t.textContent=m;} }
   }
 
-  if(!HOSTED){ // 本地开发:服务器直扫最省事(加载态指示),扫不到回退选文件夹
-    bimport.innerHTML="⚡ 一键导入(本机直读 ~/.claude + ~/.codex)";
+  // 卡 A「一键导入」引导页:明确告诉用户按哪个键、粘哪个路径(解决"不知道选哪个")
+  function fsGuide(){
+    const key=isMac?"⌘⇧G":"Ctrl+L";const nav=isMac?("按 <b>"+key+"</b>"):("按 <b>Ctrl+L</b>(或点地址栏)");
+    $("#imp").innerHTML=`<div class="guide">
+      <div style="font-family:var(--serif);font-size:19px;margin-bottom:6px">导入本地历史 · 三步,30 秒</div>
+      <div style="font-size:13px;color:var(--ink60)">网页出于安全不能自己读你硬盘,需要你<b>指给它看一次</b>。照下面做,选哪个我都写好了:</div>
+      <ol>
+        <li>点最下方<b>「打开文件夹框」</b></li>
+        <li>框里${nav},把这个路径粘进去 → 回车:<br><span class="pathchip">~/.claude/projects <button data-p="~/.claude/projects">复制</button></span></li>
+        <li>点「打开 / Open」。<b>就选这一个文件夹</b> —— 别往上选到主目录(Chrome 会拦,报"system files")。</li>
+      </ol>
+      <div style="font-size:12.5px;color:var(--ink40);margin-top:10px">导完 Claude,会让你再导一次 <b>Codex</b>:同样方式,路径填 <span class="pathchip">~/.codex/sessions <button data-p="~/.codex/sessions">复制</button></span></div>
+      <div style="margin-top:18px;display:flex;gap:10px"><button class="btn" id="gopen">打开文件夹框</button><button class="btn ghost" id="gback">← 返回</button></div>
+      <div style="font-size:12px;color:var(--ink40);margin-top:14px">嫌选文件夹麻烦?<a id="gcurl" style="color:var(--ember);cursor:pointer;text-decoration:underline">改用 CURL 命令(一个都不用选)→</a></div>
+    </div>`;
+    $("#imp").querySelectorAll(".pathchip button").forEach(b=>b.onclick=()=>{navigator.clipboard.writeText(b.dataset.p);b.textContent="已复制 ✓";setTimeout(()=>{b.textContent="复制"},1200)});
+    $("#gopen").onclick=()=>fsImport(true);
+    $("#gback").onclick=()=>step1();
+    $("#gcurl").onclick=()=>connectFlow();
+  }
+
+  bconnect.onclick=connectFlow;
+  if(!HOSTED){ // 本地开发:服务器直扫最省事(无需选文件夹)
     bimport.onclick=async()=>{const L=importLoader([{k:'scan',label:'扫描本机 ~/.claude · ~/.codex'},{k:'parse',label:'整理会话'}]);L.enter('scan');L.indet("在你本机扫描历史…");
       const r=await api("/api/import-history",{});
-      if(r.error){L.fail("本机没扫到 AI 历史 —— 点「重新开始」用选文件夹或粘贴。");return}
+      if(r.error){L.fail("本机没扫到 AI 历史 —— 点「重新开始」,或用 CURL 命令。");return}
       L.enter('parse');L.sources(r.stats.by_source||{});S.id=r.id;showImported(r.stats,r.sessions,"已导入全部对话历史(多 agent)");};
-    bupload.onclick=()=>openPicker(PICK_MSG);
-  } else if(FS_OK){ // 托管 + Chromium:授权读取一个历史文件夹(或连接本机零选择)
-    bimport.innerHTML=FS_LABEL;bimport.onclick=()=>fsImport(true);
-    bupload.innerHTML="📁 改用选文件夹";bupload.onclick=()=>openPicker(PICK_MSG);
-    bconnect.style.display="";bconnect.onclick=connectFlow;
-    $("#imphint").innerHTML='ℹ️ 网页出于安全不能自己读你硬盘,得你授权一个文件夹。两种方式:<br>· <b>一键导入</b>:弹框里按 <b>⌘⇧G</b> 粘 <b>~/.claude/projects</b> 回车「打开」(<b>别选整个主目录,Chrome 会拦</b>);导完再按提示加 Codex。<br>· <b>🔌 连接本机(零选择)</b>:终端粘一行命令,<b>一个目录都不用选</b>,最省事。';
-    (async()=>{ // 复访:有授权过的文件夹 → 给个"继续"按钮(不自动弹加载态,避免惊讶/卡住)
+  } else if(FS_OK){ // 托管 + Chromium:走引导页
+    bimport.onclick=()=>fsGuide();
+    (async()=>{ // 复访:有授权过的文件夹 → 给个"继续"按钮(不自动弹加载态)
       try{const dirs=await fsGetHandles();if(!dirs.length)return;let g=0;for(const h of dirs){try{if((await h.queryPermission({mode:"read"}))==="granted")g++}catch{}}if(!g)return;
-        const row=$("#imphint");if(row&&!$("#brevisit"))row.insertAdjacentHTML("beforebegin",`<div style="margin:6px 0 2px"><button class="btn ghost" id="brevisit">↻ 用上次授权的文件夹继续(${g} 个)</button></div>`);const br=$("#brevisit");if(br)br.onclick=()=>fsRevisit();
+        const row=$("#imphint");if(row&&!$("#brevisit"))row.innerHTML=`<button class="btn ghost" id="brevisit" style="margin:0">↻ 用上次授权的文件夹继续(${g} 个)</button>`;const br=$("#brevisit");if(br)br.onclick=()=>fsRevisit();
       }catch{} })();
-  } else { // 托管 + Safari/Firefox:回退到选文件夹 + 连接本机(零选择)
-    bimport.innerHTML="📁 选文件夹导入 Claude + Codex";
-    bimport.onclick=()=>openPicker('<b>你的浏览器不支持一键授权(建议用 Chrome/Edge)。</b><br>'+PICK_MSG);
-    bupload.style.display="none";bconnect.style.display="";bconnect.onclick=connectFlow;
-    $("#imphint").innerHTML='提示:你的浏览器没有一键授权。可「📁 选文件夹导入」,或用 <b>🔌 连接本机(零选择)</b> —— 终端粘一行命令,一个目录都不用选。';
+  } else { // 托管 + Safari/Firefox:不支持一键,引导用 CURL
+    bimport.onclick=()=>{$("#imphint").innerHTML='你的浏览器不支持「一键导入」(建议用 <b>Chrome / Edge</b>),请用右边的 <b>「通过 CURL 命令导入」</b> —— 一个文件夹都不用选。';};
   }
-  $("#b1").onclick=async()=>{const raw=$("#raw").value.trim();if(!raw){const t=$("#raw");if(t){t.style.borderColor="#b8863b";t.focus();}return}const b=$("#b1");b.disabled=true;b.textContent="导入中…";
-    const r=await api("/api/import",{text:raw});S.id=r.id;showImported(r.stats,null,"已导入对话历史");};
 }
 function showImported(st,sessions,title){
+  S.importStats=st;   // 存给 Personal Context 用(规模/工具/跨度)
   const SRC={claude:"#C96442",codex:"#10a37f",opencode:"#6e56cf",hermes:"#b8860b"};
   const tag=s=>s.source?`<span class="mono" style="font-size:9px;padding:1px 5px;border-radius:4px;flex:none;color:#fff;background:${SRC[s.source]||"#888"}">${esc(s.source)}</span>`:"";
   const bs=st.by_source||{};
@@ -396,14 +458,34 @@ function showImported(st,sessions,title){
 function step2(){$("#root").innerHTML=shell(`<div class="eyebrow">STEP 2 · 提取</div><h1 class="serif">从 raw data 提取能力项</h1>
    <div class="lede">AI 扫描你的 raw data,识别出反复出现、值得打包成 mini-app 的能力。下一步你来选要发哪个。</div>
    <div id="o2"></div>`);}
+// Personal Context:从萃取结果 + 导入统计派生(无额外 LLM),给"这是谁/反复在做什么"留展示位
+function personalContextHTML(r){
+  const cands=r.candidates||[];
+  const themes=cands.slice(0,6).map(c=>`<span class="ptag">${esc(c.name)}</span>`).join("")||'<span class="fl2" style="font-size:13px">—</span>';
+  // 项目:从候选证据聚合频次
+  const projFreq={};cands.forEach(c=>(c.evidence||[]).forEach(e=>{const p=e&&e.project;if(p&&p!=="upload"&&p!=="codex"&&p!=="claude")projFreq[p]=(projFreq[p]||0)+1}));
+  const projs=Object.entries(projFreq).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([p])=>`<span class="ptag">${esc(p)}</span>`).join("")||'<span class="fl2" style="font-size:13px">(项目信息有限)</span>';
+  const st=S.importStats||{};const bs=st.by_source||{};const tot=Object.values(bs).reduce((a,b)=>a+b,0)||1;
+  const tools=Object.entries(bs).filter(([,v])=>v>0).map(([k,v])=>`${k} ${Math.round(v/tot*100)}%`).join(" · ")||"—";
+  const scale=`<b>${st.segments||cands.reduce((n,c)=>n+(c.from_segments||0),0)}</b> 段会话 · <b>${(st.messages||0).toLocaleString()}</b> 条消息`;
+  return `<div class="pctx"><div class="pctx-h">Personal Context<span>基于你的真实历史 · 没编数字</span></div>
+    <div class="pctx-grid">
+      <div><div class="pl">你反复在做</div><div>${themes}</div></div>
+      <div><div class="pl">主要项目</div><div>${projs}</div></div>
+      <div><div class="pl">规模 / 工具 / 跨度</div><div class="pstat">${scale}<br>工具 ${tools}<br>跨度 ${esc(st.span||"—")}</div></div>
+    </div></div>`;
+}
 function renderCandidates(r){
   S.candidates=r.candidates;
   if(!r.candidates||!r.candidates.length){$("#o2").innerHTML=`<div class="banner" style="border-color:var(--gold)"><b>这批 raw data 没萃取出足够稳定的能力项</b>${r.fallback?"":" —— 多导入一些历史(Claude+Codex 都导),或换更聚焦的会话再试。"}</div><div class="foot"><span class="fl2">第 2 步,共 5 步</span><button class="btn ghost" id="b2back">← 回去多导一些</button></div>`;const bb=$("#b2back");if(bb)bb.onclick=()=>{S.step=1;render();};return;}
-  $("#o2").innerHTML=`<div class="banner"><b>✓ 已分析 raw data</b> 识别出 ${r.candidates.length} 个能力项,按可打包度排序:${r.cached?' <span class="fl2" style="font-size:12px">(上次结果)</span>':""}</div>
-    ${r.candidates.map((c,i)=>`<div class="cand"><div class="ic serif">${esc((c.name||"?")[0])}</div>
-      <div><div class="cn serif">${esc(c.name)} <span class="badge ${c.confidence==="高"?"b-hi":"b-mid"}">置信 ${esc(c.confidence)}</span> <span class="badge b-ty">${esc(c.type)}</span></div><div class="cd">${esc(c.tagline)}</div></div>
-      <div class="from">来自 ${c.from_segments||"?"} 段</div></div>`).join("")}
-    <div class="foot"><span class="fl2">识别 ${r.candidates.length} 个 · 第 2 步,共 5 步</span><button class="btn" id="b2">下一步:选择发布内容 →</button></div>`;
+  const card=(c)=>`<div class="candg"><div class="ch"><div class="cic serif">${esc((c.name||"?")[0])}</div><div class="cnm">${esc(c.name)}</div></div>
+    <div class="cdesc">${esc(c.tagline||"")}</div>
+    <div class="cfoot"><span class="badge ${c.confidence==="高"?"b-hi":"b-mid"}">置信 ${esc(c.confidence)}</span><span class="badge b-ty">${esc(c.type)}</span><span class="cfrom">${c.from_segments||"?"} 段</span></div></div>`;
+  $("#o2").innerHTML=`<div class="banner"><b>✓ 已分析 raw data</b> 识别出 ${r.candidates.length} 个能力项${r.cached?' <span class="fl2" style="font-size:12px">(上次结果)</span>':""}</div>
+    ${personalContextHTML(r)}
+    <div class="lbl" style="margin-bottom:8px">你反复在做的能力项 · 按可打包度排序</div>
+    <div class="candgrid">${r.candidates.map(card).join("")}</div>
+    <div class="foot" style="margin-top:20px"><span class="fl2">识别 ${r.candidates.length} 个 · 第 2 步,共 5 步</span><button class="btn" id="b2">下一步:选择发布内容 →</button></div>`;
   $("#b2").onclick=()=>{S.step=3;render();};
 }
 // 萃取很慢(120 段可达 4+ 分钟)。结果经 SSE done 通知 → GET 拉取,不靠这条 HTTP 撑到结束(去掉超时天花板)。
