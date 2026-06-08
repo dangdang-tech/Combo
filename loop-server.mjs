@@ -8,6 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync, execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import crypto from "node:crypto";
 import { run, runAgent, createAgent, Type, log } from "./pi-exec.mjs";
 import { distillToManifest, parseManifest } from "./distill-to-manifest.mjs";
 import { firstJson, computeScope, compile } from "./anchor-lib.mjs";
@@ -123,6 +124,32 @@ const STRUCTURE_TIMEOUT = 40000;
 async function readBody(req) { let b = ""; for await (const c of req) b += c; return b ? JSON.parse(b) : {}; }
 const json = (res, code, obj) => { res.writeHead(code, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify(obj)); };
 
+// 访问码闸:ACCESS_CODE 非空(公网部署)时,创作者面(导入/草稿/锚定/打包,会烧 OpenRouter key)需解锁;
+//   消费侧(/miniapp + /api/miniapp/*,凭发布 token 用别人做好的 app)放行。本地不设码 → 全开。
+const ACCESS = (process.env.ACCESS_CODE || "").trim();
+const tokenFor = (code) => crypto.createHash("sha256").update("agora:" + code).digest("hex").slice(0, 24);
+const ACCESS_TOKEN = ACCESS ? tokenFor(ACCESS) : "";
+function unlocked(req) {
+  if (!ACCESS) return true;
+  const m = (req.headers.cookie || "").match(/agora_ok=([a-f0-9]+)/);
+  if (m && m[1] === ACCESS_TOKEN) return true;
+  if ((req.headers["x-access"] || "").trim() === ACCESS) return true;
+  return false;
+}
+const UNLOCK_HTML = `<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
+<title>Agora · 访问</title><style>*{box-sizing:border-box}body{margin:0;height:100vh;display:grid;place-items:center;background:#1a1714;color:#e8e0d6;font-family:"Noto Sans SC",system-ui,sans-serif}
+.c{width:min(92vw,360px);text-align:center}.t{font-family:"Noto Serif SC",serif;font-size:22px;margin:0 0 6px}.s{opacity:.6;font-size:13px;margin:0 0 22px}
+input{width:100%;padding:13px 14px;border-radius:10px;border:1px solid #4a4038;background:#221d19;color:#e8e0d6;font-size:15px;text-align:center;letter-spacing:2px}
+button{width:100%;margin-top:12px;padding:13px;border-radius:10px;border:0;background:#a73718;color:#fff;font-size:15px;font-weight:600;cursor:pointer}
+.e{color:#e0795f;font-size:13px;margin-top:10px;min-height:18px}</style>
+<div class=c><p class=t>Agora</p><p class=s>把你的 AI 对话历史 → 一个 agentic mini-app</p>
+<input id=k type=password placeholder="访问码" autofocus autocomplete=off>
+<button id=go>进入</button><div class=e id=e></div></div>
+<script>const k=document.getElementById('k'),e=document.getElementById('e');
+async function go(){e.textContent='';const r=await fetch('/api/unlock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:k.value})});
+if(r.ok){location.reload()}else{e.textContent='访问码不对';k.value='';k.focus()}}
+document.getElementById('go').onclick=go;k.onkeydown=ev=>{if(ev.key==='Enter')go()};</script>`;
+
 // ② 提取(agentic)：给 Pi agent 装工具,让它多步翻真实会话内容再下结论 —— 比"看标题猜"细致得多。
 // 按来源(claude/codex/opencode/hermes)分发,统一返回"用户: …"多行文本。
 function readSessionContent(s, maxChars = 3000) {
@@ -233,14 +260,26 @@ ${qs.length ? "【消费者已在开始前一次性填好的输入项】" + qs.j
 【动手与产出】动手时简述你在做什么、为什么调某工具;产出后支持在产物上多轮微调,复用上一稿、不重来。
 最终给出 artifact(markdown),并简述你做了什么、在什么边界内。`;
 };
-// 取网页文本 —— 走 curl(自动用 HTTPS_PROXY 本地代理;node 原生 http/undici 默认不读代理 → 外网不通)。
+// 取网页文本 —— 有代理(本地)走 curl(node 原生 http/undici 默认不读代理 → 外网不通);
+//   无代理(云端/直连)走 node 原生 fetch,免除对 curl 的部署依赖。
+const PROXY = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.ALL_PROXY || "";
 function fetchText(urlStr, timeoutMs = 8000) {
-  return new Promise((resolve, reject) => {
-    execFile("curl", ["-sL", "--max-time", String(Math.ceil(timeoutMs / 1000)), "-A", "AgoraMiniApp/0.1", urlStr], { maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => {
-      if (err) return reject(new Error(err.killed ? "超时" : String(err.message || err)));
-      resolve(stdout || "");
+  if (PROXY) {
+    return new Promise((resolve, reject) => {
+      execFile("curl", ["-sL", "--max-time", String(Math.ceil(timeoutMs / 1000)), "-A", "AgoraMiniApp/0.1", urlStr], { maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => {
+        if (err) return reject(new Error(err.killed ? "超时" : String(err.message || err)));
+        resolve(stdout || "");
+      });
     });
-  });
+  }
+  return (async () => {
+    const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const r = await fetch(urlStr, { signal: ctrl.signal, headers: { "User-Agent": "AgoraMiniApp/0.1" }, redirect: "follow" });
+      const t = await r.text(); return t.slice(0, 4 * 1024 * 1024);
+    } catch (e) { throw new Error(ctrl.signal.aborted ? "超时" : String(e.message || e)); }
+    finally { clearTimeout(timer); }
+  })();
 }
 // SSRF 闸:拒内网/本机/非常规端口/非 http(s)。
 function scopeGuardUrl(urlStr) {
@@ -559,6 +598,19 @@ const server = http.createServer(async (req, res) => {
     res.on("finish", () => log(`← ${res.statusCode} ${u.pathname} ${((Date.now() - t0) / 1000).toFixed(1)}s`));
   }
   try {
+    // 解锁端点 + 访问码闸(消费侧放行;创作者面需解锁)
+    if (u.pathname === "/api/unlock" && req.method === "POST") {
+      const { code } = await readBody(req);
+      if ((code || "").trim() === ACCESS) { res.setHeader("Set-Cookie", `agora_ok=${ACCESS_TOKEN}; HttpOnly; Path=/; Max-Age=2592000; SameSite=Lax`); return json(res, 200, { ok: true }); }
+      return json(res, 401, { ok: false, error: "访问码不对" });
+    }
+    if (ACCESS && !unlocked(req)) {
+      const consumerSurface = u.pathname === "/miniapp" || u.pathname === "/consume" || u.pathname.startsWith("/api/miniapp/");
+      if (!consumerSurface) {
+        if (u.pathname.startsWith("/api/")) return json(res, 401, { error: "需要访问码(创作者面已锁)" });
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }); return res.end(UNLOCK_HTML);
+      }
+    }
     if (u.pathname === "/") { res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }); return res.end(HTML); }
     if (u.pathname === "/anchor") { res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }); return res.end(fs.readFileSync(path.join(__dir, "anchor.html"), "utf8")); }
     // 消费侧 = agentic mini-app(/consume 与 /miniapp 都指向它;旧的一次性 consumer 已弃用)

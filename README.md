@@ -67,9 +67,17 @@ node test-flow.mjs     # 全链路集成(draft→anchor→package→publish→co
 
 ---
 
-## 关于公网托管(为什么现在是本机跑)
+## 公网托管(已支持)
 
-mini-app 的导入读的是**用户本机**的 session 文件。要做成"打开一个公网网址、所有人用同一个站"需要额外:① 用户**导出 + 上传** session(而非读本地 FS);② 服务端处理上传文件;③ 共享/各自的 API key 管理;④ 部署。这是后续工作。当前形态(本机 clone 跑)已能完整体验链路并改代码。
+两种用法,代码同一套:
+
+**A. 本机 clone 跑**(改代码/开发):如上,读你本机 `~/.claude` / `~/.codex`。
+
+**B. 打开一个公网 URL,人人用同一个站**:
+- **上传导入**(隐私优先):浏览器选 `~/.claude/projects`(Claude Code)或 `~/.codex/sessions`(Codex)文件夹 → **就地本地解析、两格式自动识别**,只上传提取后的精简文本,原始日志不出本机;可「➕ 再加一个来源」把第二个文件夹追加合并。
+- **访问码闸**:设环境变量 `ACCESS_CODE` 后,创作者面(导入/草稿/锚定/打包,会烧 OpenRouter key)需先输码;消费侧 `/miniapp?token=` 永远放行(可单独分享给最终用户)。本地不设码 = 全开。
+- **即时公网**:`cloudflared tunnel --url http://localhost:4190` → 秒得 `https://*.trycloudflare.com`(机器在线即可)。
+- **永久部署**:Railway(固定 URL、机器关了也在)—— 见 [`docs/部署-railway.md`](docs/部署-railway.md)。`PORT` 已用平台注入,`fetchText` 云端走原生 fetch(不依赖 curl)。
 
 ---
 
