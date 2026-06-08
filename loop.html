@@ -302,6 +302,7 @@ function step1(){
   } else if(FS_OK){ // 托管 + Chromium:一键授权读取
     bimport.innerHTML=FS_LABEL;bimport.onclick=()=>fsImport(true);
     bupload.innerHTML="📁 改用选文件夹";bupload.onclick=()=>openPicker(PICK_MSG);
+    $("#imphint").innerHTML='ℹ️ 网页出于安全不能自己读你硬盘 —— 点上面后浏览器会弹一次<b>授权框(就是选个目录)</b>:选你的<b>用户主目录</b>(⌘⇧H,或 ⌘⇧G 粘 <b>~</b> 回车)→ 点「打开」。<b>这一下就是授权,只需一次</b>,之后免再选。我们只读 ~/.claude 与 ~/.codex,别的不碰。';
     (async()=>{ // 复访:权限仍在 → 零点击自动导(带加载态);要复确认 → 改文案
       try{const home=await fsIdbGet("home");if(!home)return;
         if((await home.queryPermission({mode:"read"}))==="granted")fsImport(false,home);
