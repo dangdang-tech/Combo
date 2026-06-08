@@ -172,23 +172,10 @@ function shell(inner){
 }
 function render(){({1:step1,2:step2,3:step3,4:step4,5:step5})[S.step]();}
 
-// 客户端解析一个 .jsonl:自动认 Claude(message.role=user / aiTitle)或 Codex(rollout: response_item + payload.role=user)。
-function parseSession(txt,fname,lastModified){
-  const date=new Date(lastModified).toISOString().slice(0,10);const parts=fname.split("/");
-  const isCodex=/rollout-/.test(fname)||/"type"\s*:\s*"response_item"/.test(txt)||/"type"\s*:\s*"session_meta"/.test(txt);
-  if(isCodex){
-    let count=0,title="",cwd="";const out=[];
-    for(const line of txt.split("\n")){if(!line)continue;let d;try{d=JSON.parse(line)}catch{continue}const p=d.payload||{};
-      if(d.type==="session_meta"&&p.cwd)cwd=p.cwd;
-      if(d.type==="response_item"&&p.role==="user"){const c=p.content;let t=typeof c==="string"?c:Array.isArray(c)?c.map(b=>b?.text||"").join(""):"";t=t.trim();if(t&&!t.startsWith("#")&&!t.startsWith("<")){count++;if(!title)title=t.slice(0,50).replace(/\s+/g," ");if(out.length<12)out.push("用户: "+t.slice(0,400))}}}
-    if(count<2)return null;if(!title)title=cwd?("("+cwd.split("/").pop()+")"):"(Codex 会话)";
-    return {title,count,date,content:out.join("\n").slice(0,6000),project:cwd?cwd.split("/").pop():"codex",source:"codex"};
-  }
-  let title="(无标题会话)";const tm=txt.match(/"aiTitle"\s*:\s*"((?:[^"\\]|\\.)*)"/);if(tm){try{title=JSON.parse('"'+tm[1]+'"')}catch{title=tm[1]}}
-  const count=(txt.match(/"role":\s*"user"/g)||[]).length;if(count<2)return null;
-  const out=[];for(const line of txt.split("\n")){if(!line)continue;let d;try{d=JSON.parse(line)}catch{continue}const m=d.message;if(!m||m.role!=="user")continue;const c=m.content;let t=typeof c==="string"?c:Array.isArray(c)?c.map(b=>b?.text||"").join(""):"";t=t.trim();if(t&&!t.startsWith("<")&&!t.startsWith("Caveat"))out.push("用户: "+t.slice(0,400));if(out.length>=12)break}
-  return {title,count,date,content:out.join("\n").slice(0,6000),project:parts.length>1?parts[parts.length-2]:"claude",source:"claude"};
-}
+// 客户端解析器由服务器注入(parse-sessions.mjs 唯一真源):parseSession/parseClaude/parseCodex 等。
+/*__PARSERS__*/
+// 薄封装:文件的 lastModified(数字)→ {date} 给共享 parseSession
+function parseSessionFile(txt,fname,lastModified){return parseSession(txt,fname,{date:new Date(lastModified).toISOString().slice(0,10)});}
 // ── 浏览器内一键授权读取(File System Access API · Chromium)──
 // 用户授权一次「用户主目录」→ 我们直接定位 ~/.claude/projects 与 ~/.codex/sessions 两个子目录读取
 // (不遍历整个 home,只读这两处)。句柄存 IndexedDB,复访权限仍在则零点击自动导入。
@@ -207,7 +194,7 @@ async function fsCollectHome(home,onProg){
   let total=0;for(const [d,pfx] of roots)await fsWalk(d,dep,pfx,async()=>{total++});           // 先只枚举计数(不读内容,快)→ 真实进度条
   const out=[];let done=0;const src={claude:0,codex:0};
   for(const [d,pfx] of roots)await fsWalk(d,dep,pfx,async(name,handle,p)=>{done++;
-    try{const f=await handle.getFile();const txt=await f.text();const s=parseSession(txt,p,f.lastModified);if(s){out.push(s);src[s.source]=(src[s.source]||0)+1}}catch{}
+    try{const f=await handle.getFile();const txt=await f.text();const s=parseSessionFile(txt,p,f.lastModified);if(s){out.push(s);src[s.source]=(src[s.source]||0)+1}}catch{}
     if(onProg)onProg({done,total,parsed:out.length,sources:src});});
   if(onProg)onProg({done,total,parsed:out.length,sources:src});return out;
 }
@@ -283,7 +270,7 @@ function step1(){
     if(!files.length){const h=$("#imphint");if(h)h.textContent="没找到 .jsonl —— 请选含 .jsonl 的文件夹(如 ~/.claude/projects)。";return}
     const L=importLoader([{k:'scan',label:'读取所选文件夹'},{k:'parse',label:'解析会话'},{k:'upload',label:'上传'}]);
     L.enter('parse');const sessions=[];let done=0;const src={claude:0,codex:0};
-    for(const f of files){try{const txt=await f.text();const s=parseSession(txt,f.webkitRelativePath||f.name,f.lastModified);if(s){sessions.push(s);src[s.source]=(src[s.source]||0)+1}}catch{}
+    for(const f of files){try{const txt=await f.text();const s=parseSessionFile(txt,f.webkitRelativePath||f.name,f.lastModified);if(s){sessions.push(s);src[s.source]=(src[s.source]||0)+1}}catch{}
       done++;if(done%10===0||done===files.length){L.progress(done,files.length);L.sources(src)}}
     await uploadSessions(sessions,L);
   }

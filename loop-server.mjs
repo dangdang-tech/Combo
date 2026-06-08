@@ -12,6 +12,7 @@ import crypto from "node:crypto";
 import { run, runAgent, createAgent, Type, log } from "./pi-exec.mjs";
 import { distillToManifest, parseManifest } from "./distill-to-manifest.mjs";
 import { firstJson, computeScope, compile } from "./anchor-lib.mjs";
+import { parseClaude as parseCl, parseCodex as parseCx, codexText, dedupeAndStats } from "./parse-sessions.mjs";
 
 // ============================================================================
 // 一键导入 —— 【真实,非 mock】扫本机【多个 agent】的会话历史,统一成一份会话索引。
@@ -28,39 +29,24 @@ function walkJsonl(dir, out = []) {
 }
 const mtimeOf = (f) => { try { return fs.statSync(f).mtimeMs; } catch { return 0; } };
 
-// ── Claude:每行一条事件,aiTitle 是标题,"role":"user" 计消息数 ──
+// ── Claude / Codex:用共享解析器(parse-sessions.mjs);本机扫描保留 path,内容交给提取 agent 懒读原始文件。
 function scanClaude() {
   const root = path.join(HOME, ".claude", "projects"); if (!fs.existsSync(root)) return [];
   const out = [];
   for (const f of walkJsonl(root)) {
     let txt; try { txt = fs.readFileSync(f, "utf8"); } catch { continue; }
-    const tm = txt.match(/"aiTitle"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-    let title = "(无标题会话)"; if (tm) { try { title = JSON.parse('"' + tm[1] + '"'); } catch { title = tm[1]; } }
-    const count = (txt.match(/"role":\s*"user"/g) || []).length; if (count < 2) continue;
-    out.push({ title, count, date: new Date(mtimeOf(f)).toISOString().slice(0, 10), path: f, source: "claude", project: path.basename(path.dirname(f)) });
+    const s = parseCl(txt, { date: new Date(mtimeOf(f)).toISOString().slice(0, 10), project: path.basename(path.dirname(f)) });
+    if (s) out.push({ title: s.title, count: s.count, date: s.date, path: f, source: "claude", project: s.project });
   }
   return out;
 }
-// ── Codex:rollout jsonl,{type,payload};response_item + payload.role=user 是用户消息 ──
-const codexText = (p) => { const c = p?.content; if (typeof c === "string") return c; if (Array.isArray(c)) return c.map((b) => b?.text || "").join(""); return ""; };
 function scanCodex() {
   const root = path.join(HOME, ".codex", "sessions"); if (!fs.existsSync(root)) return [];
   const out = [];
   for (const f of walkJsonl(root)) {
     let txt; try { txt = fs.readFileSync(f, "utf8"); } catch { continue; }
-    let count = 0, title = "", cwd = "";
-    for (const line of txt.split("\n")) {
-      if (!line) continue; let d; try { d = JSON.parse(line); } catch { continue; }
-      const p = d.payload || {};
-      if (d.type === "session_meta" && p.cwd) cwd = p.cwd;
-      if (d.type === "response_item" && p.role === "user") {
-        const t = codexText(p).trim();
-        if (t && !t.startsWith("#") && !t.startsWith("<")) { count++; if (!title) title = t.slice(0, 50).replace(/\s+/g, " "); }
-      }
-    }
-    if (count < 2) continue;
-    if (!title) title = cwd ? "(" + path.basename(cwd) + ")" : "(Codex 会话)";
-    out.push({ title, count, date: new Date(mtimeOf(f)).toISOString().slice(0, 10), path: f, source: "codex", project: cwd ? path.basename(cwd) : "codex" });
+    const s = parseCx(txt, { date: new Date(mtimeOf(f)).toISOString().slice(0, 10) });
+    if (s) out.push({ title: s.title, count: s.count, date: s.date, path: f, source: "codex", project: s.project });
   }
   return out;
 }
@@ -118,7 +104,10 @@ const PORT = process.env.PORT || 4190;
 // DB_PATH(如挂载的持久卷 /data/apps-db.json)→ 跨重启/重部署保留状态;否则落本地(开发)。
 const DB = process.env.DB_PATH || path.join(__dir, "apps-db.json");
 try { fs.mkdirSync(path.dirname(DB), { recursive: true }); } catch {}
-const HTML = fs.readFileSync(path.join(__dir, "loop.html"), "utf8");
+// 解析器唯一真源:把 parse-sessions.mjs 源码去掉 export 关键字,注入到 loop.html(classic script)与 connect-helper(stdin ESM)。
+const PARSERS_SRC = fs.readFileSync(path.join(__dir, "parse-sessions.mjs"), "utf8")
+  .replace(/^export\s+function\s+/gm, "function ").replace(/^export\s+const\s+/gm, "const ");
+const HTML = fs.readFileSync(path.join(__dir, "loop.html"), "utf8").replace("/*__PARSERS__*/", PARSERS_SRC);
 let apps = {};
 try { if (fs.existsSync(DB)) apps = JSON.parse(fs.readFileSync(DB, "utf8")); } catch (e) { console.error("apps-db 读取失败,从空开始:", e.message); }
 let _zombies = 0;
@@ -249,13 +238,7 @@ function buildUploadedApp(sessions, appendTo) {
   if (!arr.length) return null;
   const mapped = arr.map((s) => ({ title: s.title || "(无标题会话)", count: s.count || 0, date: (s.date || new Date().toISOString()).slice(0, 10), path: "upload:" + uid(), source: s.source || "upload", project: s.project || "upload", content: String(s.content).slice(0, 6000) }));
   const base = (appendTo && apps[appendTo]) ? (apps[appendTo].sessionIndex || []) : [];
-  const seen = new Map(base.map((s) => [s.title + "|" + s.count + "|" + s.project, s]));
-  mapped.forEach((s) => seen.set(s.title + "|" + s.count + "|" + s.project, s));
-  const idx = [...seen.values()].sort((a, b) => b.count - a.count).slice(0, 400);
-  const totalMsgs = idx.reduce((n, s) => n + s.count, 0);
-  const times = idx.map((s) => Date.parse(s.date)).filter((n) => n); const fmt = (t) => new Date(t).toISOString().slice(0, 7);
-  const bySrc = {}; idx.forEach((s) => bySrc[s.source] = (bySrc[s.source] || 0) + 1);
-  const stats = { segments: idx.length, messages: totalMsgs, span: times.length ? fmt(Math.min(...times)) + "–" + fmt(Math.max(...times)) : "—", projects: new Set(idx.map((s) => s.project)).size, by_source: bySrc };
+  const { idx, stats } = dedupeAndStats(base, mapped, 400);   // 去重(title|count|project)+ 统计,纯函数(有单测)
   const id = (appendTo && apps[appendTo]) ? appendTo : uid();
   apps[id] = { ...(apps[id] || {}), id, raw: idx.slice(0, 80).map((s) => `[${s.count}条] ${s.title}`).join("\n"), status: "imported", stats, sessions: idx.slice(0, 8), sessionIndex: idx, source: "upload", draft: undefined, extraction: undefined, candidates: undefined, extracting: false, createdAt: apps[id]?.createdAt || Date.now() }; save();
   return { id, stats, sessions: idx.slice(0, 6) };
@@ -698,7 +681,7 @@ const server = http.createServer(async (req, res) => {
       const proto = (req.headers["x-forwarded-proto"] || "http").split(",")[0];
       const host = req.headers["host"] || ("localhost:" + PORT);
       let js; try { js = fs.readFileSync(path.join(__dir, "connect-helper.mjs"), "utf8"); } catch { return json(res, 500, { error: "helper 缺失" }); }
-      js = js.replace(/__BASE__/g, proto + "://" + host);
+      js = js.replace(/__BASE__/g, proto + "://" + host).replace("/*__PARSERS__*/", PARSERS_SRC);
       res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8" }); return res.end(js);
     }
     // ① 导入(粘贴)
