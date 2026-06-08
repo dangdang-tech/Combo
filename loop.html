@@ -208,8 +208,8 @@ function step1(){
       let home=await fsIdbGet("home").catch(()=>null);
       if(home&&!(await fsPerm(home,gesture))){ if(!gesture){bimport.innerHTML="⚡ 继续导入(上次已授权)";return} home=null; }
       if(!home){ if(!gesture)return;
-        h.innerHTML="浏览器会弹授权框,已为你定位到<b>用户主目录</b> —— 直接点「打开 / Open」即可。我们只读 <b>~/.claude</b> 与 <b>~/.codex</b>,别的不碰。";
-        home=await window.showDirectoryPicker({id:"agora",mode:"read",startIn:"home"});
+        h.innerHTML="弹出的框里选你的<b>用户主目录</b>(边栏点你的用户名,或按 <b>⌘⇧H</b>;也可 <b>⌘⇧G</b> 粘 <b>~</b> 回车)→ 点「打开 / Open」。我们只读 <b>~/.claude</b> 与 <b>~/.codex</b>,别的不碰。<br>(只想导一个也行:直接选 ~/.claude/projects 或 ~/.codex/sessions)";
+        home=await window.showDirectoryPicker({id:"agora",mode:"read"});
         if(!(await fsPerm(home,true))){h.textContent="未授权,无法读取。再点一次即可。";return}
         try{await fsIdbSet("home",home)}catch{}
       }
