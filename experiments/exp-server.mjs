@@ -63,10 +63,9 @@ const server = createServer(async (req, res) => {
   const u = new URL(req.url, "http://x");
   const p = u.pathname;
 
-  if (p === "/" ) return file(res, "index.html", "text/html; charset=utf-8");
-  if (p === "/advisor.html") return file(res, "advisor.html", "text/html; charset=utf-8");
-  if (p === "/collab.html") return file(res, "collab.html", "text/html; charset=utf-8");
-  if (p === "/redliner.html") return file(res, "redliner.html", "text/html; charset=utf-8");
+  // 任何 /*.html 都按静态文件伺服(shell/advisor/collab/redliner/index…);"/" = 桌面壳。
+  if (p === "/" ) return file(res, "shell.html", "text/html; charset=utf-8");
+  if (/^\/[\w-]+\.html$/.test(p)) return file(res, p.slice(1), "text/html; charset=utf-8");
   // 经验体脱敏视图:?exp= 选经验体,缺省 career。
   if (p === "/api/experience") {
     const exp = pickExp(u.searchParams.get("exp"));

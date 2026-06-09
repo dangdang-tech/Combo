@@ -38,14 +38,16 @@ button{font:inherit;background:var(--ember);color:#fff;border:0;border-radius:10
 <script>
 const $=s=>document.querySelector(s); let sid=null,started=false,blocks={},botBub=null,buf="";
 const kindLabel={guardrail:"守则",taste:"品味",case:"案例"};
+const Q=new URLSearchParams(location.search), EMBED=Q.get("embed")==="1", EXP=Q.get("exp")||"career";
+if(EMBED){const t=document.querySelector(".top");if(t)t.style.display="none";document.body.style.background="transparent";}
 async function boot(){
-  const e=await (await fetch("/api/experience")).json();
+  const e=await (await fetch("/api/experience?exp="+EXP)).json();
   $("#introTitle").textContent=`我是「${e.ownerName}」,可以问我:${e.title}`;
   $("#introDesc").textContent="我不是泛泛的 AI —— 我复用的是这个人反复表现出的判断模式。每条回答旁会标出命中了他的哪条守则/品味/案例。";
   e.blocks.forEach(b=>blocks[b.id]={label:b.label,kind:b.kind});
   const st=["我手里 A、B 两个 offer,B 多 30%,怎么选？","想从大厂去早期创业,该考虑什么？","主要因为受不了老板想跳槽,你怎么看？"];
   st.forEach(t=>{const c=document.createElement("div");c.className="chip";c.textContent=t;c.onclick=()=>{$("#inp").value=t;ask();};$("#starters").appendChild(c)});
-  const s=await (await fetch("/api/session",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({stance:"advisor"})})).json();
+  const s=await (await fetch("/api/session",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({stance:"advisor",exp:EXP})})).json();
   sid=s.sessionId; openSSE();
 }
 function openSSE(){

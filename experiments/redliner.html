@@ -77,6 +77,8 @@ td.locked{background:#a737180a}td.locked .cell{color:var(--ink)}
 
 <script>
 const EXP="redliner";
+const EMBED=new URLSearchParams(location.search).get("embed")==="1";
+if(EMBED){const t=document.querySelector(".top");if(t)t.style.display="none";document.body.style.background="transparent";}
 const $=s=>document.querySelector(s);let sid=null,started=false,blocks={},version=0,curArt=null,running=false;
 async function boot(){
   const e=await(await fetch("/api/experience?exp="+EXP)).json();

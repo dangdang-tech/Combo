@@ -89,13 +89,15 @@ td.hasguard .whytoggle{color:var(--ember)}
 <script>
 const $=s=>document.querySelector(s);let sid=null,started=false,blocks={},version=0,curArt=null,running=false,citeIssues={};
 const kindLabel={guardrail:"守则",taste:"品味",case:"案例"};
+const Q=new URLSearchParams(location.search), EMBED=Q.get("embed")==="1", EXP=Q.get("exp")||"career";
+if(EMBED){const t=document.querySelector(".top");if(t)t.style.display="none";document.body.style.background="transparent";}
 async function boot(){
-  const e=await(await fetch("/api/experience")).json();
+  const e=await(await fetch("/api/experience?exp="+EXP)).json();
   $("#ititle").textContent=`让「${e.ownerName}」帮你拍板`;
   $("#intro").innerHTML=`我会按 <b>${e.ownerName}</b> 在「${e.title}」上的品味和守则替你判断 —— 比如「倦怠一票否决」「三年视角优先于涨薪」。产物里每一格都会标出命中了他的哪条。`;
   e.blocks.forEach(b=>blocks[b.id]={label:b.label,kind:b.kind});
   ["我手里 A、B 两个 offer,B 多 30%,但 A 团队更强,帮我对比该怎么选","想从大厂跳去早期创业,帮我把要权衡的摆开","在『内部转岗』和『直接离职』之间纠结"].forEach(t=>{const c=document.createElement("div");c.className="chip";c.textContent=t;c.onclick=()=>{$("#intent").value=t};$("#starters").appendChild(c)});
-  const s=await(await fetch("/api/session",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({stance:"collaborator"})})).json();
+  const s=await(await fetch("/api/session",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({stance:"collaborator",exp:EXP})})).json();
   sid=s.sessionId;openSSE();
 }
 function logEvt(cls,html){const d=document.createElement("div");d.className="evt "+cls;d.innerHTML=html;$("#tlog").appendChild(d);$("#tlog").scrollTop=1e9;return d;}
