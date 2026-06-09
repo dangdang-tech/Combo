@@ -530,9 +530,13 @@ async function step2load(){
   if(post&&post.candidates){ finish(post); return; }                       // 缓存命中 或 粘贴态降级 → 直接渲染
   if(post&&post.error==="no app"){ failGone(); return; }                   // app 没了(服务重启)→ 回第一步
   if(post&&post.error&&!post.started&&!post._clientFail){ fail(post.error); return; }
-  // 兜底轮询:万一 done 错过(SSE 断/窗口),每 15s 拉一次;6 分钟总上限(已完成会秒回缓存)
-  let waited=0;
-  pollTimer=setInterval(async()=>{ if(settled)return; waited+=15; await pull(); if(!settled&&waited>=360){ clearInterval(pollTimer); fail("萃取等太久了(>6 分钟)——点重试(已完成会秒回,没完成会重跑)。"); } },15000);
+  // 兜底轮询:每 15s 拉一次。后端总会跑完并落盘缓存,所以不轻易判失败:慢就安抚、继续等,
+  // 只有 12 分钟仍无果(可能真卡)才给重试(完成秒回)。SSE done 一到立刻结束。
+  let waited=0,reassured=false;
+  pollTimer=setInterval(async()=>{ if(settled)return; waited+=15; await pull(); if(settled)return;
+    if(waited>=210&&!reassured){ reassured=true; if(L)L.stat("⏳ 比平时久了 —— DeepSeek 偶尔慢,还在跑,完成会自动出现(不用动)"); }
+    if(waited>=720){ clearInterval(pollTimer); fail("萃取等太久了(>12 分钟)——点重试(已跑完会秒回,没跑完会重开)。"); }
+  },15000);
 }
 function step3(){const c=S.candidates;
   $("#root").innerHTML=shell(`<div class="eyebrow">STEP 3 · 选择</div><h1 class="serif">选择你想发布的能力</h1>

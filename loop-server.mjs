@@ -9,7 +9,7 @@ import path from "node:path";
 import { execFileSync, execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
-import { run, runAgent, createAgent, Type, log } from "./pi-exec.mjs";
+import { run, runHedged, runAgent, createAgent, Type, log } from "./pi-exec.mjs";
 import { distillToManifest, parseManifest } from "./distill-to-manifest.mjs";
 import { firstJson, computeScope, compile } from "./anchor-lib.mjs";
 import { parseClaude as parseCl, parseCodex as parseCx, codexText, dedupeAndStats } from "./parse-sessions.mjs";
@@ -400,12 +400,12 @@ ${items.map((o) => `[ref_id=${o.gi}] 目标:${o.goal} | 产物:${o.artifact}`).j
 async function buildTaxonomy(obs, meter) {
   const bs = batches([...obs.keys()], 18);
   const localsBatched = await pool(bs, 4, async (b) => {
-    const r = meterAdd(meter, await run({ label: "TAX·S2", temperature: 0, systemPrompt: "你只输出 JSON 数组。", userInput: TAX_S2_PROMPT(b.map((gi) => ({ gi, ...obs[gi] }))), timeoutMs: 120000 }));
+    const r = meterAdd(meter, await runHedged({ label: "TAX·S2", temperature: 0, systemPrompt: "你只输出 JSON 数组。", userInput: TAX_S2_PROMPT(b.map((gi) => ({ gi, ...obs[gi] }))), timeoutMs: 120000 }, 42000));
     const arr = firstJson(r.text); return Array.isArray(arr) ? arr : [];
   });
   const locals = localsBatched.filter(Boolean).flat();
   let merged = locals;
-  try { const r = meterAdd(meter, await run({ label: "TAX·S3", temperature: 0, systemPrompt: "你只输出 JSON 数组。", userInput: TAX_S3_PROMPT(locals), timeoutMs: 120000 })); const arr = firstJson(r.text); if (Array.isArray(arr) && arr.length) merged = arr; } catch {}
+  try { const r = meterAdd(meter, await runHedged({ label: "TAX·S3", temperature: 0, systemPrompt: "你只输出 JSON 数组。", userInput: TAX_S3_PROMPT(locals), timeoutMs: 120000 }, 50000)); const arr = firstJson(r.text); if (Array.isArray(arr) && arr.length) merged = arr; } catch {}
   return merged.map((c, i) => ({ id: "t" + i, name: c.name, slug: c.slug, tagline: c.tagline, role: c.role, type: c.type, steps: c.steps, slots: c.slots }));
 }
 
@@ -414,7 +414,7 @@ async function classifyRound(obs, T, k, meter) {
   const tset = new Set(T.map((t) => t.id));
   const bs = batches(seededShuffle([...obs.keys()], k + 1), 18);     // 打乱仅做负载/扰动,不影响命名(已锚定)
   const parts = await pool(bs, 4, async (b) => {
-    const r = meterAdd(meter, await run({ label: `CLS·r${k}`, temperature: 0, systemPrompt: "你只输出 JSON。", userInput: CLASSIFY_PROMPT(T, b.map((gi) => ({ gi, ...obs[gi] }))), timeoutMs: 90000 }));
+    const r = meterAdd(meter, await runHedged({ label: `CLS·r${k}`, temperature: 0, systemPrompt: "你只输出 JSON。", userInput: CLASSIFY_PROMPT(T, b.map((gi) => ({ gi, ...obs[gi] }))), timeoutMs: 90000 }, 20000));
     return (firstJson(r.text).assign) || [];
   });
   const hit = new Map();
@@ -427,7 +427,7 @@ async function readObservations(idx, meter, onRead) {
   let done = 0;
   const obsRaw = await pool(idx, 8, async (s, i) => {
     const body = readSessionContent(s, 4000);
-    const r = meterAdd(meter, await run({ label: `S1#${i}`, temperature: 0, systemPrompt: "你只输出 JSON。", userInput: S1_PROMPT(s, body), timeoutMs: 90000 }));
+    const r = meterAdd(meter, await runHedged({ label: `S1#${i}`, temperature: 0, systemPrompt: "你只输出 JSON。", userInput: S1_PROMPT(s, body), timeoutMs: 90000 }, 35000));
     const o = firstJson(r.text);
     if (onRead) onRead(++done, idx.length);
     return { session_ref: { path: s.path, title: s.title, source: s.source, project: s.project, date: s.date, count: s.count }, goal: o.goal, steps: o.steps, inputs_user_gave: o.inputs_user_gave, artifact: o.artifact, success_signal: o.success_signal, input_features: o.input_features || {} };

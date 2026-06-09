@@ -78,6 +78,18 @@ export async function run({ systemPrompt, userInput, model = DEFAULT_MODEL, time
   return await p;
 }
 
+/** 对冲重试:先发一次;hedgeMs 内没回来,并发再发一次,谁先成功用谁。专治 DeepSeek 偶发长尾(多数 5s、偶尔 60-85s)。
+ *  失败也会重试(最多 2 次);两次都失败才抛。代价:长尾那一小撮调用各多花一份钱,换来 barrier 不被单个 straggler 拖死。 */
+export function runHedged(opts, hedgeMs = 30000) {
+  return new Promise((resolve, reject) => {
+    let settled = false, errs = 0, fired = 0, timer;
+    const win = (v) => { if (settled) return; settled = true; clearTimeout(timer); resolve(v); };
+    const go = () => { if (settled || fired >= 2) return; fired++; run(opts).then(win).catch((e) => { if (settled) return; errs++; if (fired < 2) go(); else if (errs >= 2) { settled = true; clearTimeout(timer); reject(e); } }); };
+    go();                                                        // attempt 1
+    timer = setTimeout(() => { if (!settled) { log(`${opts.label || "run"} ⏳ ${hedgeMs / 1000}s 未回 → 对冲重发`); go(); } }, hedgeMs);  // attempt 2 if slow
+  });
+}
+
 /** 从 pi-ai 的 AssistantMessage 里抽纯文本(兼容几种形态)。 */
 export function extractText(res) {
   if (!res) return "";
