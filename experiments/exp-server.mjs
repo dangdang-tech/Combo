@@ -9,14 +9,43 @@
 //      EXP_MODEL=deepseek/deepseek-chat        (覆盖模型)
 // ============================================================================
 import { createServer } from "node:http";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { Engine } from "./engine.mjs";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.EXP_PORT || 7800;
-const exp = JSON.parse(readFileSync(join(__dir, "fixtures/experience-career.json"), "utf8"));
+
+// ── 多经验体注册表:扫描 fixtures/experience-*.json,key = 去掉前缀/后缀的文件名。
+//    如 experience-career.json → "career"、experience-redliner.json → "redliner"。
+const FIXTURE_DIR = join(__dir, "fixtures");
+const DEFAULT_EXP = "career";
+const registry = new Map();
+for (const fn of readdirSync(FIXTURE_DIR)) {
+  const m = fn.match(/^experience-(.+)\.json$/);
+  if (!m) continue;
+  try {
+    registry.set(m[1], JSON.parse(readFileSync(join(FIXTURE_DIR, fn), "utf8")));
+  } catch (e) { console.error(`[exp] 跳过坏 fixture ${fn}:`, e.message); }
+}
+if (!registry.size) throw new Error("没有找到任何 experience-*.json");
+console.log(`[exp] 经验体注册表: ${[...registry.keys()].join(", ")} (缺省=${DEFAULT_EXP})`);
+
+// 选经验体:?exp= 或 body.exp,缺省 career;未知 key 回退缺省。
+function pickExp(key) {
+  const k = key || DEFAULT_EXP;
+  return registry.get(k) || registry.get(DEFAULT_EXP) || [...registry.values()][0];
+}
+
+// 脱敏视图:只给 block 的 id/kind/label/priority,不给 systemPrompt/case raw evidenceRef。
+function publicView(exp) {
+  return {
+    title: exp.title, ownerName: exp.ownerName, stance: exp.stance,
+    expectedOutput: exp.expectedOutput,
+    blocks: exp.blocks.map((b) => ({ id: b.id, kind: b.kind, label: b.label, priority: b.priority })),
+  };
+}
 
 // brain 注入:默认真 pi,EXP_BRAIN=mock 走脚本
 const brainMod = process.env.EXP_BRAIN === "mock"
@@ -30,14 +59,6 @@ const json = (res, code, obj) => send(res, code, "application/json; charset=utf-
 const file = (res, name, type) => { try { send(res, 200, type, readFileSync(join(__dir, name))); } catch { send(res, 404, "text/plain", "not found"); } };
 const readBody = (req) => new Promise((r) => { let b = ""; req.on("data", (c) => (b += c)); req.on("end", () => { try { r(b ? JSON.parse(b) : {}); } catch { r({}); } }); });
 
-// 经验体对消费者的【脱敏】视图:只给 block 的 id/kind/label(品味/守则/案例的标题),
-// 不给 systemPrompt 原文、不给 case 的 raw evidenceRef。GUI 用它渲染自我介绍卡 + 出处 chip。
-const publicExperience = {
-  title: exp.title, ownerName: exp.ownerName, stance: exp.stance,
-  expectedOutput: exp.expectedOutput,
-  blocks: exp.blocks.map((b) => ({ id: b.id, kind: b.kind, label: b.label, priority: b.priority })),
-};
-
 const server = createServer(async (req, res) => {
   const u = new URL(req.url, "http://x");
   const p = u.pathname;
@@ -45,11 +66,17 @@ const server = createServer(async (req, res) => {
   if (p === "/" ) return file(res, "index.html", "text/html; charset=utf-8");
   if (p === "/advisor.html") return file(res, "advisor.html", "text/html; charset=utf-8");
   if (p === "/collab.html") return file(res, "collab.html", "text/html; charset=utf-8");
-  if (p === "/api/experience") return json(res, 200, publicExperience);
+  if (p === "/redliner.html") return file(res, "redliner.html", "text/html; charset=utf-8");
+  // 经验体脱敏视图:?exp= 选经验体,缺省 career。
+  if (p === "/api/experience") {
+    const exp = pickExp(u.searchParams.get("exp"));
+    return json(res, 200, publicView(exp));
+  }
 
-  // 建 session:stance 来自请求(advisor.html 传 advisor,collab.html 传 collaborator)
+  // 建 session:stance + exp 来自请求(?exp= 或 body.exp,缺省 career)
   if (p === "/api/session" && req.method === "POST") {
     const b = await readBody(req);
+    const exp = pickExp(b.exp || u.searchParams.get("exp"));
     const s = engine.startSession(exp, b.stance || exp.stance);
     return json(res, 200, { sessionId: s.id, stance: s.stance });
   }

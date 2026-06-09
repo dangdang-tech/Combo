@@ -86,9 +86,9 @@ function outputContract(exp, stance) {
     "[OUTPUT CONTRACT] 先用一两句话说你打算怎么做。然后末尾【必须】追加一个 ```json 代码块,产出 type=" + type + " 的结构化产物:",
     "```json",
     '{"artifact":{"type":"' + type + '","columns":[{"key":"opt_a","label":"选项A"},{"key":"opt_b","label":"选项B"}],' +
-    '"rows":[{"key":"learning","label":"能学到什么","cells":[{"colKey":"opt_a","value":"...","citedBlockIds":["taste2"]},{"colKey":"opt_b","value":"...","citedBlockIds":[]}]}]}}',
+    '"rows":[{"key":"learning","label":"能学到什么","cells":[{"colKey":"opt_a","value":"...","why":"为什么这么判断的一句话","citedBlockIds":["taste2"]},{"colKey":"opt_b","value":"...","why":"...","citedBlockIds":[]}]}]}}',
     "```",
-    "每个单元的 value 是你站在创作者立场给出的判断;citedBlockIds 填命中的真实 block id。" +
+    "每个单元的 value 是你站在创作者立场给出的判断;why 是『为什么这么判断』的一句话(可选,强烈建议填);citedBlockIds 填命中的真实 block id。" +
     "rows 是评估维度、columns 是被比较的选项(若任务不是比较型,可只用一列)。" +
     "单元的稳定地址 path = rowKey + '/' + colKey,后续用户可能手动锁定某个 path,届时你绝不能覆盖它。",
   ].join("\n");
@@ -115,7 +115,7 @@ function stripArtifactForPrompt(a) {
     columns: a.columns,
     rows: a.rows.map((r) => ({
       key: r.key, label: r.label,
-      cells: r.cells.map((c) => ({ colKey: c.colKey, value: c.value, locked: !!c.locked })),
+      cells: r.cells.map((c) => ({ colKey: c.colKey, value: c.value, why: c.why ?? undefined, locked: !!c.locked })),
     })),
   };
 }
@@ -152,7 +152,7 @@ export function mergeAgentArtifact(session, incoming) {
     a.rows = (a.rows || []).map((r) => ({
       key: r.key, label: r.label,
       cells: (r.cells || []).map((c) => ({
-        colKey: c.colKey, value: c.value, citedBlockIds: c.citedBlockIds || [],
+        colKey: c.colKey, value: c.value, why: c.why ?? null, citedBlockIds: c.citedBlockIds || [],
         path: cellPath(r.key, c.colKey), origin: "agent", locked: false,
       })),
     }));
@@ -168,7 +168,7 @@ export function mergeAgentArtifact(session, incoming) {
         if (session.locked.has(path)) { warnings.push(`跳过已锁定单元 ${path}(user 赢)`); continue; }
         let nc = nr.cells.find((c) => c.colKey === ic.colKey);
         if (!nc) { nc = { colKey: ic.colKey }; nr.cells.push(nc); }
-        Object.assign(nc, { value: ic.value, citedBlockIds: ic.citedBlockIds || [], path, origin: "agent", locked: false });
+        Object.assign(nc, { value: ic.value, why: ic.why ?? null, citedBlockIds: ic.citedBlockIds || [], path, origin: "agent", locked: false });
       }
     }
     session.artifact = next;
@@ -217,6 +217,26 @@ export function patchArtifact(session, baseVersion, ops, runTurnFn) {
     });
   }
   return result;
+}
+
+// ── 引用校验:找出 cell.citedBlockIds 里【不存在于经验体】的 id(= 幻觉引用)。 ──
+// 纯函数,不改 artifact。返回 [{path, badIds:[...]}],只列有问题的单元。
+export function validateArtifactCitations(exp, artifact) {
+  const valid = new Set((exp?.blocks || []).map((b) => b.id));
+  const issues = [];
+  for (const r of artifact?.rows || []) {
+    for (const c of r.cells || []) {
+      const path = c.path || cellPath(r.key, c.colKey);
+      const badIds = (c.citedBlockIds || []).filter((id) => !valid.has(id));
+      if (badIds.length) issues.push({ path, badIds });
+    }
+  }
+  return issues;
+}
+
+// 把引用校验结果格式化成人类可读的告警行,形如 "幻觉引用 learning/opt_a: [xx]"。
+function citationWarnings(issues) {
+  return issues.map((i) => `幻觉引用 ${i.path}: [${i.badIds.join(", ")}]`);
 }
 
 // ── 3. Engine:管理 session,跑 turn,发事件。brain 注入(pi / mock)。 ──
@@ -273,18 +293,26 @@ export class Engine {
 
     if (session.stance === "collaborator" || session.stance === "delegate") {
       const { warnings } = mergeAgentArtifact(session, parsed.artifact);
+      // 幻觉引用校验:对合并后的权威产物校验,把问题并入 warnings 并单列 citationIssues。
+      const citationIssues = session.artifact ? validateArtifactCitations(session.exp, session.artifact) : [];
+      const allWarnings = warnings.concat(citationWarnings(citationIssues));
       const turn = { runId, kind: "artifact", prose: parsed.prose, version: session.version };
       session.turns.push(turn);
       session.runState.set(runId, "done");
       return this._emit(session, "task.completed", {
-        runId, kind: "artifact", prose: parsed.prose, artifact: session.artifact, version: session.version, warnings,
+        runId, kind: "artifact", prose: parsed.prose, artifact: session.artifact, version: session.version,
+        warnings: allWarnings, citationIssues,
       });
     } else {
+      const citedBlockIds = parsed.meta?.citedBlockIds || [];
+      const valid = new Set((session.exp?.blocks || []).map((b) => b.id));
+      const badIds = citedBlockIds.filter((id) => !valid.has(id));
       const answerTurn = {
         runId, kind: "answer", text: parsed.prose,
-        citedBlockIds: parsed.meta?.citedBlockIds || [],
+        citedBlockIds,
         confidence: parsed.meta?.confidence ?? null,
         outOfScope: !!parsed.meta?.outOfScope,
+        citationIssues: badIds.length ? [{ badIds }] : [],
       };
       session.turns.push(answerTurn);
       session.runState.set(runId, "done");

@@ -35,8 +35,8 @@ export function makeBrainSession(systemPrompt, { stance } = {}) {
             key: r.key, label: r.label,
             cells: r.cells.map((c) =>
               c.locked
-                ? { colKey: c.colKey, value: c.value, citedBlockIds: [] }            // 锁定:agent 不该动(且 engine 会兜底跳过)
-                : { colKey: c.colKey, value: (c.value || "") + "(已据你的要求调整)", citedBlockIds: ["g2"] }
+                ? { colKey: c.colKey, value: c.value, why: c.why, citedBlockIds: [] }            // 锁定:agent 不该动(且 engine 会兜底跳过)
+                : { colKey: c.colKey, value: (c.value || "") + "(已据你的要求调整)", why: "据你锁定的单元重新顺了一遍取舍", citedBlockIds: ["g2"] }
             ),
           })),
         };
@@ -46,14 +46,14 @@ export function makeBrainSession(systemPrompt, { stance } = {}) {
           columns: [{ key: "opt_a", label: "选项A" }, { key: "opt_b", label: "选项B(多30%)" }],
           rows: [
             { key: "learning", label: "能学到什么", cells: [
-              { colKey: "opt_a", value: "有高人带,能学稀缺能力", citedBlockIds: ["taste2"] },
-              { colKey: "opt_b", value: "钱多但偏消耗战", citedBlockIds: ["taste2"] }] },
+              { colKey: "opt_a", value: "有高人带,能学稀缺能力", why: "命中 taste2:稀缺能力 > 头衔", citedBlockIds: ["taste2"] },
+              { colKey: "opt_b", value: "钱多但偏消耗战", why: "钱多但学不到稀缺能力,与 taste2 相悖", citedBlockIds: ["taste2"] }] },
             { key: "burnout", label: "倦怠风险", cells: [
-              { colKey: "opt_a", value: "低", citedBlockIds: ["g1"] },
-              { colKey: "opt_b", value: "高(6个月内可能倦怠→一票否决)", citedBlockIds: ["g1"] }] },
+              { colKey: "opt_a", value: "低", why: "节奏可持续,不触发倦怠红线", citedBlockIds: ["g1"] },
+              { colKey: "opt_b", value: "高(6个月内可能倦怠→一票否决)", why: "命中 g1:6 个月内大概率倦怠,一票否决", citedBlockIds: ["g1"] }] },
             { key: "cash", label: "现金流", cells: [
-              { colKey: "opt_a", value: "够用", citedBlockIds: ["g2"] },
-              { colKey: "opt_b", value: "更宽裕", citedBlockIds: ["g2"] }] },
+              { colKey: "opt_a", value: "够用", why: "现金流没断,可优先学习曲线陡的(g2)", citedBlockIds: ["g2"] },
+              { colKey: "opt_b", value: "更宽裕", why: "现金更宽裕但非决定项,g2 只是底线", citedBlockIds: ["g2"] }] },
           ],
         };
       }
