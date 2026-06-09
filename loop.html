@@ -562,7 +562,7 @@ function step3(){const c=S.candidates;
      ${c.map((x,i)=>`<div class="radio ${i===S.selected?'on':''}" data-i="${i}"><div class="rc">${i===S.selected?"✓":""}</div><div><div class="rn serif">${esc(x.name)}</div><div class="rd">${esc(x.tagline)}</div></div>${i===S.selected?'<span class="sel">已选</span>':""}</div>`).join("")}</div>
    <div class="foot"><span class="fl2">已选 1 个目标 · 第 3 步,共 5 步</span><button class="btn" id="b3">下一步:结构化描述 →</button></div>`);
   document.querySelectorAll('.radio').forEach(r=>r.onclick=()=>{S.selected=+r.dataset.i;step3();});
-  $("#b3").onclick=()=>{S.step=4;render();step4load($("#desc").value);};
+  $("#b3").onclick=()=>{const desc=$("#desc").value;S.step=4;render();step4load(desc);};  // 必须先取 desc:render() 会销毁 step3 的 #desc,否则 $("#desc").value 抛 TypeError、step4load 永不执行
 }
 function step4(){$("#root").innerHTML=shell(`<div class="eyebrow">STEP 4 · 结构化</div><h1 class="serif">正在生成结构化描述…</h1>
    <div class="lede">结构化是整条流里最重的一次生成(名称 + 目标用户 + 4–6 个输入问题 + 输出规范,都是数组)。稍等几秒。</div>
