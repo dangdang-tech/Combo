@@ -178,6 +178,20 @@ const esc=s=>(s==null?"":String(s)).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;"
 const token=new URLSearchParams(location.search).get("token");
 const S={step:1,id:null,candidates:[],selected:0,draft:null,manifest:null,evalRes:null,pub:null,scope:"market"};
 
+// ── 状态持久化(localStorage):刷新/服务重启不丢进度,无需重新提取(省 ~6min/$2)。只存稳定字段。──
+const LS_KEY="agora_creator_state";
+function saveS(){try{ if(!S.id){localStorage.removeItem(LS_KEY);return;}   // 重新导入会把 id 清空 → 顺手清掉旧状态
+  localStorage.setItem(LS_KEY,JSON.stringify({step:S.step,id:S.id,candidates:S.candidates,selected:S.selected,draft:S.draft,manifest:S.manifest,evalRes:S.evalRes,pub:S.pub,scope:S.scope,_desc:S._desc})); }catch{}}
+function loadS(){try{const j=JSON.parse(localStorage.getItem(LS_KEY)||"null"); if(j&&j.id)Object.assign(S,j);}catch{}}
+// 启动创作侧:恢复上次状态,但【绝不停在"加载中"的瞬态屏】(step2 提取中 / step4 结构化中)—— 退回最近的稳定步。
+function bootCreator(){
+  loadS();
+  if(S.draft&&S.manifest){S.step=4;renderDraftShell();}         // 已有结构化草稿 → 直接进可编辑态
+  else if(S.candidates&&S.candidates.length){S.step=3;step3();} // 有候选 → 选择页(不丢提取结果)
+  else {S.step=1;render();}                                     // 否则从头
+  setInterval(saveS,2000);                                      // 兜底自动保存:任何代码路径改了 S 都会落盘
+}
+
 /* ===================== 消费侧 ===================== */
 async function consumer(){
   const a=await api("/api/app?token="+encodeURIComponent(token));
@@ -207,7 +221,7 @@ function shell(inner){
    <div class="wrap"><div class="rail">${steps.map((s,i)=>{const n=i+1;const cls=S.step>n?"done":S.step===n?"on":"";return `<div class="rstep ${cls}"><div class="rdot">${S.step>n?"✓":n}</div><div class="rlabel">${s}</div></div>${i<4?'<div class="rline"></div>':""}`}).join("")}</div>
    <div id="step">${inner}</div></div>`;
 }
-function render(){({1:step1,2:step2,3:step3,4:step4,5:step5})[S.step]();}
+function render(){saveS();({1:step1,2:step2,3:step3,4:step4,5:step5})[S.step]();}
 
 // 客户端解析器由服务器注入(parse-sessions.mjs 唯一真源):parseSession/parseClaude/parseCodex 等。
 /*__PARSERS__*/
@@ -483,7 +497,7 @@ function personalContextHTML(r){
     </div></div>`;
 }
 function renderCandidates(r){
-  S.candidates=r.candidates;
+  S.candidates=r.candidates;saveS();
   if(!r.candidates||!r.candidates.length){$("#o2").innerHTML=`<div class="banner" style="border-color:var(--gold)"><b>这批 raw data 没萃取出足够稳定的能力项</b>${r.fallback?"":" —— 多导入一些历史(Claude+Codex 都导),或换更聚焦的会话再试。"}</div><div class="foot"><span class="fl2">第 2 步,共 5 步</span><button class="btn ghost" id="b2back">← 回去多导一些</button></div>`;const bb=$("#b2back");if(bb)bb.onclick=()=>{S.step=1;render();};return;}
   const card=(c)=>`<div class="candg"><div class="ch"><div class="cic serif">${esc((c.name||"?")[0])}</div><div class="cnm">${esc(c.name)}</div></div>
     <div class="cdesc">${esc(c.tagline||"")}</div>
@@ -541,7 +555,7 @@ function step3(){const c=S.candidates;
      ${c.map((x,i)=>`<div class="radio ${i===S.selected?'on':''}" data-i="${i}"><div class="rc">${i===S.selected?"✓":""}</div><div><div class="rn serif">${esc(x.name)}</div><div class="rd">${esc(x.tagline)}</div></div>${i===S.selected?'<span class="sel">已选</span>':""}</div>`).join("")}</div>
    <div class="foot"><span class="fl2">已选 1 个目标 · 第 3 步,共 5 步</span><button class="btn" id="b3">下一步:结构化描述 →</button></div>`);
   document.querySelectorAll('.radio').forEach(r=>r.onclick=()=>{S.selected=+r.dataset.i;step3();});
-  $("#b3").onclick=()=>{S.step=4;render();step4load($("#desc").value);};
+  $("#b3").onclick=()=>{const desc=$("#desc")?.value||"";S.step=4;render();step4load(desc);};
 }
 function step4(){$("#root").innerHTML=shell(`<div class="eyebrow">STEP 4 · 结构化</div><h1 class="serif">正在生成结构化描述…</h1>
    <div class="lede">结构化是整条流里最重的一次生成(名称 + 目标用户 + 4–6 个输入问题 + 输出规范,都是数组)。稍等几秒。</div>
@@ -552,7 +566,7 @@ async function step4load(desc){S._desc=desc;S.structRetries=S.structRetries||0;s
   clearInterval(S._tick);
   if(r.partial){structureSlow(r);return}              // 超时/解析失败 → 兜底退路(绝不卡死)
   if(r.error){structureError(r.error);return}
-  S.draft=r.draft;S.manifest=r.manifest;renderDraftShell();}
+  S.draft=r.draft;S.manifest=r.manifest;saveS();renderDraftShell();}
 function structureSlow(r){const secs=Math.round((Date.now()-S._t0)/1000);const p=r.partial;
   $("#root").innerHTML=shell(`<div class="eyebrow">↓ 加载态 · 久了 / 超时恢复(有退路)</div>
    <h1 class="serif">⚠ 这一步比平时久了… <span style="font-size:13px;font-family:var(--mono);color:var(--gold)">已 ${secs}s</span></h1>
@@ -631,6 +645,6 @@ async function step5load(){step5();
   $("#pub").onclick=async()=>{const b=$("#pub");b.disabled=true;b.textContent="发布中…";const r=await api("/api/publish",{id:S.id,scope:S.scope});
     b.textContent="✓ 已发布:agora.app/a/"+r.slug;b.style.background="var(--success)";};
 }
-token?consumer():(render());
+token?consumer():bootCreator();
 </script>
 </body></html>
