@@ -23,14 +23,17 @@ export interface InfraContext {
 
 /** 组装基础设施上下文（惰性客户端，骨架阶段不强连）。 */
 export function buildInfra(env: Env): InfraContext {
+  // db 单例先取出,注入 LLM 网关的 PG 审计 sink(成功/降级都落 audit_llm_calls;
+  // 写审计失败只日志不阻断主调用——审计非计费真源,70 §8.3)。
+  const db = getPool(env);
   return {
     env,
-    db: getPool(env),
+    db,
     redisQueue: getQueueRedis(env),
     redisHot: getHotRedis(env),
     queue: createBullQueuePort(env),
     objectStore: createS3ObjectStore(env),
-    llm: createLlmGateway(env),
+    llm: createLlmGateway(env, db),
   };
 }
 

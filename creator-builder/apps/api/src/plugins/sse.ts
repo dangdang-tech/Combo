@@ -69,6 +69,34 @@ export interface SseStreamOptions {
    * 返回是否在窗口内 + 窗口内增量帧。缺省（未接 Redis Streams）= 视为超窗（走 snapshot 重置）。
    */
   replaySince?: (lastEventId: string) => Promise<ReplayResult>;
+  /**
+   * 持续订阅业务流（Codex P0-1）：建流后从 fromId 起持续读 Redis Stream，把 worker 后续帧
+   * （progress、subtask、item-appended、field 系列、slow_hint、error、done）经 onFrame 实时 push 给在线连接。
+   *   - fromId：订阅起点。
+   *       · 在窗口内 resume → 最后一帧 replayed id（无新帧则 = lastEventId）。
+   *       · snapshot 路径 → 建流前抓取的流最新 id（gap-free：之后的帧必被订阅捕获）。
+   *   - signal：startSseStream 在客户端断开或收到终态帧时 abort，订阅据此清理 reader、断独立连接。
+   *   缺省（未接 Streams 或测试）= 不订阅，仅 snapshot 加心跳（协议仍为真，但收不到后续业务帧）。
+   *   收到 done 帧视为终态，由 startSseStream 关流；error 帧不关（其后通常紧跟 done）。
+   */
+  subscribe?: (args: {
+    fromId: string;
+    onFrame: (frame: SSEFrame) => void;
+    signal: AbortSignal;
+  }) => void | Promise<void>;
+  /**
+   * 订阅起点 id（snapshot 路径用）：建流前由调用方抓取的流最新 id（见 RedisEventStream.latestId）。
+   *   resume 在窗口内时 startSseStream 改用最后一帧 replayed id，本字段被忽略。
+   */
+  subscribeFromId?: string;
+  /**
+   * 建流瞬间 DB 已是终态（snapshot 路径，Codex P0-1 集中编排）：返回应补发的终态帧序列
+   *   （completed→[done]；failed→[error, done]；cancelled→[done]）。返回非空 = DB 已终态：
+   *   startSseStream 写完 snapshot 后【在此处一次性补发】、由 done 帧触发关流，且【不再启动 live subscribe】。
+   *   返回空 / 未提供 = 非终态（running）→ 正常 snapshot + live subscribe。
+   *   终态编排全部集中在本插件，route 不再在建流后无条件补帧（杜绝双 done，Codex P0-1）。
+   */
+  terminalFrames?: () => Array<{ event: SSEEventType; payload: unknown }>;
   /** 心跳间隔覆盖（默认 SSE_HEARTBEAT_INTERVAL_MS）。 */
   heartbeatMs?: number;
 }
@@ -82,8 +110,19 @@ export interface SseStreamHandle {
 
 /**
  * 启动一条 SSE 流：写 SSE 响应头 → 按 Last-Event-ID 协议下发首帧 → 启心跳 → 返回句柄。
- *   - 有 Last-Event-ID 且 replaySince 判定在窗口内 → 直接补发增量（不重推 snapshot，脊柱 §5.4）。
- *   - 否则（无 id / 超窗 / 未接 Streams）→ 先推 state_snapshot 重置（脊柱 §5.2），再续流。
+ *
+ * 建流是一条【明确顺序的状态机】（Codex P0-r4，统一终态闸，终结反复出现的 SSE 边角）：
+ *   ① 锚点：订阅起点 subscribeFromId（调用方建流前抓取的流最新 id；窗口内 resume 改用最后一帧 replayed id）。
+ *   ② snapshot/status：调用方在锚点之后读的最新 DB 快照（loadSnapshot）与终态判定（terminalFrames）。
+ *   ③ 发首帧：窗口内 replay → 补发增量（不重推 snapshot，脊柱 §5.4）；否则 → state_snapshot 重置（脊柱 §5.2）。
+ *   ④ replay：窗口内则写 (Last-Event-ID, latestId] 增量；replay 帧里若含 done/error，记为「已发终态帧」。
+ *   ⑤ 【统一终态闸（subscribe 之前）】：
+ *        terminal = (DB status 终态：terminalFrames() 返回非空) OR (replay 已发出 done/error)。
+ *        若 terminal：确保终态帧【恰好发一次】——replay 没发过就按 DB 状态补发 done/error（含
+ *        Last-Event-ID==done id：replay 排除该 id 故无帧，此处按 DB 补一次），然后 stop+关流，【绝不 subscribe】。
+ *   ⑥ 否则（running）：从锚点 live subscribe，收到 done/error 帧 → stop+关流。
+ *
+ *   保证：任何「非 running」路径都不 subscribe、终态帧恰好一次、无悬挂心跳、无双 done。
  * 鉴权/owner 校验须在调用前由路由 requireSseAuth preHandler + handler 完成（建流前 HTTP 失败，脊柱 §11.C）。
  */
 export async function startSseStream(
@@ -101,25 +140,8 @@ export async function startSseStream(
   // 防止 fastify 继续接管这个已 hijack 的响应。
   reply.hijack();
 
-  // —— 首帧协议（脊柱 §5.2 / §5.4）——
-  let resumedInWindow = false;
-  if (opts.lastEventId && opts.replaySince) {
-    // 尝试窗口内补发增量（不重推 snapshot）。
-    const replay = await opts.replaySince(opts.lastEventId);
-    if (replay.inWindow) {
-      resumedInWindow = true;
-      for (const f of replay.frames) {
-        writeSseFrame(reply, { id: f.id, event: f.event, payload: f.payload });
-      }
-    }
-  }
-  if (!resumedInWindow) {
-    // 超窗 / 无 Last-Event-ID / 未接 Streams → 先 state_snapshot 重置（硬规则①③，刷新/重连不打回从头）。
-    const snapshot = await opts.loadSnapshot();
-    writeSseFrame(reply, { event: 'state_snapshot', payload: snapshot });
-  }
-
-  // 心跳（脊柱 §5.5）。
+  // —— 生命周期句柄先于首帧协议定义（终态恰好处理一次）：
+  //    这样 replay/snapshot 阶段命中终态时也能立即 push 终态帧 + stop（统一一条关流路径）。——
   const interval = opts.heartbeatMs ?? SSE_HEARTBEAT_INTERVAL_MS;
   const heartbeat = setInterval(() => {
     if (!reply.raw.writableEnded) writeHeartbeat(reply);
@@ -127,21 +149,101 @@ export async function startSseStream(
   // 心跳定时器不应阻止进程退出（worker/优雅关闭）。
   if (typeof heartbeat.unref === 'function') heartbeat.unref();
 
+  // 订阅生命周期：客户端断开 / 收到终态 done 帧 → abort → 订阅 reader 清理、断独立连接（防泄漏）。
+  const subAbort = new AbortController();
+
   let stopped = false;
   const stop = (): void => {
     if (stopped) return;
     stopped = true;
     clearInterval(heartbeat);
+    // 先中止订阅（清理 XREAD reader / 独立连接），再关响应。
+    if (!subAbort.signal.aborted) subAbort.abort();
     if (!reply.raw.writableEnded) reply.raw.end();
   };
 
+  // 终态帧轨迹（统一终态闸据此「恰好一次」补发，杜绝双 done/双 error、杜绝漏发收尾 done）：
+  //   - errorEmitted：失败序列的 error 帧已写（避免补发时重复 error）。
+  //   - doneEmitted：收尾 done 帧已写（done 是唯一关流信号；缺它必补，否则悬挂心跳）。
+  let errorEmitted = false;
+  let doneEmitted = false;
   const push = (frame: { id?: string; event: SSEEventType; payload: unknown }): void => {
     if (stopped || reply.raw.writableEnded) return;
     writeSseFrame(reply, frame);
+    if (frame.event === 'error') errorEmitted = true;
+    // 收到终态 done → 关流（前端据 done 关 EventSource；服务端这侧也收尾，不再续推）。
+    // error 帧不在此关流：其后通常紧跟 done（脊柱 §5.3 失败时先 error 再 done）。
+    if (frame.event === 'done') {
+      doneEmitted = true;
+      stop();
+    }
   };
 
-  // 客户端断开 → 清理（防泄漏）。
+  // 客户端断开 → 清理（防泄漏：含订阅独立连接）。
   req.raw.on('close', stop);
+
+  // —— ① 锚点 + ③④ 首帧协议（脊柱 §5.2 / §5.4）——
+  //   订阅起点：默认调用方抓取的流最新 id（snapshot 路径）；窗口内 resume 则用最后一帧 replayed id。
+  let resumedInWindow = false;
+  let subscribeFromId = opts.subscribeFromId ?? '0-0';
+  if (opts.lastEventId && opts.replaySince) {
+    // 尝试窗口内补发增量（不重推 snapshot）。
+    const replay = await opts.replaySince(opts.lastEventId);
+    if (replay.inWindow) {
+      resumedInWindow = true;
+      for (const f of replay.frames) {
+        // 经 push 写（而非裸 writeSseFrame）：replay 到 done 即触发 stop，并记录 done/error 已发（终态闸据此不重发）。
+        push({ id: f.id, event: f.event, payload: f.payload });
+      }
+      // 续订从「补发的最后一帧 id」之后开始；无新帧则从 lastEventId 之后（衔接无缝、不漏不重）。
+      subscribeFromId = replay.frames.at(-1)?.id ?? opts.lastEventId;
+    }
+  }
+  if (!resumedInWindow) {
+    // 超窗 / 无 Last-Event-ID / 未接 Streams → 先 state_snapshot 重置（硬规则①③，刷新/重连不打回从头）。
+    //   合成帧补 id（Codex r5 非阻塞③）= 订阅锚点（subscribeFromId，调用方建流前抓取的流最新 id）。
+    //   语义：「你已收齐到锚点为止的状态」。前端把它当 Last-Event-ID 重连 → replaySince 从锚点【之后】补增量，
+    //   与 live subscribe 起点一致（不破坏窗口锚点、不重不漏）。锚点缺省 '0-0' 也合法（= 从头补，保守不漏）。
+    const snapshot = await opts.loadSnapshot();
+    writeSseFrame(reply, { id: subscribeFromId, event: 'state_snapshot', payload: snapshot });
+  }
+
+  // —— ⑤ 统一终态闸（subscribe 之前，Codex P0-r4 核心）——
+  //   terminal = (DB status 终态：terminalFrames() 返回非空) OR (replay 已发出 done/error)。任一为真即【绝不 subscribe】。
+  //   不变量：终态流必须以恰好一个 done 收尾、error 至多一次、无双发。落实如下——
+  //     · doneEmitted（replay 已回放到 done）→ push 时已 stop，终态已闭合，什么都不补。
+  //     · 否则若 terminal（DB 终态 或 已发过 error 但缺收尾 done）→ 按 DB 状态补发缺失的终态帧：
+  //         - 已发过 error（DB failed 的失败序列 error 在前）→ 只补收尾 done，不重复 error。
+  //         - 没发过 error → 按 DB 帧序补全（failed: error+done；completed/cancelled: done）。
+  //       覆盖边角：snapshot 路径建流瞬间 DB 已终态 / 窗口内 replay 但没回放到 done / Last-Event-ID 恰等于 done id
+  //       （replay 排除该 id 故增量为空）—— 统统在此补一次 done、stop、绝不 subscribe（旧 bug：terminalFrames 只在
+  //       snapshot 分支调用，窗口内 replay 未到 done 时会跳过补帧并启动 live subscribe → 终态 job 悬挂心跳）。
+  if (!doneEmitted) {
+    const dbTerminalFrames = (!stopped && opts.terminalFrames?.()) || [];
+    const terminal = dbTerminalFrames.length > 0 || errorEmitted;
+    if (terminal) {
+      // 已发过 error 就丢掉补发序列里的前导 error（避免重复 error）；无 DB 帧但已 error → 至少补一个 done 收尾。
+      const backfill = errorEmitted
+        ? dbTerminalFrames.filter((f) => f.event !== 'error')
+        : dbTerminalFrames;
+      // 合成终态帧补 id（Codex r5 非阻塞③）= 订阅锚点：与 state_snapshot 同锚点，前端以它为 Last-Event-ID
+      //   重连时 replaySince 从锚点之后补（终态后通常无新帧 → 增量空，仍在窗口内不打回从头），不破坏窗口锚点。
+      for (const frame of backfill) push({ id: subscribeFromId, ...frame });
+      // 结构性兜底（Codex r4-P2 加固）：终态闸只要判定 terminal，就【必以一个 done 收尾、必 stop】，
+      //   不依赖 terminalFrames() 一定含 done 的调用方约定。若补发序列没有 done（DB 帧畸形 / 只有前导
+      //   error / 已 error 但 DB 没给收尾帧）→ 此处补一个 done 关流。done 触发 stop，故下面 subscribe 必早退。
+      //   保证不变量「任何非 running 路径绝不 subscribe、绝无悬挂心跳」是结构性成立而非契约性成立。
+      if (!doneEmitted) push({ id: subscribeFromId, event: 'done', payload: { status: 'failed' } });
+    }
+  }
+
+  // —— ⑥ 持续订阅业务流：仅【running（非终态）】才订阅。终态闸已 stop，此处早退不订阅。——
+  if (!stopped && opts.subscribe) {
+    // 不 await：订阅是长循环，与本握手解耦；其内部异常吞掉（推流尽力而为，snapshot 才是真源）。
+    void Promise.resolve(
+      opts.subscribe({ fromId: subscribeFromId, onFrame: (f) => push(f), signal: subAbort.signal }),
+    ).catch(() => undefined);
+  }
 
   return { push, stop };
 }

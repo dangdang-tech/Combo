@@ -63,9 +63,27 @@ export interface OutboxEvent<P = unknown> {
 }
 
 // ---------- consumer / dead_events ----------
+/**
+ * MarketplaceProjection 合并流的单 cursor key（P0-2）：lifecycle 的 capability.published/unpublished
+ * 共用这【一行】cursor，按合并 seq 单调推进保上架/下架严格全局顺序，故 cursor.topic 列写的是
+ * 合并字面量 `capability.*`（不是任一真实 OutboxTopic）。registry.ts 的 MARKETPLACE_LIFECYCLE_CURSOR_TOPIC
+ * 与本字面量一致（同一真源）。
+ */
+export const MERGED_LIFECYCLE_CURSOR_TOPIC = 'capability.*' as const;
+
+/**
+ * consumer_cursors.topic 列的合法取值（P1 修复）：notify 子 topic 用真实 OutboxTopic、各拆一行游标；
+ * lifecycle 合并流用合并字面量 `capability.*` 共用一行游标（P0-2）。schema 因此须容纳合并 key，
+ * 否则与运行时写入的 cursor topic 冲突。
+ */
+export const ConsumerCursorTopicSchema = OutboxTopicSchema.or(
+  z.literal(MERGED_LIFECYCLE_CURSOR_TOPIC),
+);
+export type ConsumerCursorTopic = z.infer<typeof ConsumerCursorTopicSchema>;
+
 export const ConsumerCursorSchema = z.object({
   consumerName: z.string(),
-  topic: OutboxTopicSchema,
+  topic: ConsumerCursorTopicSchema,
   lastSeq: z.number().int(),
   lastEventId: z.string().optional(),
   updatedAt: IsoDateTimeSchema,

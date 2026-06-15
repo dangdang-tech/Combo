@@ -8,12 +8,16 @@ import type { FastifyReply, FastifyRequest, RouteHandlerMethod } from 'fastify';
 import {
   buildError,
   ErrorCode,
+  isTerminalJobStatus,
+  type ErrorBody,
+  type JobStatus,
   type ProgressView,
   type StateSnapshotPayload,
   type StructureState,
 } from '@cb/shared';
 import { startSseStream } from '../plugins/sse.js';
 import { getLastEventId } from '../plugins/sse.js';
+import { RedisEventStream } from '../sse/event-stream.js';
 
 /** 建流前资源查找结果：owner 校验用。 */
 interface OwnerLookup {
@@ -53,20 +57,22 @@ export function jobSseHandler(): RouteHandlerMethod {
       return reply;
     }
 
-    let row: { owner_user_id: string; progress: unknown } | undefined;
+    // —— 建流前 owner 校验：只读 owner 字段（不读 progress/status，避免与下方 snapshot 取数耦合，
+    //    且让 owner 校验是最便宜的一跳；Codex P0-1）。缺则 404、非 owner 则 403（HTTP，脊柱 §11.C）。——
+    let ownerRow: { owner_user_id: string } | undefined;
     try {
-      const res = await req.server.infra.db.query<{ owner_user_id: string; progress: unknown }>(
-        'SELECT owner_user_id, progress FROM jobs WHERE id = $1',
+      const res = await req.server.infra.db.query<{ owner_user_id: string }>(
+        'SELECT owner_user_id FROM jobs WHERE id = $1',
         [jobId],
       );
-      row = res.rows[0];
+      ownerRow = res.rows[0];
     } catch {
       reply500(req, reply);
       return reply;
     }
 
-    const lookup: OwnerLookup = row
-      ? { found: true, ownerUserId: row.owner_user_id }
+    const lookup: OwnerLookup = ownerRow
+      ? { found: true, ownerUserId: ownerRow.owner_user_id }
       : { found: false };
     if (!lookup.found) {
       reply404(req, reply);
@@ -77,8 +83,47 @@ export function jobSseHandler(): RouteHandlerMethod {
       return reply;
     }
 
+    const stream = new RedisEventStream(req.server.infra.redisHot);
+
+    // —— TOCTOU 消除（Codex P0-1）：**先取 stream latest id（订阅锚点），再读最新 job snapshot/status**。
+    //    顺序反过来保证 snapshot 不早于 latestId 锚点：worker 在「读 snapshot」之后 XADD 的帧，其 id 必 >
+    //    latestId，会被从 latestId 起的持续订阅捕获（不漏）；snapshot 已含的进展，订阅重叠一两帧由前端按
+    //    percent/状态幂等吸收（不重不卡）。若先读 snapshot 再取 latestId，则两者间 XADD 的 progress/done
+    //    会两头漏（不在 snapshot、也不在 latestId 之后），done 漏掉会让连接只剩心跳、不关流。
+    const subscribeFromId = await stream.latestId(jobId).catch(() => '0-0');
+
+    // snapshot/status 取数：在 latestId 锚点【之后】读，保证 snapshot 不早于锚点（gap-free 衔接）。
+    let snapRow: { status: string; progress: unknown; result: unknown; error: unknown } | undefined;
+    try {
+      const res = await req.server.infra.db.query<{
+        status: string;
+        progress: unknown;
+        result: unknown;
+        error: unknown;
+      }>('SELECT status, progress, result, error FROM jobs WHERE id = $1', [jobId]);
+      snapRow = res.rows[0];
+    } catch {
+      reply500(req, reply);
+      return reply;
+    }
+    // 取 snapshot 时 job 已被删（极少）→ 404（仍未建流）。
+    if (!snapRow) {
+      reply404(req, reply);
+      return reply;
+    }
+
+    const progress = (snapRow.progress ?? {}) as Partial<ProgressView>;
+    const status = snapRow.status as JobStatus;
+
     // 建流（hijack 后由 startSseStream 接管 raw）。snapshot = jobs.progress（kind=job）。
-    const progress = (row?.progress ?? {}) as Partial<ProgressView>;
+    // Last-Event-ID 窗口补发接 redis_hot Streams（B-12）：窗口内补增量、超窗走 snapshot 重置（脊柱 §5.4）。
+    //
+    // —— 终态编排全部交给 startSseStream（Codex P0-1 集中编排，杜绝双 done）——
+    //   route 不再在建流后无条件 handle.push 终态帧：
+    //     · replay 命中 done/error → 插件内 push 触发关流、不再订阅；
+    //     · snapshot 阶段 DB 已终态 → 插件用 terminalFrames() 补一次终态帧并关流、不订阅；
+    //     · running → snapshot + 从锚点 live subscribe，收到 done 即关流。
+    //   终态帧只发一次、无重复、无悬挂；snapshot 已锚定在 latestId 之后，故终态判定与首帧一致。
     await startSseStream(req, reply, {
       kind: 'job',
       lastEventId: getLastEventId(req),
@@ -86,7 +131,15 @@ export function jobSseHandler(): RouteHandlerMethod {
         kind: 'job',
         progress: normalizeProgress(progress),
       }),
-      // replaySince 未接 Redis Streams（业务事件源 Phase 3）：缺省 → 视为超窗、走 snapshot 重置（协议为真）。
+      replaySince: (lastEventId) => stream.replaySince(jobId, lastEventId),
+      // 建流后持续订阅 events:job:{jobId}：把 worker 后续帧实时 push 给在线连接；
+      // 断开 / done 终态由 startSseStream abort signal 清理 reader、断独立连接（Codex P0-1）。
+      subscribeFromId,
+      subscribe: ({ fromId, onFrame, signal }) => stream.subscribe(jobId, fromId, onFrame, signal),
+      // 建流瞬间 job 已终态：返回对应终态帧（completed→done；failed→error+done；cancelled→done），
+      //   由 startSseStream 在 snapshot 后一次性补发并关流（不留只剩心跳的悬挂连接）。非终态返回空。
+      terminalFrames: () =>
+        isTerminalJobStatus(status) ? terminalFrames(status, snapRow.result, snapRow.error) : [],
     });
     return reply;
   };
@@ -144,6 +197,33 @@ export function structureSseHandler(): RouteHandlerMethod {
     });
     return reply;
   };
+}
+
+/**
+ * 建流瞬间 job 已终态时补发的终态帧（Codex P0-1）。与 runner 落终态时推的帧同形态（脊柱 §5.3）：
+ *   - completed → done(status, result)。
+ *   - failed    → 先 error(完整 ErrorEnvelope) 再 done(status, error)（失败先 error 后 done）。
+ *     jobs.error 存的是 ErrorBody（= JobView.error），故包成 { error: body } 形成对外 ErrorEnvelope。
+ *   - cancelled → done(status)。
+ * done 帧经 startSseStream.push 触发关流（不留只剩心跳的悬挂连接）。
+ */
+function terminalFrames(
+  status: JobStatus,
+  result: unknown,
+  error: unknown,
+): Array<{ event: 'error' | 'done'; payload: unknown }> {
+  if (status === 'completed') {
+    return [{ event: 'done', payload: { status, result: result ?? null } }];
+  }
+  if (status === 'failed') {
+    const envelope = { error: (error ?? {}) as ErrorBody };
+    return [
+      { event: 'error', payload: envelope },
+      { event: 'done', payload: { status, error: envelope } },
+    ];
+  }
+  // cancelled（及理论上其它终态）：只发 done。
+  return [{ event: 'done', payload: { status } }];
 }
 
 /** 把 jobs.progress（可能为 {} 或部分）规整成合法 ProgressView（永不裸转圈：至少给 0% + 子任务空清单）。 */

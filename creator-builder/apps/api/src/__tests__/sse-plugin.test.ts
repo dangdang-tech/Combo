@@ -80,6 +80,30 @@ describe('startSseStream handshake (脊柱 §5.2 / §5.4)', () => {
     handle.stop();
   });
 
+  it('合成 state_snapshot 帧带 id = 订阅锚点（Codex r5 非阻塞③：Last-Event-ID 续传锚点一致）', async () => {
+    const { reply, req, raw } = makeReplyReq();
+    const handle = await startSseStream(req, reply, {
+      kind: 'job',
+      loadSnapshot: async () => jobSnapshot,
+      subscribeFromId: '777-3', // 调用方建流前抓取的流最新 id（锚点）
+    });
+    const out = raw.writes.join('');
+    // snapshot 帧在 event 之前带 id（合成帧不再裸发、可作 Last-Event-ID 续传锚点）。
+    expect(out).toMatch(/id: 777-3\nevent: state_snapshot/);
+    handle.stop();
+  });
+
+  it('无 subscribeFromId 时合成 snapshot 帧 id 回落 0-0（合法：从头补，保守不漏）', async () => {
+    const { reply, req, raw } = makeReplyReq();
+    const handle = await startSseStream(req, reply, {
+      kind: 'job',
+      loadSnapshot: async () => jobSnapshot,
+    });
+    const out = raw.writes.join('');
+    expect(out).toMatch(/id: 0-0\nevent: state_snapshot/);
+    handle.stop();
+  });
+
   it('Last-Event-ID in window → replays increments, NO snapshot (脊柱 §5.4)', async () => {
     const { reply, req, raw } = makeReplyReq();
     const replaySince = async (): Promise<ReplayResult> => ({
@@ -133,6 +157,60 @@ describe('startSseStream handshake (脊柱 §5.2 / §5.4)', () => {
     expect(raw.writes.length).toBe(before);
   });
 
+  it('持续订阅（Codex P0-1）：subscribe 被调用并带 fromId；push 的帧写到流上', async () => {
+    const { reply, req, raw } = makeReplyReq();
+    let seenFromId: string | undefined;
+    const handle = await startSseStream(req, reply, {
+      kind: 'job',
+      loadSnapshot: async () => jobSnapshot,
+      subscribeFromId: '500-0', // snapshot 路径：调用方抓的流最新 id
+      subscribe: ({ fromId, onFrame }) => {
+        seenFromId = fromId;
+        onFrame({ id: '600-0', event: 'progress', payload: { percent: 33 } });
+      },
+    });
+    // 让 fire-and-forget 订阅微任务跑完。
+    await new Promise((r) => setTimeout(r, 0));
+    expect(seenFromId).toBe('500-0'); // 用调用方提供的订阅起点
+    const out = raw.writes.join('');
+    expect(out).toContain('event: state_snapshot'); // 首帧 snapshot
+    expect(out).toContain('id: 600-0'); // 订阅 push 的后续帧
+    expect(out).toContain('"percent":33');
+    handle.stop();
+  });
+
+  it('收到 done 终态帧 → 自动关流（Codex P0-1：终态后关流）', async () => {
+    const { reply, req, raw } = makeReplyReq();
+    await startSseStream(req, reply, {
+      kind: 'job',
+      loadSnapshot: async () => jobSnapshot,
+      subscribe: ({ onFrame }) => {
+        onFrame({ id: '700-0', event: 'done', payload: { status: 'completed' } });
+      },
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    const out = raw.writes.join('');
+    expect(out).toContain('event: done');
+    expect(raw.end).toHaveBeenCalled(); // done → 关流
+  });
+
+  it('客户端断开 → 订阅 signal 被 abort（清理 reader，不泄漏）', async () => {
+    const { reply, req, reqRaw } = makeReplyReq();
+    let sawAbort = false;
+    await startSseStream(req, reply, {
+      kind: 'job',
+      loadSnapshot: async () => jobSnapshot,
+      subscribe: ({ signal }) => {
+        signal.addEventListener('abort', () => {
+          sawAbort = true;
+        });
+      },
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    reqRaw.emit('close');
+    expect(sawAbort).toBe(true);
+  });
+
   it('心跳发【具名 heartbeat 帧】+ data:{ts}（不是 SSE comment : hb，Codex#5）', async () => {
     vi.useFakeTimers();
     try {
@@ -152,5 +230,198 @@ describe('startSseStream handshake (脊柱 §5.2 / §5.4)', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('startSseStream 统一终态闸（Codex P0-r4：四路径各发一次终态、不悬挂、非 running 不 subscribe）', () => {
+  /** 统计 `event: done` 出现次数（双 done 回归守门）。 */
+  function countDone(out: string): number {
+    return out.split('event: done').length - 1;
+  }
+  /** 统计 `event: error` 出现次数（双 error 回归守门）。 */
+  function countError(out: string): number {
+    return out.split('event: error').length - 1;
+  }
+
+  it('(a) DB 终态但 replay 在窗口内未含 done → 补发一次 done、关流、绝不 subscribe', async () => {
+    const { reply, req, raw } = makeReplyReq();
+    let subscribed = false;
+    // replay 在窗口内，但只回放到 progress（没回放到 done，Redis done 尽力而为丢了）。
+    const replaySince = async (): Promise<ReplayResult> => ({
+      inWindow: true,
+      frames: [{ id: '20-0', event: 'progress', payload: { percent: 100 } }],
+    });
+    const handle = await startSseStream(req, reply, {
+      kind: 'job',
+      lastEventId: '19-0',
+      replaySince,
+      loadSnapshot: async () => jobSnapshot,
+      subscribe: () => {
+        subscribed = true;
+      },
+      // DB snapshot 已终态 completed → 终态闸据此补发 done。
+      terminalFrames: () => [{ event: 'done', payload: { status: 'completed' } }],
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    const out = raw.writes.join('');
+    expect(out).toContain('id: 20-0'); // 窗口内增量
+    expect(out).not.toContain('event: state_snapshot'); // 窗口内不重推 snapshot
+    expect(countDone(out)).toBe(1); // 终态闸补发的那一次
+    expect(out).toContain('"status":"completed"');
+    expect(raw.end).toHaveBeenCalled(); // done → 关流
+    expect(subscribed).toBe(false); // 非 running：绝不 subscribe
+    handle.stop();
+  });
+
+  it('(b) replay 已含 done → 发一次 done、不补、绝不 subscribe（杜绝双 done）', async () => {
+    const { reply, req, raw } = makeReplyReq();
+    let subscribed = false;
+    const replaySince = async (): Promise<ReplayResult> => ({
+      inWindow: true,
+      frames: [
+        { id: '30-0', event: 'progress', payload: { percent: 100 } },
+        { id: '31-0', event: 'done', payload: { status: 'completed' } },
+      ],
+    });
+    const handle = await startSseStream(req, reply, {
+      kind: 'job',
+      lastEventId: '29-0',
+      replaySince,
+      loadSnapshot: async () => jobSnapshot,
+      subscribe: () => {
+        subscribed = true;
+      },
+      // DB 也终态：终态闸不能因此再补第二个 done。
+      terminalFrames: () => [{ event: 'done', payload: { status: 'completed' } }],
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    const out = raw.writes.join('');
+    expect(out).toContain('id: 31-0');
+    expect(countDone(out)).toBe(1); // 恰好一次（replay 那次），无双 done
+    expect(raw.end).toHaveBeenCalled();
+    expect(subscribed).toBe(false);
+    handle.stop();
+  });
+
+  it('(c) Last-Event-ID == done id（replay 增量为空）→ 补发一次 done、不悬挂、不 subscribe', async () => {
+    const { reply, req, raw } = makeReplyReq();
+    let subscribed = false;
+    // Last-Event-ID 恰是 done 的 id：XRANGE (lastId, +] 把 done 自身排除 → 增量为空，但仍在窗口内。
+    const replaySince = async (): Promise<ReplayResult> => ({ inWindow: true, frames: [] });
+    const handle = await startSseStream(req, reply, {
+      kind: 'job',
+      lastEventId: '40-0', // == done id
+      replaySince,
+      loadSnapshot: async () => jobSnapshot,
+      subscribe: () => {
+        subscribed = true;
+      },
+      terminalFrames: () => [{ event: 'done', payload: { status: 'completed' } }],
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    const out = raw.writes.join('');
+    expect(out).not.toContain('event: state_snapshot'); // 窗口内（增量空但 inWindow）不重推 snapshot
+    expect(countDone(out)).toBe(1); // 终态闸据 DB 补发一次（不悬挂心跳）
+    expect(raw.end).toHaveBeenCalled();
+    expect(subscribed).toBe(false);
+    handle.stop();
+  });
+
+  it('(d) running → 从锚点 subscribe，收到 done 发一次并关流', async () => {
+    const { reply, req, raw } = makeReplyReq();
+    let seenFromId: string | undefined;
+    const handle = await startSseStream(req, reply, {
+      kind: 'job',
+      loadSnapshot: async () => jobSnapshot,
+      subscribeFromId: '900-0',
+      // DB 非终态（running）→ terminalFrames 返回空 → 走 subscribe。
+      terminalFrames: () => [],
+      subscribe: ({ fromId, onFrame }) => {
+        seenFromId = fromId;
+        onFrame({ id: '901-0', event: 'progress', payload: { percent: 80 } });
+        onFrame({ id: '902-0', event: 'done', payload: { status: 'completed' } });
+      },
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    const out = raw.writes.join('');
+    expect(seenFromId).toBe('900-0'); // 从锚点订阅
+    expect(out).toContain('event: state_snapshot'); // running 首帧 snapshot
+    expect(out).toContain('id: 902-0');
+    expect(countDone(out)).toBe(1); // 在线 done 一次
+    expect(raw.end).toHaveBeenCalled();
+    handle.stop();
+  });
+
+  it('DB failed 且 replay 已发 error 但缺收尾 done → 只补 done（不重复 error）、关流', async () => {
+    const { reply, req, raw } = makeReplyReq();
+    let subscribed = false;
+    const envelope = {
+      error: { userMessage: 'x', retriable: false, action: 'contact', traceId: 't' },
+    };
+    const replaySince = async (): Promise<ReplayResult> => ({
+      inWindow: true,
+      frames: [{ id: '50-0', event: 'error', payload: envelope }], // 回放到 error，done 丢了/超窗
+    });
+    const handle = await startSseStream(req, reply, {
+      kind: 'job',
+      lastEventId: '49-0',
+      replaySince,
+      loadSnapshot: async () => jobSnapshot,
+      subscribe: () => {
+        subscribed = true;
+      },
+      // DB failed 的完整失败序列。
+      terminalFrames: () => [
+        { event: 'error', payload: envelope },
+        { event: 'done', payload: { status: 'failed', error: envelope } },
+      ],
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    const out = raw.writes.join('');
+    expect(countError(out)).toBe(1); // 只 replay 那一次 error（终态闸丢掉补发的前导 error）
+    expect(countDone(out)).toBe(1); // 补发收尾 done 一次
+    expect(out).toContain('"status":"failed"');
+    expect(raw.end).toHaveBeenCalled();
+    expect(subscribed).toBe(false);
+    handle.stop();
+  });
+
+  it('(e) 合成终态 backfill 帧带 id = 订阅锚点（Codex r5 非阻塞③：不破坏 replay 锚点）', async () => {
+    const { reply, req, raw } = makeReplyReq();
+    // snapshot 路径建流瞬间 DB 已 completed → 终态闸据 terminalFrames 补发 done（合成帧）。
+    const handle = await startSseStream(req, reply, {
+      kind: 'job',
+      loadSnapshot: async () => jobSnapshot,
+      subscribeFromId: '888-0', // 锚点
+      terminalFrames: () => [{ event: 'done', payload: { status: 'completed' } }],
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    const out = raw.writes.join('');
+    // 合成 snapshot 与合成 done 都带锚点 id（前端以此为 Last-Event-ID 重连：从锚点之后补，终态后增量空、仍在窗口内）。
+    expect(out).toMatch(/id: 888-0\nevent: state_snapshot/);
+    expect(out).toMatch(/id: 888-0\nevent: done/);
+    expect(countDone(out)).toBe(1);
+    expect(raw.end).toHaveBeenCalled();
+    handle.stop();
+  });
+
+  it('结构性兜底（Codex r4-P2）：terminalFrames 畸形返回无 done → 仍补一个 done 收尾、绝不 subscribe', async () => {
+    const { reply, req, raw } = makeReplyReq();
+    let subscribed = false;
+    const handle = await startSseStream(req, reply, {
+      kind: 'job',
+      loadSnapshot: async () => jobSnapshot,
+      subscribe: () => {
+        subscribed = true;
+      },
+      // 畸形 DB 帧：非空但没 done（违反调用方约定）。终态闸必须仍以 done 收尾、stop、不 subscribe。
+      terminalFrames: () => [{ event: 'error', payload: { error: {} } }],
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    const out = raw.writes.join('');
+    expect(countDone(out)).toBe(1); // 结构性补的收尾 done
+    expect(raw.end).toHaveBeenCalled(); // 关流，不悬挂心跳
+    expect(subscribed).toBe(false); // terminal 判定后绝不 subscribe（结构性，不靠 DB 帧含 done）
+    handle.stop();
   });
 });

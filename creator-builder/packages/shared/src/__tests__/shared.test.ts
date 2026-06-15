@@ -19,6 +19,9 @@ import {
   OutboxTopicSchema,
   ACTIVE_OUTBOX_TOPICS,
   TOPIC_CLASS,
+  ConsumerCursorSchema,
+  ConsumerCursorTopicSchema,
+  MERGED_LIFECYCLE_CURSOR_TOPIC,
   NotifyReviewDecidedPayloadSchema,
   CapabilityPublishedPayloadSchema,
   CapabilityUnpublishedPayloadSchema,
@@ -185,6 +188,31 @@ describe('events / outbox topics', () => {
       expect(TOPIC_CLASS[t]).toBeDefined();
     }
     expect(TOPIC_CLASS['notify.review_decided']).toBe('notify');
+  });
+
+  // P1：ConsumerCursor.topic 列须容纳 lifecycle 合并 cursor 字面量 'capability.*'（与运行时写入一致），
+  //   否则 schema 与运行时游标取值冲突（P0-2 合并 cursor 单行游标）。
+  it('ConsumerCursorTopicSchema accepts real OutboxTopics AND the merged lifecycle cursor key', () => {
+    expect(MERGED_LIFECYCLE_CURSOR_TOPIC).toBe('capability.*');
+    // 真实子 topic（notify 各拆一行游标）通过。
+    expect(ConsumerCursorTopicSchema.safeParse('notify.import_completed').success).toBe(true);
+    expect(ConsumerCursorTopicSchema.safeParse('capability.published').success).toBe(true);
+    // 合并 cursor key（lifecycle 合并流单行游标，运行时写入值）通过——本期修复点。
+    expect(ConsumerCursorTopicSchema.safeParse('capability.*').success).toBe(true);
+    expect(ConsumerCursorTopicSchema.safeParse(MERGED_LIFECYCLE_CURSOR_TOPIC).success).toBe(true);
+    // 非法字面量仍被拒。
+    expect(ConsumerCursorTopicSchema.safeParse('capability.bogus').success).toBe(false);
+  });
+
+  it('ConsumerCursorSchema parses a merged-lifecycle cursor row (topic = capability.*)', () => {
+    const ok = ConsumerCursorSchema.safeParse({
+      consumerName: 'MarketplaceProjection',
+      topic: 'capability.*',
+      lastSeq: 42,
+      lastEventId: '01J-evt',
+      updatedAt: '2026-06-16T00:00:00Z',
+    });
+    expect(ok.success).toBe(true);
   });
 
   it('NotifyReviewDecidedPayload accepts the authoritative review-decided payload', () => {
