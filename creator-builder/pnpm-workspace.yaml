@@ -1,0 +1,9 @@
+packages:
+  - 'packages/*'
+  - 'apps/*'
+  - 'db'
+  - 'infra'
+  - 'scripts'
+allowBuilds:
+  esbuild: true
+  msgpackr-extract: true

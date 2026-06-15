@@ -9,6 +9,7 @@
 > **六项已拍板决策落地点**：① **Auth = Logto 自托管唯一**（不二选一）。本域全部端点据此。share_token 匿名运行的限流 / 日成本上限 / 匿名身份键 **本期 usage 置空、不写计量**，但匿名身份键解析与签发链路本期定契约（②）。
 >
 > **三条硬规则在本域的落地**：
+>
 > 1. **永不裸转圈** —— Auth 端点都是短同步请求，无长任务、无 SSE 自有流；唯一关联 SSE 是「受保护 SSE 流鉴权」（§5，遵脊柱 §11.C 同源 Cookie、建流前 HTTP 失败），按脊柱帧协议、不另造帧。
 > 2. **绝不裸露错误码** —— 鉴权失败（401/403）只出 `ErrorEnvelope`，唯一可展示字段是 `userMessage`（人话，如「登录态失效了，请重新登录」「你没有权限做这个操作」）+ `action`，**禁止**把内部 `error.code`、JWT 校验原始报错（`jwt expired` / `invalid signature` / `audience mismatch`）、Logto 上游 HTTP 状态、OIDC 错误码裸出。**登录失败重定向用 opaque `failureId`、不带内部 code**（脊柱 §11.B Codex#11）。落地于 §3.2 登录回调、§4 错误用例。
 > 3. **已生成内容不丢** —— Auth 无产物。但登录态过期时前端跳登录、回跳后凭草稿 + 断点续传（脊柱 §8）回到原步骤，不打回从头；本域只负责「过期给可操作退路」，不破坏续传。
@@ -65,12 +66,12 @@
 
 ### 3.1 `GET /api/v1/auth/login` — 发起登录（302 跳 Logto）
 
-| 项 | 值 |
-|---|---|
-| method + path | `GET /api/v1/auth/login` |
-| 鉴权 | **无**（未登录入口） |
-| 幂等 | 天然幂等（GET，无副作用，不需 `Idempotency-Key`）；每次生成新 state/nonce/PKCE verifier 存短时会话 |
-| 响应 | **302 Redirect** 到 Logto 授权端点；非 JSON 包络（重定向语义） |
+| 项            | 值                                                                                                 |
+| ------------- | -------------------------------------------------------------------------------------------------- |
+| method + path | `GET /api/v1/auth/login`                                                                           |
+| 鉴权          | **无**（未登录入口）                                                                               |
+| 幂等          | 天然幂等（GET，无副作用，不需 `Idempotency-Key`）；每次生成新 state/nonce/PKCE verifier 存短时会话 |
+| 响应          | **302 Redirect** 到 Logto 授权端点；非 JSON 包络（重定向语义）                                     |
 
 **请求 query（zod 片段）**：
 
@@ -96,20 +97,20 @@ const LoginQuery = z.object({
 
 ### 3.2 `GET /api/v1/auth/callback` — OIDC 回调换会话（302 回站内）
 
-| 项 | 值 |
-|---|---|
-| method + path | `GET /api/v1/auth/callback`（= `LOGTO_REDIRECT_URI`，本地 `http://localhost/api/v1/auth/callback`） |
-| 鉴权 | **无**（持 `code` + `state` 即换会话；靠 state/PKCE 防伪） |
-| 幂等 | code 一次性（Logto 侧），重复 callback 同 code 第二次失败 → 走 `change_input`（重新登录）；不引入 `Idempotency-Key`（OAuth 语义自带一次性） |
-| 响应 | 成功 **302** 回 `auth_tx.returnTo`（默认 `/creator`），并 `Set-Cookie` 会话；失败 **302** 回 `/login?failureId=<opaque>`（脊柱 §11.B Codex#11：opaque `failureId`，**不带内部 code**；前端据 `failureId` 查预置文案表或调失败说明读接口渲染人话），不裸返 JSON 错误页、不把内部 code 进 URL |
+| 项            | 值                                                                                                                                                                                                                                                                                          |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| method + path | `GET /api/v1/auth/callback`（= `LOGTO_REDIRECT_URI`，本地 `http://localhost/api/v1/auth/callback`）                                                                                                                                                                                         |
+| 鉴权          | **无**（持 `code` + `state` 即换会话；靠 state/PKCE 防伪）                                                                                                                                                                                                                                  |
+| 幂等          | code 一次性（Logto 侧），重复 callback 同 code 第二次失败 → 走 `change_input`（重新登录）；不引入 `Idempotency-Key`（OAuth 语义自带一次性）                                                                                                                                                 |
+| 响应          | 成功 **302** 回 `auth_tx.returnTo`（默认 `/creator`），并 `Set-Cookie` 会话；失败 **302** 回 `/login?failureId=<opaque>`（脊柱 §11.B Codex#11：opaque `failureId`，**不带内部 code**；前端据 `failureId` 查预置文案表或调失败说明读接口渲染人话），不裸返 JSON 错误页、不把内部 code 进 URL |
 
 **请求 query（zod 片段）**：
 
 ```typescript
 const CallbackQuery = z.object({
-  code: z.string().optional(),          // 授权码（成功路径）
-  state: z.string().optional(),         // 必须与 auth_tx.state 匹配
-  error: z.string().optional(),         // Logto 侧错误（如 access_denied）
+  code: z.string().optional(), // 授权码（成功路径）
+  state: z.string().optional(), // 必须与 auth_tx.state 匹配
+  error: z.string().optional(), // Logto 侧错误（如 access_denied）
   error_description: z.string().optional(),
 });
 ```
@@ -125,12 +126,12 @@ const CallbackQuery = z.object({
 
 **错误用例**（统一 302 回 `/login?failureId=<opaque>`；服务端把 `failureId` 映射到下表内部 code + `traceId` 落日志，前端据 `failureId` 渲染对应人话 `userMessage`，绝不裸露原始 OIDC 报错或内部 code）：
 
-| 触发 | 内部 code（仅日志/映射，不进 URL/前端） | HTTP（内部判定） | retriable | action | 人话 `userMessage`（前端渲染） |
-|---|---|---|---|---|---|
-| `state` 不匹配 / `auth_tx` 缺失或过期 | `AUTH_STATE_MISMATCH` | 400 | false | `change_input` | 「登录会话过期了，请重新登录。」 |
-| 用户在 Logto 取消授权（`error=access_denied`） | `AUTH_CONSENT_DENIED` | 400 | false | `change_input` | 「登录未完成，可以再试一次。」 |
-| code 换 token 失败 / id_token 校验不过 | `AUTH_CALLBACK_FAILED` | 400 | false | `change_input` | 「登录没能完成，请重新登录。」 |
-| Logto token 端点不可达 / 超时 | `AUTH_UPSTREAM_UNAVAILABLE` | 503 | true | `escalate` | 「登录服务正在恢复，请稍候再试。」 |
+| 触发                                           | 内部 code（仅日志/映射，不进 URL/前端） | HTTP（内部判定） | retriable | action         | 人话 `userMessage`（前端渲染）     |
+| ---------------------------------------------- | --------------------------------------- | ---------------- | --------- | -------------- | ---------------------------------- |
+| `state` 不匹配 / `auth_tx` 缺失或过期          | `AUTH_STATE_MISMATCH`                   | 400              | false     | `change_input` | 「登录会话过期了，请重新登录。」   |
+| 用户在 Logto 取消授权（`error=access_denied`） | `AUTH_CONSENT_DENIED`                   | 400              | false     | `change_input` | 「登录未完成，可以再试一次。」     |
+| code 换 token 失败 / id_token 校验不过         | `AUTH_CALLBACK_FAILED`                  | 400              | false     | `change_input` | 「登录没能完成，请重新登录。」     |
+| Logto token 端点不可达 / 超时                  | `AUTH_UPSTREAM_UNAVAILABLE`             | 503              | true      | `escalate`     | 「登录服务正在恢复，请稍候再试。」 |
 
 > 硬约束（脊柱 §11.B Codex#11）：内部 code、`error_description`、Logto 原始 `error`、JWT 库报错串**禁止**进 URL / `userMessage` / 前端展示；失败重定向**只带 opaque `failureId`**（随机短串，服务端映射到内部 code + `traceId`），内部 code 永不进 `/login?...`。上游不可达类用 `action:'escalate'`（§11.B 收敛可展示退路为 `retry|change_input|escalate`，前端给「稍后再试 / 反馈」入口，配 `traceId` 反馈代码）。
 
@@ -138,12 +139,12 @@ const CallbackQuery = z.object({
 
 ### 3.3 `POST /api/v1/auth/logout` — 登出
 
-| 项 | 值 |
-|---|---|
-| method + path | `POST /api/v1/auth/logout` |
-| 鉴权 | **可选**（已登录则清会话；未登录幂等返成功） |
-| 幂等 | 幂等（重复登出同结果）；POST 但语义幂等，**可不带 `Idempotency-Key`**（清会话无「重复副作用」风险，与脊柱 §4「写命令带 key」的例外：登出是会话销毁、无产物、无连坐） |
-| 响应 | `200 Envelope<{ loggedOut: true; logoutUrl?: string }>` |
+| 项            | 值                                                                                                                                                                   |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| method + path | `POST /api/v1/auth/logout`                                                                                                                                           |
+| 鉴权          | **可选**（已登录则清会话；未登录幂等返成功）                                                                                                                         |
+| 幂等          | 幂等（重复登出同结果）；POST 但语义幂等，**可不带 `Idempotency-Key`**（清会话无「重复副作用」风险，与脊柱 §4「写命令带 key」的例外：登出是会话销毁、无产物、无连坐） |
+| 响应          | `200 Envelope<{ loggedOut: true; logoutUrl?: string }>`                                                                                                              |
 
 **行为**：
 
@@ -164,26 +165,26 @@ const LogoutResponse = z.object({
 
 ### 3.4 `GET /api/v1/me` — 当前登录用户
 
-| 项 | 值 |
-|---|---|
-| method + path | `GET /api/v1/me` |
-| 鉴权 | **必需**（`requireAuth`） |
-| 幂等 | 天然幂等（GET） |
-| 响应 | `200 Envelope<MeView>` |
+| 项            | 值                        |
+| ------------- | ------------------------- |
+| method + path | `GET /api/v1/me`          |
+| 鉴权          | **必需**（`requireAuth`） |
+| 幂等          | 天然幂等（GET）           |
+| 响应          | `200 Envelope<MeView>`    |
 
 **响应 schema（zod 片段，对应 §8 `MeView`）**：
 
 ```typescript
 const MeView = z.object({
-  id: z.string(),                         // users.id（UUID v7），对外字符串
-  logtoUserId: z.string(),                // OIDC sub（前端一般不用，便于支持/反馈）
-  account: z.string(),                    // 展示账号名（如 "@WAYNE"，发布署名取此，发布-05）
-  email: z.string().email().nullable(),   // 可空（GitHub 无邮箱时）
+  id: z.string(), // users.id（UUID v7），对外字符串
+  logtoUserId: z.string(), // OIDC sub（前端一般不用，便于支持/反馈）
+  account: z.string(), // 展示账号名（如 "@WAYNE"，发布署名取此，发布-05）
+  email: z.string().email().nullable(), // 可空（GitHub 无邮箱时）
   roles: z.array(z.enum(['creator', 'consumer'])), // 单账号双角色（§6）
   status: z.enum(['active', 'disabled']),
-  hasProfile: z.boolean(),                // 是否已建公开名片（profile 详情在主页域）
-  creatorId: z.string(),                  // = id，作为主页 /creators/{creatorId}/profile 寻址
-  createdAt: z.string(),                  // IsoDateTime
+  hasProfile: z.boolean(), // 是否已建公开名片（profile 详情在主页域）
+  creatorId: z.string(), // = id，作为主页 /creators/{creatorId}/profile 寻址
+  createdAt: z.string(), // IsoDateTime
   lastLoginAt: z.string().nullable(),
 });
 ```
@@ -213,14 +214,14 @@ const MeView = z.object({
 
 中间件对从 token 来源（§3.4）取到的 JWT 依次校验：
 
-| 校验项 | 断言 | env / 来源 |
-|---|---|---|
-| 签名 | 用 JWKS 公钥验签（RS256 等非对称） | JWKS = `{LOGTO_ISSUER}/jwks`（= `LOGTO_JWKS_URI`），缓存 + 按 `kid` 轮换拉取 |
-| `iss` | == `LOGTO_ISSUER`（本地 `http://logto:3001/oidc`） | `LOGTO_ISSUER` |
-| `aud` | 包含本服务 API resource indicator / `LOGTO_APP_ID`（按 Logto API resource 配置断言） | `LOGTO_APP_ID` / API resource |
-| `exp` | 未过期（含时钟偏移容忍 ≤ 60s） | token claim |
-| `nbf` | 若存在，已生效 | token claim |
-| 角色 claim | 解析 `roles` / `scope`（Logto 角色 → `('creator'｜'consumer')[]`） | token claim（§6.1） |
+| 校验项     | 断言                                                                                      | env / 来源                                                                   |
+| ---------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| 签名       | 用 JWKS 公钥验签（RS256 等非对称）                                                        | JWKS = `{LOGTO_ISSUER}/jwks`（= `LOGTO_JWKS_URI`），缓存 + 按 `kid` 轮换拉取 |
+| `iss`      | == **canonical** `LOGTO_ISSUER`（compose `http://logto:3001/oidc`，见 §9 canonical 铁律） | `LOGTO_ISSUER`                                                               |
+| `aud`      | 包含本服务 API resource indicator / `LOGTO_APP_ID`（按 Logto API resource 配置断言）      | `LOGTO_APP_ID` / API resource                                                |
+| `exp`      | 未过期（含时钟偏移容忍 ≤ 60s）                                                            | token claim                                                                  |
+| `nbf`      | 若存在，已生效                                                                            | token claim                                                                  |
+| 角色 claim | 解析 `roles` / `scope`（Logto 角色 → `('creator'｜'consumer'｜'reviewer')[]`）            | token claim（§6.1）                                                          |
 
 **JWKS 处理**：本地缓存 JWKS，遇未知 `kid` 触发一次刷新拉取（防密钥轮换后误判）；JWKS 拉取本身不可达时，对受保护请求返 `AUTH_UPSTREAM_UNAVAILABLE`（503 / `escalate`，§11.B 收敛口径，前端给「稍后再试 / 反馈」入口），而非 401（区分「token 真无效」与「暂时验不了」），并不裸露上游报错。
 
@@ -230,9 +231,9 @@ const MeView = z.object({
 
 ```typescript
 interface AuthContext {
-  userId: UserId;                          // 已映射的业务 users.id（非 sub）
-  logtoUserId: string;                     // OIDC sub
-  roles: Array<'creator' | 'consumer'>;
+  userId: UserId; // 已映射的业务 users.id（非 sub）
+  logtoUserId: string; // OIDC sub
+  roles: Array<'creator' | 'consumer' | 'reviewer'>;
   account: string;
   authSource: 'cookie' | 'bearer';
   // 匿名身份：仅 optionalAuth 且无登录态、持 share_token 时填充（§6.4），登录态下为 undefined
@@ -242,11 +243,11 @@ interface AuthContext {
 
 ### 4.3 三种中间件守卫（鉴权约定）
 
-| 守卫 | 行为 | 用于 |
-|---|---|---|
-| `requireAuth` | 必须有有效 token，否则 `401 UNAUTHENTICATED`（`escalate`，前端跳登录） | 工作台 / 五步流程 / `/me` / 所有创作者私有写读 |
-| `optionalAuth` | 有 token 则解 `AuthContext`；无 token 不报错，可降级匿名（持 share_token 填 `anonymous`） | 公开主页 `GET /creators/{id}/profile`、公开市集读、私享 share_token 访问 |
-| `requireRole(role)` | 在 `requireAuth` 基础上断言 `roles` 含指定角色，否则 `403 FORBIDDEN`（`escalate`） | 需创作者角色的写命令（建能力 / 发布等，由各域按需挂载） |
+| 守卫                | 行为                                                                                      | 用于                                                                     |
+| ------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `requireAuth`       | 必须有有效 token，否则 `401 UNAUTHENTICATED`（`escalate`，前端跳登录）                    | 工作台 / 五步流程 / `/me` / 所有创作者私有写读                           |
+| `optionalAuth`      | 有 token 则解 `AuthContext`；无 token 不报错，可降级匿名（持 share_token 填 `anonymous`） | 公开主页 `GET /creators/{id}/profile`、公开市集读、私享 share_token 访问 |
+| `requireRole(role)` | 在 `requireAuth` 基础上断言 `roles` 含指定角色，否则 `403 FORBIDDEN`（`escalate`）        | 需创作者角色的写命令（建能力 / 发布等，由各域按需挂载）                  |
 
 > **资源 owner 校验**（外壳首页-20/31「只对本人可见」）不在通用中间件层做，而是各受保护资源 handler 内断言 `resource.owner_user_id == ctx.userId`，不匹配 → `403 FORBIDDEN`。本文给出统一约定（§6.3），各域沿用。
 
@@ -254,16 +255,16 @@ interface AuthContext {
 
 > 全部只出 `ErrorEnvelope`（脊柱 §3 / §11.B）。唯一可对 UI 展示的是 `userMessage`（人话）+ `action`；内部 `error.code` 仅供日志/告警/文案映射，**UI 永不渲染**；不含 JWT/OIDC 原始报错；HTTP 状态行不裸进 body。
 
-| 触发 | HTTP | 内部 code（仅日志/映射，UI 不渲染） | retriable | action | 人话 `userMessage` |
-|---|---|---|---|---|---|
-| 无 token / token 缺失（`requireAuth`） | 401 | `UNAUTHENTICATED` | false | `escalate` | 「登录态失效了，请重新登录。」 |
-| token 过期（`exp`） | 401 | `UNAUTHENTICATED` | false | `escalate` | 「登录态失效了，请重新登录。」 |
-| token 签名 / `iss` / `aud` / `nonce` 不合法 | 401 | `UNAUTHENTICATED` | false | `escalate` | 「登录态失效了，请重新登录。」 |
-| 已登录但缺所需角色（`requireRole`） | 403 | `FORBIDDEN` | false | `escalate` | 「你没有权限做这个操作。」 |
-| 已登录但非资源 owner（本人可见） | 403 | `FORBIDDEN` | false | `escalate` | 「你没有权限查看这个内容。」 |
-| 账号被禁用（`users.status='disabled'`） | 403 | `FORBIDDEN` | false | `escalate` | 「账号当前不可用，请联系支持。」（带 traceId） |
-| JWKS / Logto 暂不可达（验不了，非「token 无效」） | 503 | `AUTH_UPSTREAM_UNAVAILABLE` | true | `escalate` | 「登录服务正在恢复，请稍候再试。」 |
-| share_token 不存在 / 已失效（`optionalAuth` 匿名路径） | 404 | `NOT_FOUND` | false | `change_input` | 「没找到对应内容，可能已被删除或链接失效。」 |
+| 触发                                                   | HTTP | 内部 code（仅日志/映射，UI 不渲染） | retriable | action         | 人话 `userMessage`                             |
+| ------------------------------------------------------ | ---- | ----------------------------------- | --------- | -------------- | ---------------------------------------------- |
+| 无 token / token 缺失（`requireAuth`）                 | 401  | `UNAUTHENTICATED`                   | false     | `escalate`     | 「登录态失效了，请重新登录。」                 |
+| token 过期（`exp`）                                    | 401  | `UNAUTHENTICATED`                   | false     | `escalate`     | 「登录态失效了，请重新登录。」                 |
+| token 签名 / `iss` / `aud` / `nonce` 不合法            | 401  | `UNAUTHENTICATED`                   | false     | `escalate`     | 「登录态失效了，请重新登录。」                 |
+| 已登录但缺所需角色（`requireRole`）                    | 403  | `FORBIDDEN`                         | false     | `escalate`     | 「你没有权限做这个操作。」                     |
+| 已登录但非资源 owner（本人可见）                       | 403  | `FORBIDDEN`                         | false     | `escalate`     | 「你没有权限查看这个内容。」                   |
+| 账号被禁用（`users.status='disabled'`）                | 403  | `FORBIDDEN`                         | false     | `escalate`     | 「账号当前不可用，请联系支持。」（带 traceId） |
+| JWKS / Logto 暂不可达（验不了，非「token 无效」）      | 503  | `AUTH_UPSTREAM_UNAVAILABLE`         | true      | `escalate`     | 「登录服务正在恢复，请稍候再试。」             |
+| share_token 不存在 / 已失效（`optionalAuth` 匿名路径） | 404  | `NOT_FOUND`                         | false     | `change_input` | 「没找到对应内容，可能已被删除或链接失效。」   |
 
 > 细分内部 code（如 `AUTH_TOKEN_EXPIRED` / `AUTH_BAD_SIGNATURE`）**仅供内部日志 / 告警 / 文案映射**，对外统一收口到 `UNAUTHENTICATED`，前端只据 `action=escalate`（脊柱 §11.B：UI 永不渲染 `code`）跳登录，绝不分别向用户暴露「为什么无效」的技术原因。
 >
@@ -287,20 +288,21 @@ Auth 域不拥有自己的 SSE 流，但所有 job / structure SSE 端点（`GET
 
 ## 6. 单账号双角色 + owner 可见性 + 匿名身份
 
-### 6.1 双角色 claim 解析
+### 6.1 角色 claim 解析（creator / consumer / reviewer）
 
-- Logto 侧给账号配「creator」「consumer」两角色（同一账号可同时持有），角色随 access_token 的 `roles`（或 `scope`）claim 下发。
-- 中间件把 Logto 角色字符串映射为内部 `roles: ('creator'|'consumer')[]`，存入 `AuthContext`，并冗余落 `users.roles`（首登 / 角色变更时同步，便于无 token 的服务端逻辑读取）。
-- 本期创作者中心主链路只实际门禁 `creator`（建能力/结构化/发布/批量发布走 `requireRole('creator')`）；**社交写（follow/like）是例外——按脊柱 §11.F 走 `requireAuth`、不限角色**（§6.2）。`consumer` 角色解析就绪但消费链路本期不交付（决策③，schema 冻结、行为占位）。
+- Logto 侧给账号配「creator」「consumer」两业务角色（同一账号可同时持有）+ 评审运营账号另配「reviewer」角色（与创作者隔离，Codex#7），角色随 access_token 的 `roles`（或 `scope`）claim 下发。
+- 中间件把 Logto 角色字符串映射为内部 `roles: ('creator'|'consumer'|'reviewer')[]`，存入 `AuthContext`，并冗余落 `users.roles`（首登 / 角色变更时同步，便于无 token 的服务端逻辑读取）。
+- 本期创作者中心主链路实际门禁 `creator`（建能力/结构化/发布/批量发布走 `requireRole('creator')`）+ `reviewer`（Alpha 人工评审端点走 `requireReviewer`，并禁创作者自审，见 50 §2.6）；**社交写（follow/like）是例外——按脊柱 §11.F 走 `requireAuth`、不限角色**（§6.2）。`consumer` 角色解析就绪但消费链路本期不交付（决策③，schema 冻结、行为占位）。`reviewer` 归运营/审核侧，不在创作者向导内。
 
 ### 6.2 角色门禁挂载（供各域引用，本文不重复各域端点）
 
-| 场景 | 守卫 |
-|---|---|
-| 工作台 / 数据分析 / 收益 / 五步流程 / `/me` | `requireAuth`（+ handler owner 校验） |
-| 建能力 / 结构化 / 发布 / 批量发布 | `requireRole('creator')` |
-| **社交写（follow / like 及其 DELETE 取消）** | **`requireAuth`**（任意已登录用户，**不**限 creator role；脊柱 §11.F Codex#17） |
-| 公开主页读 / 公开市集读 / 私享访问 | `optionalAuth` |
+| 场景                                                       | 守卫                                                                            |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| 工作台 / 数据分析 / 收益 / 五步流程 / `/me`                | `requireAuth`（+ handler owner 校验）                                           |
+| 建能力 / 结构化 / 发布 / 批量发布 / 读 manifest            | `requireRole('creator')`（+ handler owner 校验）                                |
+| **Alpha 人工评审裁决（`POST /publications/{id}/review`）** | **`requireReviewer`**（reviewer 角色 + 禁创作者自审 → `403`；50 §2.6 Codex#7）  |
+| **社交写（follow / like 及其 DELETE 取消）**               | **`requireAuth`**（任意已登录用户，**不**限 creator role；脊柱 §11.F Codex#17） |
+| 公开主页读 / 公开市集读 / 私享访问                         | `optionalAuth`                                                                  |
 
 > 社交写权限唯一权威见脊柱 §11.F：follow/like 是消费侧基础互动，限定 creator 会让普通登录用户无法关注创作者，违背产品意图，故对**任意已登录用户**开放。仍需 `Idempotency-Key`（写命令）；匿名 `optionalAuth` 不可写社交，未登录写 → `401 UNAUTHENTICATED` + `action:'escalate'`。「自己不能关注/点赞自己」等业务校验归 60-profile 域。本表与 60-profile 权限表、错误用例、前端权限态必须一致。
 
@@ -321,6 +323,7 @@ Auth 域不拥有自己的 SSE 流，但所有 job / structure SSE 端点（`GET
   ```
 
   其中 `anon_cookie` 是首次匿名访问下发的稳定匿名 Cookie（HttpOnly）。结果填入 `AuthContext.anonymous`。
+
 - `consumerKey` **本期仅用于解析与（未来）限流 / 日成本上限 / 活跃消费者去重**；决策② usage 置空 —— **本期不写 `usage_events`、不计数、不限流落库**，活跃消费者卡显示「暂无数据 / 上线后填充」占位（验收 外壳首页-32 占位即过）。
 - share_token 的**签发**属发布域（B-30 `publications.share_token`）；本域只定义「请求里 share_token 如何被解析成匿名身份」。
 
@@ -340,14 +343,14 @@ CREATE TABLE users (
   logto_user_id  text        NOT NULL,                            -- OIDC sub（去重键，首登 upsert 锚点）
   account        text        NOT NULL,                            -- 展示账号名（如 "WAYNE"，发布署名取此）
   email          text,                                            -- 可空（GitHub 登录可能无邮箱）
-  roles          text[]      NOT NULL DEFAULT '{creator}',        -- 单账号双角色冗余：creator|consumer
+  roles          text[]      NOT NULL DEFAULT '{creator}',        -- 业务角色 creator|consumer + 评审角色 reviewer（50 §2.6，Codex#7）
   status         text        NOT NULL DEFAULT 'active',           -- active|disabled
   last_login_at  timestamptz,
   created_at     timestamptz NOT NULL DEFAULT now(),
   updated_at     timestamptz NOT NULL DEFAULT now(),
 
   CONSTRAINT users_status_chk CHECK (status IN ('active','disabled')),
-  CONSTRAINT users_roles_chk  CHECK (roles <@ ARRAY['creator','consumer']::text[])
+  CONSTRAINT users_roles_chk  CHECK (roles <@ ARRAY['creator','consumer','reviewer']::text[])
 );
 
 -- 去重键：OIDC sub 一对一，首登 ON CONFLICT (logto_user_id) DO UPDATE 防并发重复建档
@@ -383,19 +386,19 @@ RETURNING id;
 import type { UserId, IsoDateTime, Envelope } from '@/shared';
 
 // ---------- 角色 ----------
-export type Role = 'creator' | 'consumer';
+export type Role = 'creator' | 'consumer' | 'reviewer';
 export type UserStatus = 'active' | 'disabled';
 
 // ---------- /me 视图 ----------
 export interface MeView {
   id: UserId;
-  logtoUserId: string;       // OIDC sub
-  account: string;           // 展示账号（发布署名取此，发布-05）
+  logtoUserId: string; // OIDC sub
+  account: string; // 展示账号（发布署名取此，发布-05）
   email: string | null;
-  roles: Role[];             // 单账号双角色
+  roles: Role[]; // 单账号双角色
   status: UserStatus;
-  hasProfile: boolean;       // 公开名片是否已建（详情在主页域）
-  creatorId: UserId;         // = id，主页 /creators/{creatorId}/profile 寻址
+  hasProfile: boolean; // 公开名片是否已建（详情在主页域）
+  creatorId: UserId; // = id，主页 /creators/{creatorId}/profile 寻址
   createdAt: IsoDateTime;
   lastLoginAt: IsoDateTime | null;
 }
@@ -404,13 +407,13 @@ export type MeResponse = Envelope<MeView>;
 // ---------- 登出 ----------
 export interface LogoutResult {
   loggedOut: true;
-  logoutUrl?: string;        // Logto RP-initiated logout，前端可选跳转
+  logoutUrl?: string; // Logto RP-initiated logout，前端可选跳转
 }
 export type LogoutResponse = Envelope<LogoutResult>;
 
 // ---------- 鉴权上下文（中间件注入，非对外响应体）----------
 export interface AuthContext {
-  userId: UserId;            // 已映射业务 users.id（非 sub）
+  userId: UserId; // 已映射业务 users.id（非 sub）
   logtoUserId: string;
   roles: Role[];
   account: string;
@@ -420,7 +423,7 @@ export interface AuthContext {
 
 // ---------- 匿名身份（share_token 路径；本期仅解析、usage 置空）----------
 export interface AnonymousIdentity {
-  consumerKey: string;       // hash(share_token + anon_cookie)，限流/去重用，本期不落库
+  consumerKey: string; // hash(share_token + anon_cookie)，限流/去重用，本期不落库
   shareToken: string;
 }
 
@@ -437,15 +440,17 @@ export type AuthGuard =
 
 > 容器编排属运维域；本表列本域中间件 / 端点运行期读取的 env，口径与技术方案 B-08 一致。
 
-| env | 含义 | 本地示例 |
-|---|---|---|
-| `LOGTO_ENDPOINT` | Logto 运行态端点 | `http://logto:3001` |
-| `LOGTO_ISSUER` | OIDC issuer（验签 `iss` 锚点 + `/ready` 探针基址） | `http://logto:3001/oidc` |
-| `LOGTO_JWKS_URI` | JWKS 地址（= `{LOGTO_ISSUER}/jwks`） | `http://logto:3001/oidc/jwks` |
-| `LOGTO_APP_ID` | 本服务 application id（验 `aud`） | — |
-| `LOGTO_APP_SECRET` | code 换 token 的客户端密钥 | —（机密） |
-| `LOGTO_REDIRECT_URI` | 回调域名（= `/api/v1/auth/callback`） | `http://localhost/api/v1/auth/callback` |
+| env                  | 含义                                                                                     | 本地示例                                |
+| -------------------- | ---------------------------------------------------------------------------------------- | --------------------------------------- |
+| `LOGTO_ENDPOINT`     | Logto 运行态端点（决定铸 token 的 `iss` = `{ENDPOINT}/oidc`）                            | `http://logto:3001`                     |
+| `LOGTO_ISSUER`       | **canonical** OIDC issuer（验签 `iss` 锚点 + `/ready` 探针基址；见下「canonical 铁律」） | `http://logto:3001/oidc`                |
+| `LOGTO_JWKS_URI`     | JWKS 地址（= `{LOGTO_ISSUER}/jwks`，容器内网取址）                                       | `http://logto:3001/oidc/jwks`           |
+| `LOGTO_APP_ID`       | 本服务 application id（验 `aud`）                                                        | —                                       |
+| `LOGTO_APP_SECRET`   | code 换 token 的客户端密钥                                                               | —（机密）                               |
+| `LOGTO_REDIRECT_URI` | 回调域名（= `/api/v1/auth/callback`）                                                    | `http://localhost/api/v1/auth/callback` |
 
+> **canonical issuer 铁律（Codex#11-r4）**：`LOGTO_ISSUER` 是单一权威值，三处必须**完全相等**——① Logto 铸 token 的 `iss`（= `{LOGTO_ENDPOINT}/oidc`）；② API `verifyLogtoJwt` 断言的 `iss`；③ compose `logto` 自身 healthcheck 断言的 `iss`。故 `LOGTO_ISSUER` 必须 == `{LOGTO_ENDPOINT}/oidc`，**绝不让 token `iss` 与 `/ready`/验签 issuer 分裂**（分裂 = compose 判 logto healthy 但 API `/ready` 必 down、JWT `iss` 错配全拒）。compose 网内统一用服务名 `logto:3001`（不用 `localhost:3001`，那是宿主直跑口径）。若 JWKS 须走容器内网另址取，可独立配 `LOGTO_JWKS_URI`（与 issuer 同主机即可），但 `jwtVerify` 仍以 canonical `LOGTO_ISSUER` 断言 `iss`（jose 支持 JWKS URL 与 issuer 分离）。
+>
 > 健康检查（`/ready` 中 logto 依赖）口径见脊柱 §10.2：拉 `GET {LOGTO_ISSUER}/.well-known/openid-configuration`，断言返回 `issuer` 与 `jwks_uri` 存在且 `issuer` 匹配，通才 ready（**不用** `{LOGTO_ENDPOINT}/api/.well-known/...` 错误路径）。logto down 计入 required 依赖，`ready=false`；本域不重定义健康检查端点，仅声明此断言归属。
 
 ---
@@ -454,23 +459,23 @@ export type AuthGuard =
 
 ### 10.1 功能点 → 端点 / 表
 
-| 功能点 | 内容 | 对应端点 | 对应表 |
-|---|---|---|---|
+| 功能点   | 内容                              | 对应端点                                                                                                                                                           | 对应表                                                                                       |
+| -------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
 | **B-08** | Logto 自托管接入 + JWT 鉴权中间件 | `GET /api/v1/auth/login`、`GET /api/v1/auth/callback`、`POST /api/v1/auth/logout`、`GET /api/v1/me` + JWT 校验中间件（`requireAuth`/`requireRole`/`optionalAuth`） | `users`（本域新建，含 `logto_user_id` UNIQ 去重键、`account` UNIQ 署名键、`roles[]` 双角色） |
 
 > **B-21**（本机助手直传）**不依赖本域 JWT 链路**——它走独立 PairAuth（`pairId` + `pairingCode`，不进 JWT 中间件、无 token exchange），鉴权 / 失败计数口径以 20-step1-import §3.3 / §6.4 为唯一真源，本域仅在 §2 token 来源处声明「配对码不进 JWT 中间件」以杜绝双套鉴权。本域为 **B-32/B-33/B-34/F-04** 等所有依赖登录 / 鉴权 / owner 可见性 / 公开访问的功能点提供三种守卫 + owner 校验约定（§4.3/§6.3）；为 **B-30** 提供 share_token → 匿名身份键解析口径（§6.4）；为 **O-04** 提供 logto 依赖断言归属（§9）。这些为「被引用 / 提供契约」，端点 / 表归各自域。
 
 ### 10.2 涉及的验收用例模块
 
-| 验收用例 | 本域承担的口径 |
-|---|---|
-| 外壳首页-01（登录后默认落工作台） | `auth/callback` 成功 302 回 `returnTo` 默认 `/creator` |
-| 外壳首页-20（工作台只对本人可见、含经营数据） | `requireAuth` + handler owner 校验（§6.3）；非本人 `403 FORBIDDEN` 人话 |
-| 外壳首页-31（数据分析 / 收益页只对本人可见） | 同上 owner 可见性约定 |
-| 外壳首页-32（活跃消费者含匿名访客、与公开计数分清） | `consumerKey = hash(share_token+anon_cookie)` 匿名键形态冻结；本期 usage 置空、计数占位 |
-| 主页-13（访客看公开名片、全程只读） | `optionalAuth`：访客无 token 不报错；公开口径不带钱 / 成本（字段裁剪在主页域） |
-| 发布-05（市集卡署名自动取创作者账号 @WAYNE） | 署名取 `users.account`（本域唯一性 + 首登初始化保证） |
-| 接口-（鉴权失败、异常不裸露错误码） | 所有鉴权失败只出 `ErrorEnvelope`，唯一可展示 `userMessage`+`action`、内部 `code` UI 永不渲染（§4.4 / 脊柱 §11.B）；登录失败重定向用 opaque `failureId`、不带内部 code（§3.2）；禁裸 JWT/OIDC 报错 |
+| 验收用例                                            | 本域承担的口径                                                                                                                                                                                    |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 外壳首页-01（登录后默认落工作台）                   | `auth/callback` 成功 302 回 `returnTo` 默认 `/creator`                                                                                                                                            |
+| 外壳首页-20（工作台只对本人可见、含经营数据）       | `requireAuth` + handler owner 校验（§6.3）；非本人 `403 FORBIDDEN` 人话                                                                                                                           |
+| 外壳首页-31（数据分析 / 收益页只对本人可见）        | 同上 owner 可见性约定                                                                                                                                                                             |
+| 外壳首页-32（活跃消费者含匿名访客、与公开计数分清） | `consumerKey = hash(share_token+anon_cookie)` 匿名键形态冻结；本期 usage 置空、计数占位                                                                                                           |
+| 主页-13（访客看公开名片、全程只读）                 | `optionalAuth`：访客无 token 不报错；公开口径不带钱 / 成本（字段裁剪在主页域）                                                                                                                    |
+| 发布-05（市集卡署名自动取创作者账号 @WAYNE）        | 署名取 `users.account`（本域唯一性 + 首登初始化保证）                                                                                                                                             |
+| 接口-（鉴权失败、异常不裸露错误码）                 | 所有鉴权失败只出 `ErrorEnvelope`，唯一可展示 `userMessage`+`action`、内部 `code` UI 永不渲染（§4.4 / 脊柱 §11.B）；登录失败重定向用 opaque `failureId`、不带内部 code（§3.2）；禁裸 JWT/OIDC 报错 |
 
 ---
 

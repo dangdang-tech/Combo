@@ -7,3 +7,16 @@ dist/
 build/
 .env
 .env.local
+
+# TypeScript 增量编译产物
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# 测试 / 工具缓存
+coverage/
+.vitest/
+.eslintcache
+
+# 编辑器
+.DS_Store
+*.log

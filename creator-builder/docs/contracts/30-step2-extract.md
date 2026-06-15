@@ -8,6 +8,7 @@
 > **本文只写契约**：markdown + TS 类型片段 + SQL DDL，不写业务实现代码。TS 片段最终归集到 `src/shared/`（zod schema 即 OpenAPI 3.1 真源，本文为人读镜像，冲突以 zod 为准）；DDL 归 `src/infra/pg/migrations/`。
 >
 > **强制对齐脊柱**：本文 **import** `00-约定与状态机.md` 的全部约定，不重定义。具体引用：
+>
 > - 路由前缀 `/api/v1` + 复数资源 + 动作子路径（脊柱 §1）。
 > - 成功包络 `Envelope<T>` / `Paginated<T>`、占位语义 `meta.placeholders`（脊柱 §2）。
 > - 错误信封 `ErrorEnvelope`、`action` 五枚举、错误分类表缺省（脊柱 §3）——任何对外失败只出 `ErrorEnvelope`。
@@ -19,6 +20,7 @@
 > - **跨域共识硬规则（脊柱 §11，强制引用、不偏移）**：§11.A 受保护写入 CTE 模板（萃取 worker 写 candidates/evidence）、§11.B ErrorEnvelope 收紧 + `userMessage`（域内所有错误形态）、§11.C SSE 同源 Cookie 鉴权（job 流建流前 HTTP 失败）、§11.E 血缘约束注册表固定约束名（`uq_candidates_id_snapshot`、`fk_evidence_candidate_snapshot`、`fk_evidence_segment_snapshot`，依赖 20 域 `uq_session_segments_id_snapshot`）。
 >
 > **三条硬规则在本域的落地点**：
+>
 > 1. **永不裸转圈** —— 提取经 jobs + SSE 推「总进度 + 五项子任务清单 + 量化文案『已识别 3 / 9』 + 候选逐个浮现 + 占位骨架」；慢任务发 `slow_hint`；degraded 也给进度短语。落地于 §3 SSE。
 > 2. **绝不裸露错误码** —— 整体失败出 `ErrorEnvelope`；单候选失败走 `item-appended`（status=`failed`）携人话错误副文（如「上游解析中断 · 段 5/9」），绝不裸 500/堆栈/英文。落地于 §2.1 触发、§3.4 失败行、§4 错误用例。
 > 3. **已生成内容不丢** —— 每个候选 + 段级证据**逐项落库**；中断/超时/取消保留已识别候选；刷新/重连走 `state_snapshot` 恢复已识别清单与计数；单候选重试只动该行、不连坐。落地于 §3.2 snapshot、§5 DDL、§2.3 重试。
@@ -27,13 +29,13 @@
 
 ## 1. 域内资源与端点总览
 
-| # | method + path | 作用 | 鉴权 | 幂等 | 功能点 |
-|---|---|---|---|---|---|
-| 1 | `POST /api/v1/snapshots/{snapshotId}/extract` | 对某去敏快照触发萃取 Job（入队，秒回 jobId） | 需登录（快照属主） | `Idempotency-Key`，scope=`extract.create` | B-22 / B-23 |
-| 2 | `GET  /api/v1/extract-jobs/{jobId}/candidates` | 列某次萃取的候选（cursor 分页，追加流用 `asc`） | 需登录（job 属主） | 读，天然幂等 | B-22 / B-23 |
-| 3 | `GET  /api/v1/candidates/{candidateId}` | 取单个候选详情（含 scope/reusability 摘要） | 需登录（候选属主） | 读，天然幂等 | B-22 |
-| 4 | `GET  /api/v1/candidates/{candidateId}/evidence` | 列某候选的段级血缘证据（下钻，cursor 分页） | 需登录（候选属主） | 读，天然幂等 | B-22 |
-| 5 | `POST /api/v1/candidates/{candidateId}/retry` | 单候选重试（失败行不阻塞其余，无连坐） | 需登录（候选属主） | `Idempotency-Key`，scope=`candidate.retry` | B-23 |
+| #   | method + path                                    | 作用                                            | 鉴权               | 幂等                                       | 功能点      |
+| --- | ------------------------------------------------ | ----------------------------------------------- | ------------------ | ------------------------------------------ | ----------- |
+| 1   | `POST /api/v1/snapshots/{snapshotId}/extract`    | 对某去敏快照触发萃取 Job（入队，秒回 jobId）    | 需登录（快照属主） | `Idempotency-Key`，scope=`extract.create`  | B-22 / B-23 |
+| 2   | `GET  /api/v1/extract-jobs/{jobId}/candidates`   | 列某次萃取的候选（cursor 分页，追加流用 `asc`） | 需登录（job 属主） | 读，天然幂等                               | B-22 / B-23 |
+| 3   | `GET  /api/v1/candidates/{candidateId}`          | 取单个候选详情（含 scope/reusability 摘要）     | 需登录（候选属主） | 读，天然幂等                               | B-22        |
+| 4   | `GET  /api/v1/candidates/{candidateId}/evidence` | 列某候选的段级血缘证据（下钻，cursor 分页）     | 需登录（候选属主） | 读，天然幂等                               | B-22        |
+| 5   | `POST /api/v1/candidates/{candidateId}/retry`    | 单候选重试（失败行不阻塞其余，无连坐）          | 需登录（候选属主） | `Idempotency-Key`，scope=`candidate.retry` | B-23        |
 
 > SSE 端点不在本表单列：复用脊柱 §5 的 `GET /api/v1/jobs/{jobId}/events`（`kind=job`）。本域不新增 SSE 端点，只定义该流上「候选逐个浮现 / 失败行 / 计数」的 payload 形态（见 §3）。
 >
@@ -50,6 +52,7 @@
 **鉴权**：登录态（Logto JWT）；`snapshotId` 必须属于当前用户（`raw_snapshots.owner_user_id = sub`），否则 `404 NOT_FOUND`（不暴露他人快照存在性）。
 
 **请求**：
+
 - Header：`Idempotency-Key: <uuid-v7>`（必填，scope=`extract.create`，见脊柱 §4）。
 - Path：`snapshotId`。
 - Body：可空 `{}`；可选 `options`（本期不开放任何可调参数，预留位，传了忽略）：
@@ -70,9 +73,9 @@ export interface ExtractCreateRequest {
 export interface ExtractJobAccepted {
   jobId: JobId;
   snapshotId: SnapshotId;
-  status: JobStatus;          // 入队即 'queued'
+  status: JobStatus; // 入队即 'queued'
   // 前端拿到即连 SSE：GET /api/v1/jobs/{jobId}/events
-  eventsUrl: string;          // "/api/v1/jobs/{jobId}/events"，前端直连，不裸转圈
+  eventsUrl: string; // "/api/v1/jobs/{jobId}/events"，前端直连，不裸转圈
 }
 ```
 
@@ -83,13 +86,14 @@ export interface ExtractJobAccepted {
     "jobId": "018f9c...",
     "snapshotId": "018f9b...",
     "status": "queued",
-    "eventsUrl": "/api/v1/jobs/018f9c.../events"
+    "eventsUrl": "/api/v1/jobs/018f9c.../events",
   },
-  "meta": { "traceId": "018f9c-trace" }
+  "meta": { "traceId": "018f9c-trace" },
 }
 ```
 
 **幂等行为**（脊柱 §4 行为矩阵，对齐提取-25「连点两次/刷新只跑一次」）：
+
 - key 首次 → 取租约 → 建 job + 入队 → 落 `response_ref` → 202。
 - key 重复 + hash 同 + 首次已完成 → 回放首次 202（同 jobId，**对前端透明**，不产生第二个萃取 job、不重复候选）。
 - key 重复 + hash 同 + 首次仍在租约 → `423 RESOURCE_LOCKED` + `action:'wait'`。
@@ -98,13 +102,13 @@ export interface ExtractJobAccepted {
 
 **错误用例**（缺省遵脊柱 §3.3，userMessage 必人话）：
 
-| HTTP | code | retriable | action | 触发场景 / userMessage |
-|---|---|---|---|---|
-| 401 | `UNAUTHENTICATED` | false | `escalate` | 登录态失效。「登录态失效了，请重新登录。」 |
-| 404 | `NOT_FOUND` | false | `change_input` | 快照不存在/非本人。「没找到对应的原始数据，可能已被删除。」 |
-| 409 | `STATE_CONFLICT` | false | `change_input` | 快照仍在导入中/未就绪（无段可萃取）。「这份原始数据还没处理好，请稍候再提取。」 |
-| 423 | `RESOURCE_LOCKED` | true | `wait` | 同 key 萃取在途。「这次提取正在进行，请稍候。」 |
-| 409 | `IDEMPOTENCY_CONFLICT` | false | `none` | 同 key 不同 body（脊柱 §4）。 |
+| HTTP | code                   | retriable | action         | 触发场景 / userMessage                                                          |
+| ---- | ---------------------- | --------- | -------------- | ------------------------------------------------------------------------------- |
+| 401  | `UNAUTHENTICATED`      | false     | `escalate`     | 登录态失效。「登录态失效了，请重新登录。」                                      |
+| 404  | `NOT_FOUND`            | false     | `change_input` | 快照不存在/非本人。「没找到对应的原始数据，可能已被删除。」                     |
+| 409  | `STATE_CONFLICT`       | false     | `change_input` | 快照仍在导入中/未就绪（无段可萃取）。「这份原始数据还没处理好，请稍候再提取。」 |
+| 423  | `RESOURCE_LOCKED`      | true      | `wait`         | 同 key 萃取在途。「这次提取正在进行，请稍候。」                                 |
+| 409  | `IDEMPOTENCY_CONFLICT` | false     | `none`         | 同 key 不同 body（脊柱 §4）。                                                   |
 
 > **注**：「原始数据太少/太杂识别不出能力」**不是触发期错误**——触发成功仍 202，萃取跑完落「空态」由 SSE `done`（result 标注 `degraded`/空候选）+ 候选列表为空表达，前端渲染空态退路（提取-26）。不在触发时报错，避免「能不能提取」与「提取出几个」混淆。
 
@@ -117,6 +121,7 @@ export interface ExtractJobAccepted {
 **鉴权**：登录态；`jobId` 必须 `type=extract` 且属本人，否则 `404`。
 
 **请求**：`GET /api/v1/extract-jobs/{jobId}/candidates?cursor=&limit=20&order=asc`
+
 - 分页：cursor 唯一（脊柱 §2.3），`PageQuery`。
 - **`order` 默认 `asc`**（追加流：先识别的在前，与逐个浮现顺序一致，对齐提取-30「不发生内容跳变」）。
 - 可选过滤 `status`（多值逗号分隔）：`?status=ready,failed`。默认返回全部状态（含 failed 行，对齐提取-17「失败行也在列表里」）。
@@ -148,14 +153,14 @@ export interface CandidateListQuery extends PageQuery {
       "splitSuggested": false,
       "error": null,
       "retryCount": 0,
-      "createdAt": "2026-06-15T10:00:01Z"
+      "createdAt": "2026-06-15T10:00:01Z",
     },
     {
       "id": "018f-c7",
       "extractJobId": "018f9c...",
       "snapshotId": "018f9b...",
       "status": "failed",
-      "name": "港险资格打分器",         // 失败行仍带已知名（来自聚类草稿），用于「! 名称 · 错误副文」
+      "name": "港险资格打分器", // 失败行仍带已知名（来自聚类草稿），用于「! 名称 · 错误副文」
       "intent": null,
       "slug": "hk-insurance-eligibility-scorer-2",
       "type": null,
@@ -164,23 +169,24 @@ export interface CandidateListQuery extends PageQuery {
       "frequencyRatio": null,
       "scopeCoherence": null,
       "splitSuggested": null,
-      "error": {                          // 人话错误副文（提取-17/18），非裸错误码（脊柱 §11.B）
-        "code": "EXTRACT_UPSTREAM_TIMEOUT",  // 仅日志/告警/文案映射，UI 永不渲染
-        "userMessage": "这一项没能识别出来，可点重试。",  // 唯一可展示人话
+      "error": {
+        // 人话错误副文（提取-17/18），非裸错误码（脊柱 §11.B）
+        "code": "EXTRACT_UPSTREAM_TIMEOUT", // 仅日志/告警/文案映射，UI 永不渲染
+        "userMessage": "这一项没能识别出来，可点重试。", // 唯一可展示人话
         "retriable": true,
         "action": "retry",
         "traceId": "018f-trace",
-        "details": { "stuckAt": "段 5 / 9" }   // 渲染「上游解析中断 · 段 5/9」
+        "details": { "stuckAt": "段 5 / 9" }, // 渲染「上游解析中断 · 段 5/9」
       },
       "retryCount": 1,
-      "createdAt": "2026-06-15T10:00:05Z"
-    }
+      "createdAt": "2026-06-15T10:00:05Z",
+    },
   ],
   "meta": {
     "traceId": "018f-trace",
     "page": { "nextCursor": null, "hasMore": false, "limit": 20, "order": "asc" },
-    "confidenceSummary": { "high": 4, "med": 3, "low": 2 }  // 置信分布摘要（提取-12），仅本端点 meta 扩展
-  }
+    "confidenceSummary": { "high": 4, "med": 3, "low": 2 }, // 置信分布摘要（提取-12），仅本端点 meta 扩展
+  },
 }
 ```
 
@@ -199,6 +205,7 @@ export interface CandidateListQuery extends PageQuery {
 **鉴权**：登录态；候选必须属本人，否则 `404`。
 
 **请求**：
+
 - Header：`Idempotency-Key: <uuid-v7>`（必填，scope=`candidate.retry`；**每个候选独立 key**，无连坐）。
 - Path：`candidateId`。
 - Body：空 `{}`。
@@ -208,11 +215,11 @@ export interface CandidateListQuery extends PageQuery {
 ```typescript
 export interface CandidateRetryAccepted {
   candidateId: CandidateId;
-  extractJobId: JobId;       // 原萃取 job（候选归属、列表寻址用，只读引用）
-  retryJobId: JobId;         // 本次重试新建的 job（type=extract，全新 fence/流）
-  status: 'generating';      // 重试入队即 generating（行内进入「重试中」态）
-  retryCount: number;        // 本次重试后的累计次数（达上限语义见下）
-  eventsUrl: string;         // 新 retry job 流："/api/v1/jobs/{retryJobId}/events"（前端改连此流，非原 job 流）
+  extractJobId: JobId; // 原萃取 job（候选归属、列表寻址用，只读引用）
+  retryJobId: JobId; // 本次重试新建的 job（type=extract，全新 fence/流）
+  status: 'generating'; // 重试入队即 generating（行内进入「重试中」态）
+  retryCount: number; // 本次重试后的累计次数（达上限语义见下）
+  eventsUrl: string; // 新 retry job 流："/api/v1/jobs/{retryJobId}/events"（前端改连此流，非原 job 流）
 }
 ```
 
@@ -221,11 +228,13 @@ export interface CandidateRetryAccepted {
 **状态流转（候选级，详见 §5.2）**：`failed → generating →（成功）ready /（再失败）failed`。
 
 **重试语义与硬规则**：
+
 - **逐项落库不丢**：重试 worker 用脊柱 §11.A 受保护写入（fence 取自**新 retry job**），只改该 candidate 行、其余候选与证据原样保留（硬规则③）；fence 不匹配写 0 行、干净退出（见 §5.1/§5.2 受保护写入模板）。
 - **再次失败仍落带退路失败态**（提取-20）：重试再失败 → 回 `failed` + 仍带人话 `error`（脊柱 §11.B 收紧形态：`userMessage` + `action`，UI 不渲染 `code`）+ `action:'retry'`，**不停在转圈、不裸错误码**。
 - **重试上限**：服务端跟踪 `retry_cnt`。同一处重试达上限（默认 2，对齐脊柱「LLM 调用重试 ≤2」与「同处两次仍失败落 escalate」）后，再次调用本端点仍 202 受理（仍建新 retry job），但若再失败，`error.action` 升级为 `escalate`（「转人工 / 反馈」带 traceId），retriable 仍可由前端决定是否再点。
 
 **幂等行为**（脊柱 §4）：
+
 - key 首次 → 受理重试 → 202。
 - key 重复 + hash 同 + 在途 → `423` + `wait`。
 - key 重复 + hash 同 + 已完成 → 回放该次 202（不重复入队）。
@@ -233,37 +242,39 @@ export interface CandidateRetryAccepted {
 
 **错误用例**：
 
-| HTTP | code | retriable | action | 场景 / userMessage |
-|---|---|---|---|---|
-| 404 | `NOT_FOUND` | false | `change_input` | 候选不存在/非本人。「没找到这一项，可能已刷新。」 |
-| 409 | `STATE_CONFLICT` | false | `none` | 候选已是 `ready`（无需重试）。「这一项已经识别成功了，无需重试。」 |
-| 423 | `RESOURCE_LOCKED` | true | `wait` | 该候选重试在途。「这一项正在重试，请稍候。」 |
-| 502 | `EXTRACT_UPSTREAM_TIMEOUT` | true | `retry` | （异步落 SSE/列表 `error`，非同步响应）上游不稳。「这一项没能识别出来，可点重试。」 |
+| HTTP | code                       | retriable | action         | 场景 / userMessage                                                                  |
+| ---- | -------------------------- | --------- | -------------- | ----------------------------------------------------------------------------------- |
+| 404  | `NOT_FOUND`                | false     | `change_input` | 候选不存在/非本人。「没找到这一项，可能已刷新。」                                   |
+| 409  | `STATE_CONFLICT`           | false     | `none`         | 候选已是 `ready`（无需重试）。「这一项已经识别成功了，无需重试。」                  |
+| 423  | `RESOURCE_LOCKED`          | true      | `wait`         | 该候选重试在途。「这一项正在重试，请稍候。」                                        |
+| 502  | `EXTRACT_UPSTREAM_TIMEOUT` | true      | `retry`        | （异步落 SSE/列表 `error`，非同步响应）上游不稳。「这一项没能识别出来，可点重试。」 |
 
 ---
 
 ### 2.4 候选详情 / 证据下钻（B-22 血缘）
 
 #### `GET /api/v1/candidates/{candidateId}`
+
 取单候选详情（`CandidateView` 全量，§6）。供结果态展开卡或选择步带详情用。鉴权同上。错误：401 / 404。
 
 #### `GET /api/v1/candidates/{candidateId}/evidence`
+
 列该候选的段级血缘证据（提取-34「频次条段数 = 下钻段条数」、提取-31「证据是去敏后内容、不出现隐私原文」）。cursor 分页，`order` 默认 `asc`。
 
 **响应**：`200`，`Paginated<CandidateEvidenceView>`：
 
 ```typescript
 export interface CandidateEvidenceView {
-  id: Id;                    // candidate_evidence.id
+  id: Id; // candidate_evidence.id
   candidateId: CandidateId;
-  segmentId: Id;             // 指向 session_segments（某 snapshot 下具体段）
-  snapshotId: SnapshotId;    // 该段所属快照（可回溯，证据不跨快照）
+  segmentId: Id; // 指向 session_segments（某 snapshot 下具体段）
+  snapshotId: SnapshotId; // 该段所属快照（可回溯，证据不跨快照）
   // 段级摘要（去敏后；绝不返回未去敏原文，对齐提取-31）
-  title: string | null;      // 段标题/会话标题
-  source: string | null;     // 来源标记（如 'claude' | 'codex'），用于来源色标
-  quote: string | null;      // 去敏后的代表性片段（手机号/密钥已抹除）
+  title: string | null; // 段标题/会话标题
+  source: string | null; // 来源标记（如 'claude' | 'codex'），用于来源色标
+  quote: string | null; // 去敏后的代表性片段（手机号/密钥已抹除）
   happenedAt: IsoDateTime | null; // 会话发生时间（热力图/新近度）
-  project: string | null;    // 项目归属（跨项目信号）
+  project: string | null; // 项目归属（跨项目信号）
 }
 ```
 
@@ -283,16 +294,16 @@ export interface CandidateEvidenceView {
 
 ### 3.1 本域用到的事件类型
 
-| event | 何时发 | 本域 payload 要点 | 对应硬规则 / 验收 |
-|---|---|---|---|
-| `state_snapshot` | 连接首帧 / 重连超窗 | `kind:'job'` + `progress` 全量（含已追加候选摘要 `items[]` + 计数 `done/total`） | ①③ 提取-23/24，刷新已识别不丢 |
-| `progress` | 总进度推进 + 计数更新 | `{ percent, phrase:"已识别 3 / 9 能力项…", done, total, unit:"能力项" }` | ① 提取-07/21，计数实时、有进展感 |
-| `subtask` | 五项子任务依次点亮 | `{ subtasks: SubtaskView[] }` 或单条 `{ key, status }` | ① 提取-03 |
-| `item-appended` | 每识别出一个候选 / 失败行 / 重试结果 | `{ item: CandidateItem }`（含 `status`、`isNew`，失败时含人话 `error`） | ①③ 提取-04/05/06/17/19 逐个浮现、失败行、重试回填 |
-| `slow_hint` | 整体偏慢 | `{ phrase, elapsedMs }` 进度短语 | ① 提取-21，degraded 也给短语、不裸转圈 |
-| `error` | 整体失败终态 | `ErrorEnvelope`（人话 + 退路） | ② 提取-22，整体失败不裸错误码 |
-| `done` | 任务终止（completed/failed/cancelled） | `{ status, result?: { candidateCount, degraded }, error? }` | 终止信号，前端关流 |
-| `heartbeat` | 周期保活（15s） | `{ ts }` | ① 连接活着 |
+| event            | 何时发                                 | 本域 payload 要点                                                                | 对应硬规则 / 验收                                 |
+| ---------------- | -------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------- |
+| `state_snapshot` | 连接首帧 / 重连超窗                    | `kind:'job'` + `progress` 全量（含已追加候选摘要 `items[]` + 计数 `done/total`） | ①③ 提取-23/24，刷新已识别不丢                     |
+| `progress`       | 总进度推进 + 计数更新                  | `{ percent, phrase:"已识别 3 / 9 能力项…", done, total, unit:"能力项" }`         | ① 提取-07/21，计数实时、有进展感                  |
+| `subtask`        | 五项子任务依次点亮                     | `{ subtasks: SubtaskView[] }` 或单条 `{ key, status }`                           | ① 提取-03                                         |
+| `item-appended`  | 每识别出一个候选 / 失败行 / 重试结果   | `{ item: CandidateItem }`（含 `status`、`isNew`，失败时含人话 `error`）          | ①③ 提取-04/05/06/17/19 逐个浮现、失败行、重试回填 |
+| `slow_hint`      | 整体偏慢                               | `{ phrase, elapsedMs }` 进度短语                                                 | ① 提取-21，degraded 也给短语、不裸转圈            |
+| `error`          | 整体失败终态                           | `ErrorEnvelope`（人话 + 退路）                                                   | ② 提取-22，整体失败不裸错误码                     |
+| `done`           | 任务终止（completed/failed/cancelled） | `{ status, result?: { candidateCount, degraded }, error? }`                      | 终止信号，前端关流                                |
+| `heartbeat`      | 周期保活（15s）                        | `{ ts }`                                                                         | ① 连接活着                                        |
 
 > 本域**不使用** `field_*` 帧（那是结构化域 STEP④ 的字段流）。逐个浮现用连字符 `item-appended`（对齐验收「逐个浮现」措辞）。
 
@@ -329,13 +340,13 @@ data: {
 
 五项，依次点亮（`pending → running → done/failed`）：
 
-| key | label（人话，对齐验收逐字） |
-|---|---|
-| `analyze` | 分析会话段落 |
-| `cluster` | 聚类相似工作流 |
-| `form` | 形成候选能力 |
-| `score` | 评估频率与可打包度 |
-| `rank` | 按成功率排序 |
+| key       | label（人话，对齐验收逐字） |
+| --------- | --------------------------- |
+| `analyze` | 分析会话段落                |
+| `cluster` | 聚类相似工作流              |
+| `form`    | 形成候选能力                |
+| `score`   | 评估频率与可打包度          |
+| `rank`    | 按成功率排序                |
 
 ### 3.4 候选逐个浮现 / 失败行 / 重试回填 — `item-appended`
 
@@ -384,9 +395,9 @@ event: done
 data: { "status": "completed", "result": { "candidateCount": 9, "readyCount": 7, "failedCount": 2, "analyzedSegments": 215, "degraded": false } }
 ```
 
-  - 正常完成：`result.candidateCount > 0`，前端进结果态、渲染结果横幅「已分析 215 段原始数据，识别出 9 个能力项…」（`analyzedSegments` 供横幅段数）。
-  - **空态**（提取-26）：`status:'completed'` 但 `result.candidateCount == 0` → 前端渲染空态 + 「回去多导入一些历史再试」退路，**不是错误、不裸转圈、不给空列表配可点下一步**。
-  - **整体失败**（提取-22）：先发 `error`（`ErrorEnvelope`，见 §4），再发 `done`（`status:'failed'`，`error` 同体），前端落带退路错误态。
+- 正常完成：`result.candidateCount > 0`，前端进结果态、渲染结果横幅「已分析 215 段原始数据，识别出 9 个能力项…」（`analyzedSegments` 供横幅段数）。
+- **空态**（提取-26）：`status:'completed'` 但 `result.candidateCount == 0` → 前端渲染空态 + 「回去多导入一些历史再试」退路，**不是错误、不裸转圈、不给空列表配可点下一步**。
+- **整体失败**（提取-22）：先发 `error`（`ErrorEnvelope`，见 §4），再发 `done`（`status:'failed'`，`error` 同体），前端落带退路错误态。
 
 ---
 
@@ -394,21 +405,22 @@ data: { "status": "completed", "result": { "candidateCount": 9, "readyCount": 7,
 
 > 域内错误 code 命名 `EXTRACT_*` / `CANDIDATE_*`，扩展自脊柱分类表，**action/retriable 缺省遵脊柱**，userMessage 必中文人话、禁含 HTTP 状态/堆栈/英文报错（CI 守门）。
 
-| 场景 | HTTP | code | retriable | action | 人话 userMessage |
-|---|---|---|---|---|---|
-| 未登录 / 登录失效 | 401 | `UNAUTHENTICATED` | false | `escalate` | 登录态失效了，请重新登录。 |
-| 快照/候选不存在或非本人 | 404 | `NOT_FOUND` | false | `change_input` | 没找到对应内容，可能已被删除或刷新。 |
-| 快照未就绪（导入未完成、无段可萃取） | 409 | `EXTRACT_SNAPSHOT_NOT_READY` | false | `change_input` | 这份原始数据还没处理好，请稍候再提取。 |
-| 候选已 ready 仍调重试 | 409 | `CANDIDATE_ALREADY_READY` | false | `none` | 这一项已经识别成功了，无需重试。 |
-| 同 key 萃取/重试在途 | 423 | `RESOURCE_LOCKED` | true | `wait` | 这次提取正在进行，请稍候。 |
-| 幂等 key 复用于不同 body | 409 | `IDEMPOTENCY_CONFLICT` | false | `none` | （通常对前端透明，见脊柱 §4） |
-| 上游 LLM 超时/不稳（整体或单候选） | 502 | `EXTRACT_UPSTREAM_TIMEOUT` | true | `retry` | 提取暂时没能完成，请稍后重试。（单候选：这一项没能识别出来，可点重试。） |
-| 萃取任务整体超时 | 504 | `EXTRACT_JOB_TIMEOUT` | true | `retry` | 这一步超时了，可重试或稍后再看。 |
-| 依赖恢复中（db/redis/minio/llm 网关降级） | 503 | `DEPENDENCY_UNAVAILABLE` | true | `wait` | 系统正在恢复，请稍候再试。 |
-| 同处重试 2 次仍失败 | （沿用 502 的 error） | `EXTRACT_UPSTREAM_TIMEOUT` | true | `escalate` | 这一项多次没能识别出来，可反馈给我们。（带 traceId） |
-| 服务内部异常 | 500 | `INTERNAL` | true | `retry` | 服务开小差了，请重试。（绝不带 500/堆栈进 userMessage） |
+| 场景                                      | HTTP                  | code                         | retriable | action         | 人话 userMessage                                                         |
+| ----------------------------------------- | --------------------- | ---------------------------- | --------- | -------------- | ------------------------------------------------------------------------ |
+| 未登录 / 登录失效                         | 401                   | `UNAUTHENTICATED`            | false     | `escalate`     | 登录态失效了，请重新登录。                                               |
+| 快照/候选不存在或非本人                   | 404                   | `NOT_FOUND`                  | false     | `change_input` | 没找到对应内容，可能已被删除或刷新。                                     |
+| 快照未就绪（导入未完成、无段可萃取）      | 409                   | `EXTRACT_SNAPSHOT_NOT_READY` | false     | `change_input` | 这份原始数据还没处理好，请稍候再提取。                                   |
+| 候选已 ready 仍调重试                     | 409                   | `CANDIDATE_ALREADY_READY`    | false     | `none`         | 这一项已经识别成功了，无需重试。                                         |
+| 同 key 萃取/重试在途                      | 423                   | `RESOURCE_LOCKED`            | true      | `wait`         | 这次提取正在进行，请稍候。                                               |
+| 幂等 key 复用于不同 body                  | 409                   | `IDEMPOTENCY_CONFLICT`       | false     | `none`         | （通常对前端透明，见脊柱 §4）                                            |
+| 上游 LLM 超时/不稳（整体或单候选）        | 502                   | `EXTRACT_UPSTREAM_TIMEOUT`   | true      | `retry`        | 提取暂时没能完成，请稍后重试。（单候选：这一项没能识别出来，可点重试。） |
+| 萃取任务整体超时                          | 504                   | `EXTRACT_JOB_TIMEOUT`        | true      | `retry`        | 这一步超时了，可重试或稍后再看。                                         |
+| 依赖恢复中（db/redis/minio/llm 网关降级） | 503                   | `DEPENDENCY_UNAVAILABLE`     | true      | `wait`         | 系统正在恢复，请稍候再试。                                               |
+| 同处重试 2 次仍失败                       | （沿用 502 的 error） | `EXTRACT_UPSTREAM_TIMEOUT`   | true      | `escalate`     | 这一项多次没能识别出来，可反馈给我们。（带 traceId）                     |
+| 服务内部异常                              | 500                   | `INTERNAL`                   | true      | `retry`        | 服务开小差了，请重试。（绝不带 500/堆栈进 userMessage）                  |
 
 > **整体失败 vs 单候选失败的边界**（B-23 无连坐核心）：
+>
 > - **整体失败**（job 级，如快照读取失败、聚类阶段崩）→ SSE `error` + `done(failed)`，前端整页错误态（提取-22）。
 > - **单候选失败**（某候选 LLM 没出/超时）→ **不影响 job 状态**，job 仍可 `completed`；失败候选以 `status=failed` + 人话 `error` 落库 + `item-appended` 推送（提取-17/29），前端只在该行显示失败 + 行内重试，其余候选正常可勾选、可进下一步。
 
@@ -538,29 +550,38 @@ CREATE INDEX idx_evidence_segment   ON candidate_evidence (segment_id);
 
 ```typescript
 import type {
-  Id, JobId, SnapshotId, CandidateId, TraceId, IsoDateTime,
-  Envelope, Paginated, PageQuery, ErrorEnvelope, JobStatus,
+  Id,
+  JobId,
+  SnapshotId,
+  CandidateId,
+  TraceId,
+  IsoDateTime,
+  Envelope,
+  Paginated,
+  PageQuery,
+  ErrorEnvelope,
+  JobStatus,
 } from '../shared';
 
 // ---------- 枚举 ----------
 export type CandidateStatus = 'generating' | 'ready' | 'failed';
-export type CapabilityType  = 'core-workflow' | 'recurring' | 'occasional'; // 提取-10
-export type Confidence      = 'high' | 'med' | 'low';                        // 提取-09/12
+export type CapabilityType = 'core-workflow' | 'recurring' | 'occasional'; // 提取-10
+export type Confidence = 'high' | 'med' | 'low'; // 提取-09/12
 
 // ---------- 候选适用范围（来自聚类，证据画像；详见 raw-to-capability scope）----------
 export interface CandidateScope {
-  language?: string;          // 'zh' | 'en' | 'mixed'
-  domain?: string;            // 垂类，如 'SaaS路演'
-  inputType?: string;         // '录音' | '代码仓库' | '文档' | '截图'
-  scale?: string;             // '早期' | '30-60min' | '单文件'
-  preconditions?: string[];   // 必须为真才能跑
-  outOfScope?: string[];      // 已知不适用
+  language?: string; // 'zh' | 'en' | 'mixed'
+  domain?: string; // 垂类，如 'SaaS路演'
+  inputType?: string; // '录音' | '代码仓库' | '文档' | '截图'
+  scale?: string; // '早期' | '30-60min' | '单文件'
+  preconditions?: string[]; // 必须为真才能跑
+  outOfScope?: string[]; // 已知不适用
 }
 export interface ReusabilityBreakdown {
-  frequency?: number;         // 0~1
-  crossProject?: number;      // 0~1
-  recency?: number;           // 0~1
-  timeCost?: number;          // 0~1
+  frequency?: number; // 0~1
+  crossProject?: number; // 0~1
+  recency?: number; // 0~1
+  timeCost?: number; // 0~1
 }
 
 // ---------- 候选全量视图（GET .../candidates 列表项 & GET /candidates/{id} 单体）----------
@@ -569,15 +590,15 @@ export interface CandidateView {
   extractJobId: JobId;
   snapshotId: SnapshotId;
   status: CandidateStatus;
-  name: string | null;            // 失败行也可有名（来自聚类草稿）
+  name: string | null; // 失败行也可有名（来自聚类草稿）
   intent: string | null;
   slug: string;
-  type: CapabilityType | null;    // failed 时可为 null
+  type: CapabilityType | null; // failed 时可为 null
   confidence: Confidence | null;
-  segmentCount: number | null;    // 频次条段数 = 证据行数（提取-11/34）
-  frequencyRatio: number | null;  // 0~1
-  reusability: number | null;     // 0~1，排序用
-  scopeCoherence: number | null;  // 0~1
+  segmentCount: number | null; // 频次条段数 = 证据行数（提取-11/34）
+  frequencyRatio: number | null; // 0~1
+  reusability: number | null; // 0~1，排序用
+  scopeCoherence: number | null; // 0~1
   splitSuggested: boolean | null;
   scope: CandidateScope | null;
   reusabilityBreakdown?: ReusabilityBreakdown | null;
@@ -590,7 +611,7 @@ export interface CandidateView {
 export interface CandidateItem {
   id: CandidateId;
   status: CandidateStatus;
-  isNew?: boolean;                // 「刚识别出」角标（提取-05）
+  isNew?: boolean; // 「刚识别出」角标（提取-05）
   name: string | null;
   intent?: string | null;
   type?: CapabilityType | null;
@@ -608,8 +629,8 @@ export interface CandidateEvidenceView {
   segmentId: Id;
   snapshotId: SnapshotId;
   title: string | null;
-  source: string | null;          // 来源色标
-  quote: string | null;           // 去敏后片段（提取-31，不含隐私原文）
+  source: string | null; // 来源色标
+  quote: string | null; // 去敏后片段（提取-31，不含隐私原文）
   happenedAt: IsoDateTime | null;
   project: string | null;
 }
@@ -626,34 +647,38 @@ export interface ExtractJobAccepted {
 }
 export interface CandidateRetryAccepted {
   candidateId: CandidateId;
-  extractJobId: JobId;       // 原萃取 job（候选归属/列表寻址，只读引用）
-  retryJobId: JobId;         // 本次重试新建的 job（type=extract，全新 fence/流）
+  extractJobId: JobId; // 原萃取 job（候选归属/列表寻址，只读引用）
+  retryJobId: JobId; // 本次重试新建的 job（type=extract，全新 fence/流）
   status: 'generating';
   retryCount: number;
-  eventsUrl: string;         // = "/api/v1/jobs/{retryJobId}/events"（新流，非原 job 流）
+  eventsUrl: string; // = "/api/v1/jobs/{retryJobId}/events"（新流，非原 job 流）
 }
 export interface CandidateListQuery extends PageQuery {
-  status?: string;                // "ready,failed"
+  status?: string; // "ready,failed"
 }
 
 // 列候选 meta 扩展：置信分布摘要（提取-12）
-export interface ConfidenceSummary { high: number; med: number; low: number; }
+export interface ConfidenceSummary {
+  high: number;
+  med: number;
+  low: number;
+}
 
-export type ExtractCreateResponse   = Envelope<ExtractJobAccepted>;
-export type CandidateRetryResponse  = Envelope<CandidateRetryAccepted>;
+export type ExtractCreateResponse = Envelope<ExtractJobAccepted>;
+export type CandidateRetryResponse = Envelope<CandidateRetryAccepted>;
 export type CandidateDetailResponse = Envelope<CandidateView>;
-export type CandidateListResponse   = Paginated<CandidateView> & {
+export type CandidateListResponse = Paginated<CandidateView> & {
   meta: { confidenceSummary?: ConfidenceSummary };
 };
 export type CandidateEvidenceResponse = Paginated<CandidateEvidenceView>;
 
 // done.result（萃取完成产物摘要，SSE done payload 的 result）
 export interface ExtractDoneResult {
-  candidateCount: number;         // 0 → 空态（提取-26）
+  candidateCount: number; // 0 → 空态（提取-26）
   readyCount: number;
   failedCount: number;
-  analyzedSegments: number;       // 结果横幅段数（提取-08）
-  degraded: boolean;              // LLM degraded 完成（脊柱 §10）
+  analyzedSegments: number; // 结果横幅段数（提取-08）
+  degraded: boolean; // LLM degraded 完成（脊柱 §10）
 }
 ```
 
@@ -663,37 +688,37 @@ export interface ExtractDoneResult {
 
 ### 7.1 功能点 → 端点 / 表 / SSE
 
-| 功能点 | 名称 | 端点 | 表 | SSE | 验收模块 |
-|---|---|---|---|---|---|
-| **B-22** | 萃取 Job + 候选/证据落库 + 候选流（携 snapshot_id 只在该快照段集聚类） | `POST /snapshots/{id}/extract`（建 job）、`GET /extract-jobs/{jobId}/candidates`、`GET /candidates/{id}`、`GET /candidates/{id}/evidence` | `capability_candidates`、`candidate_evidence`（+ 复用 `jobs` type=extract、`raw_snapshots`、`session_segments`） | `state_snapshot`、`progress`（计数）、`subtask`（五项）、`item-appended`（逐个浮现/失败行）、`slow_hint`、`done` | 提取- |
-| **B-23** | 萃取接入 API + 单候选重试（失败行不阻塞其余、无连坐；重试建新 retry job + 新流，Codex#4） | `POST /snapshots/{id}/extract`、`POST /candidates/{id}/retry`（建新 retry job，返回 `retryJobId`+新 `eventsUrl`） | `capability_candidates`（`status/error/retry_cnt`）、`jobs`（新建 retry job type=extract）、`idempotency_keys`（脊柱 §4，scope=`extract.create` / `candidate.retry`） | `item-appended`（重试回填 ready/再失败 failed，**在新 retry job 流**）、`error`（整体失败） | 提取- |
+| 功能点   | 名称                                                                                      | 端点                                                                                                                                      | 表                                                                                                                                                                    | SSE                                                                                                              | 验收模块 |
+| -------- | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | -------- |
+| **B-22** | 萃取 Job + 候选/证据落库 + 候选流（携 snapshot_id 只在该快照段集聚类）                    | `POST /snapshots/{id}/extract`（建 job）、`GET /extract-jobs/{jobId}/candidates`、`GET /candidates/{id}`、`GET /candidates/{id}/evidence` | `capability_candidates`、`candidate_evidence`（+ 复用 `jobs` type=extract、`raw_snapshots`、`session_segments`）                                                      | `state_snapshot`、`progress`（计数）、`subtask`（五项）、`item-appended`（逐个浮现/失败行）、`slow_hint`、`done` | 提取-    |
+| **B-23** | 萃取接入 API + 单候选重试（失败行不阻塞其余、无连坐；重试建新 retry job + 新流，Codex#4） | `POST /snapshots/{id}/extract`、`POST /candidates/{id}/retry`（建新 retry job，返回 `retryJobId`+新 `eventsUrl`）                         | `capability_candidates`（`status/error/retry_cnt`）、`jobs`（新建 retry job type=extract）、`idempotency_keys`（脊柱 §4，scope=`extract.create` / `candidate.retry`） | `item-appended`（重试回填 ready/再失败 failed，**在新 retry job 流**）、`error`（整体失败）                      | 提取-    |
 
 ### 7.2 涉及的验收用例模块
 
 **模块：提取-**（提取-01 ～ 提取-34，本域全覆盖）。关键映射：
 
-| 验收用例 | 本契约落点 |
-|---|---|
-| 提取-01/02 发起进加载态、策略文案 | `POST .../extract` 202 + `eventsUrl` 立连，不空白页 |
-| 提取-03 五项子任务依次点亮 | SSE `subtask`，标准序 analyze→cluster→form→score→rank（§3.3） |
-| 提取-04/05/06 逐个浮现 + 「刚识别出」角标 + 占位骨架 | SSE `item-appended`（`isNew`） + `progress.done/total`（未识别位渲染骨架） |
-| 提取-07/08 计数实时 + 结果横幅 | `progress.phrase「已识别 3/9」` + `done.result.{candidateCount,analyzedSegments}` |
-| 提取-09/10/11/12 行字段组合 / 类型 / 频次条 / 置信分布 | `CandidateView`（name/confidence/type/segmentCount/frequencyRatio）+ `meta.confidenceSummary` |
-| 提取-13 识别多于展示只展前 N | 前端展示策略；后端 `candidateCount` 全量 + cursor 分页支撑前 N |
-| 提取-14/15/16/28/29 勾选 / 主按钮动态 / 不带 0 项 / 带入下一步 / 失败不阻塞 | 纯前端选择态（STEP③）；本域保证 `status=ready` 行可勾选、failed 行不入选 |
-| 提取-17/18 失败行 + 人话错误副文 | `CandidateView.error` / `CandidateItem.error`（人话 + `details.stuckAt`） |
-| 提取-19/20 行内重试 / 重试再失败仍带退路 | `POST /candidates/{id}/retry`（建新 retry job + 新 `eventsUrl`）+ 新 retry job 流上 `item-appended` 回填；§2.3 重试上限/escalate |
-| 提取-21 慢任务有进展感 | SSE `slow_hint` + 持续 `progress`/`subtask`（§3.5） |
-| 提取-22 整体失败带退路不裸码 | SSE `error`（`ErrorEnvelope`）+ `done(failed)`（§4） |
-| 提取-23/24 刷新/重连已识别不丢、不重跑 | `state_snapshot(job)` 含 `items[]`+计数（§3.2）；`GET .../candidates` 兜底 |
-| 提取-25 连点/刷新只跑一次 | 幂等 `Idempotency-Key` scope=`extract.create`（脊柱 §4）+ BullMQ jobId 去重 |
-| 提取-26 空态可操作退路 | `done.result.candidateCount==0` + 候选列表空（非错误、非裸转圈） |
-| 提取-27 底栏步数文案 | 纯前端；后端无关 |
-| 提取-30 内容不跳变 | 候选 `order=asc` 稳定排序 + 落库即定值（加载态=结果态同源） |
-| 提取-31 证据去敏不出隐私原文 | `candidate_evidence` 只挂去敏 `session_segments`；`quote` 去敏正文（§5.2） |
-| 提取-32 去重不翻倍 | `(extract_job_id, slug)` + `(candidate_id, segment_id)` 双去重键（§5.1/5.2） |
-| 提取-33 重导新快照不串、旧可查 | 候选/证据带 `snapshot_id`，只在该快照段集聚类；每次萃取独立 job（§5.1） |
-| 提取-34 频次段数血缘可追溯 | `segment_count` = `candidate_evidence` 行数 = 下钻条数（§5.1/5.2/§2.4） |
+| 验收用例                                                                    | 本契约落点                                                                                                                       |
+| --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| 提取-01/02 发起进加载态、策略文案                                           | `POST .../extract` 202 + `eventsUrl` 立连，不空白页                                                                              |
+| 提取-03 五项子任务依次点亮                                                  | SSE `subtask`，标准序 analyze→cluster→form→score→rank（§3.3）                                                                    |
+| 提取-04/05/06 逐个浮现 + 「刚识别出」角标 + 占位骨架                        | SSE `item-appended`（`isNew`） + `progress.done/total`（未识别位渲染骨架）                                                       |
+| 提取-07/08 计数实时 + 结果横幅                                              | `progress.phrase「已识别 3/9」` + `done.result.{candidateCount,analyzedSegments}`                                                |
+| 提取-09/10/11/12 行字段组合 / 类型 / 频次条 / 置信分布                      | `CandidateView`（name/confidence/type/segmentCount/frequencyRatio）+ `meta.confidenceSummary`                                    |
+| 提取-13 识别多于展示只展前 N                                                | 前端展示策略；后端 `candidateCount` 全量 + cursor 分页支撑前 N                                                                   |
+| 提取-14/15/16/28/29 勾选 / 主按钮动态 / 不带 0 项 / 带入下一步 / 失败不阻塞 | 纯前端选择态（STEP③）；本域保证 `status=ready` 行可勾选、failed 行不入选                                                         |
+| 提取-17/18 失败行 + 人话错误副文                                            | `CandidateView.error` / `CandidateItem.error`（人话 + `details.stuckAt`）                                                        |
+| 提取-19/20 行内重试 / 重试再失败仍带退路                                    | `POST /candidates/{id}/retry`（建新 retry job + 新 `eventsUrl`）+ 新 retry job 流上 `item-appended` 回填；§2.3 重试上限/escalate |
+| 提取-21 慢任务有进展感                                                      | SSE `slow_hint` + 持续 `progress`/`subtask`（§3.5）                                                                              |
+| 提取-22 整体失败带退路不裸码                                                | SSE `error`（`ErrorEnvelope`）+ `done(failed)`（§4）                                                                             |
+| 提取-23/24 刷新/重连已识别不丢、不重跑                                      | `state_snapshot(job)` 含 `items[]`+计数（§3.2）；`GET .../candidates` 兜底                                                       |
+| 提取-25 连点/刷新只跑一次                                                   | 幂等 `Idempotency-Key` scope=`extract.create`（脊柱 §4）+ BullMQ jobId 去重                                                      |
+| 提取-26 空态可操作退路                                                      | `done.result.candidateCount==0` + 候选列表空（非错误、非裸转圈）                                                                 |
+| 提取-27 底栏步数文案                                                        | 纯前端；后端无关                                                                                                                 |
+| 提取-30 内容不跳变                                                          | 候选 `order=asc` 稳定排序 + 落库即定值（加载态=结果态同源）                                                                      |
+| 提取-31 证据去敏不出隐私原文                                                | `candidate_evidence` 只挂去敏 `session_segments`；`quote` 去敏正文（§5.2）                                                       |
+| 提取-32 去重不翻倍                                                          | `(extract_job_id, slug)` + `(candidate_id, segment_id)` 双去重键（§5.1/5.2）                                                     |
+| 提取-33 重导新快照不串、旧可查                                              | 候选/证据带 `snapshot_id`，只在该快照段集聚类；每次萃取独立 job（§5.1）                                                          |
+| 提取-34 频次段数血缘可追溯                                                  | `segment_count` = `candidate_evidence` 行数 = 下钻条数（§5.1/5.2/§2.4）                                                          |
 
 **贯穿-** 相关（断点续传/幂等/不裸转圈/不丢，跨域共用脊柱机制，本域承接）：贯穿-22（断线续传到真实状态，靠 `state_snapshot`）、贯穿-27（双标签页不重复，靠幂等键）。
 
@@ -704,6 +729,7 @@ export interface ExtractDoneResult {
 ## 8. 返回精炼摘要（供合并校验）
 
 **端点清单（method + path）**
+
 1. `POST /api/v1/snapshots/{snapshotId}/extract` — 触发萃取（202，幂等 scope=`extract.create`）
 2. `GET  /api/v1/extract-jobs/{jobId}/candidates` — 列候选（cursor，order=asc，`meta.confidenceSummary`）
 3. `GET  /api/v1/candidates/{candidateId}` — 候选详情
@@ -713,6 +739,7 @@ export interface ExtractDoneResult {
 （SSE 复用脊柱 `GET /api/v1/jobs/{jobId}/events`，kind=job，不新增端点；`{jobId}` 可为原萃取 job 或单候选 retry job）
 
 **表清单（DDL）**
+
 - `capability_candidates` —— 去重键 `(extract_job_id, slug)`；**血缘复合唯一键 `uq_candidates_id_snapshot UNIQUE (id, snapshot_id)`**（脊柱 §11.E，供 evidence 复合 FK 引用）；`status/error/retry_cnt`（单项重试）；`type/confidence/segment_count/frequency_ratio/reusability/scope_coherence/split_suggested/scope`；含 `snapshot_id`（不跨快照）+ `owner_user_id`（鉴权）；三索引（job 追加流 / owner / job+status）。
 - `candidate_evidence` —— 血缘去重键 `(candidate_id, segment_id)`；**两条血缘复合 FK（脊柱 §11.E 固定约束名）`fk_evidence_candidate_snapshot (candidate_id, snapshot_id)→capability_candidates(id, snapshot_id) ON DELETE CASCADE`、`fk_evidence_segment_snapshot (segment_id, snapshot_id)→session_segments(id, snapshot_id)`**（替代原单列 FK，schema 层焊死证据血缘回溯到具体 snapshot）；`snapshot_id` 仍单列 FK→`raw_snapshots`；两索引（候选下钻 / 段反查）。
 - 复用（不新建）：`jobs`（type=extract，脊柱 §6.3，fencing；单候选重试新建一条 retry job）、`idempotency_keys`（脊柱 §4）、`raw_snapshots`、`session_segments`（导入域，**须带 §11.E `uq_session_segments_id_snapshot (id, snapshot_id)` 唯一键供本域复合 FK 引用**）。
@@ -730,8 +757,10 @@ export interface ExtractDoneResult {
 **功能点覆盖**：B-22（萃取 Job + 候选/证据 + 候选流）、B-23（萃取 API + 单候选重试）。验收模块：提取-（01～34 全覆盖）+ 贯穿-22/27 + 接口-（口径随脊柱）。
 
 **本轮共识修订（Codex 对抗，供合并校验）**
+
 - **Codex#2 / §11.E（对外影响约束名）**：`candidate_evidence` 单列 FK → 两条复合 FK：`fk_evidence_candidate_snapshot (candidate_id, snapshot_id) → capability_candidates(id, snapshot_id) ON DELETE CASCADE`、`fk_evidence_segment_snapshot (segment_id, snapshot_id) → session_segments(id, snapshot_id)`。父表新增唯一键 `uq_candidates_id_snapshot UNIQUE (id, snapshot_id)`（本域 `capability_candidates`）。**依赖 20 域**提供 `uq_session_segments_id_snapshot UNIQUE (id, snapshot_id)`（否则 `fk_evidence_segment_snapshot` 无法建）——20 域须确认该唯一键存在，约束名不得偏离。
 - **Codex#4（对外影响字段/语义）**：`POST /candidates/{id}/retry` 不再复用原萃取 job 的（已 terminal）流；改为**新建 retry job**（`jobs.type='extract'`，新 `fence_token`/新流）。`CandidateRetryAccepted` 新增字段 **`retryJobId: JobId`**，`eventsUrl` 改指 `/api/v1/jobs/{retryJobId}/events`（原 `extractJobId` 保留为只读引用）。重试回填帧在新 retry job 流，前端靠 `item.id == candidateId` 跨流对位。**对 70 域/sweeper 影响**：retry job 与普通 extract job 同 schema、同 fencing/重入队语义，无新表、无新 job type。
 - **Codex#3 / §11.A（写入模式）**：萃取 worker 写 `capability_candidates`/`candidate_evidence` 改为 §11.A 受保护写入（fence 内联进单条事务 CTE 数据源 `FROM jobs WHERE id=:jobId AND fence_token=:fence AND status='running'`），禁两步「查后写」；`rowCount=0` 为正常控制流。重试写入 fence 取自新 retry job。纯文档/SQL DDL 约束，不改对外字段。
-- **§11.B（错误形态对齐）**：域内所有错误对象人话字段统一为 **`userMessage`**（替代 `message`），`code` 仅日志/映射、UI 不渲染。错误用例表「人话 userMessage」列即 `userMessage`。
+- **§11.B + D1（错误形态对齐）**：域内所有错误对象人话字段统一为 **`userMessage`**（替代 `message`），内部 `code` 仅日志/映射、**对外信封一律不含 code**（D1）。错误用例表「人话 userMessage」列即 `userMessage`。
+- **Codex#2（SSE error 帧形态）**：job 流（含 retry job 流）`error` 帧 `payload` = **完整对外 `ErrorEnvelope`**（外层 `{ error: {...} }`，非裸 `ErrorBody`，无 code）；`done` 帧失败时 `error` 同为完整对外 `ErrorEnvelope`。
 - **§11.C（SSE 鉴权对齐）**：job 流（含 retry job 流）统一同源 Cookie 鉴权，建流前 HTTP `ErrorEnvelope` 失败，不用 `error` 帧表鉴权失败。
