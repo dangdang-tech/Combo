@@ -361,6 +361,7 @@ function makeContext(args: MakeContextArgs): RunnerContext {
 
     async emitField(event, payload): Promise<void> {
       // 字段流是纯增量帧（结构化 structure_state 由 40 域 worker 受保护写、不入 jobs.progress）。
+      // 含 item-appended（数组字段逐条浮现）：结构化 payload 形态 { field, itemIndex, value }，与提取 appendItem 的 { item } 不同。
       await bridge.publish(leased.id, { event, payload });
     },
 

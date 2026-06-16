@@ -72,9 +72,17 @@ export interface JobContext {
   reportSubtask(key: string, status: SubtaskStatus, label?: string): Promise<void>;
   /** 边生成边显示：追加一项已生成摘要（候选/段/批量 item，硬规则③已生成不丢）。 */
   appendItem(item: unknown): Promise<void>;
-  /** 结构化字段流（field_start/field_delta/field_done/field_stuck，脊柱 §5.3）。仅增量帧、不入 progress。 */
+  /**
+   * 结构化字段流（field_start/field_delta/field_done/field_stuck + 数组逐项 item-appended + 字段级 error，脊柱 §5.3 / 40 §3.2/§3.4）。
+   *   仅增量帧、不入 jobs.progress（结构化 structure_state 由 40 域 worker 受保护写、断点续传真源）。
+   *   - item-appended：结构化 payload 为 `{ field, itemIndex, value }`（数组字段逐条浮现，40 §3.2）——
+   *     与提取域 ctx.appendItem 的 `{ item }` 形态不同，故结构化数组项走本通道、不走 appendItem。
+   *   - error：单【软】字段两次重试仍失败的【字段级】错误帧（payload = 完整对外 ErrorEnvelope，40 §3.4）。
+   *     这与 runner 在 job 终止时发的 error/done【整 job 终态】帧不同——字段级失败后 job 仍可 completed，
+   *     前端按 structure_state[field].status='failed' 渲染错误态 + 退路（§3.4，不整 job 转 failed）。
+   */
   emitField(
-    event: 'field_start' | 'field_delta' | 'field_done' | 'field_stuck',
+    event: 'field_start' | 'field_delta' | 'field_done' | 'field_stuck' | 'item-appended' | 'error',
     payload: unknown,
   ): Promise<void>;
   /** 慢任务提示（slow_hint 帧，脊柱 §5.3）。 */

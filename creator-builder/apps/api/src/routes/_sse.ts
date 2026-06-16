@@ -9,9 +9,11 @@ import {
   buildError,
   ErrorCode,
   isTerminalJobStatus,
+  SOFT_FIELD_KEYS,
   type ErrorBody,
   type JobStatus,
   type ProgressView,
+  type SoftFieldKey,
   type StateSnapshotPayload,
   type StructureState,
 } from '@cb/shared';
@@ -146,9 +148,18 @@ export function jobSseHandler(): RouteHandlerMethod {
 }
 
 /**
- * structure 流 SSE handler（脊柱 §5，kind=structure）。
- *   建流前：查 capability_versions JOIN capabilities（owner=creator_user_id），缺 404、非 owner 403；
- *   建流：首帧 state_snapshot = structure_state 全量（字段级断点续传，已生成字段不丢）。
+ * structure 流 SSE handler（脊柱 §5，kind=structure；Codex P0-1 真流）。
+ *   建流前：查 capability_versions JOIN capabilities（owner=creator_user_id），缺 404、非 owner 403。
+ *   建流：首帧 state_snapshot = structure_state 全量（从 structure_state 重建，含各软字段 done/generating/stuck/
+ *     failed + attempts；硬字段 locked，字段级断点续传、已生成不丢）。
+ *   真流映射（核心修复）：worker 把 field_* / item-appended / field_stuck / error / done 帧写 events:job:{jobId}
+ *     （ctx.emitField），故本 SSE 把结构化流【可靠映射到该 version 的 active structure job】并订阅其 job stream：
+ *       - latestId 锚点（active job 流）→ snapshot（structure_state）→ 从锚点 live subscribe（同 3A 时序消 TOCTOU）；
+ *       - Last-Event-ID 在窗补增量、超窗回落 snapshot（replaySince 接 active job 流）；
+ *       - 具名 heartbeat（startSseStream 内）；
+ *       - 统一终态闸：active job 已终态 / 无 active job 但有终态历史 job → snapshot 后补 done 关流、绝不 subscribe。
+ *     无任何 structure job（尚未发起结构化）→ 仅 snapshot + heartbeat，流保持开放（前端连上即有结构化状态，
+ *       等用户发起后 worker 推帧；非 running 不 subscribe，靠下次重连续上）。
  */
 export function structureSseHandler(): RouteHandlerMethod {
   return async function (req: FastifyRequest, reply: FastifyReply) {
@@ -159,41 +170,107 @@ export function structureSseHandler(): RouteHandlerMethod {
       return reply;
     }
 
-    let row: { creator_user_id: string; structure_state: unknown } | undefined;
+    // —— 建流前 owner 校验（只读 owner，缺 404 / 非 owner 403，脊柱 §11.C）——
+    let ownerRow: { creator_user_id: string } | undefined;
     try {
-      const res = await req.server.infra.db.query<{
-        creator_user_id: string;
-        structure_state: unknown;
-      }>(
-        `SELECT c.creator_user_id AS creator_user_id, v.structure_state AS structure_state
+      const res = await req.server.infra.db.query<{ creator_user_id: string }>(
+        `SELECT c.creator_user_id AS creator_user_id
            FROM capability_versions v
            JOIN capabilities c ON c.id = v.capability_id
           WHERE v.id = $1`,
         [versionId],
       );
-      row = res.rows[0];
+      ownerRow = res.rows[0];
+    } catch {
+      reply500(req, reply);
+      return reply;
+    }
+    if (!ownerRow) {
+      reply404(req, reply);
+      return reply;
+    }
+    if (ownerRow.creator_user_id !== userId) {
+      reply403(req, reply);
+      return reply;
+    }
+
+    // —— 映射 active structure job（订阅锚点 / 终态判定）：取该 version 最近一条 structure job。
+    //    优先未终态（queued/running，可 live subscribe）；否则最近一条终态（补 done 关流，统一终态闸）。——
+    let jobRow: { id: string; status: string } | undefined;
+    try {
+      const res = await req.server.infra.db.query<{ id: string; status: string }>(
+        `SELECT id, status FROM jobs
+          WHERE type = 'structure'
+            AND owner_user_id = $2
+            AND subject_ref->>'versionId' = $1
+          ORDER BY (status IN ('queued','running')) DESC, created_at DESC
+          LIMIT 1`,
+        [versionId, userId],
+      );
+      jobRow = res.rows[0];
     } catch {
       reply500(req, reply);
       return reply;
     }
 
-    if (!row) {
-      reply404(req, reply);
-      return reply;
-    }
-    if (row.creator_user_id !== userId) {
-      reply403(req, reply);
+    const stream = new RedisEventStream(req.server.infra.redisHot);
+    const jobId = jobRow?.id;
+    const jobStatus = jobRow?.status as JobStatus | undefined;
+    const isActive = jobStatus === 'queued' || jobStatus === 'running';
+
+    // —— TOCTOU 消除（同 3A）：先取 active job 流 latestId 锚点，再读 structure_state snapshot。——
+    //    无 active job（无 job / 终态）→ 锚点 '0-0'（不 subscribe，仅 snapshot + 终态闸/heartbeat）。
+    const subscribeFromId =
+      jobId && isActive ? await stream.latestId(jobId).catch(() => '0-0') : '0-0';
+
+    // —— snapshot 取数：在锚点之后读 structure_state（gap-free，已生成字段/stuck/failed/attempts 全回显）——
+    let structureState: Partial<StructureState> = {};
+    try {
+      const res = await req.server.infra.db.query<{ structure_state: unknown }>(
+        `SELECT structure_state FROM capability_versions WHERE id = $1`,
+        [versionId],
+      );
+      const r = res.rows[0];
+      if (!r) {
+        reply404(req, reply);
+        return reply;
+      }
+      structureState = (r.structure_state ?? {}) as Partial<StructureState>;
+    } catch {
+      reply500(req, reply);
       return reply;
     }
 
-    const structureState = (row.structure_state ?? {}) as Partial<StructureState>;
     await startSseStream(req, reply, {
       kind: 'structure',
+      // 字段级 error 是软事件、非 job 终态（40 §3.4：单软字段重试 2 次仍失败落字段级 ErrorEnvelope，
+      //   Job 整体可继续并最终 completed，验收 选择结构化-20/-11/-27）。errorIsTerminal=false →
+      //   结构化流的 error 帧只透传、不触发终态闸/不合成 done failed/不关流；终态仅由 active job 终态
+      //   （terminalFrames）或 replay 到 done 决定。修复前 replay 到字段级 error 被提前收口（Codex r7 P1）。
+      errorIsTerminal: false,
       lastEventId: getLastEventId(req),
       loadSnapshot: async (): Promise<StateSnapshotPayload> => ({
         kind: 'structure',
         structureState: normalizeStructureState(versionId, structureState),
       }),
+      // Last-Event-ID 窗口补发接 active job 流（无 active job → 无 replaySince，走 snapshot 重置）。
+      ...(jobId && isActive
+        ? { replaySince: (lastEventId: string) => stream.replaySince(jobId, lastEventId) }
+        : {}),
+      subscribeFromId,
+      // 仅 active（queued/running）才 live subscribe active job 流；非 running 不订阅（统一终态闸，硬要求）。
+      ...(jobId && isActive
+        ? {
+            subscribe: ({ fromId, onFrame, signal }) =>
+              stream.subscribe(jobId, fromId, onFrame, signal),
+          }
+        : {}),
+      // 统一终态闸：active job 不存在（无 job / 终态）→ 据 DB 终态补 done 关流（completed/failed/cancelled）。
+      //   structure 流的终态以「该 version 的 structure job 终态」为准；无 job → 不发终态（保持开放等发起）。
+      terminalFrames: () =>
+        jobStatus && isTerminalJobStatus(jobStatus)
+          ? [{ event: 'done' as const, payload: { status: jobStatus } }]
+          : [],
     });
     return reply;
   };
@@ -240,13 +317,19 @@ function normalizeProgress(p: Partial<ProgressView>): ProgressView {
   };
 }
 
-/** 把 structure_state（可能为 {} 或部分）规整成合法 StructureState（已生成字段原样回显）。 */
+/**
+ * 把 structure_state（可能为 {} 或部分）规整成合法 StructureState（已生成字段原样回显）。
+ *   doneCount/totalCount 一律从 fields 重算（不信库内存量值）：worker surgical 写只 patch fields 数组、不刷新
+ *   存量 doneCount（Codex r6 P1，避免整列写覆盖并发改动），故计数须以 fields 为唯一真源在读时派生
+ *   （与 manifest.buildStructureState 同口径：done 只数软字段、硬字段 locked 不计 total）。
+ */
 function normalizeStructureState(versionId: string, s: Partial<StructureState>): StructureState {
   const fields = Array.isArray(s.fields) ? s.fields : [];
+  const soft = fields.filter((f) => SOFT_FIELD_KEYS.includes(f.field as SoftFieldKey));
   return {
     versionId,
     fields,
-    doneCount: typeof s.doneCount === 'number' ? s.doneCount : 0,
-    totalCount: typeof s.totalCount === 'number' ? s.totalCount : fields.length,
+    doneCount: soft.filter((f) => f.status === 'done').length,
+    totalCount: soft.length,
   };
 }

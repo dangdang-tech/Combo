@@ -77,7 +77,8 @@ export interface SseStreamOptions {
    *       · snapshot 路径 → 建流前抓取的流最新 id（gap-free：之后的帧必被订阅捕获）。
    *   - signal：startSseStream 在客户端断开或收到终态帧时 abort，订阅据此清理 reader、断独立连接。
    *   缺省（未接 Streams 或测试）= 不订阅，仅 snapshot 加心跳（协议仍为真，但收不到后续业务帧）。
-   *   收到 done 帧视为终态，由 startSseStream 关流；error 帧不关（其后通常紧跟 done）。
+   *   收到 done 帧视为终态，由 startSseStream 关流；error 帧从不在订阅路径关流（job/import/extract 流其后紧跟 done；
+   *     结构化流 errorIsTerminal=false，字段级 error 是软事件、Job 继续，见 errorIsTerminal）。
    */
   subscribe?: (args: {
     fromId: string;
@@ -89,6 +90,18 @@ export interface SseStreamOptions {
    *   resume 在窗口内时 startSseStream 改用最后一帧 replayed id，本字段被忽略。
    */
   subscribeFromId?: string;
+  /**
+   * `error` 帧是否为 job 级终态前导（跨流通用语义，默认 true；Codex r7 P1）。
+   *   - true（job/import/extract 等流，**保持现状不回归**）：`error` 帧是失败序列的前导（其后紧跟 `done`，
+   *     脊柱 §5.3）。终态闸据「已发 error」判 terminal：若 replay 回放到 error 但缺收尾 done，则按 DB 状态
+   *     补一个收尾 done 关流（不悬挂心跳）；DB failed 的 backfill 已含前导 error 时去重，不重复 error。
+   *   - false（结构化 SSE，kind=structure）：`error` 帧是**软字段级失败软事件**（40 §3.4：单软字段重试 2 次
+   *     仍失败落字段级 ErrorEnvelope，Job 整体可继续并最终 completed，验收 选择结构化-20/-11/-27）。**字段级
+   *     error 只透传给前端、不触发终态/不合成 done failed/不关流**；结构化流的终态【仅由 DB terminalFrames()
+   *     或 replay 回放到 `done` 帧 决定】。修复前：replay 到字段级 error 被当 job 终态提前收口、合成 done failed
+   *     关流，破坏 SSE 真流 / resume / snapshot 后续接管（Codex r7 P1，sse.ts:221/:236）。
+   */
+  errorIsTerminal?: boolean;
   /**
    * 建流瞬间 DB 已是终态（snapshot 路径，Codex P0-1 集中编排）：返回应补发的终态帧序列
    *   （completed→[done]；failed→[error, done]；cancelled→[done]）。返回非空 = DB 已终态：
@@ -115,11 +128,13 @@ export interface SseStreamHandle {
  *   ① 锚点：订阅起点 subscribeFromId（调用方建流前抓取的流最新 id；窗口内 resume 改用最后一帧 replayed id）。
  *   ② snapshot/status：调用方在锚点之后读的最新 DB 快照（loadSnapshot）与终态判定（terminalFrames）。
  *   ③ 发首帧：窗口内 replay → 补发增量（不重推 snapshot，脊柱 §5.4）；否则 → state_snapshot 重置（脊柱 §5.2）。
- *   ④ replay：窗口内则写 (Last-Event-ID, latestId] 增量；replay 帧里若含 done/error，记为「已发终态帧」。
+ *   ④ replay：窗口内则写 (Last-Event-ID, latestId] 增量；replay 帧里若含 done（或 errorIsTerminal 流的 error），
+ *      记为「已发终态轨迹」。结构化流（errorIsTerminal=false）的字段级 error 是软事件，不记终态轨迹。
  *   ⑤ 【统一终态闸（subscribe 之前）】：
- *        terminal = (DB status 终态：terminalFrames() 返回非空) OR (replay 已发出 done/error)。
+ *        terminal = (DB status 终态：terminalFrames() 返回非空) OR (已发 job 级 error 轨迹)。
  *        若 terminal：确保终态帧【恰好发一次】——replay 没发过就按 DB 状态补发 done/error（含
  *        Last-Event-ID==done id：replay 排除该 id 故无帧，此处按 DB 补一次），然后 stop+关流，【绝不 subscribe】。
+ *        Codex r7 P1：结构化流字段级 error 不入终态轨迹 → running 时 replay 到字段级 error 仍走 ⑥ live subscribe。
  *   ⑥ 否则（running）：从锚点 live subscribe，收到 done/error 帧 → stop+关流。
  *
  *   保证：任何「非 running」路径都不 subscribe、终态帧恰好一次、无悬挂心跳、无双 done。
@@ -162,15 +177,21 @@ export async function startSseStream(
     if (!reply.raw.writableEnded) reply.raw.end();
   };
 
+  // `error` 帧终态语义（跨流通用，Codex r7 P1）：默认 true（job/import/extract 不回归）。
+  //   结构化流（kind=structure）传 false —— 字段级 error 是软事件、不参与终态闸、不去重、不关流。
+  const errorIsTerminal = opts.errorIsTerminal ?? true;
+
   // 终态帧轨迹（统一终态闸据此「恰好一次」补发，杜绝双 done/双 error、杜绝漏发收尾 done）：
-  //   - errorEmitted：失败序列的 error 帧已写（避免补发时重复 error）。
+  //   - errorEmitted：失败序列的【job 级终态】error 帧已写（避免补发时重复 error）。
+  //     仅当 errorIsTerminal 时才据 error 帧置位：结构化的字段级 error 是软事件，不视作终态轨迹（不收口）。
   //   - doneEmitted：收尾 done 帧已写（done 是唯一关流信号；缺它必补，否则悬挂心跳）。
   let errorEmitted = false;
   let doneEmitted = false;
   const push = (frame: { id?: string; event: SSEEventType; payload: unknown }): void => {
     if (stopped || reply.raw.writableEnded) return;
     writeSseFrame(reply, frame);
-    if (frame.event === 'error') errorEmitted = true;
+    // 仅 error=job 终态前导的流（errorIsTerminal）才记 error 轨迹；结构化字段级 error 透传但不收口。
+    if (frame.event === 'error' && errorIsTerminal) errorEmitted = true;
     // 收到终态 done → 关流（前端据 done 关 EventSource；服务端这侧也收尾，不再续推）。
     // error 帧不在此关流：其后通常紧跟 done（脊柱 §5.3 失败时先 error 再 done）。
     if (frame.event === 'done') {
@@ -208,8 +229,12 @@ export async function startSseStream(
     writeSseFrame(reply, { id: subscribeFromId, event: 'state_snapshot', payload: snapshot });
   }
 
-  // —— ⑤ 统一终态闸（subscribe 之前，Codex P0-r4 核心）——
-  //   terminal = (DB status 终态：terminalFrames() 返回非空) OR (replay 已发出 done/error)。任一为真即【绝不 subscribe】。
+  // —— ⑤ 统一终态闸（subscribe 之前，Codex P0-r4 核心；Codex r7 P1 修正 error 终态语义）——
+  //   terminal = (DB status 终态：terminalFrames() 返回非空) OR (errorEmitted)。任一为真即【绝不 subscribe】。
+  //   关键：errorEmitted 仅 errorIsTerminal=true（job/import/extract）才据 error 帧置位；结构化流
+  //     errorIsTerminal=false → 字段级 error 永不置 errorEmitted → 终态【仅由 DB terminalFrames() 或 replay
+  //     到 done 决定】。故结构化 running 时 replay 到字段级 error 不会被本闸误收口（不合成 done failed、不关流），
+  //     仍走 ⑥ live subscribe 续收 field_done/done（Codex r7 P1：sse.ts:221/:236 旧 bug 修复）。
   //   不变量：终态流必须以恰好一个 done 收尾、error 至多一次、无双发。落实如下——
   //     · doneEmitted（replay 已回放到 done）→ push 时已 stop，终态已闭合，什么都不补。
   //     · 否则若 terminal（DB 终态 或 已发过 error 但缺收尾 done）→ 按 DB 状态补发缺失的终态帧：

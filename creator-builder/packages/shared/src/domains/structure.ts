@@ -1,19 +1,12 @@
 // 40 · STEP③选择 + STEP④结构化域（B-24/B-25/B-26）。import 脊柱 §9，不重定义。
 import { z } from 'zod';
 import { IdSchema, SlugSchema } from '../core/ids.js';
-import { StructureStateSchema } from '../core/structure-state.js';
+import { StructureStateSchema, SoftFieldKeySchema } from '../core/structure-state.js';
 
 // ===== manifest 软硬分层（§2）=====
-export const SoftFieldKeySchema = z.enum([
-  'name',
-  'tagline',
-  'role',
-  'goal',
-  'instructions',
-  'skill_set',
-  'starter_prompts',
-]);
-export type SoftFieldKey = z.infer<typeof SoftFieldKeySchema>;
+// SoftFieldKey 的真源已下沉到 core/structure-state.ts（FieldState.error.details.field 须强约束 ∈ SoftFieldKey，
+//   §3.4 / Codex r2 P1；core 不可 import domains，故下沉避免循环）。此处 re-export 保持公共 API（@cb/shared）不变。
+export { SoftFieldKeySchema, SOFT_FIELD_KEYS, type SoftFieldKey } from '../core/structure-state.js';
 
 export const HardFieldKeySchema = z.enum([
   'id',
@@ -25,8 +18,6 @@ export const HardFieldKeySchema = z.enum([
 ]);
 export type HardFieldKey = z.infer<typeof HardFieldKeySchema>;
 
-/** 软字段标准序（7 个）。 */
-export const SOFT_FIELD_KEYS: SoftFieldKey[] = SoftFieldKeySchema.options;
 /** 硬字段标准序（6 类，平台锁定）。 */
 export const HARD_FIELD_KEYS: HardFieldKey[] = HardFieldKeySchema.options;
 
@@ -87,7 +78,8 @@ export type ManifestView = z.infer<typeof ManifestViewSchema>;
 // ===== STEP③ 选择草稿（端点 G，drafts.selection 权威形态）=====
 export const SelectionDraftSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('single'), candidateId: IdSchema }),
-  z.object({ mode: z.literal('all'), candidateIds: z.array(IdSchema) }),
+  // all 分支至少一个候选（.min(1)）：空选不是合法「全选」，否则可存「ready 数量为 0」的伪全选草稿（Codex P1-3）。
+  z.object({ mode: z.literal('all'), candidateIds: z.array(IdSchema).min(1) }),
 ]);
 export type SelectionDraft = z.infer<typeof SelectionDraftSchema>;
 

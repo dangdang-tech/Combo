@@ -61,6 +61,15 @@ describe('migrations', () => {
     }
   });
 
+  it('registers structure job version-level hard lock (partial unique index, Codex P1-4)', () => {
+    const sql = allSql();
+    // 部分唯一索引：每个 versionId 至多一个未终态 structure job（version 级硬锁，杜绝并发双跑覆盖）。
+    expect(sql).toContain('uq_structure_job_active_version');
+    expect(sql).toMatch(/CREATE UNIQUE INDEX uq_structure_job_active_version/);
+    expect(sql).toContain("subject_ref->>'versionId'");
+    expect(sql).toMatch(/WHERE type = 'structure' AND status IN \('queued', 'running'\)/);
+  });
+
   it('provides gen_uuid_v7 helper before any DEFAULT gen_uuid_v7()', () => {
     const list = files();
     expect(list[0]).toContain('extensions_and_helpers');

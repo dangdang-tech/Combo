@@ -14,6 +14,9 @@ import {
   envelopeSchema,
   MeViewSchema,
   CreateCapabilityBodySchema,
+  SelectionDraftSchema,
+  FieldStateSchema,
+  FieldFailureErrorBodySchema,
   buildOpenApiDocument,
   REGISTERED_SCHEMA_NAMES,
   OutboxTopicSchema,
@@ -164,6 +167,95 @@ describe('zod DTOs', () => {
         fromVersionId: 'v1',
       }).success,
     ).toBe(false);
+  });
+
+  it('SelectionDraft: all.candidateIds 须 .min(1)（Codex P1-3，空选不是合法全选）', () => {
+    // single 一个 → 通过。
+    expect(SelectionDraftSchema.safeParse({ mode: 'single', candidateId: 'c1' }).success).toBe(
+      true,
+    );
+    // all 至少一个 → 通过。
+    expect(
+      SelectionDraftSchema.safeParse({ mode: 'all', candidateIds: ['c1', 'c2'] }).success,
+    ).toBe(true);
+    // all 空数组 → 拒（修法前 .min(1) 缺失会放过空全选）。
+    expect(SelectionDraftSchema.safeParse({ mode: 'all', candidateIds: [] }).success).toBe(false);
+  });
+
+  it('FieldState: 含 error 字段（无 code 的对外 ErrorBody，Codex P1-7）', () => {
+    // failed 态带 error（断线重连 snapshot 回显错误态 + 退路）。
+    const ok = FieldStateSchema.safeParse({
+      field: 'instructions',
+      status: 'failed',
+      attempts: 2,
+      error: {
+        userMessage: '这个字段没生成出来，可重试、改输入或转人工。',
+        retriable: true,
+        action: 'escalate',
+        traceId: '01J000000000000000000000T',
+        details: { field: 'instructions', attempts: 2 },
+      },
+    });
+    expect(ok.success).toBe(true);
+    // error 内层不含 code（对外 D1）：带 code 也能 parse（ErrorBody strip 未知键）但解析结果无 code。
+    if (ok.success) expect('code' in (ok.data.error ?? {})).toBe(false);
+    // error 可选：done 态无 error 仍合法。
+    expect(FieldStateSchema.safeParse({ field: 'name', status: 'done', value: 'x' }).success).toBe(
+      true,
+    );
+  });
+
+  it('FieldFailureErrorBody（Codex r2 P1）：details.field 须 ∈ SoftFieldKey；硬字段/未知字段 → schema 拒绝', () => {
+    const base = {
+      userMessage: '这个字段没生成出来，可重试、改输入或转人工。',
+      retriable: true,
+      action: 'escalate' as const,
+      traceId: '01J000000000000000000000T',
+    };
+    // 软字段 → 接受。
+    for (const field of ['name', 'instructions', 'skill_set', 'starter_prompts']) {
+      expect(
+        FieldFailureErrorBodySchema.safeParse({ ...base, details: { field, attempts: 2 } }).success,
+      ).toBe(true);
+    }
+    // 硬字段（output/id/version/status/inputs/boundaries）→ 拒绝（硬字段锁定不报字段级失败，§2.2/§3.4）。
+    for (const field of ['output', 'id', 'version', 'status', 'inputs', 'boundaries']) {
+      expect(
+        FieldFailureErrorBodySchema.safeParse({ ...base, details: { field, attempts: 2 } }).success,
+      ).toBe(false);
+    }
+    // 未知字段 → 拒绝。
+    expect(
+      FieldFailureErrorBodySchema.safeParse({ ...base, details: { field: 'bogus', attempts: 1 } })
+        .success,
+    ).toBe(false);
+    // 无 details.field 键 → 不强制（仍合法：error 体不强制带 field）。
+    expect(
+      FieldFailureErrorBodySchema.safeParse({ ...base, details: { attempts: 1 } }).success,
+    ).toBe(true);
+    expect(FieldFailureErrorBodySchema.safeParse(base).success).toBe(true);
+  });
+
+  it('FieldState.error 接入专用 schema：硬字段 details.field（如 output）→ FieldStateSchema 拒绝（Codex r2 P1）', () => {
+    const hardFieldError = {
+      field: 'instructions',
+      status: 'failed' as const,
+      attempts: 2,
+      error: {
+        userMessage: '这个字段没生成出来，可重试、改输入或转人工。',
+        retriable: true,
+        action: 'escalate' as const,
+        traceId: '01J000000000000000000000T',
+        details: { field: 'output', attempts: 2 }, // 硬字段 → 应被专用 schema 拒绝。
+      },
+    };
+    expect(FieldStateSchema.safeParse(hardFieldError).success).toBe(false);
+    // 未知字段同样拒绝。
+    const unknownFieldError = {
+      ...hardFieldError,
+      error: { ...hardFieldError.error, details: { field: 'nope', attempts: 1 } },
+    };
+    expect(FieldStateSchema.safeParse(unknownFieldError).success).toBe(false);
   });
 });
 
