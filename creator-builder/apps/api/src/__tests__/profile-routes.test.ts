@@ -164,6 +164,56 @@ describe('GET /creators/:id/profile（主聚合）', () => {
   });
 });
 
+// —— self 别名 'me'（§2.0 / Codex r1#1 P0）：/creators/me/* 解析为当前登录用户 creatorId ——
+describe('self 别名 me（鉴权态自身主页）', () => {
+  it('登录态 GET /creators/me/profile → 解析为本人 creatorId，200 返回本人名片', async () => {
+    const db = new ProfileFakeDb();
+    const creatorId = seedProfile(db, { display_name: '本人韦恩' });
+    seedPublishedCapability(db, creatorId, { name: '需求炼金师' });
+    // auth.userId = 本人，path 用别名 me。
+    const ctx = makeReqReply({ params: { creatorId: 'me' }, userId: creatorId, db });
+    await call(getCreatorProfileHandler(), ctx);
+    expect(ctx.sent.code).toBe(200);
+    const body = ctx.sent.body as { data: { creatorId: string; hero: { displayName: string } } };
+    expect(body.data.creatorId).toBe(creatorId);
+    expect(body.data.hero.displayName).toBe('本人韦恩');
+  });
+
+  it('未登录 GET /creators/me/profile → 401 escalate（self 需鉴权，不下钻不当 404）', async () => {
+    const db = new ProfileFakeDb();
+    const ctx = makeReqReply({ params: { creatorId: 'me' }, db }); // 无 userId
+    await call(getCreatorProfileHandler(), ctx);
+    expect(ctx.sent.code).toBe(401);
+    const body = ctx.sent.body as { error: { action: string; userMessage: string } };
+    expect(body.error.action).toBe('escalate');
+    expect(body.error.userMessage).toContain('登录');
+    assertNoCode(body);
+  });
+
+  it('me 别名同样覆盖子端点（works）：登录态解析本人、未登录 401', async () => {
+    const db = new ProfileFakeDb();
+    const creatorId = seedProfile(db);
+    seedPublishedCapability(db, creatorId, { name: '上架能力' });
+    // 登录态：解析本人，200。
+    const okCtx = makeReqReply({ params: { creatorId: 'me' }, userId: creatorId, db });
+    await call(getWorksHandler(), okCtx);
+    expect(okCtx.sent.code).toBe(200);
+    // 未登录：401。
+    const noAuthCtx = makeReqReply({ params: { creatorId: 'me' }, db });
+    await call(getWorksHandler(), noAuthCtx);
+    expect(noAuthCtx.sent.code).toBe(401);
+    assertNoCode(noAuthCtx.sent.body);
+  });
+
+  it('他人主页（非 me）匿名仍 200（公开只读不受 self 鉴权影响）', async () => {
+    const db = new ProfileFakeDb();
+    const creatorId = seedProfile(db);
+    const ctx = makeReqReply({ params: { creatorId }, db }); // 真实 id、无 auth
+    await call(getCreatorProfileHandler(), ctx);
+    expect(ctx.sent.code).toBe(200);
+  });
+});
+
 describe('分区子端点 handler', () => {
   it('密度榜：Paginated 形态 + readonly 行（主页-08）', async () => {
     const db = new ProfileFakeDb();
@@ -259,7 +309,8 @@ describe('分区子端点 handler', () => {
     };
     expect(body.data.map((c) => c.name)).toEqual(['上架能力']);
     expect(body.data[0]!.invocations).toBeNull();
-    expect(body.meta.placeholders['invocations']).toBe('暂无数据 / 上线后填充');
+    // 占位键与主聚合一致（works.invocations），前端单键读不漂移（Codex r1#3）。
+    expect(body.meta.placeholders['works.invocations']).toBe('暂无数据 / 上线后填充');
   });
 
   it('分区失败 → 500 PROFILE_SECTION_FAILED 局部退路（主页-17）', async () => {

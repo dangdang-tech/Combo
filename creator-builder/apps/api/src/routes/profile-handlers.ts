@@ -26,6 +26,31 @@ import {
   PROFILE_USAGE_PLACEHOLDER,
 } from '../profile/profile-repo.js';
 
+/** 自身主页别名（鉴权态 self，§2.0 / Codex r1#1 P0）：/creators/me/* 解析为当前登录用户的 creatorId。 */
+export const SELF_CREATOR_ALIAS = 'me';
+
+/** 401 未登录访问 self 别名（me 需鉴权；公开他人主页仍走 optionalAuth 放行匿名）。 */
+function reply401Self(req: FastifyRequest, reply: FastifyReply): FastifyReply {
+  reply.code(401).send(
+    buildError(ErrorCode.UNAUTHENTICATED, req.id, {
+      userMessage: '登录后才能查看“我的个人主页”，请先登录。',
+      action: 'escalate',
+    }),
+  );
+  return reply;
+}
+
+/**
+ * 解析 path 的 creatorId（§2.0 / Codex r1#1 P0）。
+ *   - 'me' 别名：解析为当前登录用户 id（req.auth.userId）；未登录 → 返回 null（handler 落 401）。
+ *   - 其它值：原样返回（他人主页，公开只读、匿名同视图）。
+ * 返回 null 表示「self 但未登录」，调用方据此落 401（不下钻、不当成 404）。
+ */
+function resolveCreatorId(req: FastifyRequest, raw: string): string | null {
+  if (raw !== SELF_CREATOR_ALIAS) return raw;
+  return req.auth?.userId ?? null;
+}
+
 /** 404（creatorId 不存在/已注销）：不暴露存在性、不下钻（§2.7）。 */
 function reply404(req: FastifyRequest, reply: FastifyReply): FastifyReply {
   reply.code(404).send(
@@ -88,8 +113,11 @@ function parseLimit(raw: string | undefined, def: number, max: number): number |
  */
 export function getCreatorProfileHandler(): RouteHandlerMethod {
   return async function (req: FastifyRequest, reply: FastifyReply) {
-    const { creatorId } = req.params as { creatorId: string };
+    const { creatorId: rawId } = req.params as { creatorId: string };
     const viewerId = req.auth?.userId ?? null;
+    // self 别名 'me' 解析为当前登录用户（§2.0）；self 未登录 → 401（他人主页仍匿名可读）。
+    const creatorId = resolveCreatorId(req, rawId);
+    if (creatorId === null) return reply401Self(req, reply);
 
     let result;
     try {
@@ -121,7 +149,9 @@ export function getCreatorProfileHandler(): RouteHandlerMethod {
  */
 export function getDensityHandler(): RouteHandlerMethod {
   return async function (req: FastifyRequest, reply: FastifyReply) {
-    const { creatorId } = req.params as { creatorId: string };
+    const { creatorId: rawId } = req.params as { creatorId: string };
+    const creatorId = resolveCreatorId(req, rawId);
+    if (creatorId === null) return reply401Self(req, reply);
     const q = req.query as { cursor?: string; limit?: string; byDensity?: string };
     // 默认前 3（主页-05）；密度榜上限 50（§2.3）。
     const limit = parseLimit(q.limit, 3, 50);
@@ -162,7 +192,9 @@ export function getDensityHandler(): RouteHandlerMethod {
  */
 export function getHeatmapHandler(): RouteHandlerMethod {
   return async function (req: FastifyRequest, reply: FastifyReply) {
-    const { creatorId } = req.params as { creatorId: string };
+    const { creatorId: rawId } = req.params as { creatorId: string };
+    const creatorId = resolveCreatorId(req, rawId);
+    if (creatorId === null) return reply401Self(req, reply);
     const q = req.query as { range?: string };
     const range: 'half_year' | 'year' = q.range === 'year' ? 'year' : 'half_year';
 
@@ -190,7 +222,9 @@ export function getHeatmapHandler(): RouteHandlerMethod {
  */
 export function getNetworkHandler(): RouteHandlerMethod {
   return async function (req: FastifyRequest, reply: FastifyReply) {
-    const { creatorId } = req.params as { creatorId: string };
+    const { creatorId: rawId } = req.params as { creatorId: string };
+    const creatorId = resolveCreatorId(req, rawId);
+    if (creatorId === null) return reply401Self(req, reply);
 
     let network;
     try {
@@ -217,7 +251,9 @@ export function getNetworkHandler(): RouteHandlerMethod {
  */
 export function getWorksHandler(): RouteHandlerMethod {
   return async function (req: FastifyRequest, reply: FastifyReply) {
-    const { creatorId } = req.params as { creatorId: string };
+    const { creatorId: rawId } = req.params as { creatorId: string };
+    const creatorId = resolveCreatorId(req, rawId);
+    if (creatorId === null) return reply401Self(req, reply);
     const q = req.query as { cursor?: string; limit?: string };
     // 作品墙默认 24、上限 60（§2.6）。
     const limit = parseLimit(q.limit, 24, 60);
@@ -241,8 +277,8 @@ export function getWorksHandler(): RouteHandlerMethod {
       meta: {
         traceId: req.id,
         page: { nextCursor: page.nextCursor, hasMore: page.hasMore, limit, order: 'desc' },
-        // 作品墙调用次数 usage 占位（主页-11/19/24，脊柱 §2.2）。
-        placeholders: { invocations: PROFILE_USAGE_PLACEHOLDER },
+        // 作品墙调用次数 usage 占位（主页-11/19/24，脊柱 §2.2）。键与主聚合一致（works.invocations），前端单键读不漂移。
+        placeholders: { 'works.invocations': PROFILE_USAGE_PLACEHOLDER },
       },
     };
     reply.code(200).send(body);

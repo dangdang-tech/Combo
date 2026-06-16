@@ -194,6 +194,9 @@ export type WorkCard = z.infer<typeof WorkCardSchema>;
 export const ProfileWorksSliceSchema = z.object({
   cards: z.array(WorkCardSchema),
   hasMore: z.boolean(),
+  // 主聚合内嵌首屏切片的不透明续翻游标（脊柱 §2.3 cursor 由后端铸造、前端不可构造，Codex r1#5）。
+  //   hasMore=true 时给下一页 cursor；前端「加载更多」用它真追加（不重拉首页替换）。null/缺省 = 无更多。
+  nextCursor: z.string().nullable().optional(),
 });
 export type ProfileWorksSlice = z.infer<typeof ProfileWorksSliceSchema>;
 

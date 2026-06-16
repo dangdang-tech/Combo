@@ -210,6 +210,36 @@ describe('readCreatorProfile — 六分区全量首屏（主页-01/02/03）', ()
     expect(card.coverUrl).toBe('cover.png');
   });
 
+  it('⑥ 作品墙首屏切片带后端铸造 nextCursor（hasMore 时；前端据此真追加，Codex r1#5）', async () => {
+    const db = new ProfileFakeDb();
+    const creatorId = seedProfile(db);
+    // 播 WORKS_SLICE_LIMIT(24) + 1 = 25 张上墙卡 → 首屏切 24、hasMore=true、带 nextCursor。
+    for (let i = 0; i < 25; i++) {
+      seedPublishedCapability(db, creatorId, {
+        name: `能力${i}`,
+        createdAt: `2026-06-${String(i + 1).padStart(2, '0')}T00:00:00.000Z`,
+      });
+    }
+    const res = await readCreatorProfile(db, creatorId, null, TODAY);
+    const works = res!.profile.works;
+    expect(works.cards).toHaveLength(24);
+    expect(works.hasMore).toBe(true);
+    expect(works.nextCursor).toBeTruthy();
+    // cursor 不透明编码（脊柱 §2.3），解码锚 = 首屏末位卡 capabilityId（与 readWorksPage 同一编码）。
+    expect(decodeIdCursor(works.nextCursor!)).toBe(
+      works.cards[works.cards.length - 1]!.capabilityId,
+    );
+  });
+
+  it('⑥ 作品墙首屏切片无更多 → nextCursor=null（hasMore=false）', async () => {
+    const db = new ProfileFakeDb();
+    const creatorId = seedProfile(db);
+    seedPublishedCapability(db, creatorId, { name: '唯一能力' });
+    const res = await readCreatorProfile(db, creatorId, null, TODAY);
+    expect(res!.profile.works.hasMore).toBe(false);
+    expect(res!.profile.works.nextCursor).toBeNull();
+  });
+
   it('usage 占位键齐全（totalInvocations / hottestTopic.heatValue / works.invocations）', async () => {
     const db = new ProfileFakeDb();
     const creatorId = seedProfile(db);

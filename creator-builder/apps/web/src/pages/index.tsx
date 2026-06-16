@@ -4,37 +4,22 @@ import { Outlet } from 'react-router-dom';
 import { Placeholder } from './Placeholder.js';
 import { CREATE_STEPS } from '../shell/routes.js';
 
+// F-07 三页真实实现（我的能力 / 数据分析 / 收益）——各自独立文件 + 组件测试。
+export { CapabilitiesPage } from './capabilities/CapabilitiesPage.js';
+export { AnalyticsPage } from './analytics/AnalyticsPage.js';
+export { RevenuePage } from './revenue/RevenuePage.js';
+
+// F-06 个人主页真实实现（六分区主聚合）——独立目录 + 组件测试。
+export { ProfilePage } from './profile/index.js';
+
+// 公开能力页 /a/:slug（对外只读最小视图）——工作台「查看公开页」/ 作品墙卡片的落点。
+export { PublicCapabilityPage } from './public/PublicCapabilityPage.js';
+
 export function WorkbenchPage(): ReactElement {
   return (
     <Placeholder
       title="工作台"
       hint="对接 GET /dashboard/summary · /metrics · /token-trend · /capabilities · /drafts"
-    />
-  );
-}
-
-export function CapabilitiesPage(): ReactElement {
-  return <Placeholder title="我的能力" hint="对接 GET /dashboard/capabilities（cursor 分页）" />;
-}
-
-export function AnalyticsPage(): ReactElement {
-  return (
-    <Placeholder
-      title="数据分析"
-      hint="对接 GET /dashboard/metrics · /token-trend（部分 usage 占位）"
-    />
-  );
-}
-
-export function EarningsPage(): ReactElement {
-  return <Placeholder title="收益" hint="收益/计费本期范围外，仅冻结 schema，usage 置空占位" />;
-}
-
-export function ProfilePage(): ReactElement {
-  return (
-    <Placeholder
-      title="个人主页"
-      hint="对接 GET /creators/{creatorId}/profile 六分区聚合 + heatmap/network/works"
     />
   );
 }

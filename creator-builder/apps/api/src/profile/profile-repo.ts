@@ -235,9 +235,17 @@ export function buildWorkCards(caps: PublishedCapRow[]): WorkCard[] {
   return filterWorkCards(toWorkRows(caps));
 }
 
-/** 主聚合内嵌作品墙首屏切片（首页 + hasMore，§2.6）。 */
+/**
+ * 主聚合内嵌作品墙首屏切片（首页 + hasMore + nextCursor，§2.6，Codex r1#5）。
+ *   nextCursor 由后端用末位卡 capabilityId 铸造（与 readWorksPage 同一不透明编码），
+ *   前端「加载更多」据此真追加下一页（不重拉首页替换、不前端构造 cursor）。无更多 → null。
+ */
 export function worksSlice(cards: WorkCard[], limit = WORKS_SLICE_LIMIT): ProfileWorksSlice {
-  return { cards: cards.slice(0, limit), hasMore: cards.length > limit };
+  const page = cards.slice(0, limit);
+  const hasMore = cards.length > limit;
+  const nextCursor =
+    hasMore && page.length > 0 ? encodeIdCursor(page[page.length - 1]!.capabilityId) : null;
+  return { cards: page, hasMore, nextCursor };
 }
 
 /**

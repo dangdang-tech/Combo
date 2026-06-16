@@ -5,12 +5,13 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Shell } from './shell/Shell.js';
 import { ViewModeProvider } from './shell/viewMode.js';
 import { AccountProvider } from './shell/account.js';
+import { DashboardPage } from './pages/dashboard/index.js';
 import {
-  WorkbenchPage,
   CapabilitiesPage,
   AnalyticsPage,
-  EarningsPage,
+  RevenuePage,
   ProfilePage,
+  PublicCapabilityPage,
   NotFoundPage,
   CreateLayout,
   ImportStepPage,
@@ -28,11 +29,15 @@ export function App(): ReactElement {
           <Routes>
             <Route element={<Shell />}>
               <Route index element={<Navigate to="/creator" replace />} />
-              <Route path="/creator" element={<WorkbenchPage />} />
+              <Route path="/creator" element={<DashboardPage />} />
               <Route path="/capabilities" element={<CapabilitiesPage />} />
               <Route path="/analytics" element={<AnalyticsPage />} />
-              <Route path="/earnings" element={<EarningsPage />} />
+              <Route path="/earnings" element={<RevenuePage />} />
               <Route path="/profile" element={<ProfilePage />} />
+              {/* 公开只读个人主页（访客同视图）：/creators/:creatorId/profile（60 §2）。 */}
+              <Route path="/creators/:creatorId/profile" element={<ProfilePage />} />
+              {/* 公开能力页（对外只读最小视图）：工作台「查看公开页」/ 作品墙卡片落点 /a/:slug。 */}
+              <Route path="/a/:slug" element={<PublicCapabilityPage />} />
 
               {/* 上传五步：父布局 + 五子步（映射 DraftStep）。 */}
               <Route path="/create" element={<CreateLayout />}>
