@@ -70,11 +70,18 @@ export interface CreatedExtractJob {
  *       返回 'not_ready'（调用方 409 EXTRACT_SNAPSHOT_NOT_READY）。
  *   owner_user_id 取自 raw_snapshots 行（血缘焊死，不靠入参传 owner，杜绝越权写）。
  *   subject_ref 记 { snapshotId, mode:'extract' }，worker 据此只在该快照段集聚类（提取-33）。
+ *
+ *   草稿落点同事务回填（P0，Codex r4）：给了 draftId → 在【同一条 CTE】里把 extract_job_id + current_step='extract'
+ *     焊到该草稿（owner 守卫 + 单次写 + current_step 永不倒退），不再 handler 层 best-effort 独立写。
+ *     建 job 与草稿落点要么一起提交、要么一起回滚——续传指针绝不与 job 半落（已生成不丢、续传完整）。
+ *     草稿守卫内联进 backfill 子句的 WHERE（owner_user_id=本人 AND status='active'）：非本人/非 active/不存在 →
+ *     UPDATE 命中 0 行（job 仍建成，draftId 错配只是不回填，不挡萃取，job 才是真源）。
  */
 export async function insertFullExtractJob(
   db: Queryable,
   snapshotId: string,
   ownerUserId: string,
+  draftId?: string,
 ): Promise<
   | {
       kind: 'created';
@@ -87,20 +94,42 @@ export async function insertFullExtractJob(
   const subjectRef = JSON.stringify({ snapshotId, mode: 'extract' } satisfies ExtractSubjectRef);
   const progress = JSON.stringify(initialExtractProgress());
   // 属主 + 就绪闸内联进 INSERT 数据源（快照属本人 AND segment_count>0 才建 job）。
+  // 给 draftId → 同一 CTE 再回填该草稿（new_job 产出 extract_job_id → 焊进 drafts，owner 守卫 + current_step 永不倒退）。
   const res = await db.query<{
     id: string;
     fence_token: number;
     attempt_no: number;
     created_at: string;
   }>(
-    `INSERT INTO jobs (type, status, owner_user_id, subject_ref, progress, fence_token)
-     SELECT 'extract', 'queued', s.owner_user_id, $2::jsonb, $3::jsonb, 1
-       FROM raw_snapshots s
-      WHERE s.id = $1
-        AND s.owner_user_id = $4
-        AND s.segment_count > 0
-     RETURNING id, fence_token, attempt_no, created_at`,
-    [snapshotId, subjectRef, progress, ownerUserId],
+    `WITH new_job AS (
+        INSERT INTO jobs (type, status, owner_user_id, subject_ref, progress, fence_token)
+        SELECT 'extract', 'queued', s.owner_user_id, $2::jsonb, $3::jsonb, 1
+          FROM raw_snapshots s
+         WHERE s.id = $1
+           AND s.owner_user_id = $4
+           AND s.segment_count > 0
+        RETURNING id, fence_token, attempt_no, created_at
+     ),
+     draft_backfill AS (
+        -- 同事务回填本草稿（P0）：extract_job_id 焊死 + current_step 推进到 'extract'（永不倒退：已过萃取的草稿不被打回）。
+        --   current_step 永不倒退：仅当当前步序 ≤ extract(=1) 才置 'extract'（select/structure/publish 序更后，保留）。
+        --   owner 守卫（draftId 客户端传入，必须独立守门）：owner_user_id=本人 AND status='active'；$5 NULL → 0 行（无草稿不回填）。
+        UPDATE drafts d
+           SET extract_job_id = nj.id,
+               current_step = CASE
+                                WHEN (CASE d.current_step
+                                        WHEN 'import' THEN 0 WHEN 'extract' THEN 1 WHEN 'select' THEN 2
+                                        WHEN 'structure' THEN 3 WHEN 'publish' THEN 4 ELSE 0 END) <= 1
+                                THEN 'extract' ELSE d.current_step END,
+               updated_at = now()
+          FROM new_job nj
+         WHERE d.id = $5
+           AND d.owner_user_id = $4
+           AND d.status = 'active'
+        RETURNING d.id
+     )
+     SELECT id, fence_token, attempt_no, created_at FROM new_job`,
+    [snapshotId, subjectRef, progress, ownerUserId, draftId ?? null],
   );
   const row = res.rows[0];
   if (row) return { kind: 'created', row };
@@ -119,6 +148,8 @@ export async function insertFullExtractJob(
  * 触发萃取（§2.1）：建 jobs(type=extract, mode=extract) + BullMQ 入队（殊途同归到 B-22 extract handler）。
  *   幂等第一道闸 Idempotency-Key（preHandler）已挡连点/刷新（提取-25）；本函数只在取得租约时被调一次。
  *   入队失败不回滚——job 已建成 queued，交 staleQueued sweeper 按既有 fence 补投（不裸转圈，与导入同口径）。
+ *   draftId（P0，Codex r4）：本萃取由哪条草稿发起 → 同事务把 extract_job_id + current_step='extract' 焊到该草稿
+ *     （insertFullExtractJob 的同一 CTE 内回填，owner 守卫 + 单次写），续传按 draftId 恢复 extractJobId 回断点。
  *   返回 created（含完整 JobView）/ not_found（404）/ not_ready（409）。
  */
 export async function createFullExtractJob(
@@ -126,10 +157,11 @@ export async function createFullExtractJob(
   queue: Pick<QueuePort, 'enqueue'>,
   snapshotId: string,
   ownerUserId: string,
+  draftId?: string,
 ): Promise<
   { kind: 'created'; job: CreatedExtractJob } | { kind: 'not_found' } | { kind: 'not_ready' }
 > {
-  const inserted = await insertFullExtractJob(db, snapshotId, ownerUserId);
+  const inserted = await insertFullExtractJob(db, snapshotId, ownerUserId, draftId);
   if (inserted.kind !== 'created') return inserted;
   const { row } = inserted;
   let enqueued = true;

@@ -908,7 +908,7 @@ describe('patchSelectionHandler (§4.G)', () => {
     assertNoCode(ctx.sent.body);
   });
 
-  it('all 选择 → 200 持久化 candidateIds（数量与该 snapshot 全 ready 候选完全匹配）', async () => {
+  it('subset 选 N==total（全部发布特例）→ 200 持久化 candidateIds', async () => {
     const db = new StructureRoutesFakeDb();
     const draftId = seedDraft(db, 'u1', { snapshotId: 'snap-1' });
     const c1 = seedCandidate(db, 'u1', { snapshotId: 'snap-1' });
@@ -916,12 +916,46 @@ describe('patchSelectionHandler (§4.G)', () => {
     const ctx = makeReqReply({
       userId: 'u1',
       params: { draftId },
-      body: { selection: { mode: 'all', candidateIds: [c1, c2] } },
+      body: { selection: { mode: 'subset', candidateIds: [c1, c2] } },
       db,
     });
     await call(patchSelectionHandler(), ctx);
     expect(ctx.sent.code).toBe(200);
-    expect(db.drafts.get(draftId)!.selection).toEqual({ mode: 'all', candidateIds: [c1, c2] });
+    expect(db.drafts.get(draftId)!.selection).toEqual({ mode: 'subset', candidateIds: [c1, c2] });
+  });
+
+  it('subset 选 N<total（批量勾选 N 项，§5.2）→ 200 持久化（不再要求 == 全 ready，子集化 P0-1 / Codex r6 P1）', async () => {
+    const db = new StructureRoutesFakeDb();
+    const draftId = seedDraft(db, 'u1', { snapshotId: 'snap-1' });
+    const c1 = seedCandidate(db, 'u1', { snapshotId: 'snap-1' });
+    seedCandidate(db, 'u1', { snapshotId: 'snap-1' }); // c2 存在但【不选】→ 子集 N(1)<total(2)，旧实现会 400 卡死。
+    const c3 = seedCandidate(db, 'u1', { snapshotId: 'snap-1' }); // c3 选中。
+    const ctx = makeReqReply({
+      userId: 'u1',
+      params: { draftId },
+      body: { selection: { mode: 'subset', candidateIds: [c1, c3] } }, // 选 2 / 共 3 = 真子集。
+      db,
+    });
+    await call(patchSelectionHandler(), ctx);
+    expect(ctx.sent.code).toBe(200); // 放开后子集通过（旧 ==全ready 校验会 400）。
+    expect(db.drafts.get(draftId)!.selection).toEqual({ mode: 'subset', candidateIds: [c1, c3] });
+    assertNoCode(ctx.sent.body);
+  });
+
+  it('兼容别名 all（旧草稿/未迁移前端）→ 200 持久化（= subset 语义，⊆ ready 即可，不强制全选）', async () => {
+    const db = new StructureRoutesFakeDb();
+    const draftId = seedDraft(db, 'u1', { snapshotId: 'snap-1' });
+    const c1 = seedCandidate(db, 'u1', { snapshotId: 'snap-1' });
+    seedCandidate(db, 'u1', { snapshotId: 'snap-1' }); // c2 未选 → N<total，别名 all 也按子集放开。
+    const ctx = makeReqReply({
+      userId: 'u1',
+      params: { draftId },
+      body: { selection: { mode: 'all', candidateIds: [c1] } },
+      db,
+    });
+    await call(patchSelectionHandler(), ctx);
+    expect(ctx.sent.code).toBe(200);
+    expect(db.drafts.get(draftId)!.selection).toEqual({ mode: 'all', candidateIds: [c1] });
   });
 
   it('幂等：同 draft 重复保存覆盖（最后写赢）', async () => {
@@ -1025,20 +1059,104 @@ describe('patchSelectionHandler (§4.G)', () => {
     expect(ctx.sent.code).toBe(400);
   });
 
-  it('all 数量不匹配（Codex P1-3）→ 400（漏选该 snapshot 全 ready 集中的一个）', async () => {
+  it('subset 含他人候选 → 400（子集闸：每个 id 须 ⊆ 本人 ready，含他人即拒，不存伪选择）', async () => {
     const db = new StructureRoutesFakeDb();
     const draftId = seedDraft(db, 'u1', { snapshotId: 'snap-1' });
-    const c1 = seedCandidate(db, 'u1', { snapshotId: 'snap-1' });
-    seedCandidate(db, 'u1', { snapshotId: 'snap-1' }); // c2 存在但未选 → all 数量不足。
+    const mine = seedCandidate(db, 'u1', { snapshotId: 'snap-1' });
+    const victimCand = seedCandidate(db, 'victim', { snapshotId: 'snap-1' }); // 他人候选混进子集。
     const ctx = makeReqReply({
       userId: 'u1',
       params: { draftId },
-      body: { selection: { mode: 'all', candidateIds: [c1] } }, // 漏选 c2。
+      body: { selection: { mode: 'subset', candidateIds: [mine, victimCand] } },
+      db,
+    });
+    await call(patchSelectionHandler(), ctx);
+    expect(ctx.sent.code).toBe(400);
+    assertNoCode(ctx.sent.body);
+    expect(db.drafts.get(draftId)!.selection).toBeNull();
+  });
+
+  it('subset 含非 ready 候选 → 400（还没识别好不可选）', async () => {
+    const db = new StructureRoutesFakeDb();
+    const draftId = seedDraft(db, 'u1', { snapshotId: 'snap-1' });
+    const ready = seedCandidate(db, 'u1', { snapshotId: 'snap-1' });
+    const generating = seedCandidate(db, 'u1', { snapshotId: 'snap-1', status: 'generating' });
+    const ctx = makeReqReply({
+      userId: 'u1',
+      params: { draftId },
+      body: { selection: { mode: 'subset', candidateIds: [ready, generating] } },
       db,
     });
     await call(patchSelectionHandler(), ctx);
     expect(ctx.sent.code).toBe(400);
     expect(db.drafts.get(draftId)!.selection).toBeNull();
+  });
+
+  it('subset 跨来源 snapshot → 400（不同 snapshot 候选不可混选）', async () => {
+    const db = new StructureRoutesFakeDb();
+    const draftId = seedDraft(db, 'u1', { snapshotId: 'snap-1' });
+    const sameSnap = seedCandidate(db, 'u1', { snapshotId: 'snap-1' });
+    const otherSnap = seedCandidate(db, 'u1', { snapshotId: 'snap-OTHER' });
+    const ctx = makeReqReply({
+      userId: 'u1',
+      params: { draftId },
+      body: { selection: { mode: 'subset', candidateIds: [sameSnap, otherSnap] } },
+      db,
+    });
+    await call(patchSelectionHandler(), ctx);
+    expect(ctx.sent.code).toBe(400);
+    expect(db.drafts.get(draftId)!.selection).toBeNull();
+  });
+
+  it('subset 含重复 id → 400（子集去重防御）', async () => {
+    const db = new StructureRoutesFakeDb();
+    const draftId = seedDraft(db, 'u1', { snapshotId: 'snap-1' });
+    const c1 = seedCandidate(db, 'u1', { snapshotId: 'snap-1' });
+    const ctx = makeReqReply({
+      userId: 'u1',
+      params: { draftId },
+      body: { selection: { mode: 'subset', candidateIds: [c1, c1] } },
+      db,
+    });
+    await call(patchSelectionHandler(), ctx);
+    expect(ctx.sent.code).toBe(400);
+    expect(db.drafts.get(draftId)!.selection).toBeNull();
+  });
+
+  it('subset 空数组 → 400（schema .min(1)，空选非合法子集，Codex P1-3）', async () => {
+    const db = new StructureRoutesFakeDb();
+    const draftId = seedDraft(db, 'u1', { snapshotId: 'snap-1' });
+    seedCandidate(db, 'u1', { snapshotId: 'snap-1' });
+    const ctx = makeReqReply({
+      userId: 'u1',
+      params: { draftId },
+      body: { selection: { mode: 'subset', candidateIds: [] } },
+      db,
+    });
+    await call(patchSelectionHandler(), ctx);
+    expect(ctx.sent.code).toBe(400);
+    expect(errOf(ctx.sent.body).action).toBe('change_input');
+    expect(db.drafts.get(draftId)!.selection).toBeNull();
+  });
+
+  // 反向破坏（证明「放开 ==全ready 校验」正确）：若后端仍把 subset 当 all==全ready 校验，
+  //   则下例 N(2)<total(3) 必被 400 拒。当前实现【不再做数量相等校验】→ 该子集 200 通过。
+  //   这条用例锁死：旧「==全ready」校验【绝不能】回归，否则它会变红（N<total 被错拒 = 卡死回归）。
+  it('反向破坏：subset N<total 必须 200（若回归到 all==全ready 校验则此条变红，证明放开正确）', async () => {
+    const db = new StructureRoutesFakeDb();
+    const draftId = seedDraft(db, 'u1', { snapshotId: 'snap-1' });
+    const a = seedCandidate(db, 'u1', { snapshotId: 'snap-1' });
+    const b = seedCandidate(db, 'u1', { snapshotId: 'snap-1' });
+    seedCandidate(db, 'u1', { snapshotId: 'snap-1' }); // 第三个 ready 存在但不选 → total=3, 选 2。
+    const ctx = makeReqReply({
+      userId: 'u1',
+      params: { draftId },
+      body: { selection: { mode: 'subset', candidateIds: [a, b] } },
+      db,
+    });
+    await call(patchSelectionHandler(), ctx);
+    expect(ctx.sent.code).toBe(200);
+    expect(db.drafts.get(draftId)!.selection).toEqual({ mode: 'subset', candidateIds: [a, b] });
   });
 
   it('selection 格式不对 → 400 VALIDATION_FAILED（change_input）', async () => {

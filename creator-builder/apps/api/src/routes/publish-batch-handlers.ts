@@ -73,14 +73,17 @@ export function createPublishBatchHandler(): RouteHandlerMethod {
 
     const parsed = CreatePublishBatchBodySchema.safeParse(req.body ?? {});
     if (!parsed.success) {
-      // items 空 / 项缺 candidateId&versionId / idempotencyKey 缺（schema 校验）→ 400 去上一步选。
+      // items 空 / 项 candidateId·versionId 非恰好二选一（都缺 或 两者都给，schema refine）/ idempotencyKey 缺 → 400 去上一步选。
       return replyError(req, reply, ErrorCode.VALIDATION_FAILED, 400, {
         userMessage: '这批没有可发布的能力，回上一步选一下。',
         action: 'change_input',
       });
     }
-    // 项级「恰好提供 candidateId 或 versionId」防御（schema 未 refine 时兜底，§2.3 请求 refine）。
-    const hasInvalid = parsed.data.items.some((it) => !(it.candidateId ?? it.versionId));
+    // 项级「candidateId / versionId 恰好二选一」防御（schema refine 已是单一真源，此处与之同口径兜底）：
+    //   都缺 或 两者都给 都拒——两者都给会走 candidate 路径却因 existingVersionId 跳过 create、错配版本（B-29 P0）。
+    const hasInvalid = parsed.data.items.some(
+      (it) => [it.candidateId, it.versionId].filter((v) => v !== undefined).length !== 1,
+    );
     if (hasInvalid) {
       return replyError(req, reply, ErrorCode.VALIDATION_FAILED, 400, {
         userMessage: '这批没有可发布的能力，回上一步选一下。',
@@ -102,6 +105,7 @@ export function createPublishBatchHandler(): RouteHandlerMethod {
       created = await createPublishBatchTx(asTxPool(req.server.infra.db), {
         ownerUserId: userId,
         items,
+        ...(parsed.data.draftId ? { draftId: parsed.data.draftId } : {}),
       });
     } catch (err) {
       // 请求内重复 idempotencyKey（或全局撞键）→ 建批已整事务回滚（不留 total 不符的卡死 batch）→ 人话冲突信封。

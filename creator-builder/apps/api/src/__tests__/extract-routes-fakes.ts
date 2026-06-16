@@ -62,6 +62,13 @@ export interface EvRow {
   segment_id: string;
   snapshot_id: string;
 }
+export interface DraftRow {
+  id: string;
+  owner_user_id: string;
+  status: string;
+  current_step: string;
+  extract_job_id: string | null;
+}
 
 function ok<R>(rows: R[]): QueryResultLike<R> {
   return { rows, rowCount: rows.length };
@@ -79,6 +86,7 @@ export class ExtractRoutesFakeDb implements Queryable {
   readonly candidates = new Map<string, CandRow>();
   readonly segments = new Map<string, SegRow>();
   readonly evidence = new Map<string, EvRow>();
+  readonly drafts = new Map<string, DraftRow>();
   now = 1_000_000;
   failOn: string | null = null;
 
@@ -89,7 +97,8 @@ export class ExtractRoutesFakeDb implements Queryable {
     this.queries.push({ sql, params });
     if (this.failOn && sql.includes(this.failOn)) throw new Error('injected db failure');
 
-    // —— 触发萃取建 job（INSERT INTO jobs SELECT FROM raw_snapshots WHERE owner + segment_count>0）——
+    // —— 触发萃取建 job + 同事务回填草稿（WITH new_job AS (INSERT INTO jobs SELECT FROM raw_snapshots ...),
+    //    draft_backfill AS (UPDATE drafts SET extract_job_id ...) SELECT FROM new_job）——
     if (
       sql.includes('INSERT INTO jobs') &&
       sql.includes('FROM raw_snapshots') &&
@@ -97,8 +106,9 @@ export class ExtractRoutesFakeDb implements Queryable {
     ) {
       const snapshotId = params[0] as string;
       const owner = params[3] as string;
+      const draftId = (params[4] ?? null) as string | null;
       const s = this.snapshots.get(snapshotId);
-      if (!s || s.owner_user_id !== owner || s.segment_count <= 0) return ok<R>([]);
+      if (!s || s.owner_user_id !== owner || s.segment_count <= 0) return ok<R>([]); // new_job 空 → 不回填草稿
       const id = genId('exjob');
       const createdAt = new Date(this.now).toISOString();
       this.jobs.set(id, {
@@ -112,7 +122,53 @@ export class ExtractRoutesFakeDb implements Queryable {
         attempt_no: 0,
         created_at: createdAt,
       });
+      // draft_backfill：同事务回填本草稿（owner 守卫 + status='active' + current_step 永不倒退）。draftId NULL/错配 → 0 行（不挡 job）。
+      if (sql.includes('UPDATE drafts') && draftId) {
+        const d = this.drafts.get(draftId);
+        if (d && d.owner_user_id === owner && d.status === 'active') {
+          d.extract_job_id = id; // extract_job_id 焊上（续传指针落 draft）
+          const rank: Record<string, number> = {
+            import: 0,
+            extract: 1,
+            select: 2,
+            structure: 3,
+            publish: 4,
+          };
+          if ((rank[d.current_step] ?? 0) <= 1) d.current_step = 'extract'; // 永不倒退
+        }
+      }
       return ok<R>([{ id, fence_token: 1, attempt_no: 0, created_at: createdAt }] as R[]);
+    }
+
+    // —— readDraftView（SELECT ... FROM drafts WHERE id=$1 AND owner_user_id=$2 AND status='active'）——
+    //    续传恢复：萃取同事务回填后按 draftId 读回 DraftView.extractJobId（P0 端到端续传断点）。
+    if (
+      sql.includes('FROM drafts') &&
+      sql.trimStart().startsWith('SELECT') &&
+      sql.includes('extract_job_id')
+    ) {
+      const id = params[0] as string;
+      const owner = params[1] as string;
+      const d = this.drafts.get(id);
+      if (!d || d.owner_user_id !== owner || d.status !== 'active') return ok<R>([]);
+      const nowIso = new Date(this.now).toISOString();
+      return ok<R>([
+        {
+          id: d.id,
+          status: d.status,
+          current_step: d.current_step,
+          step_progress: {},
+          title: null,
+          snapshot_id: null,
+          extract_job_id: d.extract_job_id,
+          selection: null,
+          version_id: null,
+          capability_id: null,
+          batch_id: null,
+          created_at: nowIso,
+          updated_at: nowIso,
+        },
+      ] as R[]);
     }
 
     // —— insertFullExtractJob 0 行后轻查（SELECT (segment_count>0) AS ready ...）——
@@ -365,6 +421,21 @@ export function seedCandidate(
     error: args.error ?? null,
     retry_cnt: args.retryCnt ?? 0,
     created_at: new Date(db.now).toISOString(),
+  });
+  return id;
+}
+/** 播种一行 active 草稿（续传基线；触发萃取同事务回填 extract_job_id 落点用）。 */
+export function seedDraft(
+  db: ExtractRoutesFakeDb,
+  args: { owner: string; currentStep?: string; status?: string },
+): string {
+  const id = genId('draft');
+  db.drafts.set(id, {
+    id,
+    owner_user_id: args.owner,
+    status: args.status ?? 'active',
+    current_step: args.currentStep ?? 'extract',
+    extract_job_id: null,
   });
   return id;
 }

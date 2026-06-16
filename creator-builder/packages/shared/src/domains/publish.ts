@@ -127,18 +127,33 @@ export const BatchItemStateSchema = z.enum([
 ]);
 export type BatchItemState = z.infer<typeof BatchItemStateSchema>;
 
-export const CreatePublishBatchItemSchema = z.object({
-  candidateId: IdSchema.optional().describe('二选一：候选起（需结构化）'),
-  versionId: IdSchema.optional().describe('或已有版本直接发'),
-  idempotencyKey: z.string().describe('每 item 独立幂等键（scope=publish_batch.item）'),
-  cover: CoverInputSchema.optional(),
-  tiers: z.array(TierInputSchema).optional(),
-  visibility: VisibilitySchema.optional(),
-});
+/**
+ * 批量 item【恰好二选一】：candidateId / versionId 必须有且仅有一个（单一真源 refine，路由/worker 同口径）。
+ *   零个（都缺）或两个都给都拒 → 400 VALIDATION_FAILED 人话（回上一步选），不建畸形批。
+ *   为何禁「两者都给」：同携 candidateId+versionId 会走 candidate 路径但因 existingVersionId 跳过 create，
+ *     可能把外部传入的 version 挂到不相关候选项下（错配版本）。语义二分支：
+ *     ① 仅 candidateId：候选起源，批内 create→structure→publish 整理后发（§5.3）；
+ *     ② 仅 versionId：前端已结构化版本直接发。
+ */
+export const CreatePublishBatchItemSchema = z
+  .object({
+    candidateId: IdSchema.optional().describe('二选一：候选起（需结构化）'),
+    versionId: IdSchema.optional().describe('或已有版本直接发'),
+    idempotencyKey: z.string().describe('每 item 独立幂等键（scope=publish_batch.item）'),
+    cover: CoverInputSchema.optional(),
+    tiers: z.array(TierInputSchema).optional(),
+    visibility: VisibilitySchema.optional(),
+  })
+  .refine((it) => [it.candidateId, it.versionId].filter((v) => v !== undefined).length === 1, {
+    message: 'candidateId / versionId 必须恰好二选一（有且仅有一个）',
+  });
 export type CreatePublishBatchItem = z.infer<typeof CreatePublishBatchItemSchema>;
 
 export const CreatePublishBatchBodySchema = z.object({
   items: z.array(CreatePublishBatchItemSchema).min(1),
+  draftId: IdSchema.optional().describe(
+    '批量发布由某草稿发起：建批同事务把 batch_id+current_step=publish 回填该草稿（续传）',
+  ),
 });
 export type CreatePublishBatchBody = z.infer<typeof CreatePublishBatchBodySchema>;
 

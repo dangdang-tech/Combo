@@ -32,6 +32,7 @@ import {
   type SelectionDraft,
   type DraftView,
   type ErrorBody,
+  selectionCandidateIds,
 } from '@cb/shared';
 
 // ---------------------------------------------------------------------------
@@ -421,6 +422,7 @@ interface DraftRow {
   extract_job_id: string | null;
   selection: unknown;
   version_id: string | null;
+  capability_id: string | null;
   batch_id: string | null;
   created_at: string;
   updated_at: string;
@@ -441,6 +443,7 @@ function rowToDraftView(r: DraftRow): DraftView {
     ...(r.extract_job_id ? { extractJobId: r.extract_job_id } : {}),
     ...(r.selection ? { selection: r.selection } : {}),
     ...(r.version_id ? { versionId: r.version_id } : {}),
+    ...(r.capability_id ? { capabilityId: r.capability_id } : {}),
     ...(r.batch_id ? { batchId: r.batch_id } : {}),
     createdAt: new Date(r.created_at).toISOString(),
     updatedAt: new Date(r.updated_at).toISOString(),
@@ -448,11 +451,13 @@ function rowToDraftView(r: DraftRow): DraftView {
 }
 
 /**
- * STEP③ 显式存草稿（§4.G）：持久化 selection + current_step='select' + step_progress「选择中」短语。
+ * STEP③/STEP② 显式存草稿（§4.G）：持久化 selection + current_step='select' + step_progress「选择中」短语。
  *   owner 守门（不存在/非本人 → 404/403）。**不建任务、不调模型、不产生能力体**。幂等：同 draftId 重复保存覆盖（最后写赢）。
- *   候选校验（Codex P1-3）：保存前按候选表校验选中候选——
+ *   候选校验（子集化 P0-1，§5.2/§5.3 / Codex P1-3）：保存前按候选表校验选中候选——
  *     · 属本人（owner_user_id = 当前用户）；· 同来源 snapshot（candidate.snapshot_id = draft.snapshot_id）；
- *     · ready 数量完全匹配：single 选 1 个 ready；all 选中的 candidateIds 必须 == 该 snapshot 全部 ready 候选集（不多不少）。
+ *     · 都是 ready；· 非空（schema .min(1) 兜，single 恒 1 个）。
+ *   【放开】subset/all 不再要求 candidateIds == 该 snapshot 全部 ready 集——勾选任意子集（N<total）合法，
+ *     「全部发布」只是 subset==全 ready 的特例（§5.3）。这修掉 STEP② 勾选子集写 selection→PATCH 400 卡死（Codex r6 P1）。
  *   不匹配 → invalid_selection（路由 400 VALIDATION_FAILED 人话，无 code）。绝不存「指向他人/跨快照/非 ready」的伪选择。
  */
 export async function patchSelection(
@@ -485,7 +490,7 @@ export async function patchSelection(
             updated_at = now()
       WHERE id = $1 AND owner_user_id = $2
       RETURNING id, owner_user_id, status, current_step, step_progress, title,
-                snapshot_id, extract_job_id, selection, version_id, batch_id,
+                snapshot_id, extract_job_id, selection, version_id, capability_id, batch_id,
                 created_at, updated_at`,
     [args.draftId, args.ownerUserId, JSON.stringify(args.selection)],
   );
@@ -503,11 +508,13 @@ export async function patchSelection(
 }
 
 /**
- * 候选选择校验（§4.G / Codex P1-3）。返回不匹配原因（人话短语，无 code）或 null（合法）。
- *   按候选表（capability_candidates）校验选中候选：
+ * 候选选择校验（子集化 P0-1，§4.G / §5.2/§5.3 / Codex P1-3 / Codex r6 P1）。
+ *   返回不匹配原因（人话短语，无 code）或 null（合法）。按候选表（capability_candidates）校验选中候选：
  *     · single：candidateId 须属本人、同 draft 来源 snapshot、status='ready'。
- *     · all：candidateIds 须全属本人 + 同 snapshot + ready，且【数量与该 snapshot 全部 ready 候选完全相等】
- *       （不多不少、不重复）——「全选」语义就是该来源全部已识别候选；多/少/含非 ready/跨快照都拒。
+ *     · subset/all（兼容别名）：candidateIds 须【全】属本人 + 同 snapshot + ready，且非空、无重复——
+ *       即 candidateIds ⊆ 本人该 snapshot 的 ready 候选集。【不再要求 == 全 ready】：勾选任意子集（N<total）
+ *       合法（§5.2 批量勾选 N 项）；「全部发布」只是 subset==全 ready 的特例（§5.3），无需单独 mode、无需数量相等校验。
+ *   去重 / 含他人 / 跨快照 / 非 ready / 不存在 → 拒（owner/snapshot/ready 内联进 WHERE，杜绝越权）。
  *   draft 无 snapshot_id（理论罕见，尚未关联快照）→ 无从校验来源，直接拒（不存伪选择）。
  */
 async function validateSelectionCandidates(
@@ -518,8 +525,9 @@ async function validateSelectionCandidates(
   if (!args.snapshotId) {
     return '这个草稿还没关联可选的候选来源，回上一步重新识别。';
   }
-  const ids = selection.mode === 'single' ? [selection.candidateId] : selection.candidateIds;
-  // 去重防御（all 里重复 id 不该算「全选」）。
+  // 规范化取候选集（single→[一个]，subset/all→原数组）：子集语义统一，不再按 mode 分叉数量校验。
+  const ids = selectionCandidateIds(selection);
+  // 去重防御（子集里重复 id 不合法）。
   const uniqueIds = [...new Set(ids)];
   if (uniqueIds.length !== ids.length) {
     return '选择里有重复的候选，重选一下再保存。';
@@ -535,22 +543,10 @@ async function validateSelectionCandidates(
     [uniqueIds, args.ownerUserId, args.snapshotId],
   );
   const matchedIds = new Set(matched.rows.map((r) => r.id));
-  // 选中的每个 id 都必须命中（否则 = 含他人/跨快照/非 ready/不存在）。
+  // 子集闸：选中的每个 id 都必须命中（⊆ 本人该 snapshot 的 ready 集；否则 = 含他人/跨快照/非 ready/不存在）。
+  //   不再做「== 全 ready」数量校验：N<total 是合法子集（§5.2），「全部发布」是 N==total 特例（§5.3）。
   if (matchedIds.size !== uniqueIds.length) {
     return '选中的候选有不可用的（可能不属于你、来源不同或还没识别好），重选一下。';
-  }
-
-  if (selection.mode === 'all') {
-    // all = 该 snapshot 全部 ready 候选；数量须完全相等（不多不少）。
-    const total = await db.query<{ n: string }>(
-      `SELECT count(*)::text AS n FROM capability_candidates
-        WHERE owner_user_id = $1 AND snapshot_id = $2 AND status = 'ready'`,
-      [args.ownerUserId, args.snapshotId],
-    );
-    const totalReady = Number(total.rows[0]?.n ?? '0');
-    if (totalReady !== uniqueIds.length) {
-      return '「全选」要正好选中这批已识别好的全部候选，刷新后重选一下。';
-    }
   }
   return null;
 }

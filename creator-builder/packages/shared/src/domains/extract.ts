@@ -102,6 +102,10 @@ export type CandidateEvidenceView = z.infer<typeof CandidateEvidenceViewSchema>;
 
 // ---------- 请求 / 响应 ----------
 export const ExtractCreateRequestSchema = z.object({
+  // 本萃取由哪条草稿发起（续传指针，P0/Codex r4）：给了即建 extract job 同事务回填 drafts.extract_job_id +
+  //   current_step='extract'（owner 守卫 + 单次写 + 永不倒退）。续传按 draftId 读 DraftView.extractJobId 回断点。
+  //   draftId 入 request_hash → 同 key 必同 draftId（刷新复用同 key 回放首次萃取，提取-25）。
+  draftId: IdSchema.optional(),
   options: z
     .object({
       engine: z.enum(['v3-singlepass', 'crune-deterministic', 'llm-oneshot']).optional(),

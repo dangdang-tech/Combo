@@ -67,6 +67,12 @@ export function triggerExtractHandler(): RouteHandlerMethod {
     if (!userId) return reply;
     const { snapshotId } = req.params as { snapshotId: string };
 
+    // 草稿落点（P0，Codex r4）：本萃取由哪条草稿发起（body.draftId）。串进建 job 同一事务回填 drafts.extract_job_id +
+    //   current_step='extract'（owner 守卫 + 单次写 + 永不倒退）——不再 handler 层 best-effort 独立写（续传指针绝不与 job 半落）。
+    const rawDraftId = (req.body as { draftId?: unknown } | undefined)?.draftId;
+    const draftId =
+      typeof rawDraftId === 'string' && rawDraftId.length > 0 ? rawDraftId : undefined;
+
     let result;
     try {
       result = await createFullExtractJob(
@@ -74,6 +80,7 @@ export function triggerExtractHandler(): RouteHandlerMethod {
         req.server.infra.queue,
         snapshotId,
         userId,
+        draftId,
       );
     } catch {
       // DB 异常：人话 503 可重试（绝不裸露原始报错，脊柱 §11.B）。

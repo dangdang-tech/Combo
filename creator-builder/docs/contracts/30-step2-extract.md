@@ -55,11 +55,16 @@
 
 - Header：`Idempotency-Key: <uuid-v7>`（必填，scope=`extract.create`，见脊柱 §4）。
 - Path：`snapshotId`。
-- Body：可空 `{}`；可选 `options`（本期不开放任何可调参数，预留位，传了忽略）：
+- Body：可空 `{}`；可选 `draftId`（本萃取由哪条草稿发起，续传指针）+ 可选 `options`（本期不开放任何可调参数，预留位，传了忽略）：
 
 ```typescript
 // 请求 body（zod 镜像）
 export interface ExtractCreateRequest {
+  // 本萃取由哪条草稿发起：给了即在【建 extract job 的同一条事务/CTE 内】把
+  //   drafts.extract_job_id + current_step='extract' 焊到该草稿（owner 守卫 + 单次写 + current_step 永不倒退）。
+  //   续传按 draftId 读 DraftView.extractJobId 即回精确断点（候选选择）。draftId 非本人/非 active/不存在 →
+  //   回填 0 行（不挡萃取，job 才是真源）。draftId 入 request_hash → 同 key 必同 draftId（刷新复用同 key 回放首次）。
+  draftId?: DraftId;
   options?: {
     // 预留：草稿引擎选择（默认 'v3-singlepass'）。本期仅 schema，传值忽略、不报错。
     engine?: 'v3-singlepass' | 'crune-deterministic' | 'llm-oneshot';

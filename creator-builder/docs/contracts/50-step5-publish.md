@@ -242,14 +242,15 @@ interface MarketCard {
 
 - **method + path**：`POST /api/v1/publish-batches`
 - **鉴权**：Logto JWT。
-- **幂等**：**批次级必带** `Idempotency-Key`，scope=`publish_batch.create`（防重复建批次）。**每 item 另有独立幂等键**（见下，无连坐核心，决策⑤；scope=`publish_batch.item`，必带）。对应选择结构化-08（「全部发布」重复点/刷新只发一次）。
-- **语义**：STEP③「全部发布（不逐个选）」→ 对一批候选/版本**逐个跑结构化 + 发布**（选择结构化-06/29）。建 `publish_batch` job（JobType=`publish_batch`），worker 编排，**每 item 独立状态机、失败只标该 item、不连累其余**。整体进度走 SSE（job 流，§4）。
+- **幂等**：**批次级必带** `Idempotency-Key`，scope=`publish_batch.create`（防重复建批次）。**每 item 另有独立幂等键**（见下，无连坐核心，决策⑤；scope=`publish_batch.item`，必带）。对应选择结构化-08（「批量发布」重复点/刷新只发一次）。
+- **语义**：STEP③/STEP②「批量发布」→ 对**所选子集**（`SelectionDraft` 的 `subset.candidateIds`，N<total 或 N==total；「全部发布」是 N==全 ready 特例，40 §4.G）的一批候选/版本**逐个跑结构化 + 发布**（选择结构化-06/29、§5.2/§5.3）。建 `publish_batch` job（JobType=`publish_batch`），worker 编排，**每 item 独立状态机、失败只标该 item、不连累其余**。整体进度走 SSE（job 流，§4）。
+  > **子集即建批入参（P0-1）**：建批 `items[]` 直接 = 所选子集（前端把 `subset.candidateIds` 一对一映射成 item），后端**不**校验「== 全 ready」、不重新派生全集——批次只处理传入的子集，`total` = 子集大小，进度/完成度据此（与 40 §4.G 子集放开同口径）。
 
 **请求 schema**：
 
 ```typescript
 const CreatePublishBatchBody = z.object({
-  // 批量来源：从 STEP③ 选定的候选（走「全部发布」时即这批识别出的全部候选）
+  // 批量来源：STEP③/STEP② 选定的子集（subset.candidateIds，N<total 或 N==total；「全部发布」= 全 ready 特例）
   items: z
     .array(
       z

@@ -22,6 +22,7 @@ import {
   StructureStateSchema,
   FieldStateSchema,
   DraftViewSchema,
+  CreateDraftBodySchema,
   ReadyViewSchema,
   HealthViewSchema,
 } from '../core/index.js';
@@ -103,6 +104,7 @@ const NAMED_SCHEMAS: Array<[string, z.ZodTypeAny]> = [
   ['StructureState', StructureStateSchema],
   ['FieldState', FieldStateSchema],
   ['DraftView', DraftViewSchema],
+  ['CreateDraftBody', CreateDraftBodySchema],
   ['ReadyView', ReadyViewSchema],
   ['HealthView', HealthViewSchema],
   // —— Auth 10 ——

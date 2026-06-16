@@ -49,6 +49,7 @@ export interface DraftRowF {
   owner_user_id?: string;
   status?: string;
   version_id: string | null;
+  capability_id?: string | null;
   current_step: string | null;
   selection: unknown;
 }
@@ -286,6 +287,25 @@ export class StructureFakeDb implements Queryable {
       return { rows: [], rowCount: 1 } as QueryResultLike<R>;
     }
 
+    // ---- readVersionForStructure（批编排起步：SELECT v.manifest, v.source_candidate_id, v.capability_id, v.status FROM capability_versions v WHERE v.id=$1，无 JOIN）----
+    if (
+      sql.includes('FROM capability_versions v') &&
+      sql.includes('v.source_candidate_id, v.capability_id, v.status') &&
+      sql.includes('WHERE v.id = $1') &&
+      !sql.includes('JOIN capabilities c')
+    ) {
+      const v = this.versions.get(params[0] as string);
+      if (!v) return ok<R>([]);
+      return ok<R>([
+        {
+          manifest: v.manifest,
+          source_candidate_id: v.source_candidate_id,
+          capability_id: v.capability_id,
+          status: v.status,
+        },
+      ] as R[]);
+    }
+
     // ---- readVersion（SELECT v.* , c.slug, c.creator_user_id FROM capability_versions v JOIN capabilities c WHERE v.id=$1）----
     if (
       sql.includes('FROM capability_versions v') &&
@@ -388,8 +408,8 @@ export class StructureFakeDb implements Queryable {
       return ok<R>([]);
     }
 
-    // ---- drafts 回填（UPDATE drafts SET version_id=$2, current_step='structure', selection=$4
-    //    WHERE id=$1 AND owner_user_id=$3 AND status='active'；owner 守卫 + rowCount，Codex P0-2）----
+    // ---- drafts 回填（UPDATE drafts SET version_id=$2, capability_id=$5, current_step='structure',
+    //    selection=$4 WHERE id=$1 AND owner_user_id=$3 AND status='active'；owner 守卫 + rowCount，Codex P0-2/P1-5）----
     if (sql.includes('UPDATE drafts') && sql.includes("current_step = 'structure'")) {
       const draftId = params[0] as string;
       const owner = params[2] as string;
@@ -401,6 +421,7 @@ export class StructureFakeDb implements Queryable {
       d.version_id = params[1] as string;
       d.current_step = 'structure';
       d.selection = JSON.parse(params[3] as string);
+      d.capability_id = (params[4] as string) ?? null; // 真实 capabilityId 回填（P1-5）。
       return { rows: [] as R[], rowCount: 1 } as QueryResultLike<R>;
     }
 

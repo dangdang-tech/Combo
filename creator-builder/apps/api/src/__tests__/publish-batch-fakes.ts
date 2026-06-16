@@ -231,6 +231,28 @@ export class PublishBatchFakeDb extends PublishFakeDb {
       return ok<R>([this.itemSelectShape(i)] as R[]);
     }
 
+    // —— ②.5 早回填 versionId：WITH guard ... UPDATE publish_batch_items ... SET version_id=$4 ... WHERE bi.version_id IS NULL ——
+    //   受保护单语句（fence 经 item→batch→job）；仅 item 尚无 version_id 时回填（幂等防覆盖）；不动 state、不触计数。
+    if (
+      sql.includes('UPDATE publish_batch_items bi') &&
+      sql.includes('SET version_id = $4') &&
+      sql.includes('bi.version_id IS NULL')
+    ) {
+      const itemId = params[0] as string;
+      const jobId = params[1] as string;
+      const fence = Number(params[2]);
+      const versionId = params[3] as string;
+      const capabilityId = (params[4] as string) ?? null;
+      const moved = this.fenceMoveItem(itemId, jobId, fence, (i) => {
+        // 幂等：仅尚无 version_id 时回填（重投/并发不覆盖既有值）。
+        if (i.version_id) return false;
+        i.version_id = versionId;
+        if (capabilityId) i.capability_id = capabilityId;
+        return true;
+      });
+      return ok<R>([], moved ? 1 : 0);
+    }
+
     // —— 模板 A：item 进中间态（WITH guard ... UPDATE publish_batch_items ... state NOT IN(published,failed)，单状态参数）——
     if (
       sql.includes('UPDATE publish_batch_items bi') &&

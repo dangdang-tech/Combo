@@ -52,6 +52,7 @@ describe('migrations', () => {
     for (const name of [
       'fk_drafts_snapshot',
       'fk_drafts_version',
+      'fk_drafts_capability',
       'fk_drafts_batch',
       'fk_pairings_draft',
       'fk_capabilities_current_version',

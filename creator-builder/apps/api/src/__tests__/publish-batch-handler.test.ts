@@ -4,13 +4,14 @@
 //     · 进度永不裸转圈：done=processed(=published+failed)，有失败也照走到 total/100%（Codex#7）。
 //     · 逐个浮现：每项发布完/失败经 ctx.appendItem 浮现一条 PublishBatchItemView（state + error?，失败只标该项）。
 //     · 计数幂等：worker 重跑（重投/接管后续跑）已终态项不重复发布、不重复计数。
-//     · 候选项（仅 candidateId、未结构化）本期诚实推迟：标 failed + 去补齐（不裸转圈/不假成功）。
+//     · 候选项（仅 candidateId）走 B-29 编排 create→structure→publish（§5.3）；编排失败【只标该 item】、不连坐版本项。
 //     · 每发布成功的 item 各走独立发布门事务（各自 publications/tiers/outbox 双事件），互不串。
 import { describe, it, expect } from 'vitest';
 import { asTxPool } from '../events/db-tx.js';
 import { createPublishBatchHandler } from '../jobs/handlers/publish-batch.js';
 import { createPublishBatchTx, readBatch, readBatchItems } from '../publish/batch-repo.js';
 import { PublishBatchFakeDb, seedUser, seedCapabilityVersion } from './publish-batch-fakes.js';
+import { StreamingFakeGateway } from './structure-fakes.js';
 import { readyManifest } from './publish-fakes.js';
 import { lintUserMessage } from '@cb/shared';
 import type { JobContext, LeasedJob } from '../jobs/types.js';
@@ -84,7 +85,12 @@ function leased(jobId: string, fenceToken: number): LeasedJob {
 async function setupBatch(
   db: PublishBatchFakeDb,
   owner: string,
-  specs: Array<{ status?: string; nameEmpty?: boolean; candidateOnly?: boolean }>,
+  specs: Array<{
+    status?: string;
+    nameEmpty?: boolean;
+    candidateOnly?: boolean;
+    noTiers?: boolean;
+  }>,
 ): Promise<{ batchId: string; jobId: string }> {
   const items: BatchItemPublishInput[] = [];
   let n = 0;
@@ -103,7 +109,8 @@ async function setupBatch(
     items.push({
       versionId: seeded.versionId,
       idempotencyKey: key,
-      tiers: [{ tierCode: 'standard', priceMicros: 9_900_000 }],
+      // noTiers：模拟前端「全部发布」只提交 candidateId+visibility、不带 tiers（缺价由 worker 补默认免费档，P0-3）。
+      ...(s.noTiers ? {} : { tiers: [{ tierCode: 'standard', priceMicros: 9_900_000 }] }),
       visibility: 'public',
     });
   }
@@ -113,7 +120,9 @@ async function setupBatch(
   return { batchId: created.batchId, jobId: created.jobId };
 }
 
-const handler = (db: PublishBatchFakeDb) => createPublishBatchHandler({ db, txPool: asTxPool(db) });
+// 装配 handler 时注入 gateway（与 worker 入口同依赖面：candidate 项编排 create→structure 需 LLM 网关补软字段）。
+const handler = (db: PublishBatchFakeDb) =>
+  createPublishBatchHandler({ db, txPool: asTxPool(db), gateway: new StreamingFakeGateway() });
 
 describe('publish_batch handler · 逐项无连坐（决策⑤ / §2.3）', () => {
   it('全 draft → 全 published；批次完成（processed===total，100%）', async () => {
@@ -135,6 +144,53 @@ describe('publish_batch handler · 逐项无连坐（决策⑤ / §2.3）', () =
     expect(last.total).toBe(3);
     // 逐个浮现 3 条 item-appended（全 published）。
     expect(cap.items().filter((i) => i.state === 'published')).toHaveLength(3);
+  });
+
+  it('全部发布缺价（前端只提交 candidateId+visibility，不带 tiers）→ worker 补默认免费档 {standard,0} → 成功 published（非缺price失败，P0-3）', async () => {
+    // §5.3「全部发布」跳过逐个调价、价格用默认：缺/空 tiers 统一补 {standard,0} 默认免费档，
+    //   保证候选 happy path 不被 manifest-hash 价格门判缺 price 而全失败（Codex r2 P0-3）。
+    const db = new PublishBatchFakeDb();
+    const owner = seedUser(db, 'WAYNE');
+    // 三项全缺价（noTiers）：补默认免费档后全部成功发布。
+    const { batchId, jobId } = await setupBatch(db, owner, [
+      { noTiers: true },
+      { noTiers: true },
+      { noTiers: true },
+    ]);
+    const cap = makeCtx(jobId, 1);
+    await handler(db).run(leased(jobId, 1), cap.ctx);
+
+    const b = await readBatch(db, batchId);
+    expect(b?.publishedCount).toBe(3); // 缺价不再全失败：默认免费档下全 published。
+    expect(b?.failedCount).toBe(0);
+    expect(b?.processedCount).toBe(3);
+    expect(b?.status).toBe('completed');
+    // 每项冻结一条默认免费档（priceMicros=0，tierCode=standard）。
+    expect(db.tiers).toHaveLength(3);
+    expect(db.tiers.every((t) => t.tier_code === 'standard' && t.price_micros === 0)).toBe(true);
+    // 逐项浮现 3 条 published（永不裸转圈，满进度）。
+    expect(cap.items().filter((i) => i.state === 'published')).toHaveLength(3);
+    expect(cap.progress.at(-1)?.percent).toBe(100);
+  });
+
+  it('缺价项（默认免费档）与一项被拒并存 → 缺价项照样 published、被拒项独立 failed、不连坐（P0-3 + 决策⑤）', async () => {
+    const db = new PublishBatchFakeDb();
+    const owner = seedUser(db);
+    // item1 缺价（→ 默认免费档 published）、item2 被拒（STATE_CONFLICT failed）、item3 缺价（published）。
+    const { batchId, jobId } = await setupBatch(db, owner, [
+      { noTiers: true },
+      { status: 'review_rejected' },
+      { noTiers: true },
+    ]);
+    await handler(db).run(leased(jobId, 1), makeCtx(jobId, 1).ctx);
+
+    const b = await readBatch(db, batchId);
+    expect(b?.publishedCount).toBe(2); // 两缺价项默认免费档发成（不因缺价连坐）。
+    expect(b?.failedCount).toBe(1); // 仅被拒项失败。
+    expect(b?.status).toBe('completed');
+    const rows = await readBatchItems(db, batchId);
+    expect(rows.filter((r) => r.state === 'published')).toHaveLength(2);
+    expect(rows.filter((r) => r.state === 'failed')).toHaveLength(1);
   });
 
   it('一项失败（被拒版 / 缺必填）其余成功 → 失败只标该项、不连累其余、批次仍到完成（有失败也 100%）', async () => {
@@ -187,7 +243,12 @@ describe('publish_batch handler · 逐项无连坐（决策⑤ / §2.3）', () =
     expect(db.outbox.filter((o) => o.topic === 'notify.publish_completed')).toHaveLength(2);
   });
 
-  it('候选项（仅 candidateId、未结构化）→ 诚实推迟：标 failed + 去补齐（change_input），不裸转圈/不假成功', async () => {
+  it('候选项（仅 candidateId）→ B-29 编排 create→structure→publish；本 fake 未播种该候选 → 该项独立 failed（人话+退路）、不连坐版本项', async () => {
+    // §5.3「全部发布」从 candidate 起：handler 对 candidate-only item 串 create→structure→publish（复用 3D/3E）。
+    //   本 fake DB 不建模 create-capability 的 SQL 面（候选/证据表），candidate 'cand-2' 解析不出来 → 该项编排失败。
+    //   本用例验证的不变量（决策⑤ 无连坐）：编排失败【只标该 item】，落人话 error（非 code）+ 明确退路，
+    //   且同批 version 项照常 published、批次仍走到完成（processed===total）。candidate→published 的happy
+    //   path 由 3D create-capability / structure handler 各自的全量 fake 套件覆盖（此处不重复建那套 SQL 面）。
     const db = new PublishBatchFakeDb();
     const owner = seedUser(db);
     const { batchId, jobId } = await setupBatch(db, owner, [{}, { candidateOnly: true }]);
@@ -196,13 +257,22 @@ describe('publish_batch handler · 逐项无连坐（决策⑤ / §2.3）', () =
 
     const rows = await readBatchItems(db, batchId);
     const cand = rows.find((r) => r.candidateId && !r.versionId)!;
+    // 该候选项独立失败（不停批、不连坐）：落人话 error（绝不裸露 code）+ 有效退路。
     expect(cand.state).toBe('failed');
-    expect(cand.error?.action).toBe('change_input'); // 去补齐回向导
-    // 版本项仍成功（无连坐）。
+    expect(cand.error?.userMessage).toBeTruthy();
+    expect(JSON.stringify(cand.error)).not.toMatch(/"code"/);
+    expect(['retry', 'change_input', 'escalate']).toContain(cand.error?.action);
+    // 版本项仍成功（无连坐：candidate 项编排失败不连累已就绪版本项）。
     expect(rows.filter((r) => r.state === 'published')).toHaveLength(1);
+    // 失败项浮现一条带 error 的 item-appended（只标该项）。
+    const appendedFailed = cap.items().filter((i) => i.state === 'failed');
+    expect(appendedFailed).toHaveLength(1);
+    expect(appendedFailed[0]?.error?.userMessage).toBeTruthy();
+    // 批次走到完成（有失败也满进度，永不裸转圈）。
     const b = await readBatch(db, batchId);
     expect(b?.processedCount).toBe(2);
     expect(b?.status).toBe('completed');
+    expect(cap.progress.at(-1)?.percent).toBe(100);
   });
 });
 

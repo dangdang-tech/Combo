@@ -15,6 +15,7 @@ import { ErrorCode } from '@cb/shared';
 import type { Queryable } from '../jobs/types.js';
 import type { Tx, TxPool } from '../events/db-tx.js';
 import { withTransaction } from '../events/db-tx.js';
+import { backfillDraftBatch } from '../drafts/drafts-repo.js';
 
 /**
  * 建批业务错误（带 code，路由层据 code → HTTP + 人话信封；与 PublishError 同口径）。
@@ -77,6 +78,8 @@ export interface BatchRow {
 export interface CreatePublishBatchArgs {
   ownerUserId: string;
   items: BatchItemPublishInput[];
+  /** 批量发布由某草稿发起（P0-2）：建批同事务把 batch_id + current_step='publish' 回填该草稿（续传回批进度）。 */
+  draftId?: string;
 }
 
 export interface CreatedPublishBatch {
@@ -183,6 +186,17 @@ export async function createPublishBatchTx(
       );
     }
 
+    // 草稿落点回填（P0-2）：批量发布由某草稿发起 → 同事务把 batch_id + current_step='publish' 焊到该草稿
+    //   （owner 守卫 + 单次写 + current_step 永不倒退）。0 行（无 draftId / 草稿已弃 / 非本人）= 无害 no-op：
+    //   batch 是发布真源，草稿只是续传指针，回填失败【不回滚建批】（不抛、不挡建批，已生成不丢）。
+    if (typeof args.draftId === 'string' && args.draftId.length > 0) {
+      await backfillDraftBatch(tx, {
+        draftId: args.draftId,
+        ownerUserId: args.ownerUserId,
+        batchId,
+      });
+    }
+
     return { batchId, jobId, total, fenceToken: 1 };
   });
 }
@@ -235,6 +249,80 @@ export async function advanceBatchItemTx(
       args.versionId ?? null,
       args.capabilityId ?? null,
     ],
+  );
+  return (res.rowCount ?? 0) > 0;
+}
+
+// ===========================================================================
+// ②.5 早回填 versionId（create-capability 成功立即回填到 item 行，早于 structure，已生成不丢）
+// ===========================================================================
+
+/**
+ * 把 create-capability 新建的 versionId【立即】回填到本 item 行（受保护单语句，fence 经 item→batch→job 内联校验）。
+ *   时机：candidate 项 create-capability 成功后【立即】、早于 structure 阶段——确保「已建版本」即刻焊在 item 行上。
+ *   为何必须早回填（已生成不丢，硬规则③）：structure 阶段 fencedOut（被接管/取消）/失败时若 versionId 未落 item 行，
+ *     重试（sweeper 重入队 / 手动）会再走 create-capability 建一遍版本（item.versionId 仍 null）→ 重复建版、已建版本丢失。
+ *     早回填后重试读 item.versionId 命中既有版本 → 复用（跳过 create-capability，直接续 structure/publish），不重复建版。
+ *   受保护：fence 经 item→batch→job（与模板 A 同口径，j.fence_token=:fence AND j.status='running'）；0 行 = 已被接管 → 安全 no-op
+ *     （新版本仍由后续 attempt 据 candidate 续——但既有版本未回填的窗口极小且重试幂等：见 create-capability 同 candidate 协同注）。
+ *   单语句只改一次：仅在 item 尚无 version_id 时回填（`AND bi.version_id IS NULL`，防覆盖已回填值——重投/并发幂等）；
+ *     不动 state（state 由模板 A/B 管），不触批次计数。返回 true = 回填成功；false = 已被接管 / 已有 versionId（幂等 no-op）。
+ */
+export async function backfillItemVersionTx(
+  db: Queryable,
+  args: {
+    itemId: string;
+    jobId: string;
+    fenceToken: number;
+    versionId: string;
+    capabilityId?: string | null;
+  },
+): Promise<boolean> {
+  return backfillItemVersionInTx(db, args);
+}
+
+/**
+ * backfillItemVersionTx 的【同事务句柄】变体（Codex r7 P1 原子窗口修）：受同一外部 tx（与 create-capability 同事务）执行。
+ *   背景：旧实现 create-capability 先【独立事务 COMMIT】建新 capability/version，再用【另一独立事务】受保护回填 item.version_id。
+ *     这两笔之间存在原子性窗口——若 create COMMIT 后、回填 COMMIT 前 job 被接管/lease 过期（fence 翻动），回填命中 0 行
+ *     → item 仍无 version_id，但版本已 COMMIT 落库 → 下个 attempt 据 candidate 复跑再 create → 【重复建版】（违「重试不重复建版」）。
+ *   修法（方案 A 原子）：把 create-capability 的建体 INSERT 与本回填【合成同一受保护事务】——create-capability 接受
+ *     onCreatedInTx 钩子，在建体同 tx 内调本函数做 fence 校验 + 回填；命中 0 行（被接管/换 fence/已终态）→ 钩子返回 false →
+ *     create-capability 抛 sentinel 回滚整事务 → 建体 INSERT 一并回滚（version 未提交）。如此「建版 + 回填」要么同 COMMIT、
+ *     要么同 ROLLBACK，绝不出现「已提交 version 但 item 无指针」的窗口；接管后重试据 candidate 重新建（无残留半版），不重复建版。
+ *   语义与 backfillItemVersionTx 完全一致（fence 经 item→batch→job、仅 version_id IS NULL 时回填、不动 state/计数），
+ *     差别仅在用调用方传入的 tx 句柄（同一连接 = 同一事务）而非独立 db 连接。
+ */
+export async function backfillItemVersionInTx(
+  tx: Tx,
+  args: {
+    itemId: string;
+    jobId: string;
+    fenceToken: number;
+    versionId: string;
+    capabilityId?: string | null;
+  },
+): Promise<boolean> {
+  const res = await tx.query(
+    `WITH guard AS (
+        SELECT bi.id
+          FROM publish_batch_items bi
+          JOIN publish_batches b ON b.id = bi.batch_id
+          JOIN jobs j           ON j.id = b.job_id
+         WHERE bi.id = $1
+           AND j.id = $2
+           AND j.fence_token = $3
+           AND j.status = 'running'
+         FOR UPDATE OF bi
+     )
+     UPDATE publish_batch_items bi
+        SET version_id = $4,
+            capability_id = COALESCE($5, bi.capability_id),
+            updated_at = now()
+       FROM guard
+      WHERE bi.id = guard.id
+        AND bi.version_id IS NULL`,
+    [args.itemId, args.jobId, args.fenceToken, args.versionId, args.capabilityId ?? null],
   );
   return (res.rowCount ?? 0) > 0;
 }

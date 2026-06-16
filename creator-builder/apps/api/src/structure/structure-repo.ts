@@ -617,20 +617,35 @@ export async function readCapabilityForNewVersion(
 }
 
 /**
- * 同事务回填 drafts.version_id + current_step='structure' + selection（§4.A：进入下一步也持久化）。
+ * 同事务回填 drafts.version_id + capability_id + current_step='structure' + selection（§4.A：进入下一步也持久化）。
  *   owner 守卫（Codex P0-2）：owner_user_id + status='active' 内联进 WHERE，杜绝覆盖他人草稿的
- *   version_id/current_step/selection（建体本身 owner 由候选/能力体校验，但 draftId 是客户端传入、必须独立守门）。
+ *   version_id/capability_id/current_step/selection（建体本身 owner 由候选/能力体校验，但 draftId 是客户端传入、必须独立守门）。
+ *   capability_id（P1-5）：真实 capabilities.id 与 version_id 同源回写（建版同事务），DB 续传据它带出
+ *     DraftView.capabilityId → STEP⑤ 拒绝态读 publication 命中真实 publication（不再拿 draftId 冒充 404 降级）。
  *   返回是否命中（rowCount>0）：0 行 = draft 不存在 / 非本人 / 非 active → 调用方回滚整事务 + 403/404（不建能力体）。
  */
 export async function backfillDraftInTx(
   tx: Tx,
-  args: { draftId: string; versionId: string; ownerUserId: string; selection: unknown },
+  args: {
+    draftId: string;
+    versionId: string;
+    capabilityId: string;
+    ownerUserId: string;
+    selection: unknown;
+  },
 ): Promise<boolean> {
   const res = await tx.query(
     `UPDATE drafts
-        SET version_id = $2, current_step = 'structure', selection = $4::jsonb, updated_at = now()
+        SET version_id = $2, capability_id = $5, current_step = 'structure',
+            selection = $4::jsonb, updated_at = now()
       WHERE id = $1 AND owner_user_id = $3 AND status = 'active'`,
-    [args.draftId, args.versionId, args.ownerUserId, JSON.stringify(args.selection)],
+    [
+      args.draftId,
+      args.versionId,
+      args.ownerUserId,
+      JSON.stringify(args.selection),
+      args.capabilityId,
+    ],
   );
   return (res.rowCount ?? 0) > 0;
 }

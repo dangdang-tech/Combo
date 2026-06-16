@@ -75,13 +75,36 @@ export const ManifestViewSchema = z.object({
 });
 export type ManifestView = z.infer<typeof ManifestViewSchema>;
 
-// ===== STEP③ 选择草稿（端点 G，drafts.selection 权威形态）=====
+// ===== STEP③/STEP② 选择草稿（端点 G，drafts.selection 权威形态）=====
+// 选择模型（P0-1 子集化，§5.2/§5.3）：
+//   · single（candidateId）—— 逐个选定一个候选（§5.3「逐个选定」）。
+//   · subset（candidateIds: [≥1]）—— 勾选 N 项（N<total 或 N==total 都合法，§5.2「批量勾选 N 项」）。
+//     「全部发布」不再是独立模式，只是 subset==该 snapshot 全部 ready 候选的特例（§5.3）。
+//   后端 patchSelection 只校验 candidateIds ⊆ 本人该 snapshot 的 ready 候选、非空——【不再要求 == 全 ready】，
+//   故 STEP② 勾选任意子集（N<total）都能持久化、不再 PATCH 400 卡死（Codex r6 P1）。
+// 兼容/迁移（§schema 同步）：旧持久化草稿/旧前端仍可能发 mode='all'（candidateIds）——保留 'all' 为
+//   subset 的【向后兼容别名】（语义等同 subset：⊆ ready、非空），既不破坏已存草稿续传、也不破坏未迁移前端编译。
+//   新写一律用 subset；'all' 只读兼容，验证/落库按 subset 同口径处理。
 export const SelectionDraftSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('single'), candidateId: IdSchema }),
-  // all 分支至少一个候选（.min(1)）：空选不是合法「全选」，否则可存「ready 数量为 0」的伪全选草稿（Codex P1-3）。
+  // subset 至少一个候选（.min(1)）：空选不是合法子集，否则可存「ready 数量为 0」的伪选择草稿（Codex P1-3）。
+  z.object({ mode: z.literal('subset'), candidateIds: z.array(IdSchema).min(1) }),
+  // 'all'：向后兼容别名（语义 = subset；旧草稿/未迁移前端续命，新写用 subset），同 .min(1) 非空约束。
   z.object({ mode: z.literal('all'), candidateIds: z.array(IdSchema).min(1) }),
 ]);
 export type SelectionDraft = z.infer<typeof SelectionDraftSchema>;
+
+/** 选择是否多选（subset 或兼容别名 all）——逐个选定单个走 single。 */
+export function isSubsetSelection(
+  s: SelectionDraft,
+): s is { mode: 'subset' | 'all'; candidateIds: string[] } {
+  return s.mode === 'subset' || s.mode === 'all';
+}
+
+/** 规范化为 candidateIds（single→[一个]，subset/all→原数组）；供后端校验/建批统一取候选集。 */
+export function selectionCandidateIds(s: SelectionDraft): string[] {
+  return s.mode === 'single' ? [s.candidateId] : s.candidateIds;
+}
 
 export const PatchSelectionBodySchema = z.object({ selection: SelectionDraftSchema });
 export type PatchSelectionBody = z.infer<typeof PatchSelectionBodySchema>;

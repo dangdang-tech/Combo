@@ -56,7 +56,17 @@ export function DashboardPage(): ReactElement {
     more.closeMore();
     navigate(`/a/${row.slug}`);
   };
-  const resumeDraft = (_draft: DraftView, path: string): void => navigate(path);
+  // 草稿续传（F-15 / 贯穿-15）：带 ?draftId= + 该草稿已生成产物全引用（snapshotId/extractJobId/version/batchId）
+  // 跳该草稿中断步，向导据此精确恢复 selection / 候选 / 版本 / 批次上下文，回到原断点（外壳首页-17/33），
+  // 各步据引用续接已生成产物、不重建任务（STEP④ 不重建版、STEP⑤ 单发布不缺 version、批量恢复同一批次），已生成不丢。
+  const resumeDraft = (draft: DraftView, path: string): void => {
+    const params = new URLSearchParams({ draftId: draft.id });
+    if (draft.snapshotId) params.set('snapshotId', draft.snapshotId);
+    if (draft.extractJobId) params.set('extractJobId', draft.extractJobId);
+    if (draft.versionId) params.set('version', draft.versionId);
+    if (draft.batchId) params.set('batchId', draft.batchId);
+    navigate(`${path}?${params.toString()}`);
+  };
 
   return (
     <section className="cb-page cb-dashboard" aria-label="工作台">

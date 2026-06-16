@@ -315,10 +315,13 @@ export async function createImportJobForPairing(
   input: CreateImportJobInput,
 ): Promise<CreatedImportJob | null> {
   // 若该配对已建过 job（job_created），直接回放既有 jobId + job 行字段（幂等，避免重复建 job）。
+  //   同时取配对的 draft_id（铸码时已绑，P0-2）：续传草稿挂接经 subject_ref.draftId 流到 import worker
+  //   （worker 完成同事务把 snapshot_id+current_step='extract' 回填该草稿，§8）。
   const existing = await db.query<{
     job_id: string | null;
     phase: string;
-  }>(`SELECT job_id, phase FROM import_pairings WHERE id = $1`, [input.pairId]);
+    draft_id: string | null;
+  }>(`SELECT job_id, phase, draft_id FROM import_pairings WHERE id = $1`, [input.pairId]);
   const cur = existing.rows[0];
   if (cur?.phase === 'job_created' && cur.job_id) {
     const j = await db.query<{ attempt_no: number; created_at: string }>(
@@ -339,6 +342,8 @@ export async function createImportJobForPairing(
     uploadId: input.uploadId ?? input.pairId,
     source: input.source,
     rawS3Keys: input.rawS3Keys,
+    // 续传草稿挂接（P0-2）：铸码时绑定的 draft_id 随 subject_ref 流到 worker → 完成回填该草稿 snapshot_id。
+    ...(cur?.draft_id ? { draftId: cur.draft_id } : {}),
   });
   const initialProgress = JSON.stringify(initialImportProgress());
 

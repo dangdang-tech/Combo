@@ -10,6 +10,18 @@ export type DraftStep = z.infer<typeof DraftStepSchema>;
 export const DraftStatusSchema = z.enum(['active', 'completed', 'abandoned']);
 export type DraftStatus = z.infer<typeof DraftStatusSchema>;
 
+/**
+ * 草稿 bootstrap 请求体（POST /drafts，脊柱 §8）。
+ *   title 可选（草稿条可读标题，区分多条；缺省后端置 NULL，前端可后续据导入/能力名补）。
+ *   owner 取登录态、不由客户端传；current_step/status 由后端固定初值（import/active），不接受客户端置入。
+ */
+export const CreateDraftBodySchema = z
+  .object({
+    title: z.string().min(1).max(200).optional(),
+  })
+  .strict();
+export type CreateDraftBody = z.infer<typeof CreateDraftBodySchema>;
+
 export const DraftViewSchema = z.object({
   id: IdSchema,
   status: DraftStatusSchema,
@@ -22,6 +34,7 @@ export const DraftViewSchema = z.object({
   extractJobId: IdSchema.optional(),
   selection: z.unknown().optional(),
   versionId: IdSchema.optional(),
+  capabilityId: IdSchema.optional(),
   batchId: IdSchema.optional(),
   createdAt: IsoDateTimeSchema,
   updatedAt: IsoDateTimeSchema,

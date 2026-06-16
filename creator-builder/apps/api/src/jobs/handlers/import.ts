@@ -38,6 +38,7 @@ import {
   type ParsedSegment,
 } from '../../import/session-parse.js';
 import type { ImportSubjectRef } from '../../import/create-job.js';
+import { backfillDraftSnapshot } from '../../drafts/drafts-repo.js';
 import {
   insertSnapshotProtected,
   insertSegmentProtected,
@@ -426,6 +427,16 @@ export function createImportHandler(deps: ImportHandlerDeps): JobHandler {
           );
           // fence out（已锁定却 0 行 = status 已变/竞态）→ 抛哨兵触发 ROLLBACK（含上面 supersede 一起回滚），不发通知。
           if (!completed) throw new FinalizeFencedOut();
+          // 草稿落点回填（P0-2）：本 import 由某草稿发起（subject.draftId）→ 同事务把 snapshot_id + current_step='extract'
+          //   焊到该草稿（owner 守卫 + 单次写 + current_step 永不倒退）。0 行（无 draftId / 草稿已弃 / 非本人）= 无害 no-op：
+          //   snapshot 是 import 真源，草稿只是续传指针，回填失败【不回滚 import】（不抛、不挡 completed/通知，已生成不丢）。
+          if (typeof subject.draftId === 'string' && subject.draftId.length > 0) {
+            await backfillDraftSnapshot(tx, {
+              draftId: subject.draftId,
+              ownerUserId: job.ownerUserId,
+              snapshotId,
+            });
+          }
           const payload: NotifyImportCompletedPayload = {
             recipientId: job.ownerUserId,
             link: SSE_ROUTES.jobEvents(job.id),

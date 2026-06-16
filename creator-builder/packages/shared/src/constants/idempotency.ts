@@ -1,9 +1,12 @@
 // Idempotency scope 常量表（脊柱 §4 / §2.10）。
 // 所有写命令（POST/PATCH/DELETE）必带 Idempotency-Key + 固定 scope；(scope,key) 唯一。
-// DELETE 不因天然幂等而豁免。下表与 _index.md §2.10「22 写端点 × scope 总表」一一对应。
+// DELETE 不因天然幂等而豁免。下表与 _index.md §2.10「写端点 × scope 总表」一一对应
+// （草稿 bootstrap `draft.create` 为本期新增，§2.10 文档行随后补；22 → 23）。
 
 /** 写端点固定 scope（端点逻辑名）。值即落 idempotency_keys.scope。 */
 export const IdempotencyScope = {
+  // —— 草稿 00（脊柱 §8：草稿 bootstrap，五步可续传基线）——
+  DRAFT_CREATE: 'draft.create',
   // —— 导入 20 ——
   IMPORT_CREATE: 'import.create',
   IMPORT_CONNECT_PAIR: 'import.connect.pair',
@@ -47,7 +50,7 @@ export const IdempotencyOptionalScope = {
 export type IdempotencyOptionalScopeValue =
   (typeof IdempotencyOptionalScope)[keyof typeof IdempotencyOptionalScope];
 
-/** 全部必带 scope 列表（22 项，供守门核验「无写端点遗漏 scope」）。 */
+/** 全部必带 scope 列表（23 项，供守门核验「无写端点遗漏 scope」；含草稿 bootstrap draft.create）。 */
 export const REQUIRED_IDEMPOTENCY_SCOPES: IdempotencyScopeValue[] = Object.values(IdempotencyScope);
 
 /** idempotency_keys.status（脊柱 §4 行为矩阵）。 */

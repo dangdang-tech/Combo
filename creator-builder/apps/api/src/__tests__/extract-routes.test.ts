@@ -23,7 +23,9 @@ import {
   seedExtractJob,
   seedCandidate,
   seedEvidence,
+  seedDraft,
 } from './extract-routes-fakes.js';
+import { readDraftView } from '../drafts/drafts-repo.js';
 
 interface Sent {
   code: number;
@@ -33,6 +35,7 @@ function makeReqReply(opts: {
   userId?: string;
   params?: Record<string, string>;
   query?: Record<string, string>;
+  body?: unknown;
   infra: Record<string, unknown>;
 }) {
   const sent: Sent = { code: 0, body: undefined };
@@ -54,7 +57,9 @@ function makeReqReply(opts: {
     auth: opts.userId ? { userId: opts.userId } : undefined,
     params: opts.params ?? {},
     query: opts.query ?? {},
+    body: opts.body,
     headers: {},
+    log: { warn() {}, error() {} },
     server: { infra: opts.infra },
   };
   return { req, reply, sent };
@@ -163,6 +168,83 @@ describe('triggerExtractHandler (B-23 §2.1)', () => {
     await call(triggerExtractHandler(), ctx);
     expect(ctx.sent.code).toBe(503);
     assertNoCode(ctx.sent.body);
+  });
+});
+
+// ===========================================================================
+// P0（Codex r4）：body.draftId → 建 extract job 同事务回填 drafts.extract_job_id + current_step；续传恢复 extractJobId
+// ===========================================================================
+describe('triggerExtractHandler · draft 落点同事务回填 + 续传恢复（Codex r4 P0）', () => {
+  it('body.draftId → 萃取创建后 GET /drafts/:id 能恢复 draft.extractJobId（同事务回填，续传回断点）', async () => {
+    const db = new ExtractRoutesFakeDb();
+    const queue = new FakeQueue();
+    const snapshotId = seedSnapshot(db, 'u1', 8);
+    const draftId = seedDraft(db, { owner: 'u1', currentStep: 'extract' });
+    const ctx = makeReqReply({
+      userId: 'u1',
+      params: { snapshotId },
+      body: { draftId },
+      infra: { db, queue },
+    });
+    await call(triggerExtractHandler(), ctx);
+    expect(ctx.sent.code).toBe(202);
+    const jobId = (ctx.sent.body as { data: { jobId: string } }).data.jobId;
+    // 续传：按 draftId 读完整 DraftView → extractJobId 命中本次创建的 job（指针落 draft，刷新/工作台续传回候选选择断点）。
+    const view = await readDraftView(db, { draftId, ownerUserId: 'u1' });
+    expect(view).not.toBeNull();
+    expect(view!.extractJobId).toBe(jobId);
+    expect(view!.currentStep).toBe('extract');
+  });
+
+  it('current_step 永不倒退：草稿已到 select → 回填只焊 extract_job_id、不把 current_step 打回 extract', async () => {
+    const db = new ExtractRoutesFakeDb();
+    const queue = new FakeQueue();
+    const snapshotId = seedSnapshot(db, 'u1', 8);
+    const draftId = seedDraft(db, { owner: 'u1', currentStep: 'select' }); // 已在更后的步
+    const ctx = makeReqReply({
+      userId: 'u1',
+      params: { snapshotId },
+      body: { draftId },
+      infra: { db, queue },
+    });
+    await call(triggerExtractHandler(), ctx);
+    const jobId = (ctx.sent.body as { data: { jobId: string } }).data.jobId;
+    const view = await readDraftView(db, { draftId, ownerUserId: 'u1' });
+    expect(view!.extractJobId).toBe(jobId); // 落点仍焊上（已生成不丢）
+    expect(view!.currentStep).toBe('select'); // 永不倒退
+  });
+
+  it('owner 守卫（反向破坏）：draftId 非本人 → job 仍建成 202，但绝不回填他人草稿（无串台）', async () => {
+    const db = new ExtractRoutesFakeDb();
+    const queue = new FakeQueue();
+    const snapshotId = seedSnapshot(db, 'u1', 8);
+    const othersDraft = seedDraft(db, { owner: 'someone-else', currentStep: 'extract' });
+    const ctx = makeReqReply({
+      userId: 'u1',
+      params: { snapshotId },
+      body: { draftId: othersDraft }, // u1 拿别人的 draftId
+      infra: { db, queue },
+    });
+    await call(triggerExtractHandler(), ctx);
+    expect(ctx.sent.code).toBe(202); // job 才是真源，draftId 错配不挡萃取
+    // 他人草稿绝不被回填（owner 守卫内联进 backfill 子句 WHERE）。
+    expect(db.drafts.get(othersDraft)!.extract_job_id).toBeNull();
+  });
+
+  it('无 draftId（body 空）→ 萃取照常 202、不回填任何草稿（向后兼容）', async () => {
+    const db = new ExtractRoutesFakeDb();
+    const queue = new FakeQueue();
+    const snapshotId = seedSnapshot(db, 'u1', 8);
+    const draftId = seedDraft(db, { owner: 'u1', currentStep: 'extract' });
+    const ctx = makeReqReply({
+      userId: 'u1',
+      params: { snapshotId },
+      body: {}, // 不传 draftId
+      infra: { db, queue },
+    });
+    await call(triggerExtractHandler(), ctx);
+    expect(ctx.sent.code).toBe(202);
+    expect(db.drafts.get(draftId)!.extract_job_id).toBeNull(); // 没传 draftId 即不回填
   });
 });
 
@@ -666,6 +748,31 @@ describe('reverse-breakage: single-CTE gated writes (no two-step query-then-writ
     expect(insertJobs[0]!.sql).toContain('owner_user_id'); // 属主闸内联进数据源
     // 成功路径无 0 行后的轻查分类（仅失败路径才走 AS ready 轻查）。
     expect(db.queries.some((q) => q.sql.includes('AS ready'))).toBe(false);
+  });
+
+  it('触发萃取带 draftId：草稿落点回填在【建 job 同一条 CTE】内（draft_backfill 与 INSERT INTO jobs 同语句，非 handler 层独立 UPDATE）', async () => {
+    const db = new ExtractRoutesFakeDb();
+    const queue = new FakeQueue();
+    const snapshotId = seedSnapshot(db, 'u1', 5);
+    const draftId = seedDraft(db, { owner: 'u1', currentStep: 'extract' });
+    const ctx = makeReqReply({
+      userId: 'u1',
+      params: { snapshotId },
+      body: { draftId },
+      infra: { db, queue },
+    });
+    await call(triggerExtractHandler(), ctx);
+    // 建 job 与草稿回填在【同一条】语句（WITH new_job ... INSERT INTO jobs ...; draft_backfill UPDATE drafts ...）。
+    const insertJobs = db.queries.filter((q) => q.sql.includes('INSERT INTO jobs'));
+    expect(insertJobs).toHaveLength(1);
+    expect(insertJobs[0]!.sql).toContain('UPDATE drafts'); // 回填内联进同一 CTE（同事务、要么一起提交要么一起回滚）
+    expect(insertJobs[0]!.sql).toContain('extract_job_id'); // 焊 extract_job_id
+    expect(insertJobs[0]!.sql).toContain("status = 'active'"); // owner 守卫之 active 闸内联
+    // 绝无独立的「建 job 之外再单独 UPDATE drafts」两步（handler 层 best-effort 已被同事务回填取代）。
+    const standaloneDraftUpdate = db.queries.filter(
+      (q) => q.sql.includes('UPDATE drafts') && !q.sql.includes('INSERT INTO jobs'),
+    );
+    expect(standaloneDraftUpdate).toHaveLength(0);
   });
 
   it('单候选重试：建 retry job + 候选状态翻转在【同一条 CTE】（target FOR UPDATE → INSERT → flipped UPDATE，候选行只改一次）', async () => {

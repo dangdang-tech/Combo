@@ -202,11 +202,12 @@ class FakePairDb {
       };
     }
 
-    // —— createImportJobForPairing step1：SELECT job_id, phase FROM import_pairings WHERE id=$1 ——
-    if (sql.includes('SELECT job_id, phase FROM import_pairings')) {
+    // —— createImportJobForPairing step1：SELECT job_id, phase, draft_id FROM import_pairings WHERE id=$1 ——
+    //   （P0-2：同读 draft_id，建 job 时随 subject_ref.draftId 流到 worker → 完成回填该草稿 snapshot_id。）
+    if (sql.includes('job_id, phase') && sql.includes('FROM import_pairings WHERE id')) {
       const p = this.pairings.get(params[0] as string);
       return {
-        rows: p ? ([{ job_id: p.job_id, phase: p.phase }] as R[]) : [],
+        rows: p ? ([{ job_id: p.job_id, phase: p.phase, draft_id: p.draft_id }] as R[]) : [],
         rowCount: p ? 1 : 0,
       };
     }

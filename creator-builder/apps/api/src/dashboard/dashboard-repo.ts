@@ -232,6 +232,7 @@ interface DraftRow {
   extract_job_id: string | null;
   selection: unknown;
   version_id: string | null;
+  capability_id: string | null;
   batch_id: string | null;
   created_at: string;
   updated_at: string;
@@ -256,6 +257,7 @@ function rowToDraftView(r: DraftRow): DraftView {
   if (r.extract_job_id !== null) view.extractJobId = r.extract_job_id;
   if (r.selection !== null && r.selection !== undefined) view.selection = r.selection;
   if (r.version_id !== null) view.versionId = r.version_id;
+  if (r.capability_id !== null) view.capabilityId = r.capability_id;
   if (r.batch_id !== null) view.batchId = r.batch_id;
   return view;
 }
@@ -309,7 +311,7 @@ export async function listDrafts(
 
   const res = await db.query<DraftRow>(
     `SELECT id, status, current_step, step_progress, title,
-            snapshot_id, extract_job_id, selection, version_id, batch_id,
+            snapshot_id, extract_job_id, selection, version_id, capability_id, batch_id,
             created_at::text AS created_at, updated_at::text AS updated_at
        FROM drafts
       WHERE ${conds.join(' AND ')}

@@ -13,13 +13,13 @@ import {
   ProfilePage,
   PublicCapabilityPage,
   NotFoundPage,
-  CreateLayout,
   ImportStepPage,
   ExtractStepPage,
-  SelectStepPage,
   StructureStepPage,
   PublishStepPage,
 } from './pages/index.js';
+// 五步上传向导（F-09 WizardShell + F-12 STEP③ + F-15 续传）；STEP①②④⑤ 渲染其 Outlet（后续模块填）。
+import { WizardLayout, SelectStepPage } from './pages/wizard/index.js';
 
 export function App(): ReactElement {
   return (
@@ -39,8 +39,9 @@ export function App(): ReactElement {
               {/* 公开能力页（对外只读最小视图）：工作台「查看公开页」/ 作品墙卡片落点 /a/:slug。 */}
               <Route path="/a/:slug" element={<PublicCapabilityPage />} />
 
-              {/* 上传五步：父布局 + 五子步（映射 DraftStep）。 */}
-              <Route path="/create" element={<CreateLayout />}>
+              {/* 上传五步：WizardShell（F-09 向导壳，外壳恒定 D14）+ 五子步（映射 DraftStep）。
+                  STEP③ 用本期实现的 SelectStepPage；STEP①②④⑤ 暂占位、后续模块填进同一 Outlet。 */}
+              <Route path="/create" element={<WizardLayout />}>
                 <Route index element={<Navigate to="/create/import" replace />} />
                 <Route path="import" element={<ImportStepPage />} />
                 <Route path="extract" element={<ExtractStepPage />} />

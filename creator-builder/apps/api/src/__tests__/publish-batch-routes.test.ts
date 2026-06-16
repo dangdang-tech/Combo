@@ -160,6 +160,51 @@ describe('createPublishBatchHandler (§2.3)', () => {
     assertNoCode(ctx.sent.body);
   });
 
+  it('项同时给 candidateId+versionId（非恰好二选一）→ 400 change_input，不建畸形批、不入队，无 code（反向破坏守门）', async () => {
+    // 缺口：旧 `!(candidateId ?? versionId)` 只挡「两者都缺」，放行「两者都给」——会走 candidate 路径却因
+    //   existingVersionId 跳过 create、把外部 version 挂到不相关候选项下。恰好二选一 refine 后此项整批校验阶段被拒。
+    const db = new PublishBatchFakeDb();
+    const queue = new FakeQueue();
+    const owner = seedUser(db);
+    const ctx = makeReqReply({
+      userId: owner,
+      body: {
+        items: [{ candidateId: 'cand-x', versionId: 'ver-x', idempotencyKey: 'x' }],
+      },
+      db,
+      queue,
+    });
+    await call(createPublishBatchHandler(), ctx);
+    expect(ctx.sent.code).toBe(400);
+    expect(errOf(ctx.sent.body).action).toBe('change_input');
+    assertNoCode(ctx.sent.body);
+    // 整批校验阶段拒，绝不建库/入队（不建畸形批）。
+    expect(db.batches.size).toBe(0);
+    expect(db.items.size).toBe(0);
+    expect(queue.enqueued).toHaveLength(0);
+  });
+
+  it('正常 candidate-only / version-only 单给项 → 通过（恰好二选一不误伤既有路径）', async () => {
+    const db = new PublishBatchFakeDb();
+    const queue = new FakeQueue();
+    const owner = seedUser(db);
+    const ctx = makeReqReply({
+      userId: owner,
+      body: {
+        items: [
+          { candidateId: 'cand-only', idempotencyKey: 'c' },
+          { versionId: 'ver-only', idempotencyKey: 'v' },
+        ],
+      },
+      db,
+      queue,
+    });
+    await call(createPublishBatchHandler(), ctx);
+    expect(ctx.sent.code).toBe(202);
+    assertNoCode(ctx.sent.body);
+    expect(queue.enqueued).toHaveLength(1);
+  });
+
   it('未登录 → 401，无 code', async () => {
     const db = new PublishBatchFakeDb();
     const queue = new FakeQueue();

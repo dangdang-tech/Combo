@@ -12,7 +12,7 @@ import {
   type Manifest,
 } from '@cb/shared';
 import type { Queryable } from '../jobs/types.js';
-import type { TxPool } from '../events/db-tx.js';
+import type { Tx, TxPool } from '../events/db-tx.js';
 import { withTransaction } from '../events/db-tx.js';
 import { slugify } from '../extract/cluster.js';
 import { initialManifest, initialStructureState, applySoftFields } from './manifest.js';
@@ -33,6 +33,43 @@ export class CreateCapabilityError extends Error {
   ) {
     super(message);
     this.name = 'CreateCapabilityError';
+  }
+}
+
+/**
+ * 同事务后置钩子（Codex r7 P1 原子窗口修，仅 sourceCandidateId 分支用，批编排注入）。
+ *   在建体 INSERT 之后、本事务 COMMIT 之前【同 tx】被调，让调用方把「依赖新 versionId 的受保护写」（如批 item.version_id 回填）
+ *   合进【同一事务】：返回 false（fence 校验未命中/被接管）→ createCapability 抛 BackfillFencedError 回滚整事务（建体一并回滚，
+ *   version 未提交），关掉「已提交 version 但 item 无指针」的窗口（重试据 candidate 重建、不重复建版）。
+ *   返回 true → 钩子的写与建体同 COMMIT。钩子内须只用传入的 tx 句柄（同一连接 = 同一事务），不可另取连接。
+ */
+export type OnCreatedInTx = (
+  tx: Tx,
+  created: { versionId: string; capabilityId: string },
+) => Promise<boolean>;
+
+/** createCapability 可选项（onCreatedInTx：同事务后置钩子，原子合入依赖新版本的受保护写）。 */
+export interface CreateCapabilityOptions {
+  onCreatedInTx?: OnCreatedInTx;
+}
+
+/**
+ * onCreatedInTx 返回 false 的内部回滚信号（fence 校验未命中/被接管）：用于把建体事务整体回滚。
+ *   不外泄给调用方——createFromCandidate 捕获它，转成「fencedOut」语义（CreateCapabilityError(STATE_CONFLICT)），
+ *   批编排据此走 fencedOut 收口（安全退出本项，无残留半版）。
+ */
+class BackfillFencedError extends Error {
+  constructor() {
+    super('onCreatedInTx fenced out');
+    this.name = 'BackfillFencedError';
+  }
+}
+
+/** 区分「create 因后置回填被 fence out」与真正建体失败（批编排据此走 fencedOut 而非 failed）。 */
+export class CreateCapabilityFencedError extends Error {
+  constructor() {
+    super('create-capability fenced out (backfill guard not satisfied)');
+    this.name = 'CreateCapabilityFencedError';
   }
 }
 
@@ -61,9 +98,10 @@ export async function createCapability(
   txPool: TxPool,
   body: CreateCapabilityBody,
   ctx: { userId: string },
+  opts?: CreateCapabilityOptions,
 ): Promise<CreateCapabilityResult> {
   if (body.sourceCandidateId) {
-    return createFromCandidate(db, txPool, body.sourceCandidateId, body.draftId, ctx);
+    return createFromCandidate(db, txPool, body.sourceCandidateId, body.draftId, ctx, opts);
   }
   if (body.capabilityId) {
     return createNewVersion(db, txPool, body.capabilityId, body.draftId, ctx);
@@ -85,6 +123,7 @@ async function createFromCandidate(
   sourceCandidateId: string,
   draftId: string | undefined,
   ctx: { userId: string },
+  opts?: CreateCapabilityOptions,
 ): Promise<CreateCapabilityResult> {
   const cand = await readCandidateForCreate(db, sourceCandidateId, ctx.userId);
   if (!cand) {
@@ -99,33 +138,47 @@ async function createFromCandidate(
   const manifest = initialManifest(capabilityId, version);
   const structureState = initialStructureState(versionId, manifest);
 
-  await withTransaction(txPool, async (tx) => {
-    await createCapabilityWithVersionInTx(tx, {
-      capabilityId,
-      versionId,
-      creatorUserId: ctx.userId,
-      slug,
-      version,
-      manifest,
-      structureState,
-      sourceCandidateId,
-    });
-    if (draftId) {
-      const ok = await backfillDraftInTx(tx, {
-        draftId,
+  try {
+    await withTransaction(txPool, async (tx) => {
+      await createCapabilityWithVersionInTx(tx, {
+        capabilityId,
         versionId,
-        ownerUserId: ctx.userId,
-        selection: { mode: 'single', candidateId: sourceCandidateId },
+        creatorUserId: ctx.userId,
+        slug,
+        version,
+        manifest,
+        structureState,
+        sourceCandidateId,
       });
-      // 0 行 = draft 不存在 / 非本人 / 非 active → 抛错回滚整事务（不建能力体，杜绝覆盖他人草稿，Codex P0-2）。
-      if (!ok) {
-        throw new CreateCapabilityError(
-          ErrorCode.NOT_FOUND,
-          'draft not found / not owner / inactive',
-        );
+      if (draftId) {
+        const ok = await backfillDraftInTx(tx, {
+          draftId,
+          versionId,
+          capabilityId,
+          ownerUserId: ctx.userId,
+          selection: { mode: 'single', candidateId: sourceCandidateId },
+        });
+        // 0 行 = draft 不存在 / 非本人 / 非 active → 抛错回滚整事务（不建能力体，杜绝覆盖他人草稿，Codex P0-2）。
+        if (!ok) {
+          throw new CreateCapabilityError(
+            ErrorCode.NOT_FOUND,
+            'draft not found / not owner / inactive',
+          );
+        }
       }
-    }
-  });
+      // 同事务后置钩子（Codex r7 P1 原子窗口修）：批编排把「item.version_id 受保护回填」合进【本事务】。
+      //   建体 INSERT 已落但未 COMMIT；钩子在同 tx 内 fence 校验 + 回填，0 行（被接管/换 fence）→ 返回 false →
+      //   抛 BackfillFencedError 回滚整事务（建体一并回滚，version 未提交）。如此「建版+回填」原子，无「已提交 version 但 item 无指针」窗口。
+      if (opts?.onCreatedInTx) {
+        const ok = await opts.onCreatedInTx(tx, { versionId, capabilityId });
+        if (!ok) throw new BackfillFencedError();
+      }
+    });
+  } catch (err) {
+    // 后置回填 fence out（被接管）→ 整事务已回滚（version 未提交）；转 CreateCapabilityFencedError 让批编排走 fencedOut 收口。
+    if (err instanceof BackfillFencedError) throw new CreateCapabilityFencedError();
+    throw err;
+  }
 
   return result(capabilityId, versionId, slug, version, manifest);
 }
@@ -168,6 +221,7 @@ async function createNewVersion(
       const ok = await backfillDraftInTx(tx, {
         draftId,
         versionId,
+        capabilityId,
         ownerUserId: ctx.userId,
         selection: { mode: 'single', candidateId: capabilityId }, // 衔接：续传读回（无候选血缘，记能力体）。
       });
@@ -227,6 +281,7 @@ async function createFromRejected(
       const ok = await backfillDraftInTx(tx, {
         draftId,
         versionId,
+        capabilityId: src.capabilityId,
         ownerUserId: ctx.userId,
         selection: { mode: 'single', candidateId: src.sourceCandidateId ?? src.capabilityId },
       });

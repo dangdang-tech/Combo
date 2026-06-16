@@ -10,6 +10,7 @@ import { asTxPool } from '../events/db-tx.js';
 import {
   createPublishBatchTx,
   advanceBatchItemTx,
+  backfillItemVersionTx,
   finalizeBatchItemTx,
   retryBatchItemTx,
   readBatch,
@@ -163,6 +164,77 @@ describe('advanceBatchItemTx 模板 A（中间态，§5）', () => {
     });
     expect(ok).toBe(false);
     expect((await readBatchItems(db, created.batchId))[0]!.state).toBe('pending');
+  });
+});
+
+describe('backfillItemVersionTx 早回填 versionId（已生成不丢，硬规则③）', () => {
+  /** 建一条 candidate-only item（version_id null，需批内 create→structure），起 job running。 */
+  async function setupCandidateItem(
+    db: PublishBatchFakeDb,
+    owner: string,
+    fence = 1,
+  ): Promise<{ itemId: string; jobId: string; batchId: string }> {
+    const created = await createPublishBatchTx(asTxPool(db), {
+      ownerUserId: owner,
+      items: [{ candidateId: 'cand-1', idempotencyKey: 'k1' }],
+    });
+    db.startJob(created.jobId, fence);
+    const it = (await readBatchItems(db, created.batchId))[0]!;
+    expect(it.versionId).toBeNull(); // candidate-only：起点无 versionId。
+    return { itemId: it.id, jobId: created.jobId, batchId: created.batchId };
+  }
+
+  it('fence 匹配 + item 无 versionId → 立即回填 versionId + capabilityId（true），早于 structure', async () => {
+    const db = new PublishBatchFakeDb();
+    const owner = seedUser(db);
+    const { itemId, jobId, batchId } = await setupCandidateItem(db, owner, 1);
+
+    const ok = await backfillItemVersionTx(db, {
+      itemId,
+      jobId,
+      fenceToken: 1,
+      versionId: 'ver-new',
+      capabilityId: 'cap-new',
+    });
+    expect(ok).toBe(true);
+    const it = (await readBatchItems(db, batchId))[0]!;
+    expect(it.versionId).toBe('ver-new'); // 已焊到 item 行（重试可据此复用，不重复建版）。
+    expect(it.capabilityId).toBe('cap-new');
+    expect(it.state).toBe('pending'); // 不动 state（state 由模板 A/B 管）。
+  });
+
+  it('fence 失配 → 0 行（false），item 不回填（已被接管，按 fencedOut 收口）', async () => {
+    const db = new PublishBatchFakeDb();
+    const owner = seedUser(db);
+    const { itemId, jobId, batchId } = await setupCandidateItem(db, owner, 1);
+
+    const ok = await backfillItemVersionTx(db, {
+      itemId,
+      jobId,
+      fenceToken: 999, // 失配（已被接管换 fence）。
+      versionId: 'ver-new',
+    });
+    expect(ok).toBe(false);
+    expect((await readBatchItems(db, batchId))[0]!.versionId).toBeNull();
+  });
+
+  it('幂等：item 已有 versionId → 不覆盖（false），保留既有版本（重投/并发安全）', async () => {
+    const db = new PublishBatchFakeDb();
+    const owner = seedUser(db);
+    const { itemId, jobId, batchId } = await setupCandidateItem(db, owner, 1);
+    // 先回填 ver-1。
+    expect(
+      await backfillItemVersionTx(db, { itemId, jobId, fenceToken: 1, versionId: 'ver-1' }),
+    ).toBe(true);
+    // 再回填 ver-2（重投/并发再 create）→ 不覆盖（仅 version_id IS NULL 才写）。
+    const second = await backfillItemVersionTx(db, {
+      itemId,
+      jobId,
+      fenceToken: 1,
+      versionId: 'ver-2',
+    });
+    expect(second).toBe(false);
+    expect((await readBatchItems(db, batchId))[0]!.versionId).toBe('ver-1'); // 既有版本不丢。
   });
 });
 

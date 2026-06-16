@@ -53,7 +53,9 @@ export function registerStructureHandler(): void {
   );
 }
 
-/** 装配 + 注册 publish_batch handler（B-29 无连坐 P0）。逐项复用发布门事务（publish-one），失败只标该 item、不连坐其余。 */
+/** 装配 + 注册 publish_batch handler（B-29 无连坐 P0，§5.3「全部发布」candidate 编排）。
+ *   逐项串 create→structure（candidate 项，复用 3D）→publish（复用 3E 发布门）；失败只标该 item、不连坐其余。
+ *   LLM 网关无 ANTHROPIC_API_KEY → degraded（结构化软字段用确定性兜底，不裸转圈/不裸 502）。 */
 export function registerPublishBatchHandler(): void {
   const env = loadEnv();
   const db = getPool(env);
@@ -61,6 +63,7 @@ export function registerPublishBatchHandler(): void {
     createPublishBatchHandler({
       db,
       txPool: asTxPool(db),
+      gateway: createLlmGateway(env, db),
     }),
   );
 }

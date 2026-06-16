@@ -3,6 +3,7 @@
 import type { FastifyInstance } from 'fastify';
 import { API_PREFIX } from '@cb/shared';
 import { registerAuthRoutes, AUTH_ENDPOINTS } from './auth.js';
+import { registerDraftRoutes, DRAFT_ENDPOINTS } from './drafts.js';
 import { registerImportRoutes, IMPORT_ENDPOINTS } from './import.js';
 import { registerExtractRoutes, EXTRACT_ENDPOINTS } from './extract.js';
 import { registerStructureRoutes, STRUCTURE_ENDPOINTS } from './structure.js';
@@ -15,6 +16,7 @@ import type { EndpointDecl } from './_helpers.js';
 /** 全部业务端点声明汇总（供守门/测试核对端点数、方法、鉴权链）。 */
 export const ALL_ENDPOINTS: EndpointDecl[] = [
   ...AUTH_ENDPOINTS,
+  ...DRAFT_ENDPOINTS,
   ...IMPORT_ENDPOINTS,
   ...EXTRACT_ENDPOINTS,
   ...STRUCTURE_ENDPOINTS,
@@ -29,6 +31,7 @@ export async function registerBusinessRoutes(app: FastifyInstance): Promise<void
   await app.register(
     async (scoped) => {
       await registerAuthRoutes(scoped); // 10
+      await registerDraftRoutes(scoped); // 00 草稿生命周期（bootstrap + 续传 hydrate）
       await registerImportRoutes(scoped); // 20
       await registerExtractRoutes(scoped); // 30
       await registerStructureRoutes(scoped); // 40

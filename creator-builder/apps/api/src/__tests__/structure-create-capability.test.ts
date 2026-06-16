@@ -84,7 +84,7 @@ describe('B-24 ① 从候选新建首版（sourceCandidateId）', () => {
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
-  it('draftId → 同事务回填 version_id + current_step=structure + selection', async () => {
+  it('draftId → 同事务回填 version_id + capability_id + current_step=structure + selection（capability_id 拒绝态闭环，P1-5）', async () => {
     const { db, tx } = setup();
     db.candidates.set('cand1', {
       id: 'cand1',
@@ -109,6 +109,8 @@ describe('B-24 ① 从候选新建首版（sourceCandidateId）', () => {
     );
     const d = db.drafts.get('d1')!;
     expect(d.version_id).toBe(res.versionId);
+    // 真实 capabilityId 同事务回填（drafts.id ≠ capabilities.id，续传据它读 publication 拒绝态，P1-5）。
+    expect(d.capability_id).toBe(res.capabilityId);
     expect(d.current_step).toBe('structure');
     expect(d.selection).toEqual({ mode: 'single', candidateId: 'cand1' });
   });
