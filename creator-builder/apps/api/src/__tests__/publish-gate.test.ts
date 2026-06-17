@@ -580,6 +580,20 @@ describe('MarketCard 字段来源映射（发布-03/06）', () => {
     expect(priceDisplay(null)).toBeNull();
   });
 
+  // 单位/币种约定锁定（micros = 微元，1 元 = 1_000_000 micros，¥=CNY；非 micro-USD/$，
+  //   micro-USD 仅用于 infra/llm 成本审计，与定价域无关）。priceMicros 经 toFixed(2) 取两位小数，
+  //   属正常四舍五入而非币种/换算 bug。E2E 标的 999000 = 0.999 元 → toFixed(2) 进位 ¥1.00（预期、正确）。
+  it('priceDisplay 单位/币种约定锁定：micros=微元、¥=CNY、toFixed(2) 正常进位（999000→¥1.00）', () => {
+    // ¥ 符号（CNY），不是 $（micro-USD 是另一个域，不混用）。
+    expect(priceDisplay(1_000_000)).toBe('¥1.00'); // 1 元
+    expect(priceDisplay(990_000)).toBe('¥0.99'); // 0.99 元（分级精度）
+    expect(priceDisplay(99_000)).toBe('¥0.10'); // 0.099 元 → 进位 0.10
+    // 关键锁定：E2E 抓到的 999000（= 0.999 元）经 toFixed(2) 正常进位为 ¥1.00（非换算/币种 bug）。
+    expect(priceDisplay(999_000)).toBe('¥1.00');
+    // 若把 micros 误当 micro-USD 显示 $ 或除以 1e4（误读为「分」）会立刻偏离这些断言。
+    expect(priceDisplay(999_000)?.startsWith('¥')).toBe(true);
+  });
+
   it('usage 占位文案存在（meta.placeholders，发布-07）', () => {
     expect(USAGE_PLACEHOLDERS.installs).toMatch(/上线后/);
     expect(USAGE_PLACEHOLDERS.rating).toMatch(/上线后/);
