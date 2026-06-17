@@ -1,9 +1,13 @@
 // B-10/B-11 · BullMQ 队列封装（实现 shared QueuePort）。
-//   - BullMQ 触发 jobId = **attempt 级唯一**（`${业务jobId}:${fenceToken}`，Codex P0-new）：
+//   - BullMQ 触发 jobId = **attempt 级唯一**（`${业务jobId}#${fenceToken}`，Codex P0-new）：
 //       业务 jobId 放 data；同一业务 job 的重入队（sweeper 换 fence 后）产生【新触发】，
 //       绝不命中旧触发的去重而被吞（旧 bug：用业务 jobId 作 BullMQ jobId，旧 job 未清时 add 命中去重不创建新触发，
 //       reconcileJobsOnce 仍记成功，过期 running 永久无主）。
 //       同 attempt（同 fenceToken）重复 add 仍幂等去重（第二道闸保留），但换 fence 必产生新触发。
+//   - 分隔符用 '#' 而非 ':'（Codex P0-2nd）：BullMQ 5.78.1 对 **custom jobId** 同样禁冒号——
+//       job.js validateOptions：jobId 含 ':' 且 split(':').length!==3 即抛 `Custom Id cannot contain :`，
+//       两段 id（如 `job-1:1`）split 长度 2 必崩，job 入队即崩、主链路全断。'#' 不在被拒之列、
+//       不与 jobId/fenceToken 自身字符冲突，故安全（详见 bullJobId 注释）。
 //   - fenceToken 随 job data 入队（worker 写库的 fence 取领租约时 DB 换发值，入队值仅记录/对账，脊柱 §11.A）。
 //   - PG jobs 表是状态唯一真源，BullMQ 只触发执行（脊柱 §6.1）。
 //   - 取消/完成时按【业务 jobId】清理其【所有 attempt 触发】（扫队列里 data.jobId 匹配的所有 job，逐个 remove）。
@@ -11,16 +15,26 @@
 // 连接以 URL 形式传给 BullMQ（避免 BullMQ 自带 ioredis 与 workspace ioredis 的类型双实例冲突）。
 import { Queue, type ConnectionOptions, type Job } from 'bullmq';
 import type { JobId, JobType, QueuePort } from '@cb/shared';
-import { ACTIVE_JOB_TYPES } from '@cb/shared';
+import { ACTIVE_JOB_TYPES, QUEUE_PREFIX } from '@cb/shared';
 import type { Env } from '../config/env.js';
 
 /**
- * BullMQ 触发 jobId（attempt 级唯一，Codex P0-new）：业务 jobId + fenceToken。
+ * BullMQ custom jobId 分隔符（Codex P0-2nd）。
+ *   不能用 ':'：BullMQ 5.78.1 对 custom jobId 校验「含 ':' 且 split(':').length!==3 即抛
+ *   `Custom Id cannot contain :`」（node_modules/.pnpm/bullmq@5.78.1/.../classes/job.js validateOptions）——
+ *   两段 id（`job-1:1`，split 长度 2）必崩。'#' 不在被拒之列（校验只针对 ':'），也不与 jobId（UUID/ULID）
+ *   或 fenceToken（数字）自身字符冲突，故选 '#'。本组件只【构造】此 id 当作 BullMQ 去重键，
+ *   不反向解析它取回 jobId/fenceToken（业务 jobId/fence 走 job.data，见 enqueue）——故分隔符无解析侧需同步。
+ */
+export const BULL_JOB_ID_SEP = '#';
+
+/**
+ * BullMQ 触发 jobId（attempt 级唯一，Codex P0-new）：业务 jobId + fenceToken（用 BULL_JOB_ID_SEP 连接）。
  *   每次重入队 fence 必 +1（reclaimExpired），故触发 id 必不同 → 不被 BullMQ jobId 去重吞掉 → 产生新触发。
  *   同 attempt 内重复入队（同 fenceToken）= 同触发 id → 仍被去重（保留第二道幂等闸语义）。
  */
 export function bullJobId(jobId: JobId, fenceToken: number): string {
-  return `${jobId}:${fenceToken}`;
+  return `${jobId}${BULL_JOB_ID_SEP}${fenceToken}`;
 }
 
 /** BullMQ 连接配置（noeviction + AOF 的 redis_queue；maxRetriesPerRequest=null 是 BullMQ 硬要求）。 */
@@ -45,7 +59,10 @@ const queues = new Map<JobType, Queue>();
 function queueFor(env: Env, jobType: JobType): Queue {
   let q = queues.get(jobType);
   if (!q) {
-    q = new Queue(`cb:${jobType}`, {
+    // 队列名只留 jobType（禁含 ':'，BullMQ queue-base 会校验抛错）；命名空间走 prefix 选项。
+    //   Redis key 仍是 `${QUEUE_PREFIX}:<jobType>:...`（原意保留）；prefix 必须与消费端 Worker 完全一致。
+    q = new Queue(jobType, {
+      prefix: QUEUE_PREFIX,
       connection: connectionFor(env),
       defaultJobOptions: {
         // 失败重试 ≤2（脊柱 §3.1：≤2 后才落终态错误信封）；退避指数。

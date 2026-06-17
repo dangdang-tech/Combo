@@ -1,12 +1,12 @@
 // worker 进程：BullMQ job processor（import/extract/structure/publish_batch）。
-//   每个已注册 JobType 一条 BullMQ Worker（队列 cb:{type}，连 redis_queue）。job 触发 → runJob 通用 runner：
+//   每个已注册 JobType 一条 BullMQ Worker（队列名=jobType + prefix=QUEUE_PREFIX，连 redis_queue）。job 触发 → runJob 通用 runner：
 //     领租约（fence）→ 跑 handler（受保护持久化 + redis_hot 推帧）→ 受保护落终态。
 //   写库铁律（脊柱 §11.A）：runner/repo 内所有写回带 WHERE id=:jobId AND fence_token=:fence AND status='running'。
 //   handler 由 3B-3E 经 registerHandler 注册；本期注册表可空（执行框架就绪、诚实标推迟具体 handler）。
 import { Worker, type ConnectionOptions } from 'bullmq';
 import { hostname } from 'node:os';
 import type { JobType } from '@cb/shared';
-import { ACTIVE_JOB_TYPES } from '@cb/shared';
+import { ACTIVE_JOB_TYPES, QUEUE_PREFIX } from '@cb/shared';
 import { loadEnv, type Env } from '../config/env.js';
 import { getPool } from '../infra/db.js';
 import { getHotRedis } from '../infra/redis.js';
@@ -57,8 +57,9 @@ function main(): void {
   // 仅对【已注册 handler 且属本期四类】的类型起 Worker（脊柱 §6.3）。
   const startable = (ACTIVE_JOB_TYPES as readonly JobType[]).filter((t) => getHandler(t));
   for (const type of startable) {
+    // 队列名只留 jobType（禁含 ':'）；prefix=QUEUE_PREFIX 必须与生产端 Queue 完全一致，否则 job 入队但收不到。
     const worker = new Worker(
-      `cb:${type}`,
+      type,
       async (job) => {
         const handler = getHandler(type);
         if (!handler) return; // 防御：注册表运行期被清（不应发生）。
@@ -78,6 +79,7 @@ function main(): void {
         return outcome;
       },
       {
+        prefix: QUEUE_PREFIX, // 与生产端 Queue 一致的命名空间（Redis key `${QUEUE_PREFIX}:<type>:...`）。
         connection: connectionFor(env),
         concurrency: 1, // 单 job 单执行（fence 兜并发，但限并发降资源争用）。
       },

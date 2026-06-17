@@ -18,6 +18,14 @@ export type JobType = z.infer<typeof JobTypeSchema>;
 /** 本期实际注册 processor 的四类（脊柱 §6.3）。 */
 export const ACTIVE_JOB_TYPES = ['import', 'extract', 'structure', 'publish_batch'] as const;
 
+/**
+ * BullMQ 队列命名空间前缀（生产端 Queue 与消费端 Worker 必须用同一值，否则 job 入队但 worker 收不到）。
+ *   ⚠️ 队列名本身禁止含 ':'（BullMQ 用 ':' 做 Redis key 分隔，queue-base 会校验抛错）。
+ *   故命名空间走 BullMQ 的 `prefix` 选项，队列名只留 jobType；Redis key 仍是 `cb:<jobType>:...`。
+ *   抽成共享常量供生产端/消费端共同引用，杜绝前缀漂移。
+ */
+export const QUEUE_PREFIX = 'cb' as const;
+
 /** 任务状态机（脊柱 §6.1）。running→completed/failed/cancelled 为终态、不可逆。 */
 export const JobStatusSchema = z.enum(['queued', 'running', 'completed', 'failed', 'cancelled']);
 export type JobStatus = z.infer<typeof JobStatusSchema>;
