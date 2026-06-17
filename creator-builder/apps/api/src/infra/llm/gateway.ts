@@ -7,7 +7,7 @@
 //   5) 用量记账落 audit(tokens/cost/retries/degraded；非计费真源)。
 // 错误一律归一为内部分类(仅 internal code 入日志经 traceId 关联，绝不进对外 payload)。
 // prompt 由 3C/3D 给;网关只提供 complete/stream/embed 高层方法骨架的「真传输/治理」层。
-import type Anthropic from '@anthropic-ai/sdk';
+import Anthropic from '@anthropic-ai/sdk';
 import type { LlmCallOptions, LlmGatewayPort, LlmResult } from '@cb/shared';
 import { LLM_MAX_RETRIES, LLM_TIMEOUTS_MS } from '@cb/shared';
 import {
@@ -59,17 +59,42 @@ export interface LlmGatewayDeps {
 const EMPTY_USAGE = { promptTokens: 0, completionTokens: 0, costMicros: 0 } as const;
 const TIMEOUT_SENTINEL = Symbol('llm-timeout');
 
-/** 给 Promise 套超时；超时 abort 上游并抛超时哨兵(归一为 retriable 上游失败)。 */
-async function withTimeout<T>(
+/**
+ * 这次失败是不是一次「abort」(网关超时 timer 触发的 controller.abort，或真实用户取消)。
+ * 导出供单测坐实 P1-3 归一口径(Anthropic.APIUserAbortError / 全局 fetch 的 AbortError 都算)。
+ */
+export function isAbortError(err: unknown): boolean {
+  return (
+    err instanceof Anthropic.APIUserAbortError ||
+    (err instanceof Error && err.name === 'AbortError')
+  );
+}
+
+/**
+ * 给 Promise 套超时；超时 abort 上游并抛超时哨兵(归一为 retriable 上游失败)。
+ *
+ * 关键(P1-3)：超时由本函数自己的 timer 触发 controller.abort()，上游(OpenRouter fetch / Anthropic SDK)
+ * 会随之抛 AbortError。该 abort reject 可能在 Promise.race 里【先于】超时哨兵胜出——若放它原样上抛，
+ * normalizeLlmError 会把它当成「用户主动取消」→ fatal CLIENT_CANCELLED(不重试)，把一次【超时】误判成取消，语义错。
+ * 因此用 timedOut 标志收口：只要超时 timer 已触发，任何随后的 abort 都统一改抛 LlmTimeoutError
+ * (retriable LLM_UPSTREAM_FAILED → 重试到上限)。仅【非超时触发】的 abort(真实用户取消)才原样上抛 → CLIENT_CANCELLED。
+ * anthropic 与 openrouter 两条路径同受益、不回归。
+ *
+ * 导出供单测：在测试 harness 里超时哨兵几乎总赢 race，难以稳定触发「abort 先于哨兵胜出」的分支；
+ * 故直接对 withTimeout 单测该分支（factory 在 timer 触发后才以 AbortError reject）——确定性反向破坏可测。
+ */
+export async function withTimeout<T>(
   factory: (signal: AbortSignal) => Promise<T>,
   timeoutMs: number,
   clock: LlmClock,
 ): Promise<T> {
   const controller = new AbortController();
+  let timedOut = false;
   let cancelTimer: (() => void) | undefined;
   const timeout = new Promise<typeof TIMEOUT_SENTINEL>((resolve) => {
-    // 用 clock.setTimer(与退避 sleep 分离)注册超时；超时即 abort 上游(不裸挂)。
+    // 用 clock.setTimer(与退避 sleep 分离)注册超时；超时即 abort 上游(不裸挂)并记 timedOut。
     cancelTimer = clock.setTimer(() => {
+      timedOut = true;
       controller.abort();
       resolve(TIMEOUT_SENTINEL);
     }, timeoutMs);
@@ -80,6 +105,12 @@ async function withTimeout<T>(
       throw new LlmTimeoutError(timeoutMs);
     }
     return result as T;
+  } catch (err) {
+    // 超时 timer 已触发后的 abort = 网关自身超时(并非用户取消)→ 统一归一为可重试超时。
+    if (timedOut && isAbortError(err)) {
+      throw new LlmTimeoutError(timeoutMs);
+    }
+    throw err;
   } finally {
     // 工作已先完成时清掉悬挂的超时定时器。
     cancelTimer?.();
@@ -362,6 +393,10 @@ export function makeLlmGateway(deps: LlmGatewayDeps): LlmGatewayPort {
             yield { deltaText: ev.delta.text };
           } else if (ev.type === 'message_delta') {
             completionTokens = ev.usage.output_tokens ?? completionTokens;
+            // OpenAI 兼容(OpenRouter)流的 prompt usage 落在末帧(非 message_start);
+            // 这里兜底从 message_delta.usage 读 input_tokens(Anthropic 该帧无此字段 → undefined,不影响原路径)。
+            const deltaInput = (ev.usage as { input_tokens?: number | null }).input_tokens;
+            if (typeof deltaInput === 'number') promptTokens = deltaInput;
           }
         }
       } catch {

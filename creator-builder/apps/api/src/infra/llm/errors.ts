@@ -5,6 +5,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { ErrorCode } from '@cb/shared';
 import type { NormalizedLlmError } from './types.js';
+import { normalizeOpenRouterError } from './openrouter-errors.js';
 
 /**
  * 从 headers 抠 retry-after(秒)，抠不到返回 undefined。
@@ -53,8 +54,17 @@ function internalMessageOf(err: unknown): string {
 export function normalizeLlmError(err: unknown): NormalizedLlmError {
   const internalMessage = internalMessageOf(err);
 
+  // OpenRouter(OpenAI 兼容)上游错误:先按其状态码归一(与 Anthropic 同分类口径)。
+  //   非 OpenRouterApiError → 返回 undefined,继续走下面的 Anthropic 归一链。
+  const orNorm = normalizeOpenRouterError(err);
+  if (orNorm) return orNorm;
+
   // 用户主动取消(AbortError)：不计失败、不重试。
-  if (err instanceof Anthropic.APIUserAbortError) {
+  //   Anthropic SDK 抛 APIUserAbortError;全局 fetch(OpenRouter 路径)抛 name='AbortError' 的 DOMException。
+  if (
+    err instanceof Anthropic.APIUserAbortError ||
+    (err instanceof Error && err.name === 'AbortError')
+  ) {
     return { kind: 'fatal', code: ErrorCode.CLIENT_CANCELLED, internalMessage };
   }
 

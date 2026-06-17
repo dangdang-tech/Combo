@@ -29,7 +29,8 @@ export async function registerHealthRoutes(app: FastifyInstance): Promise<void> 
       pingObjectStore(infra.env),
       probeLogto(infra.env),
     ]);
-    const llm = probeLlm(); // 'ok' | 'degraded' | 'down'（required:false，不计入 ready）
+    // 传 infra.env：probeLlm 据此解析 provider/key 判定 ok/degraded。不传 env 会恒 degraded（观测失真）。
+    const llm = probeLlm(infra.env); // 'ok' | 'degraded' | 'down'（required:false，不计入 ready）
 
     const toStatus = (up: boolean): HealthStatus => (up ? 'ok' : 'down');
     const dependencies: DependencyHealth[] = [

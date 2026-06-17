@@ -227,6 +227,11 @@ services:
       LOGTO_AUDIENCE: ${LOGTO_AUDIENCE:?LOGTO_AUDIENCE 必填（生产无条件校 aud）}
       # LLM key 例外：上游 degraded 不计 /ready，缺失只降级不阻塞启动，故保留空默认（与 env.ts 一致）。
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # LLM provider 选择 + OpenRouter（OpenAI 兼容）接线：同 degraded 语义，全部允许空（缺则降级不阻塞）。
+      LLM_PROVIDER: ${LLM_PROVIDER:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-}
     ports:
       - '3000:3000'
     healthcheck:
@@ -267,6 +272,10 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY:?}
       S3_REGION: ${S3_REGION:-us-east-1}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LLM_PROVIDER: ${LLM_PROVIDER:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-}
 
   # consumer 受保序约束不可多实例（启动拿 advisory lock/lease 防误 scale，70 §3.1）；不要 deploy.replicas > 1。
   consumer:

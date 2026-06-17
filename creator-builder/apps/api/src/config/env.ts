@@ -9,6 +9,14 @@
 //   不是与 redis_queue 共实例靠 /1 隔离）；本地直跑映射到宿主 6380（见 .env.local.example / compose）。
 import { z } from 'zod';
 
+/**
+ * 「留空即默认」预处理：compose 用 `LLM_X=${LLM_X:-}` 注入时，未设的变量会变成空字符串 ''，
+ * 而非 undefined。空串对 .optional()/.default() 都不等价于「未设」——optional 的 enum 会因 '' 非法值
+ * 解析失败（生产即启动失败），default 也不会回落（'' 是个合法 string，不触发 default）。
+ * 这里把空串统一规整成 undefined，让其走 schema 的 .optional()/.default() 语义（留空 = 按 key 自动判定/默认值）。
+ */
+const emptyToUndefined = (v: unknown): unknown => (v === '' ? undefined : v);
+
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   // 一镜像四入口分叉（compose 注入；本地直跑默认 api）。决定生产必填密钥集（见 PRODUCTION_REQUIRED_BY_PROCESS）。
@@ -43,7 +51,35 @@ const EnvSchema = z.object({
   LOGTO_AUDIENCE: z.string().default(''),
 
   // LLM Gateway（70 §8.3）
+  //   provider 选择：显式 LLM_PROVIDER 优先；未设时按「哪个 key 在」自动判定
+  //     （有 OPENROUTER_API_KEY 而无 ANTHROPIC_API_KEY → openrouter；否则 anthropic）。
+  //   任何 LLM 配置都【不进生产必填集】——上游 degraded 不计 /ready，缺失只降级、不阻塞启动。
+  //   compose 用 `LLM_PROVIDER=${LLM_PROVIDER:-}` 注入：未设 → 空串 ''。空串非合法 enum 值且非 undefined，
+  //   不预处理会让 .optional() 解析失败（生产启动失败），违背「留空按 key 自动判定」。先把空串规整成 undefined。
+  LLM_PROVIDER: z.preprocess(emptyToUndefined, z.enum(['anthropic', 'openrouter']).optional()),
+  // Anthropic 直连密钥（provider=anthropic 时用；空 → degraded）。
   ANTHROPIC_API_KEY: z.string().default(''),
+  // OpenRouter（OpenAI 兼容）密钥 sk-or-...（provider=openrouter 时用；空 → degraded）。
+  OPENROUTER_API_KEY: z.string().default(''),
+  // OpenAI 兼容网关基址（默认 OpenRouter）。仅 openrouter provider 用。
+  //   compose 留空（''）→ 规整成 undefined → 走 default（不让 '' 覆盖默认基址，否则 OpenRouter URL 拼空崩）。
+  LLM_BASE_URL: z.preprocess(emptyToUndefined, z.string().default('https://openrouter.ai/api/v1')),
+  // 显式模型覆盖；空 → 按 provider 各自默认（anthropic→claude-opus-4-8，
+  //   openrouter→anthropic/claude-3.7-sonnet）。compose 留空（''）→ undefined → default('')，
+  //   resolveLlmProvider 再据 provider 各自兜底（统一「留空即默认」口径）。
+  LLM_MODEL: z.preprocess(emptyToUndefined, z.string().default('')),
+
+  // —— 仅 dev/test 的种子登录（live 测试拿有效会话跑主链路，不依赖真实 Logto 浏览器登录）——
+  //   双守卫（安全第一）：NODE_ENV !== 'production' 【且】DEV_LOGIN_ENABLED=true 时才生效；
+  //   生产【无条件强制关闭】（loadEnv 内置守卫：production 下即便显式 true 也被忽略并 warn）。
+  //   关闭/生产时：POST /api/v1/auth/dev-login 不注册（404）、requireAuth/SSE 的 dev 验证分支完全不走。
+  DEV_LOGIN_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+  // dev 会话签名密钥（HS256，应用侧自签，与 Logto 无关）。无默认值：未配 = dev 登录不可用（即便开关开）。
+  //   生产无效（dev 验证分支整体被双守卫关停，绝不参与生产鉴权）。
+  DEV_SESSION_SECRET: z.string().default(''),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
@@ -130,6 +166,16 @@ export function loadEnv(): Env {
   }
 
   cached = parsed.data;
+
+  // —— dev 登录双守卫之「生产无条件强制关闭」（安全第一，Codex 反向破坏可测）——
+  //   生产模式即便误配 DEV_LOGIN_ENABLED=true，也强制改回 false 并 warn——绝不让种子登录上生产。
+  //   去掉这段（反向破坏）会让生产可被 dev 登录，对应单测应转红。
+  if (isProduction && cached.DEV_LOGIN_ENABLED) {
+    console.warn(
+      '[env] 生产模式禁止 DEV_LOGIN_ENABLED=true（种子登录仅限 dev/test）：已强制关闭。',
+    );
+    cached = { ...cached, DEV_LOGIN_ENABLED: false };
+  }
 
   // dev/test 守卫：用到默认凭据/连接串时显式 warn（生产已在上面拦截，不会走到这）。
   if (!isProduction) {

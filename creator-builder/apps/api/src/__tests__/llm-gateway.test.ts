@@ -5,7 +5,13 @@ import { describe, it, expect, vi } from 'vitest';
 import Anthropic from '@anthropic-ai/sdk';
 import type { LlmCallOptions } from '@cb/shared';
 import { LLM_MAX_RETRIES } from '@cb/shared';
-import { makeLlmGateway, type LlmSdkClient } from '../infra/llm/gateway.js';
+import {
+  makeLlmGateway,
+  withTimeout,
+  isAbortError,
+  LlmTimeoutError,
+  type LlmSdkClient,
+} from '../infra/llm/gateway.js';
 import { createMemoryAuditSink, noopAuditSink } from '../infra/llm/audit.js';
 import { createTokenBucketLimiter, noopRateLimiter } from '../infra/llm/limiter.js';
 import { normalizeLlmError, backoffMs } from '../infra/llm/errors.js';
@@ -506,5 +512,79 @@ describe('audit/limiter 默认兜底', () => {
   });
   it('noopRateLimiter 永远放行', async () => {
     expect(await noopRateLimiter.acquire('k')).toEqual({ allowed: true });
+  });
+});
+
+// P1-3：超时触发的 abort 不可误判为 CLIENT_CANCELLED。直接对 withTimeout 单测「abort 先于哨兵胜出」
+//   的分支（测试 harness 里端到端几乎总是哨兵赢 race，难稳定触发该分支，故在 withTimeout 层确定性反向破坏可测）。
+describe('withTimeout — 超时触发的 abort 归一为超时(P1-3，不误判 CLIENT_CANCELLED)', () => {
+  /** setTimer 同步触发(立即 abort + resolve sentinel);sleep/now 不参与本测。 */
+  function immediateTimerClock(): LlmClock {
+    return {
+      now: () => 0,
+      sleep: () => Promise.resolve(),
+      setTimer: (cb: () => void) => {
+        cb(); // 立即触发超时：同步 abort 上游 + 置 timedOut + resolve sentinel。
+        return () => undefined;
+      },
+    };
+  }
+
+  it('timer 触发后 factory 才以 AbortError reject → 抛 LlmTimeoutError(非 AbortError)', async () => {
+    // factory 监听 signal：超时 timer 同步 abort 后,它【同步】reject AbortError。
+    //   该 abort reject(注册在 race 第一个 promise 上)先于 sentinel reaction 胜出 → 命中 catch 分支。
+    //   反向破坏：去掉 gateway.ts catch 里 `if (timedOut && isAbortError(err)) throw LlmTimeoutError`
+    //     → 抛出的会是 AbortError(name='AbortError')而非 LlmTimeoutError → 下面两条断言转红。
+    const clock = immediateTimerClock();
+    const factory = (signal: AbortSignal) =>
+      new Promise<string>((_resolve, reject) => {
+        const onAbort = () => {
+          const e = new Error('aborted by gateway timeout');
+          e.name = 'AbortError';
+          reject(e);
+        };
+        if (signal.aborted) onAbort();
+        else signal.addEventListener('abort', onAbort, { once: true });
+      });
+
+    const err = await withTimeout(factory, 1000, clock).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(LlmTimeoutError); // ← 反向破坏此处转红(会是 AbortError)
+    expect((err as Error).name).toBe('LlmTimeoutError');
+    // 归一坐实：LlmTimeoutError → retriable(会重试),AbortError → fatal CLIENT_CANCELLED(不重试)。
+    const norm = normalizeLlmError(err);
+    expect(norm.kind).toBe('retriable');
+    expect(norm.code).toBe('LLM_UPSTREAM_FAILED');
+  });
+
+  it('保留：未超时(timedOut=false)时 factory 主动以 AbortError reject → 原样上抛 → CLIENT_CANCELLED', async () => {
+    // 真实用户取消(非网关超时触发)：timer 从不触发(setTimer 不调 cb)→ timedOut 恒 false。
+    //   factory 立即以 AbortError reject → withTimeout 原样上抛 → normalizeLlmError 归 CLIENT_CANCELLED(fatal)。
+    //   反向破坏若把「所有 abort 都当超时」,本条会从 CLIENT_CANCELLED 变 LLM_UPSTREAM_FAILED → 转红。
+    const neverTimerClock: LlmClock = {
+      now: () => 0,
+      sleep: () => Promise.resolve(),
+      setTimer: () => () => undefined, // 不触发超时
+    };
+    const factory = () =>
+      Promise.reject(Object.assign(new Error('user canceled'), { name: 'AbortError' }) as Error);
+
+    const err = await withTimeout(factory, 1000, neverTimerClock).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect((err as Error).name).toBe('AbortError'); // 非超时触发 → 原样上抛
+    const norm = normalizeLlmError(err);
+    expect(norm.kind).toBe('fatal');
+    expect(norm.code).toBe('CLIENT_CANCELLED');
+  });
+
+  it('isAbortError 识别 Anthropic.APIUserAbortError 与全局 fetch AbortError', () => {
+    expect(isAbortError(new Anthropic.APIUserAbortError())).toBe(true);
+    expect(isAbortError(Object.assign(new Error('x'), { name: 'AbortError' }))).toBe(true);
+    expect(isAbortError(new Error('plain'))).toBe(false);
+    expect(isAbortError(new LlmTimeoutError(1))).toBe(false); // 超时哨兵不是 abort
   });
 });
