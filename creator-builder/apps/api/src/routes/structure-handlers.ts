@@ -160,7 +160,9 @@ export function createCapabilityHandler(): RouteHandlerMethod {
       );
     } catch (err) {
       if (err instanceof CreateCapabilityError) {
-        return replyError(req, reply, err.code);
+        // 业务错误据 code 落 HTTP + 人话；个别用例（如重复创建撞 slug，BUG-2）带 overrides 给更贴切人话/退路。
+        //   overrides 仅 userMessage/action，对外仍不含 code（D1）；retriable 仍遵分类表（STATE_CONFLICT=false）。
+        return replyError(req, reply, err.code, err.overrides);
       }
       // DB/事务异常：人话 503 可重试（绝不裸露原始报错，脊柱 §11.B）。
       return replyError(req, reply, ErrorCode.DEPENDENCY_UNAVAILABLE, {

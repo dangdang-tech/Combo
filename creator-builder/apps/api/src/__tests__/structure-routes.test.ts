@@ -164,6 +164,85 @@ describe('createCapabilityHandler (§4.A)', () => {
     expect(slugs.size).toBe(2); // slug 唯一
   });
 
+  it('① 同候选重复 POST（CJK 名 slug 撞 uq_capabilities_slug）→ 409 STATE_CONFLICT 干净信封（非 503、不可重试、无 code，BUG-2）', async () => {
+    // BUG-2：CJK 候选名 slugify 回退成 cap-{hash(candidateId)}，同候选两次产同 slug → 第二次撞唯一约束。
+    //   修前：原始 PG 23505 落 handler catch-all → 503 DEPENDENCY_UNAVAILABLE「系统正在恢复」（retriable 但重试永不成功）。
+    //   修后：映射成 409 STATE_CONFLICT「这个能力已经创建过了」（action=none、retriable=false）。
+    const db = new StructureRoutesFakeDb();
+    const candidateId = seedCandidate(db, 'u1', { name: '需求炼金师' }); // 纯 CJK 名 → slug 走 hash 后缀
+    const first = makeReqReply({ userId: 'u1', body: { sourceCandidateId: candidateId }, db });
+    await call(createCapabilityHandler(), first);
+    expect(first.sent.code).toBe(201); // 首次建体成功
+    expect(db.capabilities.size).toBe(1);
+
+    const second = makeReqReply({ userId: 'u1', body: { sourceCandidateId: candidateId }, db });
+    await call(createCapabilityHandler(), second);
+    // 干净 409 冲突（不是 503）：同候选重复创建。
+    expect(second.sent.code).toBe(409);
+    const err = (second.sent.body as { error: { retriable: boolean; action: string } }).error;
+    expect(err.retriable).toBe(false); // 冲突不可重试（修前 503 是 retriable=true 永远失败）
+    expect(err.action).toBe('none');
+    expect(errOf(second.sent.body).userMessage).toContain('已经创建过');
+    assertNoCode(second.sent.body); // 对外无 code（D1）
+    // 第二次未新建第二个能力体（事务回滚 / 冲突）。
+    expect(db.capabilities.size).toBe(1);
+  });
+
+  it('① 注入 23505 + constraint=uq_capabilities_slug → 409 STATE_CONFLICT 干净信封（正例保留：精确约束名命中）', async () => {
+    // Codex 收紧后正例：精确约束名命中仍判 slug 冲突 → 409（非 503、不可重试、无 code）。
+    const db = new StructureRoutesFakeDb();
+    const candidateId = seedCandidate(db, 'u1', { name: '需求炼金师' });
+    const e = new Error(
+      'duplicate key value violates unique constraint "uq_capabilities_slug"',
+    ) as Error & { code: string; constraint: string };
+    e.code = '23505';
+    e.constraint = 'uq_capabilities_slug';
+    db.nextInsertCapabilityError = e;
+    const ctx = makeReqReply({ userId: 'u1', body: { sourceCandidateId: candidateId }, db });
+    await call(createCapabilityHandler(), ctx);
+    expect(ctx.sent.code).toBe(409);
+    const err = (ctx.sent.body as { error: { retriable: boolean; action: string } }).error;
+    expect(err.retriable).toBe(false);
+    expect(err.action).toBe('none');
+    expect(errOf(ctx.sent.body).userMessage).toContain('已经创建过');
+    assertNoCode(ctx.sent.body);
+  });
+
+  it('① 负例：23505 + constraint=uq_capability_version（非 slug 唯一约束）→ 不变 409，走原 DB 异常路径 503（可重试）', async () => {
+    // Codex 收紧：同事务其它唯一约束（如 uq_capability_version）的 23505 绝不能被误判成 slug 冲突 409。
+    //   应继续落 handler catch-all → 503 DEPENDENCY_UNAVAILABLE（retriable=true），而非干净 409。
+    const db = new StructureRoutesFakeDb();
+    const candidateId = seedCandidate(db, 'u1', { name: '需求炼金师' });
+    const e = new Error(
+      'duplicate key value violates unique constraint "uq_capability_version"',
+    ) as Error & { code: string; constraint: string };
+    e.code = '23505';
+    e.constraint = 'uq_capability_version';
+    db.nextInsertCapabilityError = e;
+    const ctx = makeReqReply({ userId: 'u1', body: { sourceCandidateId: candidateId }, db });
+    await call(createCapabilityHandler(), ctx);
+    expect(ctx.sent.code).not.toBe(409); // 不能被误判成 slug 冲突
+    expect(ctx.sent.code).toBe(503); // 走原 DB 异常路径
+    const err = (ctx.sent.body as { error: { retriable: boolean } }).error;
+    expect(err.retriable).toBe(true); // DB 异常可重试（slug 冲突则不可重试）
+    assertNoCode(ctx.sent.body);
+  });
+
+  it('① 负例：23505 空 constraint/message（无约束名兜底已删）→ 不变 409，走原 DB 异常路径 503（可重试）', async () => {
+    // Codex 收紧：删掉「空 constraint/message 也归 slug 冲突」的兜底；裸 23505 应继续走原 DB 异常路径（503），不变 409。
+    const db = new StructureRoutesFakeDb();
+    const candidateId = seedCandidate(db, 'u1', { name: '需求炼金师' });
+    const e = { code: '23505' }; // 无 constraint、无 message
+    db.nextInsertCapabilityError = e;
+    const ctx = makeReqReply({ userId: 'u1', body: { sourceCandidateId: candidateId }, db });
+    await call(createCapabilityHandler(), ctx);
+    expect(ctx.sent.code).not.toBe(409); // 不能被误判成 slug 冲突
+    expect(ctx.sent.code).toBe(503); // 走原 DB 异常路径
+    const err = (ctx.sent.body as { error: { retriable: boolean } }).error;
+    expect(err.retriable).toBe(true);
+    assertNoCode(ctx.sent.body);
+  });
+
   it('② capabilityId 当前版已 published → 201 建新 draft 版本 bump minor(0.2.0)', async () => {
     const db = new StructureRoutesFakeDb();
     const seeded = seedCapabilityWithVersion(db, 'u1', {

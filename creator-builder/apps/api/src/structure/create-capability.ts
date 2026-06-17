@@ -25,15 +25,42 @@ import {
   backfillDraftInTx,
 } from './structure-repo.js';
 
-/** 业务错误（带 code，路由层据 code → HTTP + 人话信封；§4.A 错误用例）。 */
+/**
+ * 业务错误（带 code，路由层据 code → HTTP + 人话信封；§4.A 错误用例）。
+ *   可选 `overrides`（userMessage/action）：用于个别用例需在分类表缺省之上给更贴切的人话/退路
+ *   （如「重复创建」走 409 STATE_CONFLICT 但人话应是「这个能力已经创建过了」、不可重试）。路由层透传，对外仍不含 code（D1）。
+ */
 export class CreateCapabilityError extends Error {
   constructor(
     public code: (typeof ErrorCode)[keyof typeof ErrorCode],
     message: string,
+    public overrides?: {
+      userMessage?: string;
+      action?: 'retry' | 'change_input' | 'escalate' | 'wait' | 'none';
+    },
   ) {
     super(message);
     this.name = 'CreateCapabilityError';
   }
+}
+
+/**
+ * 判定 PG 错误是否为 capabilities.slug 唯一键冲突（uq_capabilities_slug，code=23505，BUG-2）。
+ *   触发于「同一候选重复 POST /capabilities」：CJK 候选名 slugify 回退成 cap-{hash(sourceCandidateId)}，
+ *   同候选两次产同 slug，第二次 INSERT 撞 uq_capabilities_slug。映射成干净的 409 冲突（非 503、不可重试），
+ *   语义即「这个能力已经创建过了」。
+ *   仅认精确约束名或 message 显式含 uq_capabilities_slug（Codex 收紧）：同事务还会触发别的唯一约束
+ *   （capabilities.id / capability_versions.id / uq_capability_version / uq_capability_versions_capability_id 等），
+ *   绝不能因「确是 23505」就一概当 slug 冲突——空 constraint/message 兜底已删除，其它 23505 继续走原 DB 异常路径（503）。
+ */
+export function isCapabilitySlugConflict(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  const e = err as { code?: unknown; constraint?: unknown; message?: unknown };
+  if (e.code !== '23505') return false;
+  const constraint = typeof e.constraint === 'string' ? e.constraint : '';
+  const message = typeof e.message === 'string' ? e.message : '';
+  // 只接受精确约束名命中，或 message 完整词命中 uq_capabilities_slug（\b 防 uq_capabilities_slug2 等前后缀误判）。
+  return constraint === 'uq_capabilities_slug' || /\buq_capabilities_slug\b/.test(message);
 }
 
 /**
@@ -177,6 +204,15 @@ async function createFromCandidate(
   } catch (err) {
     // 后置回填 fence out（被接管）→ 整事务已回滚（version 未提交）；转 CreateCapabilityFencedError 让批编排走 fencedOut 收口。
     if (err instanceof BackfillFencedError) throw new CreateCapabilityFencedError();
+    // 同候选重复创建（slug 撞 uq_capabilities_slug，BUG-2）→ 干净 409 冲突（非 503、不可重试）：原始 PG 唯一冲突
+    //   不再落到 handler catch-all 被误判成「系统正在恢复」可重试。语义即「这个能力已经创建过了」。
+    if (isCapabilitySlugConflict(err)) {
+      throw new CreateCapabilityError(
+        ErrorCode.STATE_CONFLICT,
+        'capability already created for this candidate (slug conflict)',
+        { userMessage: '这个能力已经创建过了，去工作台查看即可。', action: 'none' },
+      );
+    }
     throw err;
   }
 

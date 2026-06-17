@@ -94,6 +94,11 @@ export class StructureRoutesFakeDb implements Queryable {
   failOn: string | null = null;
   /** 注入：下一次 INSERT capabilities 抛 slug 唯一冲突（测重试加后缀）。 */
   slugConflictOnce = false;
+  /**
+   * 注入：下一次 INSERT capabilities 抛指定错误（测「非 slug 的 23505 不能被误判成 slug 冲突」负例）。
+   *   消费一次后清空。优先于 slugConflictOnce 与 slug 唯一约束模拟。
+   */
+  nextInsertCapabilityError: unknown = null;
 
   async query<R = Record<string, unknown>>(
     sql: string,
@@ -200,6 +205,11 @@ export class StructureRoutesFakeDb implements Queryable {
 
     // —— createCapabilityWithVersionInTx: INSERT capabilities ——
     if (sql.includes('INSERT INTO capabilities') && sql.includes('VALUES ($1, $2, $3')) {
+      if (this.nextInsertCapabilityError != null) {
+        const e = this.nextInsertCapabilityError;
+        this.nextInsertCapabilityError = null;
+        throw e;
+      }
       if (this.slugConflictOnce) {
         this.slugConflictOnce = false;
         const e = new Error(
