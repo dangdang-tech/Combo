@@ -329,7 +329,9 @@ services:
     ports:
       - '80:80'
     healthcheck:
-      test: ['CMD-SHELL', 'wget -qO- http://localhost/ >/dev/null 2>&1 || exit 1']
+      # 用 127.0.0.1 而非 localhost：容器内 busybox wget 会先解析 localhost→::1(IPv6)，
+      # 而 nginx 默认只 listen IPv4 0.0.0.0:80 → IPv6 连接被拒、健康检查误判 unhealthy(host 侧服务实为正常)。
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1/ >/dev/null 2>&1 || exit 1']
       interval: 10s
       timeout: 5s
       retries: 6
