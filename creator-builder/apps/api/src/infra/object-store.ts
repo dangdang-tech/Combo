@@ -11,6 +11,7 @@ import {
   HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { Readable } from 'node:stream';
 import type { Bucket, ObjectStorePort } from '@cb/shared';
 import type { Env } from '../config/env.js';
 
@@ -36,6 +37,66 @@ function getClient(env: Env): S3Client {
 
 const DEFAULT_EXPIRES_SEC = 900; // 15min 预签名默认有效期
 
+/**
+ * 把对象 Body（流/二进制）读成 utf-8 字符串——【统一正确读法】。所有 S3 对象文本读取走这里，杜绝读法分叉。
+ *
+ * 为什么不用 web 流 `getReader()`：S3 getObject 的 Body 在 Node 运行时实际是 **Node Readable**
+ *   （AWS SDK v3 + Node：底层是 IncomingMessage/Readable，**无** .getReader）；旧实现把它 cast 成 web
+ *   ReadableStream 再调 getReader() → `body.getReader is not a function`（P0：fetch_index 必败 → DEPENDENCY_UNAVAILABLE）。
+ *
+ * 兼容三种真实形态（同一函数，运行时按能力分派——绝不靠不真实的类型断言）：
+ *   - Node Readable（生产真值，Node 下 S3 Body）：`for await...of` 逐块读（Readable 是 async-iterable）。
+ *   - web ReadableStream（跨运行时/未来兼容）：getReader() 逐块读。
+ *   - SdkStream（AWS SDK 经 sdkStreamMixin 注入 transformToString）：直接用 SDK 自带 transform（最稳）。
+ *   - 已是 string / Uint8Array：直接归一（便于测试与边界）。
+ */
+export async function readStreamToString(
+  body: unknown,
+  encoding: 'utf-8' = 'utf-8',
+): Promise<string> {
+  if (body == null) return '';
+  if (typeof body === 'string') return body;
+  // SdkStream：AWS SDK 自带 transformToString（SDK 跨运行时保证，最稳，优先）。
+  if (typeof (body as { transformToString?: unknown }).transformToString === 'function') {
+    return (body as { transformToString: (enc?: string) => Promise<string> }).transformToString(
+      encoding,
+    );
+  }
+  const decoder = new TextDecoder(encoding);
+  const toChunk = (v: unknown): Uint8Array =>
+    v instanceof Uint8Array
+      ? v
+      : typeof v === 'string'
+        ? new TextEncoder().encode(v)
+        : new Uint8Array(v as ArrayBuffer);
+  // Node Readable（生产真值）/ 任意 async-iterable：for await...of 逐块读。
+  if (
+    body instanceof Readable ||
+    typeof (body as { [Symbol.asyncIterator]?: unknown })[Symbol.asyncIterator] === 'function'
+  ) {
+    let out = '';
+    for await (const chunk of body as AsyncIterable<unknown>) {
+      out += decoder.decode(toChunk(chunk), { stream: true });
+    }
+    out += decoder.decode();
+    return out;
+  }
+  // web ReadableStream（跨运行时/未来兼容）：getReader() 逐块读。
+  if (typeof (body as { getReader?: unknown }).getReader === 'function') {
+    const reader = (body as ReadableStream<unknown>).getReader();
+    let out = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value !== undefined) out += decoder.decode(toChunk(value), { stream: true });
+    }
+    out += decoder.decode();
+    return out;
+  }
+  // 已是字节数组等：一次性解码。
+  return decoder.decode(toChunk(body));
+}
+
 /** S3/MinIO 实现的 ObjectStorePort。 */
 export function createS3ObjectStore(env: Env): ObjectStorePort {
   const s3 = getClient(env);
@@ -58,10 +119,11 @@ export function createS3ObjectStore(env: Env): ObjectStorePort {
       });
       return { url };
     },
-    async getObject(bucket, key) {
+    async getObjectText(bucket, key) {
       const res = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-      // SDK v3 in node 返回的 Body 是 web ReadableStream（node18+）或可转换流。
-      return res.Body as unknown as ReadableStream;
+      // res.Body 在 Node 运行时是 SdkStream<IncomingMessage|Readable>（Node Readable + transformToString 混入），
+      //   绝非 web ReadableStream——readStreamToString 按真实形态读（优先 SDK transform，否则 Node Readable 读法）。
+      return readStreamToString(res.Body);
     },
     async putObject(bucket, key, body, opts) {
       await s3.send(

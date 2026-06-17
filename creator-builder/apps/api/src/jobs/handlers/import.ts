@@ -142,29 +142,8 @@ export interface ImportHandlerDeps {
   db: Queryable;
   /** 同事务 outbox（建快照完成 + 发通知同一 PG 事务，70 §2.1）。 */
   txPool: TxPool;
-  /** S3 原文拉取（agora-raw 桶；处理完即弃，导入-33）。 */
-  objectStore: Pick<ObjectStorePort, 'getObject'>;
-}
-
-/** 把 S3 ReadableStream 读成 utf-8 字符串（原文 JSONL 文本）。 */
-async function readStreamToString(stream: ReadableStream): Promise<string> {
-  const reader = stream.getReader();
-  const chunks: Uint8Array[] = [];
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (value)
-      chunks.push(value instanceof Uint8Array ? value : new Uint8Array(value as ArrayBuffer));
-  }
-  let total = 0;
-  for (const c of chunks) total += c.length;
-  const merged = new Uint8Array(total);
-  let off = 0;
-  for (const c of chunks) {
-    merged.set(c, off);
-    off += c.length;
-  }
-  return new TextDecoder('utf-8').decode(merged);
+  /** S3 原文拉取（agora-raw 桶；处理完即弃，导入-33）。getObjectText 直接给 utf-8 文本（读法统一在 object-store 层）。 */
+  objectStore: Pick<ObjectStorePort, 'getObjectText'>;
 }
 
 /** 从 S3 key 猜来源（key 形如 `.../{source}/...`；猜不到回退 mixed→按内容兜，段级来源由 parser 定）。 */
@@ -289,8 +268,7 @@ export function createImportHandler(deps: ImportHandlerDeps): JobHandler {
         const key = rawKeys[i]!;
         let text: string;
         try {
-          const stream = await objectStore.getObject('agora-raw', key);
-          text = await readStreamToString(stream);
+          text = await objectStore.getObjectText('agora-raw', key);
         } catch {
           // S3 拉取失败：依赖不可用（人话「系统正在恢复」，绝不裸 ECONNRESET）。
           await ctx.reportSubtask('fetch_index', 'failed');

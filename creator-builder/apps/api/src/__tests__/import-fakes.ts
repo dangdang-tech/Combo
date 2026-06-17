@@ -5,7 +5,9 @@
 //       fence 失配 → 0 行；快照内 content_hash 撞重 → 0 行（去重）。
 //     - supersede / markRawPurged / 只读查询 / 建 job / list 等。
 //   无真 PG / 无 Docker。
+import { Readable } from 'node:stream';
 import type { Queryable, QueryResultLike } from '../jobs/types.js';
+import { readStreamToString } from '../infra/object-store.js';
 
 export interface SnapshotRow {
   id: string;
@@ -553,18 +555,11 @@ export class ImportFakeDb implements Queryable {
   }
 }
 
-/** 把字符串包成 web ReadableStream（模拟 S3 getObject 返回）。 */
-export function stringStream(s: string): ReadableStream {
-  const bytes = new TextEncoder().encode(s);
-  return new ReadableStream({
-    start(controller) {
-      controller.enqueue(bytes);
-      controller.close();
-    },
-  });
-}
-
-/** mock 对象存储（getObject 按 key→文本映射；putObject 写入同一 map；缺 key 抛错模拟 S3 失败）。 */
+/**
+ * mock 对象存储。getObjectText 直接走「读流→文本」的真实读路径（readStreamToString 喂真实 Node Readable），
+ *   绝不再把字符串当文本直接吐回——否则会像旧 mock 一样把「流读法不对」的 P0 bug 盖住（live E2E 才抓到）。
+ *   putObject 写入同一 map；缺 key / failKeys 命中抛错模拟 S3 失败。
+ */
 export class FakeObjectStore {
   constructor(private readonly objects: Map<string, string> = new Map()) {}
   failKeys = new Set<string>();
@@ -572,11 +567,13 @@ export class FakeObjectStore {
   failPut = false;
   /** 记录所有 putObject 落桶（断言「真实落桶」，Codex P0-2）。 */
   readonly puts: Array<{ key: string; bytes: number }> = [];
-  async getObject(_bucket: string, key: string): Promise<ReadableStream> {
+  async getObjectText(_bucket: string, key: string): Promise<string> {
     if (this.failKeys.has(key)) throw new Error('s3 failure');
     const text = this.objects.get(key);
     if (text === undefined) throw new Error(`no object: ${key}`);
-    return stringStream(text);
+    // 用真实 Node Readable（生产真值：S3 Body 在 Node 下是 Node Readable）喂统一读法——
+    //   测试链路与生产同一条读路径，绝不让 mock 盖住流读法 bug。
+    return readStreamToString(Readable.from([Buffer.from(text, 'utf-8')]));
   }
   async putObject(_bucket: string, key: string, body: Uint8Array): Promise<{ key: string }> {
     if (this.failPut) throw new Error('s3 put failure');

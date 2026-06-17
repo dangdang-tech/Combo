@@ -19,8 +19,13 @@ export interface ObjectStorePort {
     opts?: { contentType?: string; expiresSec?: number },
   ): Promise<{ url: string; key: string }>;
   presignGet(bucket: Bucket, key: string, opts?: { expiresSec?: number }): Promise<{ url: string }>;
-  /** worker 拉原文（导入 B-19）。 */
-  getObject(bucket: Bucket, key: string): Promise<ReadableStream>;
+  /**
+   * worker 拉原文文本（导入 B-19）。
+   *   返回 utf-8 解码后的字符串（原文 JSONL 文本），不暴露底层流类型——
+   *   消费方拿到的就是真值（string），不再有「声明 web ReadableStream、实际 Node Readable」的类型谎言。
+   *   实现内部用 SDK/Node 流的正确读法（绝不用 web 流 getReader()，Node Readable 没有），见 infra/object-store.ts。
+   */
+  getObjectText(bucket: Bucket, key: string): Promise<string>;
   /**
    * 直写对象（本机助手 multipart 直传落加密临时桶，B-21 §3.3）。
    * 助手把原文经 api 转存到 agora-raw 桶（前端直传走 presignPut；助手没有预签名 URL，经 api 中转写桶）。
