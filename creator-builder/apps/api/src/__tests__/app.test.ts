@@ -38,17 +38,14 @@ describe('api skeleton', () => {
     ]);
   }, 15_000); // 探针并发、各自 ≤2s 超时；给宽裕 totale 上限避免无 Docker 环境抖动。
 
-  it('no-auth business endpoint returns 501 ErrorEnvelope (never bare code, D1)', async () => {
-    // /auth/login 无鉴权守卫 → 直达 501 占位 handler。
+  it('GET /auth/login → 302 redirect (contract behavior, no longer 501)', async () => {
+    // /auth/login 已是真实 Logto 登录流（10-auth §3.1）：302 跳授权端点；
+    // 无 Docker/真 Logto 环境下 discovery 不可达 → 仍 302（降级回 /login，不裸返 JSON 错）。
     const res = await app.inject({ method: 'GET', url: '/api/v1/auth/login' });
-    expect(res.statusCode).toBe(501);
-    const body = res.json() as { error: Record<string, unknown> };
-    expect(body.error.userMessage).toBeTruthy();
-    expect(body.error.action).toBe('wait');
-    // D1：对外信封一律不含 code。
-    expect(body.error).not.toHaveProperty('code');
-    // userMessage 是人话，不含裸 code/状态码（脊柱 §11.B）。
-    expect(String(body.error.userMessage)).not.toMatch(/\b[1-5]\d{2}\b/);
+    expect(res.statusCode).toBe(302);
+    expect(res.headers.location).toBeTruthy();
+    // 绝不在重定向 URL 暴露内部 code/状态码（脊柱 §11.B）。
+    expect(String(res.headers.location)).not.toMatch(/\b[1-5]\d{2}\b/);
   });
 
   it('requireAuth endpoint without token → 401 ErrorEnvelope (no code, D1)', async () => {

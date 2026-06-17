@@ -197,6 +197,27 @@ export function optionalAuth(): preHandlerHookHandler {
 }
 
 /**
+ * bestEffortAuth（10-auth §3.3，Codex r2 P0）：logout 专用「永不拦」鉴权。
+ *   - 能解出会话则注入 req.auth（handler 可据此带 Logto end_session）；
+ *   - 任何失败一律【放行】、绝不回错误信封——含 token 无效 / 上游不可达（JWKS 不可达）/ 账号禁用 / 内部错误。
+ *   与 optionalAuth 的差别：optionalAuth 在「上游不可达 / 禁用 / 内部错误」时仍显式失败（503/403/500），
+ *   会让 logout 在 Logto/JWKS 不可达时先被 503 拦、清不了 cookie，违反 logout 200 幂等清 cookie 契约。
+ *   bestEffortAuth 把这些都吞掉：logout 的语义是「无论如何都清会话并返成功」，鉴权只是「锦上添花」。
+ *   仍是一个 preHandler（满足写命令守卫链守门 routes.test），但承诺永不短路 / 永不抛。
+ */
+export function bestEffortAuth(): preHandlerHookHandler {
+  return async (req) => {
+    try {
+      const resolution = await resolveAuth(req);
+      if (resolution.kind === 'ok') req.auth = resolution.ctx;
+      // 其余一切（anonymous / invalid / upstream_unavailable / disabled / internal）：放行，不回错误信封。
+    } catch {
+      // resolveAuth 已收口异常为分类结果，理论不抛；防御性兜底——绝不让 logout 因鉴权抛错而清不了 cookie。
+    }
+  };
+}
+
+/**
  * requireSseAuth（脊柱 §11.C，Codex#4）：SSE 端点专用守卫。
  *   - 仅接受【同源 Cookie 会话】；显式【拒绝】Authorization 头 / query-string token。
  *   - 鉴权失败在【建流前】返 HTTP 401 ErrorEnvelope（不走 SSE error 帧）。

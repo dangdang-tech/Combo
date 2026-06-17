@@ -3,7 +3,10 @@
 //     断言返回 issuer 与 jwks_uri 存在且 issuer 匹配（不用 /api/.well-known 错误路径）。
 //   - JWT 校验：从 issuer discovery 取 JWKS（createRemoteJWKSet，kid 轮换自动跟），
 //     校验 issuer / audience / exp / kid（jose 内部含 nbf/alg）。
-//   - audience（Codex#2）：生产【无条件】校 aud（env.ts 保证生产必填 LOGTO_AUDIENCE）；dev/test 配了才校。
+//   - audience 职责分开（OIDC 规范）：access_token 的 aud = API resource（LOGTO_AUDIENCE，verifyLogtoJwt）；
+//     id_token 的 aud = client_id（LOGTO_APP_ID，verifyLogtoIdToken）。两支共用 JWKS/iss/exp 验签核心，
+//     只 audience 不同——access_token 走资源校验、id_token 走 client 校验，绝不混用。
+//   - audience（Codex#2）：生产【无条件】校 aud（env.ts 保证生产必填 LOGTO_AUDIENCE / LOGTO_APP_ID）；dev/test 配了才校。
 //   - 失败区分（Codex#3）：token 无效（验签/过期/iss/aud）→ 'invalid'（中间件 401）；
 //     JWKS/Logto 上游不可达 → 'upstream_unavailable'（中间件 503 AUTH_UPSTREAM_UNAVAILABLE）。
 //     「外部不可达不等于鉴权失败」——绝不把上游抖动收口成 401。
@@ -177,10 +180,23 @@ function extractEmail(payload: JWTPayload): string | null {
   return typeof p.email === 'string' && p.email ? p.email : null;
 }
 
-/** audience：生产无条件校（env.ts 保证生产必填）；dev/test 配了才校（不强校 = dev 兜底）。 */
+/**
+ * access_token 的 audience（10-auth §4.1，Codex#2）：API resource indicator（LOGTO_AUDIENCE）。
+ *   生产无条件校（env.ts 保证生产必填）；dev/test 配了才校（不强校 = dev 兜底）。
+ */
 function resolveAudience(env: Env): string | undefined {
   if (env.NODE_ENV === 'production') return env.LOGTO_AUDIENCE; // 生产必填（env.ts 已守卫）
   return env.LOGTO_AUDIENCE || undefined;
+}
+
+/**
+ * id_token 的 audience（OIDC 规范 + 10-auth §3.2 步 3）：== client_id（LOGTO_APP_ID）。
+ *   id_token 的 aud 永远是发起认证的客户端，不是 API resource——与 access_token 的 aud 职责分开。
+ *   生产无条件校（env.ts 保证 LOGTO_APP_ID 生产必填）；dev/test 配了才校（默认空 → dev 兜底）。
+ */
+function resolveIdTokenAudience(env: Env): string | undefined {
+  if (env.NODE_ENV === 'production') return env.LOGTO_APP_ID; // 生产必填（env.ts 已守卫）
+  return env.LOGTO_APP_ID || undefined;
 }
 
 /** 判定 jose 异常是否为「JWKS 取址/获取不可达」（上游不可达，区分 token 无效，Codex#3）。 */
@@ -208,19 +224,23 @@ function isJwksFetchError(err: unknown): boolean {
 }
 
 /**
- * 真实 Logto JWT 校验（10-auth §4.1，Codex#2/#3/#5）：
+ * 真实 Logto JWT 校验核心（10-auth §4.1，Codex#2/#3/#5）：
  *   JWKS（kid 轮换）+ issuer + audience + exp（jose 内部含 alg/nbf/签名）。
+ *   audience 由调用方按 token 类型传入（access_token=LOGTO_AUDIENCE / id_token=LOGTO_APP_ID，职责分开）。
  * 返回分类结果（绝不把 jose/OIDC 原始异常抛给上层——中间件统一出人话信封，脊柱 §11.B）：
  *   - token 无效（验签失败/过期/iss 或 aud 不符/无 sub/kid 不匹配）→ { kind:'invalid' }（中间件 401）。
  *   - JWKS / Logto 上游不可达（取不到 JWKS / 网络异常 / 超时）→ { kind:'upstream_unavailable' }（中间件 503）。
  *     「外部不可达 ≠ 鉴权失败」（Codex#3）：绝不把上游抖动误判成 token 无效。
  */
-export async function verifyLogtoJwt(token: string, env: Env): Promise<VerifyResult> {
+async function verifyWithAudience(
+  token: string,
+  env: Env,
+  audience: string | undefined,
+): Promise<VerifyResult> {
   if (!token) return { kind: 'invalid' };
   const resolved = await getRemoteJwks(env);
   if ('upstream' in resolved) return { kind: 'upstream_unavailable' };
   try {
-    const audience = resolveAudience(env);
     const { payload } = await jwtVerify(token, resolved.jwks, {
       issuer: normalizeIssuer(env.LOGTO_ISSUER),
       // 生产无条件校 aud（Codex#2，env.ts 保证生产必填）；dev/test 配了才校。
@@ -243,4 +263,23 @@ export async function verifyLogtoJwt(token: string, env: Env): Promise<VerifyRes
     if (isJwksFetchError(err)) return { kind: 'upstream_unavailable' };
     return { kind: 'invalid' };
   }
+}
+
+/**
+ * 校验 **access_token**（10-auth §4.1）：aud = API resource indicator（LOGTO_AUDIENCE）。
+ *   受保护路由 / SSE 中间件、callback 第 5 步种 cb_session 前都用这一支——会话承载的是 access_token，
+ *   其 aud 必须是本服务的 API resource，而非 client_id。
+ */
+export async function verifyLogtoJwt(token: string, env: Env): Promise<VerifyResult> {
+  return verifyWithAudience(token, env, resolveAudience(env));
+}
+
+/**
+ * 校验 **id_token**（OIDC 规范 + 10-auth §3.2 步 3）：aud = client_id（LOGTO_APP_ID）。
+ *   仅用于 callback 验回调下发的 id_token——其 aud 永远是发起认证的客户端 id，与 access_token 的
+ *   aud（LOGTO_AUDIENCE）职责分开。verifyLogtoJwt 误用 LOGTO_AUDIENCE 验 id_token 会让生产 callback
+ *   恒失败（id_token.aud 不含 API resource）。nonce 比对在 callback 内单独做（需 auth_tx.nonce）。
+ */
+export async function verifyLogtoIdToken(token: string, env: Env): Promise<VerifyResult> {
+  return verifyWithAudience(token, env, resolveIdTokenAudience(env));
 }

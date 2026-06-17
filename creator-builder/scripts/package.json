@@ -6,6 +6,10 @@
   "type": "module",
   "scripts": {
     "openapi:dump": "node --experimental-strip-types openapi-dump.ts",
+    "start": "./start.sh",
+    "migrate": "./migrate.sh",
+    "smoke": "./smoke.sh",
+    "acceptance:smoke": "./acceptance-smoke.sh",
     "typecheck": "tsc -b",
     "test": "echo 'no tests in scripts' && exit 0"
   },

@@ -17,6 +17,12 @@ log() { printf '\033[1;34m[smoke]\033[0m %s\n' "$*"; }
 
 command -v curl >/dev/null 2>&1 || fail "需要 curl"
 
+# 0) 前置：API 必须可达；不可达多半是【未起栈（无 Docker）】，给清晰指引而非裸 curl 错误。
+#    smoke 设计为「起栈后」跑（与 acceptance-smoke 的优雅 need-docker 退出不同：基础冒烟要求栈已起，失败即非零）。
+if ! curl -fsS -o /dev/null --max-time 5 "${API_BASE}/health" 2>/dev/null; then
+  fail "API（${API_BASE}）不可达——请先起 live 全栈：cp .env.compose.example .env && 填密钥 && ./scripts/start.sh（需 Docker）。"
+fi
+
 # 1) liveness：/health 200 且 status=ok
 log "1 GET ${API_BASE}/health"
 health="$(curl -fsS "${API_BASE}/health")" || fail "/health 不可达"

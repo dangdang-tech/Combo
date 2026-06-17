@@ -19,7 +19,7 @@ vi.mock('jose', () => ({
   },
 }));
 
-const { verifyLogtoJwt, clearJwksCache } = await import('../infra/logto.js');
+const { verifyLogtoJwt, verifyLogtoIdToken, clearJwksCache } = await import('../infra/logto.js');
 
 // env：配 LOGTO_JWKS_URI 让 resolveJwksUri 走配置兜底（discovery fetch 会失败/不可达，回落配置，不触网）。
 //   注：fetchDiscovery 内的 fetch 在测试环境会拒绝 → reachable=false，于是回落 env.LOGTO_JWKS_URI。
@@ -87,5 +87,44 @@ describe('角色 claim 合并解析（roles + scope，Codex#7 r3）', () => {
   it('无 roles 无可识别 scope → 空角色集（首登 provision 按 DEFAULT 兜底）', async () => {
     mockPayload({ scope: 'openid profile email offline_access' });
     expect(await rolesOf()).toEqual([]);
+  });
+});
+
+// ===========================================================================
+// audience 职责分开（Codex r2 P0）：access_token=LOGTO_AUDIENCE / id_token=LOGTO_APP_ID
+//   端到端验：verifyLogtoJwt 喂给 jose.jwtVerify 的 audience == LOGTO_AUDIENCE；
+//             verifyLogtoIdToken 喂给的 audience == LOGTO_APP_ID（client_id），绝不互换。
+// ===========================================================================
+describe('audience 职责分开：id_token=APP_ID / access_token=AUDIENCE（Codex r2 P0）', () => {
+  // dev/test 下「配了才校」——两值都配上，断言各自传对的 audience。
+  const splitEnv = {
+    NODE_ENV: 'test',
+    LOGTO_ISSUER: 'http://logto.test/oidc',
+    LOGTO_JWKS_URI: 'http://logto.test/oidc/jwks',
+    LOGTO_AUDIENCE: 'https://api.agora.test', // access_token aud（API resource）
+    LOGTO_APP_ID: 'app-client-id-123', // id_token aud（client_id）
+  } as unknown as Parameters<typeof verifyLogtoJwt>[1];
+
+  /** 取最近一次 jwtVerify 调用传入的 options.audience。 */
+  function lastAudience(): unknown {
+    const call = jwtVerifyMock.mock.calls.at(-1);
+    const opts = call?.[2] as { audience?: unknown } | undefined;
+    return opts?.audience;
+  }
+
+  it('verifyLogtoJwt（access_token）→ jose 校 aud == LOGTO_AUDIENCE（API resource，非 client_id）', async () => {
+    mockPayload({ scope: 'openid creator' });
+    const res = await verifyLogtoJwt('access.jwt', splitEnv);
+    expect(res.kind).toBe('ok');
+    expect(lastAudience()).toBe('https://api.agora.test');
+    expect(lastAudience()).not.toBe('app-client-id-123'); // 绝不用 client_id 校 access_token
+  });
+
+  it('verifyLogtoIdToken（id_token）→ jose 校 aud == LOGTO_APP_ID（client_id，非 API resource）', async () => {
+    mockPayload({ scope: 'openid creator' });
+    const res = await verifyLogtoIdToken('id.jwt', splitEnv);
+    expect(res.kind).toBe('ok');
+    expect(lastAudience()).toBe('app-client-id-123');
+    expect(lastAudience()).not.toBe('https://api.agora.test'); // 绝不用 API resource 校 id_token
   });
 });

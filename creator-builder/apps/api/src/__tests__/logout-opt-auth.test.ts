@@ -1,7 +1,8 @@
-// logout 改 Opt 鉴权自检（10-auth §3.3/:145/:153，Codex r3）：
-//   POST /auth/logout 契约是 Opt——未登录也应幂等命中 logout 语义，绝不先被 401 拦。
+// logout best-effort 鉴权自检（10-auth §3.3/:145/:153，Codex r2 P0）：
+//   POST /auth/logout 的 preHandler 必须【永不拦】——未登录、token 无效、Logto/JWKS 不可达，都不发
+//   401/503，一律放行进 handler，由 handler 始终清 cookie + 200（幂等）。这才符合「上游不可达也清 cookie」。
 //   无真实 Logto/PG：mock verifyLogtoJwt + provisionUser，取 AUTH_ENDPOINTS 里 logout 的 preHandler，
-//   用无 token 的 mock req 驱动它，断言【不发 401 信封、放行】（= optionalAuth 行为，非 requireAuth）。
+//   用各态 mock req 驱动它，断言【绝不发任何错误信封、放行】（= bestEffortAuth 行为，非 optionalAuth）。
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
@@ -24,11 +25,13 @@ function logoutPreHandler() {
   return handlers[0];
 }
 
-function makeReq(opts: { bearer?: boolean } = {}): FastifyRequest {
+function makeReq(opts: { bearer?: boolean; session?: string } = {}): FastifyRequest {
+  const cookies: Record<string, string> = {};
+  if (opts.session) cookies.cb_session = opts.session;
   return {
     id: 'trace-logout',
     headers: opts.bearer ? { authorization: 'Bearer good.jwt' } : {},
-    cookies: {},
+    cookies,
     params: {},
     query: {},
     server: { infra: { db: { query: vi.fn() }, env: {} } },
@@ -55,13 +58,13 @@ beforeEach(() => {
   provisionMock.mockReset();
 });
 
-describe('POST /auth/logout = Opt 鉴权（Codex r3）', () => {
+describe('POST /auth/logout = best-effort 鉴权（Codex r2 P0）', () => {
   it('无 token 调 logout → 不被 401 拦、放行进 handler 语义（幂等成功）', async () => {
     const pre = logoutPreHandler();
     const req = makeReq({ bearer: false }); // 无 token
     const { reply, sent } = makeReply();
     await pre(req, reply, () => {});
-    expect(sent.code).toBeUndefined(); // 关键：绝不发 401（optionalAuth 不拦无 token）
+    expect(sent.code).toBeUndefined(); // 关键：绝不发 401（不拦无 token）
     expect(req.auth).toBeUndefined(); // 未登录降级匿名（无 AuthContext）
     expect(verifyMock).not.toHaveBeenCalled(); // 无 token 不进验签
   });
@@ -83,5 +86,27 @@ describe('POST /auth/logout = Opt 鉴权（Codex r3）', () => {
     await pre(req, reply, () => {});
     expect(sent.code).toBeUndefined(); // 放行
     expect(req.auth?.userId).toBe('uuid-logout');
+  });
+
+  it('带 cb_session 但 token 无效 → 仍放行、不发 401（清 cookie 不被拦）', async () => {
+    verifyMock.mockResolvedValue({ kind: 'invalid' });
+    const pre = logoutPreHandler();
+    const req = makeReq({ session: 'stale.jwt' });
+    const { reply, sent } = makeReply();
+    await pre(req, reply, () => {});
+    expect(sent.code).toBeUndefined(); // 不发任何错误信封
+    expect(req.auth).toBeUndefined();
+  });
+
+  it('带 cb_session 但 Logto/JWKS 不可达 → 仍放行、绝不发 503（关键：上游不可达也清 cookie）', async () => {
+    // optionalAuth 在此会回 503 把 logout 拦死、清不了 cookie；bestEffortAuth 必须吞掉、放行。
+    verifyMock.mockResolvedValue({ kind: 'upstream_unavailable' });
+    const pre = logoutPreHandler();
+    const req = makeReq({ session: 'cb.jwt' });
+    const { reply, sent } = makeReply();
+    await pre(req, reply, () => {});
+    expect(sent.code).toBeUndefined(); // 绝不 503（否则 handler 进不去、清不了 cookie）
+    expect(sent.body).toBeUndefined();
+    expect(req.auth).toBeUndefined();
   });
 });

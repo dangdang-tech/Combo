@@ -109,6 +109,69 @@ export async function provisionUser(
   throw lastErr ?? new Error('provisionUser: account disambiguation exhausted');
 }
 
+/** /me 视图的 DB 行（10-auth §3.4 MeView：账号映射 + 角色 + profile 引用）。 */
+export interface MeRow {
+  id: string;
+  logtoUserId: string;
+  account: string;
+  email: string | null;
+  roles: Role[];
+  status: 'active' | 'disabled';
+  hasProfile: boolean;
+  createdAt: string;
+  lastLoginAt: string | null;
+}
+
+/**
+ * 读 /me 视图行（10-auth §3.4）：按业务 users.id 取账号映射全字段 + hasProfile（creator_profiles EXISTS）。
+ *   - profile 全字段不在此返回（属主页域 B-33），只回 hasProfile + creatorId(=id) 引用。
+ *   - 找不到（理论不可达，requireAuth 已 provision）→ null，调用方落 404/重新登录。
+ *   - roles 过 RoleSchema 同口径过滤（绝不把 raw string 当 Role 出对外视图）。
+ */
+export async function readMeRow(db: QueryableDb, userId: string): Promise<MeRow | null> {
+  const res = await db.query<{
+    id: string;
+    logto_user_id: string;
+    account: string;
+    email: string | null;
+    roles: string[];
+    status: string;
+    has_profile: boolean;
+    created_at: string | Date;
+    last_login_at: string | Date | null;
+  }>(
+    `SELECT u.id, u.logto_user_id, u.account, u.email, u.roles, u.status,
+            EXISTS (SELECT 1 FROM creator_profiles cp WHERE cp.user_id = u.id) AS has_profile,
+            u.created_at, u.last_login_at
+       FROM users u
+      WHERE u.id = $1`,
+    [userId],
+  );
+  const row = res.rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    logtoUserId: row.logto_user_id,
+    account: row.account,
+    email: row.email,
+    roles: (row.roles ?? []).filter(
+      (r): r is Role => r === 'creator' || r === 'consumer' || r === 'reviewer',
+    ),
+    status: row.status === 'disabled' ? 'disabled' : 'active',
+    hasProfile: Boolean(row.has_profile),
+    createdAt: toIso(row.created_at),
+    lastLoginAt: row.last_login_at == null ? null : toIso(row.last_login_at),
+  };
+}
+
+/** timestamptz → ISO 字符串（pg 可能回 Date 或字符串，统一 IsoDateTime）。 */
+function toIso(v: string | Date): string {
+  if (v instanceof Date) return v.toISOString();
+  // 字符串：尽量规范成 ISO（pg 文本格式可被 Date 解析）；解析失败原样回（不阻塞）。
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? v : d.toISOString();
+}
+
 /** 判定 pg 错误是否为 account 唯一键冲突（用于追后缀重试；不依赖具体 pg 版本细节）。 */
 function isAccountUniqueViolation(err: unknown): boolean {
   if (typeof err !== 'object' || err === null) return false;
