@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import type { ReactElement } from 'react';
 
 vi.mock('echarts-for-react/lib/core', () => ({
@@ -157,7 +157,13 @@ function ok(): RouteMap {
 }
 
 function LocationProbe(): ReactElement {
-  return <div data-testid="probe">probed</div>;
+  const location = useLocation();
+  // 暴露落地路由的 search（供「编辑」入口断言 ?capability= 是否对齐向导消费键，Defect 3）。
+  return (
+    <div data-testid="probe" data-search={location.search}>
+      probed
+    </div>
+  );
 }
 
 function renderPage(): { container: HTMLElement } {
@@ -332,6 +338,17 @@ describe('DashboardPage 操作入口', () => {
     const createBtns = await screen.findAllByRole('button', { name: '+ 上传新能力' });
     await userEvent.click(createBtns[0] as HTMLElement);
     expect(await screen.findByTestId('probe')).toBeInTheDocument();
+  });
+
+  it('能力行「编辑」→ 进上传流程并带 ?capability=（对齐向导消费键，非被丢弃的 ?capabilityId=）', async () => {
+    restore = installRoutedFetch(ok());
+    renderPage();
+    await screen.findByText('保险方案速算');
+    await userEvent.click(screen.getByRole('button', { name: '编辑' }));
+    const probe = await screen.findByTestId('probe');
+    // 向导只读 ?capability=（WizardLayout/PublishStepPage/StructureStepPage）：编辑入口须发同名键，
+    // 否则参数被静默丢弃。断言带的是 capability= cap-1，且不是旧的 capabilityId=。
+    expect(probe.getAttribute('data-search')).toBe('?capability=cap-1');
   });
 
   it('草稿条「去上传流程」→ 回到 currentStep 路由（/create/structure）', async () => {

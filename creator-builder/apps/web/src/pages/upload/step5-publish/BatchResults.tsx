@@ -65,7 +65,7 @@ export function BatchResults({
       </header>
 
       <ul className="cb-batch-results__list">
-        {items.map((it) => {
+        {items.map((it, i) => {
           const failed = it.state === 'failed';
           const retrying = retryingItemId === it.itemId;
           return (
@@ -76,9 +76,10 @@ export function BatchResults({
               data-failed={failed ? 'true' : 'false'}
             >
               <div className="cb-batch-results__item-head">
-                <span className="cb-batch-results__item-name">
-                  {it.capabilityId ?? it.versionId ?? it.candidateId ?? it.itemId}
-                </span>
+                {/* PublishBatchItemView 无人话名字段（packages/shared publish.ts，P2 不改后端契约），
+                    与左侧切换列表同口径用序号人话标签「能力 N」（PublishStepPage.tsx），绝不裸露 UUID。
+                    真实 id 仅留作 <li> 的非可见 key。 */}
+                <span className="cb-batch-results__item-name">能力 {i + 1}</span>
                 <span className="cb-batch-results__item-state" data-state={it.state}>
                   {ITEM_STATE_LABEL[it.state]}
                 </span>

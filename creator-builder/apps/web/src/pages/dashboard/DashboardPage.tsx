@@ -55,8 +55,10 @@ export function DashboardPage(): ReactElement {
 
   // 「+ 上传新能力」/「编辑」/草稿恢复 → 五步上传流程（4C 接；本期路由占位）。
   const goCreate = (): void => navigate(CREATE_ENTRY);
+  // 向导消费方读 ?capability=（WizardLayout / PublishStepPage / StructureStepPage），故编辑入口须发同名
+  // 参数（旧 ?capabilityId= 会被向导静默丢弃）。本期是「编辑既有能力」占位，对齐消费键即可、不另立契约。
   const goEdit = (row: DashboardCapabilityRow): void =>
-    navigate(`${CREATE_ENTRY}?capabilityId=${row.capabilityId}`);
+    navigate(`${CREATE_ENTRY}?capability=${row.capabilityId}`);
   // 「查看公开页」→ 对外只读公开页路由占位（不进编辑/管理；公开页 /a/{slug} 由后续接，本期落 probe 路由）。
   const goView = (row: DashboardCapabilityRow): void => {
     more.closeMore();
