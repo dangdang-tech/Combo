@@ -229,7 +229,7 @@ describe('DashboardPage 拼装', () => {
     renderPage();
     expect(await screen.findByText('保险方案速算')).toBeInTheDocument();
     expect(screen.getByText('已上架')).toBeInTheDocument();
-    expect(await screen.findByText('结构化中 60%')).toBeInTheDocument();
+    expect(await screen.findByText(/结构化中 60%/)).toBeInTheDocument();
   });
 });
 
@@ -354,7 +354,7 @@ describe('DashboardPage 操作入口', () => {
   it('草稿条「去上传流程」→ 回到 currentStep 路由（/create/structure）', async () => {
     restore = installRoutedFetch(ok());
     renderPage();
-    await screen.findByText('结构化中 60%');
+    await screen.findByText(/结构化中 60%/);
     await userEvent.click(screen.getByRole('button', { name: /去上传流程/ }));
     expect(await screen.findByTestId('probe')).toBeInTheDocument();
   });
