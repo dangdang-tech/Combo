@@ -9,7 +9,7 @@ import type { ReactElement } from 'react';
 import type { FieldStuckPayload, SlowHintPayload, SoftFieldKey } from '@cb/shared';
 import { SlowHint } from '../../../components/index.js';
 import type { SoftFieldView, HardFieldView } from './manifestFields.js';
-import { softProgressText, isDone } from './manifestFields.js';
+import { softProgressText, isDone, isGenerating } from './manifestFields.js';
 import { SoftFieldCard } from './SoftFieldCard.js';
 import { HardFieldCard } from './HardFieldCard.js';
 
@@ -46,6 +46,8 @@ export function AppIdentityPanel({
   busyFields,
 }: AppIdentityPanelProps): ReactElement {
   const allDone = soft.every((s) => isDone(s.status));
+  // 仍有字段在生成（永不裸转圈：禁用发布按钮时给明确「正在生成、可等」短语，而非只剩静态计数，BUG-016/STEP4）。
+  const anyGenerating = soft.some((s) => isGenerating(s.status));
 
   return (
     <section className="cb-app-identity" aria-label={`${capabilityName} 的 App Identity`}>
@@ -54,6 +56,12 @@ export function AppIdentityPanel({
         {!allDone && (
           <p className="cb-app-identity__progress" role="status" aria-live="polite">
             {softProgressText(soft)}
+            {anyGenerating && (
+              <span className="cb-app-identity__progress-hint">
+                {' '}
+                · 剩余字段正在生成，完成后即可进入发布；可以稍等，或先编辑已生成的字段。
+              </span>
+            )}
           </p>
         )}
       </header>

@@ -83,9 +83,8 @@ beforeEach(() => {
 afterEach(() => mock.restore());
 
 describe('WizardShell（F-09 向导壳）', () => {
-  it('渲染头条「上传能力」+「保存草稿」+ 步骤条五段 + 底栏', () => {
+  it('渲染头条「保存草稿」+ 步骤条五段 + 底栏（页名移至 4A 顶栏面包屑，content 头条不重复）', () => {
     renderWizard('/create/import');
-    expect(screen.getByRole('heading', { name: '上传能力' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '保存草稿' })).toBeInTheDocument();
     // 步骤条五段。
     const bar = screen.getByRole('list', { name: '上传五步进度' });
@@ -247,14 +246,12 @@ describe('WizardShell（F-09 向导壳）', () => {
       json: { data: draftView({ id: 'd1', currentStep: 'select' }) },
     });
     renderWizard('/create/select?draftId=d1');
-    // select 步具备三件套。
-    expect(screen.getByRole('heading', { name: '上传能力' })).toBeInTheDocument();
+    // select 步具备外壳常驻件（步骤条 + 保存草稿；页名已移至 4A 顶栏面包屑）。
     expect(screen.getByRole('list', { name: '上传五步进度' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '保存草稿' })).toBeInTheDocument();
-    // 跳到 import 步（点回看），三件套仍在、结构不变。续传 hydrate 后 import 据真实产物 done 才可点。
+    // 跳到 import 步（点回看），常驻件仍在、结构不变。续传 hydrate 后 import 据真实产物 done 才可点。
     await userEvent.click(await screen.findByRole('button', { name: /第 1 步.*点击回看/ }));
     await waitFor(() => expect(screen.getByTestId('path')).toHaveTextContent('/create/import'));
-    expect(screen.getByRole('heading', { name: '上传能力' })).toBeInTheDocument();
     expect(screen.getByRole('list', { name: '上传五步进度' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '保存草稿' })).toBeInTheDocument();
   });

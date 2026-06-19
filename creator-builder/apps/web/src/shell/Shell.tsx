@@ -22,6 +22,10 @@ export function Shell(): ReactElement {
   const crumbs = breadcrumbFor(location.pathname);
   // 顶栏居中字标的页名（Figma：AGORA · CREATOR · 工作台）。/creator 只有根 crumb，特判为「工作台」。
   const pageTitle = crumbs.length > 1 ? (crumbs[crumbs.length - 1]?.label ?? '工作台') : '工作台';
+  // 顶栏两形态（Figma 实测）：工作台 / 个人主页等 = 居中字标 + 视角开关；上传五步 = 左面包屑「上传能力 / Creator
+  //   Builder」+ 右上头像。isWizard 据 /create 前缀判别；向导区段名取面包屑第二段（命中「上传能力」）。
+  const isWizard = location.pathname === '/create' || location.pathname.startsWith('/create/');
+  const wizardSection = crumbs[1]?.label ?? '上传能力';
 
   return (
     <div className="cb-shell" data-view-mode={mode} data-collapsed={collapsed ? 'true' : 'false'}>
@@ -83,20 +87,41 @@ export function Shell(): ReactElement {
       {/* 主区：顶栏面包屑 + 视角开关 + 右上头像 + 内容 Outlet。 */}
       <div className="cb-shell__main">
         <header className="cb-shell__topbar">
-          {/* 居中字标（Figma 工作台/个人主页顶栏：AGORA · CREATOR · 当前页）。账号头像在侧栏底部常驻。 */}
-          <p className="cb-shell__eyebrow" aria-label={`当前页面：${pageTitle}`}>
-            {`AGORA · CREATOR · ${pageTitle}`}
-          </p>
-          {/* 双视角开关占位（D14）：本期只切前端视角态，不动鉴权/路由。 */}
-          <button
-            type="button"
-            className="cb-shell__viewtoggle"
-            onClick={toggleView}
-            aria-pressed={mode === 'consumer'}
-            title="切换创作者 / 消费者视角（占位）"
-          >
-            {mode === 'creator' ? '创作者视角' : '消费者视角'}
-          </button>
+          {isWizard ? (
+            /* 向导顶栏左侧面包屑（Figma STEP：上传能力 / Creator Builder）。 */
+            <p className="cb-shell__crumbs">
+              <span className="cb-shell__crumb-page">{wizardSection}</span>
+              <span className="cb-shell__crumb-sep" aria-hidden="true">
+                /
+              </span>
+              <span className="cb-shell__crumb-root">Creator Builder</span>
+            </p>
+          ) : (
+            <span className="cb-shell__topbar-spacer" aria-hidden="true" />
+          )}
+
+          {/* 工作台 / 个人主页：居中字标（Figma：AGORA · CREATOR · 当前页）。向导页不显字标（改用左面包屑）。 */}
+          {!isWizard && (
+            <p className="cb-shell__eyebrow" aria-label={`当前页面：${pageTitle}`}>
+              {`AGORA · CREATOR · ${pageTitle}`}
+            </p>
+          )}
+
+          {isWizard ? (
+            /* 向导顶栏右上：真实账号头像（Figma STEP 顶栏右上）。 */
+            <AccountAvatar account={account} className="cb-shell__topbar-avatar" />
+          ) : (
+            /* 双视角开关占位（D14）：本期只切前端视角态，不动鉴权/路由。 */
+            <button
+              type="button"
+              className="cb-shell__viewtoggle"
+              onClick={toggleView}
+              aria-pressed={mode === 'consumer'}
+              title="切换创作者 / 消费者视角（占位）"
+            >
+              {mode === 'creator' ? '创作者视角' : '消费者视角'}
+            </button>
+          )}
         </header>
 
         <main className="cb-shell__content">

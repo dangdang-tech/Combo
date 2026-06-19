@@ -71,6 +71,11 @@ export function ExtractResult({
           : `识别出 ${identified} 个能力项。`}
       </div>
 
+      {/* 选择引导（BUG-018：让用户清楚「要勾选后才能进入下一步」，不卡在「已识别候选但已选 0 项」）。 */}
+      {candidates.some((c) => c.status === 'ready') && (
+        <p className="cb-extract-result__guide">勾选下面要保留的能力项，可多选；选好后点底部按钮进入下一步。</p>
+      )}
+
       {/* 2. 批量选择列表。 */}
       <ul className="cb-extract-result__list" aria-label="候选能力列表">
         {candidates.map((c) => {
@@ -114,6 +119,7 @@ export function ExtractResult({
                   className="cb-extract-result__checkbox"
                   checked={checked}
                   onChange={() => onToggle(c.id)}
+                  aria-label={`选择能力项「${nameText(c.name)}」`}
                 />
                 <span className="cb-extract-result__main">
                   <span className="cb-extract-result__head">

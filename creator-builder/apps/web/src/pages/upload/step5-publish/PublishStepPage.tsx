@@ -131,6 +131,12 @@ export function PublishStepPage(): ReactElement {
 
   return (
     <div className="cb-publish" data-mode={mode}>
+      {/* 步内标题（Figma STEP⑤ 1778:24：步骤条下「发布到市集」+ 副文案，content 自带标题，不复用外壳页名）。 */}
+      <header className="cb-publish__head">
+        <h2 className="cb-publish__title">发布到市集</h2>
+        <p className="cb-publish__subtitle">右边这张卡就是市集里看到的样子。左侧可切换能力。</p>
+      </header>
+
       <div className="cb-publish__cols">
         {/* 左：能力切换列表（§5.5 与上一步一致；切换换中间市集卡预览，发布-09）。 */}
         <aside className="cb-publish__left">

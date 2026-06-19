@@ -171,11 +171,15 @@ describe('顶栏居中字标页名（Figma 顶栏：AGORA · CREATOR · 当前�
     ).toBeInTheDocument();
   });
 
-  it('五步页 extract → AGORA · CREATOR · STEP② 提取', () => {
+  it('五步页 extract → 顶栏改用面包屑「上传能力 / Creator Builder」，不显居中字标（Figma STEP 顶栏）', () => {
     renderShell('/create/extract');
-    expect(
-      within(screen.getByRole('banner')).getByText('AGORA · CREATOR · STEP② 提取'),
-    ).toBeInTheDocument();
+    const topbar = screen.getByRole('banner');
+    expect(within(topbar).getByText('上传能力')).toBeInTheDocument();
+    expect(within(topbar).getByText('Creator Builder')).toBeInTheDocument();
+    // 向导页不再展示工作台式居中字标。
+    expect(within(topbar).queryByText(/AGORA · CREATOR/)).not.toBeInTheDocument();
+    // 顶栏右上常驻真实账号头像（Figma STEP 顶栏右上）。
+    expect(within(topbar).getByRole('img', { name: 'Wayne · CGO' })).toBeInTheDocument();
   });
 });
 

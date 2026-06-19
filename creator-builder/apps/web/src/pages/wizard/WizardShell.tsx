@@ -89,9 +89,9 @@ export function WizardShell(): ReactElement {
 
   return (
     <div className="cb-wizard" data-step={routeStep}>
-      {/* 1. 向导自有头条（含「保存草稿」；不动 4A Shell 顶栏 = 守 D14）。 */}
-      <header className="cb-wizard__head">
-        <h1 className="cb-wizard__title">上传能力</h1>
+      {/* 1. 向导自有头条：仅「保存草稿」（页名「上传能力」已在 4A Shell 顶栏面包屑展示，content 不再重复，BUG-016）。
+          保存失败就地落 ErrorState（永不裸错），不阻塞继续编辑；不动 4A Shell 顶栏 = 守 D14。 */}
+      <header className="cb-wizard__head cb-wizard__head--actions-only">
         <button
           type="button"
           className="cb-btn cb-wizard__save"

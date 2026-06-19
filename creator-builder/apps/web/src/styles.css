@@ -5,7 +5,8 @@
   /* 尺寸 */
   --cb-sidebar-w: 288px;
   --cb-sidebar-w-collapsed: 64px;
-  --cb-content-max: 840px;
+  /* 主内容最大宽（Figma 内容画布约 1120px；上一版 840 过窄，致工作流右侧大片空白，BUG-016）。 */
+  --cb-content-max: 1200px;
   /* 暖米中性面：bone(页面) → rail(侧栏) → paper(卡片) → raised(抬升面) */
   --cb-bg: #f7f3ec;
   --cb-rail: #f4f0e7;
@@ -96,7 +97,8 @@ body {
 }
 
 .cb-shell__brand-mark {
-  display: inline-flex;
+  /* 展开态隐去徽标，仅留衬线「Agora」字（Figma 展开壳 1153:65 无 A 方块）；收起态再现身做品牌锚。 */
+  display: none;
   align-items: center;
   justify-content: center;
   width: 28px;
@@ -111,8 +113,8 @@ body {
 
 .cb-shell__brand-word {
   font-family: var(--cb-font-serif);
-  font-weight: 700;
-  font-size: 17px;
+  font-weight: 500;
+  font-size: 22px;
   letter-spacing: 0.2px;
   white-space: nowrap;
 }
@@ -169,10 +171,13 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
+  min-height: 40px;
+  padding: 8px 12px;
   margin: 2px 0;
   border-radius: 6px;
-  color: var(--cb-muted);
+  /* Figma 未选中导航文字为深色 #14141a 15px（此前用 muted 灰，整条导航偏淡，BUG-016）。 */
+  color: var(--cb-fg);
+  font-size: 15px;
   text-decoration: none;
   white-space: nowrap;
 }
@@ -210,8 +215,8 @@ body {
 }
 
 .cb-shell__account-name {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 500;
   color: var(--cb-fg);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -219,7 +224,7 @@ body {
 }
 
 .cb-shell__account-title {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--cb-muted);
 }
 
@@ -243,6 +248,11 @@ body {
 .cb-shell[data-collapsed='true'] .cb-shell__brand {
   flex-direction: column;
   gap: 8px;
+}
+
+/* 收起态：隐衬线字、现徽标（纯图标态的品牌锚）。 */
+.cb-shell[data-collapsed='true'] .cb-shell__brand-mark {
+  display: inline-flex;
 }
 
 .cb-shell[data-collapsed='true'] .cb-shell__brand-word,
@@ -272,13 +282,41 @@ body {
 .cb-shell__topbar {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 16px;
   height: 52px;
   padding: 0 24px;
   border-bottom: 1px solid var(--cb-border);
   background: var(--cb-surface);
   position: relative;
+}
+
+/* 顶栏左侧占位（非向导页：让居中字标的右侧控件靠右，左侧留空）。 */
+.cb-shell__topbar-spacer {
+  flex: 0 0 auto;
+}
+
+/* 向导页顶栏左侧面包屑（Figma STEP 顶栏：「上传能力 / Creator Builder」，页名砖红大字 + 产品域灰副）。 */
+.cb-shell__crumbs {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.cb-shell__crumb-page {
+  font-family: var(--cb-font-serif);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--cb-accent);
+}
+
+.cb-shell__crumb-root {
+  font-size: 14px;
+  color: var(--cb-muted);
 }
 
 /* 顶栏居中字标（Figma：AGORA · CREATOR · 当前页，等宽大写小字）。 */
@@ -1637,6 +1675,11 @@ body {
   justify-content: space-between;
 }
 
+/* 仅「保存草稿」时右对齐（页名已上移到 4A Shell 顶栏面包屑，BUG-016）。 */
+.cb-wizard__head--actions-only {
+  justify-content: flex-end;
+}
+
 .cb-wizard__title {
   font-family: var(--cb-font-serif);
   font-size: 20px;
@@ -2330,6 +2373,12 @@ body {
   border-radius: 10px;
   padding: 12px 16px;
 }
+/* 选择引导文案（BUG-018：明确「勾选后才能下一步」，降低卡在已选 0 项的概率）。 */
+.cb-extract-result__guide {
+  margin: 0;
+  font-size: 13px;
+  color: var(--cb-muted);
+}
 .cb-extract-result__list {
   margin: 0;
   padding: 0;
@@ -2746,6 +2795,10 @@ body {
   font-size: 13px;
   color: var(--cb-muted);
 }
+/* 「剩余字段正在生成」主动等待短语（着 accent 提示在跑，区别于静态计数，STEP4 体验）。 */
+.cb-app-identity__progress-hint {
+  color: var(--cb-accent);
+}
 
 /* 软 / 硬两组：paper 卡 rounded8 p16 gap10（box-shadow none，靠 seam 描边分层）。 */
 .cb-app-identity__group {
@@ -2988,14 +3041,32 @@ body {
   gap: 16px;
   max-width: var(--cb-content-max);
 }
-/* 两列：左能力切换器 + 右内容（市集卡 + 来源说明 / 批量结果，gap24）。 */
+/* 步内标题（Figma 1778:24：「发布到市集」+ 副文案）。 */
+.cb-publish__head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cb-publish__title {
+  margin: 0;
+  font-family: var(--cb-font-serif);
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--cb-fg);
+}
+.cb-publish__subtitle {
+  margin: 0;
+  font-size: 14px;
+  color: var(--cb-muted);
+}
+/* 三栏（Figma 1778:24）：左能力切换器 + 中市集卡 + 右来源说明，铺开填工作区（gap32）。 */
 .cb-publish__cols {
   display: flex;
   align-items: flex-start;
-  gap: 24px;
+  gap: 32px;
 }
 .cb-publish__left {
-  flex: 0 0 190px;
+  flex: 0 0 200px;
 }
 .cb-publish__content {
   flex: 1 1 0;
@@ -3011,11 +3082,13 @@ body {
 .cb-single-publish__cols {
   display: flex;
   align-items: flex-start;
-  gap: 16px;
+  gap: 32px;
   flex-wrap: wrap;
 }
+/* 中栏（市集卡 + 封面/价格设定）：填到 Figma 卡宽 ~340，窄屏回流。 */
 .cb-single-publish__center {
-  flex: 0 0 auto;
+  flex: 1 1 320px;
+  max-width: 360px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -3024,8 +3097,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  width: 290px;
-  max-width: 100%;
+  width: 100%;
 }
 
 /* 价格输入（元；留空=免费）。 */
@@ -3061,8 +3133,8 @@ body {
 /* ---------- 市集卡预览（市集里看到的样子；暖米描边卡 radius8） ----------
    封面金色软底（gold = warn token #b8893a）+ 字形大字 / chip 徽标 / 价格 / 试用钮。 */
 .cb-market-card {
-  width: 290px;
-  max-width: 100%;
+  width: 100%;
+  max-width: 360px;
   border: 1px solid var(--cb-border);
   border-radius: var(--cb-radius-card);
   background: var(--cb-surface);
@@ -3259,8 +3331,9 @@ body {
 
 /* ---------- 来源说明表（SourceTable，发布-06，静态映射） ---------- */
 .cb-source-table {
-  flex: 1 1 280px;
-  min-width: 260px;
+  flex: 1 1 320px;
+  min-width: 280px;
+  max-width: 440px;
   border: 1px solid var(--cb-border);
   border-radius: var(--cb-radius-card);
   background: var(--cb-surface);

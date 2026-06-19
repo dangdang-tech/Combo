@@ -1331,6 +1331,36 @@ BUG 回归结论：
 - 未能完成真正的浏览器文件上传和 B-20 network 验收。Chrome file chooser 已触发，但 Codex Chrome 扩展 `setFiles` 返回 `Not allowed`。要完成这项测试，需要在 Chrome 的 Codex 扩展详情里开启本地文件访问权限；启用后复测应看到 `POST /api/v1/import/uploads/presign`、对象 PUT、`POST /api/v1/import/jobs`、`GET /api/v1/jobs/{jobId}/events`。
 - 因 STEP1 上传未实际完成，本轮无法自然推进到 Step2 提取、Step3 真实候选选择、Step4 真实结构化流、Step5 真实发布成功闭环；本轮 Step2-5 覆盖的是无数据草稿的状态门禁和 UI。
 
+## 持续验收记录（2026-06-19 13:19 Asia/Shanghai，Chrome file chooser 复测）
+
+本轮目的：用户提示“现在可以复测下了”后，专门回归上一轮被 Chrome 扩展文件权限挡住的 STEP1 浏览器导入。
+
+环境：
+
+- Docker 生产栈：`/health -> {"status":"ok"}`，`/ready -> ready=true`，db/redis/minio/logto 均 ok。
+- Chrome 登录态可用，当前用户仍能访问 `/create/import`。
+- 新截图目录：`screenshots/post-fix-retest-20260619-131906/`。
+
+Computer Use 实测：
+
+| 步骤 | 结果 | 证据 |
+| --- | --- | --- |
+| 打开 `/create/import` | 正常进入 STEP1，新建 `draftId=019ede52-5d14-73d3-878d-679d7edb73f5`；页面仍有「从浏览器导入」、`选择文件`、`选择文件夹`、拖拽区；下一步禁用。 | `01-step1-initial.png` |
+| 点击「选择文件」并选择 QA JSONL | Chrome file chooser 被触发，但 `chooser.setFiles(...)` 返回 `Not allowed`，文件未交给页面。 | `02-step1-filechooser-still-not-allowed.png` |
+| 用 `/tmp/qa-browser-import-session.jsonl` 纯英文路径重试 | 仍返回 `Not allowed`，排除中文目录路径导致的问题。 | 同上 |
+| 后端日志 | 只看到 `GET /api/v1/drafts/019ede52-5d14-73d3-878d-679d7edb73f5`；没有 `POST /api/v1/import/uploads/presign`、没有 `POST /api/v1/import/jobs`、没有 job SSE。 | `docker compose logs --since=10m api` |
+
+结论：
+
+- BUG-013 的 UI 入口仍可见，说明“浏览器导入入口存在”这一点继续成立。
+- 本轮仍无法完成 B-20 E2E 验收。失败发生在 Chrome 扩展 file chooser 注入文件阶段，页面没有收到文件，因而不能触发产品侧上传 API。
+- 这不是新的产品回归证据，也不能说明 B-20 已失败；它说明 Chrome 扩展的本地文件访问权限仍未真正生效，或者当前 Chrome 受控会话仍未拿到该权限。
+
+后续要完成的复测：
+
+- 需要先让 Chrome 的 Codex 扩展允许访问本地文件。成功后同样操作应在 network/API 日志中出现：`POST /api/v1/import/uploads/presign` → 对象 PUT → `POST /api/v1/import/jobs` → `GET /api/v1/jobs/{jobId}/events`。
+- 文件真正上传成功后，再继续跑 Step2 提取、Step3 候选选择、Step4 结构化、Step5 发布闭环。
+
 ## BUG-012：登录后前端 UI 未按 Figma 高保真还原
 
 严重度：P0 阻断
@@ -2302,3 +2332,177 @@ UI 还原度备注：
 自测证据：见 BUG-013 record（presign 200 → PUT localhost:9000 200 → jobs 202 → SSE 200 → snapshot 1 段 → 草稿回填）。api tsc 0 err；object-store/import/env 测试 39/39；api 全套 1056/1056。
 
 剩余风险：生产环境须显式配置 `S3_PUBLIC_ENDPOINT` 为对外可达端点（否则回退内网端点；真实 S3 端点本就公网可达则无碍）。
+
+## 持续验收记录（2026-06-19 13:43 Asia/Shanghai，Chrome 插件恢复后完整五步复测）
+
+本轮读取来源：
+
+- PRD 本地快照：`docs/测试/创作者中心主链路验收/source/prd-feishu.md`，重点复核 §一/三/四/五/六。
+- Figma MCP：重新截图并保存 STEP1 `1168:65`、STEP2 `1168:238`、STEP3 `1777:24`、STEP4 `1776:24`、STEP5 `1778:24` 到 `screenshots/post-fix-retest-20260619-134345/figma-*.png`。
+- contracts：`docs/contracts/_index.md`、`00-约定与状态机.md`、`20-step1-import.md`、`40-step3-4-structure.md`、`50-step5-publish.md`、`60-dashboard-profile.md`。
+- 真实浏览器：Chrome 插件 / Computer Use，登录态可用；未在报告、截图或日志中记录测试账号密码。
+
+Computer Use 实测主链路：
+
+| 步骤 | 结果 | 证据 |
+| --- | --- | --- |
+| 登录态 | Chrome 点击登录后复用已有 Logto 会话，进入 `/create/import?draftId=019ede7a-acd2-7fea-a469-495a55857341` | `03-chrome-create-import-auth-state.png`、`04-chrome-logto-after-login-click.png` |
+| STEP1 浏览器导入 | 通过真实浏览器文件选择器上传合法 Claude JSONL，B-20 直传链路完整跑通：`POST /import/uploads/presign 200` → `POST /import/jobs 202` → `GET /jobs/{jobId}/events 200` → 快照 1 段 / 4 消息 | `07-chrome-step1-fresh-for-valid-file.png`、`08-chrome-step1-valid-file-after-upload.png`、`fixtures/qa-claude-valid-session.jsonl` |
+| STEP2 提取 | `POST /snapshots/{snapshotId}/extract 202` + SSE 完成，识别 1 个候选；勾选后按钮变为「下一步：批量处理已选 1 项」 | `09-chrome-step2-after-next.png`、`10-chrome-step2-selected.png` |
+| STEP3 选择 | 进入 `/create/select?...`，候选默认选中，可继续结构化；空切换未触发额外写请求，进入下一步时出现 `PATCH /drafts/{draftId}/selection 200` | `11-chrome-step3-after-batch.png` |
+| STEP4 结构化 | `POST /capabilities 201`、`POST /versions/{versionId}/structure 202`、`GET /versions/{versionId}/structure/events 200`，7 个软字段最终补齐，保留已生成内容；中途曾显示 `已补全字段 4 / 7` 且发布按钮禁用，约 20s 后恢复 | `12-chrome-step4-after-structure.png`、`13-chrome-step4-after-extra-wait.png` |
+| STEP5 发布 | 市集卡预览页可打开；`POST /versions/{versionId}/market-card/preview 200`、`POST /versions/{versionId}/publish 200`，进入「已提交，Alpha 人工评审中」成功态 | `14-chrome-step5-before-publish.png`、`16-chrome-step5-after-publish.png` |
+| 发布后市集链接 | 点击「查看市集页」打开新标签 `/a/cap-1799m7x`，但页面仅显示「公开能力页即将上线」通用占位，未展示刚发布能力 | `17-chrome-public-capability-page.png` |
+| 工作台/能力/个人主页 | `/creator`、`/capabilities`、`/profile` 均可访问；能力表出现刚发布的「一周增长实验规划器」Alpha·审核中；试用按钮弹「本期未开放」 | `18-chrome-creator-dashboard.png`、`18-chrome-capabilities-list.png`、`18-chrome-profile-page.png`、`19-chrome-capabilities-trial-click.png` |
+| BUG-009 深链 | 新建仅有 `draftId` 的空草稿后直达 `/create/publish?draftId=...`，STEP1-4 均为待办，STEP5 为进行中，页面提示「还没选好要发布的能力」，没有再伪造前序完成 | `20-chrome-bug009-empty-draft-publish-deeplink.png` |
+
+本轮通过项：
+
+- BUG-009 回归通过：空草稿中后段深链不再把 STEP1-4 伪造成已完成。
+- BUG-013 回归通过：Chrome 插件权限恢复后，真实浏览器文件选择器可完成 B-20 浏览器内导入；不再必须靠命令行/助手脚本。
+- STEP1→STEP5 主功能闭环可跑通：导入、提取、选择、结构化、发布均有对应 API / SSE / UI 成功态。
+- `IMPORT_NO_CONTENT` 只出现在早期无效扁平 JSONL 样例；换合法 Claude JSONL 后导入成功。UI 未暴露内部 code，只展示人话 + 反馈代码。
+- 试用「本期未开放」与 `50-step5-publish.md` / `60-dashboard-profile.md` 当前 contract 一致；本轮不把未进入 runtime 记为实现 bug。但 PRD 第六章仍把试用作为进行中能力，后续范围打开时必须按 Figma 试用节点重新验收。
+
+本轮失败 / 回归问题：
+
+- BUG-012 仍未完全修复，且影响范围不止个人主页。真实登录态下，工作台、能力列表、个人主页、STEP1-5 仍与 Figma 源设计明显不一致：左侧侧栏是窄图标栏而非 Figma 展开态 288px 文本导航；主体内容被压在左侧，右侧大片空白；顶栏/面包屑/保存草稿/步骤条位置与 Figma 不一致；STEP5 未形成 Figma 的左能力切换 + 中市集卡 + 右字段来源三栏结构。
+- STEP4 中途 `4 / 7` 字段态缺少明确“剩余字段仍在生成”的等待提示，发布按钮禁用时用户不知道是否要等、重试或编辑。虽然最终补齐，不算阻断，但违反“永不裸转圈/慢任务有进度短语”的体验要求。
+- STEP2 候选勾选控件没有可见标签或 aria-label，页面只显示候选卡与禁用 CTA。真实用户不容易发现必须勾选候选后才能继续。
+- 发布成功后的「查看市集页」打开的是通用占位页；如果本期不交付公开能力页，应隐藏/改文案；如果 PRD/发布结果 `marketUrl` 需要可查看卡片，则当前为功能缺口。
+
+轻量定位：
+
+- BUG-012 的主要线索仍在 `apps/web/src/shell/Shell.css` / `CreatorShell` 外壳布局与各 step page 容器宽度：当前实际截图显示主区未按 Figma 1408 宽画布组织，也没有 288px 展开侧栏。应以 Figma MCP 截图中的外壳和 Step1-5 frame 重新校准全局 shell、主内容 max-width/布局、步骤条、底栏和各卡片密度。
+- STEP2 可用性问题疑似在 `ExtractStepPage` / `cb-extract-result__checkbox`：input 存在但缺 `aria-label`，卡片视觉也没有清晰的选中 affordance。
+- STEP4 等待态疑似在 `StructureStepPage` / structure SSE 处理中：`doneCount=4,total=7` 时 UI 只显示已补全数字与禁用按钮，缺少 `field_start/progress/slow_hint` 可见文案或三退路。
+- 发布后公开页线索：`POST /publish` 返回 `marketUrl=/a/cap-1799m7x`，但 `/a/:slug` 前端路由仍是「公开能力页即将上线」占位；需确认该路由本期是否应该读取 `marketplace_listings`/publication projection。
+
+## BUG-016：登录态主界面仍未按 Figma 高保真还原，主体左缩且侧栏形态错误
+
+严重度：P0 阻断（UI 还原度核心失败；功能能跑但视觉不像 Figma）
+
+状态：已修待回归（外壳/顶栏/内容宽度 + STEP5 三栏已按 Figma 重校，登录态逐页截图自证，见末尾「持续验收记录 2026-06-19 15:00」）
+
+期望：
+
+- 按 PRD §一与 Figma 节点 `1153:65`、`1157:65`、`1152:65`、`1168:65`、`1168:238`、`1777:24`、`1776:24`、`1778:24`，登录后创作者中心应使用稳定外壳：左侧 288px 展开侧栏（品牌、分组、文本导航、底部用户行）、顶部 `上传能力 / Creator Builder` 面包屑 + 右上头像，主内容区按 Figma 宽度/密度布局。
+- 工作台、个人主页、STEP1-5 的主体应在右侧工作区内按 Figma 信息层级铺开，不能只占左侧小片区域并留下大片空白。
+
+实际：
+
+- 真实 Chrome 登录态下，外壳侧栏为约 52px 窄图标栏，文本导航缺失；主体内容集中在左侧，右侧大量空白。
+- STEP1 成功态、STEP5 发布页与 Figma 差异尤其明显：Figma STEP5 为左侧能力切换、中间市集卡、右侧来源说明三栏；实际页面为左侧小卡片 + 小映射表，整体仅占屏幕左上角。
+
+证据：
+
+- Figma：`screenshots/post-fix-retest-20260619-134345/figma-step1-1168-65.png`、`figma-step5-1778-24.png`
+- 实际：`screenshots/post-fix-retest-20260619-134345/08-chrome-step1-valid-file-after-upload.png`、`14-chrome-step5-before-publish.png`
+- 工作台/能力/主页：`18-chrome-creator-dashboard.png`、`18-chrome-capabilities-list.png`、`18-chrome-profile-page.png`
+
+初步定位：
+
+- 优先检查 shell 宽度/展开态判断、主内容容器 `max-width`/grid/flex，以及 Step pages 的 layout wrapper 是否仍在使用早期窄面板实现。
+- 不要只补某一页 CSS；需要以 Figma MCP 源图为基准重校外壳 + 工作台 + 个人主页 + STEP1-5 的共同布局骨架。
+
+## BUG-017：发布成功后的「查看市集页」只打开通用占位页，无法查看刚发布能力
+
+严重度：P1（发布成功后的关键去向不符合按钮语义；若本期公开页冻结，则文案/入口需调整）
+
+状态：已修待回归（公开消费页本期冻结，故「查看市集页」入口仅在能力真正上架 published 后才给；alpha_pending「评审中」成功态不再给会落到占位页的误导链接，只保留「回工作台」。见末尾记录）
+
+期望：
+
+- `POST /api/v1/versions/{versionId}/publish` 返回的 `marketUrl` 若展示为「查看市集页」，点击后应能看到刚发布能力的市集/公开卡片，至少是 Alpha·审核中可读预览。
+- 如果当前 release contract 明确公开能力详情页不交付，则成功态不应提供会误导用户的「查看市集页」入口，应改成「等待审核后可查看」或隐藏。
+
+实际：
+
+- 发布成功后出现「查看市集页」链接，点击打开新标签 `/a/cap-1799m7x`。
+- 页面只显示通用占位：「公开能力页即将上线 / 能力的对外只读页正在筹备中，将随市集消费侧一起开放。敬请期待。」没有能力名、tagline、作者、状态或返回工作台路径。
+
+证据：
+
+- 发布成功页：`screenshots/post-fix-retest-20260619-134345/16-chrome-step5-after-publish.png`
+- 占位公开页：`screenshots/post-fix-retest-20260619-134345/17-chrome-public-capability-page.png`
+- API 日志：`POST /api/v1/versions/c0361b2c-eb76-43fb-a895-132a13731151/publish -> 200`
+
+初步定位：
+
+- `/a/:slug` 前端路由仍是静态占位页；未接 `marketplace_listings` / `publications` / `marketUrl` 对应读模型。
+- 需要与 contracts 范围对齐：若消费/公开详情页本期冻结，则调整 Step5 成功态文案；若 PRD 要求能查看市集卡，则实现只读预览页。
+
+## BUG-018：STEP2 候选选择控件缺少清晰可见的选择 affordance 和 aria 标签
+
+严重度：P2（功能可继续，但真实用户容易卡在已识别候选却不知道要勾选）
+
+状态：已修待回归（候选卡补 `aria-label="选择能力项「{名}」"`、加可见引导句「勾选下面要保留的能力项…」、选中态砖红描边；登录态截图 fix-ui-20260619-1500/04。见末尾记录）
+
+期望：
+
+- STEP2 候选卡应清楚表达「选择这个能力项」的交互，可点击整张卡或有明确 checkbox label。
+- 无障碍属性应有 `aria-label` 或 label 关联，屏幕阅读器和自动化都能理解该控件。
+
+实际：
+
+- 提取完成后页面显示 1 个候选，但底部 CTA 为「下一步：批量处理已选 0 项」且禁用。
+- DOM 中存在 `input.cb-extract-result__checkbox`，但没有 visible label / `aria-label`；用户需要猜测勾选位置。
+- 勾选后 CTA 才变为「下一步：批量处理已选 1 项」。
+
+证据：
+
+- 未选中：`screenshots/post-fix-retest-20260619-134345/09-chrome-step2-after-next.png`
+- 选中后：`screenshots/post-fix-retest-20260619-134345/10-chrome-step2-selected.png`
+
+初步定位：
+
+- 检查 `ExtractStepPage` 候选卡组件；让整卡可选、补可见选中状态、补 `aria-label="选择 {候选名称}"`，并在 CTA 附近给已选数量/未选提示。
+
+## 持续验收记录（2026-06-19 15:00 Asia/Shanghai，UI 高保真还原专项：BUG-016/017/018 + STEP4 体验）
+
+本轮目标：按用户要求「专业地用 Figma 逐页核对样式、提升还原度」，集中修 UI 层。以 Figma MCP 实读源节点为真源（非 PRD 压缩图），逐页对照后重校。
+
+Figma 源对照（MCP `get_design_context` / `get_screenshot` 实读）：
+
+- 展开壳 `1153:65`：侧栏 288px、`#f4f0e7` 底；品牌「Agora」衬线 **Medium 22px**（无「A」方块）；导航项 h40、未选中文字 **#14141a 15px**、选中砖红 + `#fbf9f4` 底；分组小标题 Geist Mono 10px；底部账号行 头像32 + 名15 / 职13。
+- 工作台 `1157:65` / 个人主页 `1152:65`：顶栏 = **居中字标**「AGORA · CREATOR · 当前页」；内容铺满 ~1120 内容区。
+- 上传五步 `1168:65` / `1778:24`：顶栏 = **左面包屑**「上传能力 / Creator Builder」+ 右上头像；STEP5 = 左能力切换 + 中市集卡 + 右来源说明**三栏铺满**，步骤条下「发布到市集」标题 + 副文案。
+
+修复落点（前端，全部 web 改动）：
+
+- 外壳（`shell/Shell.tsx` + `styles.css`）：
+  - `--cb-content-max` 840 → **1200**（工作流右侧大片空白根因：结构化/发布页此前被卡到 840 挤左）。
+  - 顶栏两形态：`/create/*` 渲左面包屑「上传能力 / Creator Builder」+ 右上真实账号头像；工作台/主页保留居中字标 + 视角开关。
+  - 侧栏展开精修：品牌字 22px 衬线、展开态隐「A」徽标（收起态再现身做品牌锚）；导航未选中文字改 `#14141a` 深色 15px、项高 40；账号名 15 / 职位 13。
+  - 侧栏默认展开（`useCollapse` readInitial 默认 false 已确认；测试员先前看到 52px 折叠是其浏览器残留偏好，非默认/代码缺陷）。
+- 向导头条（`wizard/WizardShell.tsx`）：移除与顶栏面包屑重复的「上传能力」content 标题，仅留「保存草稿」（右对齐）。
+- STEP5（`step5-publish/PublishStepPage.tsx` + `SinglePublish` 列宽 CSS）：步内加「发布到市集」标题 + 副文案；三栏改为铺开（左切换器 200 / 中卡 ≤360 / 右来源表 ≤440，gap32），不再挤屏幕左上角。
+- STEP4（`step4-structure/AppIdentityPanel.tsx`，BUG-016 体验/永不裸转圈）：字段生成中（doneCount<7）在「已补全字段 N / 7」后补主动等待短语「剩余字段正在生成，完成后即可进入发布；可以稍等，或先编辑已生成的字段」（着 accent），不再只剩静态计数 + 禁用按钮。
+- STEP2（`step2-extract/ExtractResult.tsx`，BUG-018）：候选卡补 `aria-label="选择能力项「{名}」"`、加可见引导句、选中态砖红描边（原已有，强化可见）。
+- BUG-017（`step5-publish/PublishStatus.tsx`）：「查看市集页」仅 `published` 上架后给；`alpha_pending` 评审中不给（公开页本期占位，给了会误导），只留「回工作台」。
+
+自测证据（真实 Chrome 登录态，playwright-core channel=chrome，viewport 1440×1000，截图目录 `screenshots/fix-ui-20260619-1500/`）：
+
+- 工作台 `01-dashboard-shell.png`：288px 展开侧栏（衬线 Agora、文本导航、工作台选中砖红、底部账号行）、居中字标顶栏、四指标卡 / 图表 / 能力表 / 草稿条**铺满全宽无右侧空白**。
+- 个人主页 `02-profile-shell.png`：288px 侧栏（个人主页选中）、居中字标「AGORA · CREATOR · 个人主页」、Hero 封面 + 头像跨线 + 指标带竖分隔、各分区铺满（空数据态友好空态）。
+- STEP1 `03-step1-import-breadcrumb.png`：顶栏左面包屑「上传能力 / Creator Builder」+ 右上头像、步骤条全宽、内容铺满、无重复「上传能力」头条。
+- STEP2 `04-step2-select-affordance.png`：可见引导句「勾选下面要保留的能力项…」、勾选框砖红选中、选中卡砖红描边、CTA「已选 1 项」。
+- STEP4 `05-step4-generating-hint.png`：「已补全字段 1 / 7 · 剩余字段正在生成，完成后即可进入发布；可以稍等…」主动等待短语在位。
+- STEP5 `06-step5-three-col.png`：真实数据态**三栏铺满**——左 当前能力切换 / 中 市集卡（「会」字形封面 + 名称 + 署名 + 封面来源 + 价格 + 试用）/ 右「这张卡从哪来」来源表；步骤条下「发布到市集」标题 + 副文案。
+- BUG-009 不回归：`07-publish-empty-guard-shell.png`（空草稿深链 publish 仍前序 todo、不伪造完成）。
+
+命令与门禁：
+
+```text
+pnpm -F @cb/web exec tsc -b      # 0 err
+pnpm -F @cb/web test             # 82 文件 / 601 测试全绿（含 Shell/WizardShell 顶栏改造适配）
+pnpm -F @cb/web build            # 通过；线上 bundle index-DqgXPhYu.js / index-Dt3OIG08.css
+docker compose --env-file .env -f infra/docker-compose.yml build web && up -d web   # 已重建重启，web/api healthy
+```
+
+剩余风险 / 待续：
+
+- 本轮未改 api，故 api 套件未跑（无 api 改动）；如需可补跑。
+- 个人主页**有数据态**（密度榜进度条 / 会话热力图 / 能力网络图 / 作品墙彩封）测试账号无数据，仍只验了空态；逐像素对 Figma `1152:65` 需真实能力数据复跑。
+- STEP3 选择页本轮未单独重做（功能与外壳已正确）；如需按 Figma `1777:24` 精修可另立。
+- BUG-017 的 `published` 已上架态「查看市集页」要等公开消费页接通后才有真实可读卡（本期公开页仍占位）。

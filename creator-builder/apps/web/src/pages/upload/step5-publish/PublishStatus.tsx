@@ -68,12 +68,15 @@ export function PublishStatus({
           </button>
         ) : (
           <>
-            {marketUrl && (
+            {/* 「查看市集页」仅在能力真正上架（published）后给（BUG-017）：
+                alpha_pending 只是「已提交·人工评审中」，能力尚未上线，此时给市集链接会落到「即将上线」占位页、误导用户。
+                故评审中不显该入口；待 published 上架、公开消费页接通后再放出可读市集卡。 */}
+            {reviewStatus === 'published' && marketUrl && (
               <a className="cb-btn" href={marketUrl} target="_blank" rel="noreferrer">
                 查看市集页
               </a>
             )}
-            <button type="button" className="cb-btn" onClick={onDone}>
+            <button type="button" className="cb-btn cb-btn--primary" onClick={onDone}>
               回工作台
             </button>
           </>
