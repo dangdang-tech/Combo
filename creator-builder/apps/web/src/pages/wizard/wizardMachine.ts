@@ -141,3 +141,44 @@ export function buildStepNodes(
 export function stepSummary(step: DraftStep): string {
   return `第 ${stepIndex(step)} 步，共 ${WIZARD_STEP_COUNT} 步`;
 }
+
+/**
+ * 真实进度锚点（BUG-009）——草稿已落库产物引用 ∪ 前进流程中各步已 set 的引用。
+ * 每个非空字段 = 对应步「真做过」的证据；**draftId 不在此**：草稿存在 ≠ 走过任何后续步。
+ */
+export interface ProgressAnchors {
+  /** STEP① 导入产物（snapshot）。 */
+  snapshotId?: string | undefined;
+  /** STEP② 萃取 job（萃取已起）。 */
+  extractJobId?: string | undefined;
+  /** STEP③ 选择态非空（选过能力）。 */
+  hasSelection?: boolean | undefined;
+  /** STEP④ 建版产物。 */
+  versionId?: string | undefined;
+  /** STEP④ 能力体（建版同事务回填）。 */
+  capabilityId?: string | undefined;
+  /** STEP⑤ 批量发布批次。 */
+  batchId?: string | undefined;
+}
+
+/**
+ * 据真实产物锚点推导「进度前沿步」（BUG-009 核心）——只认已落库 / 已生成的证据，**绝不看 URL 落点**。
+ *
+ * 每个锚点证明某步真做完，对应「现在最远可处于」的步（取最远证据）：
+ *   - versionId / capabilityId / batchId → 已建版 / 已建批（结构化做完）→ publish。
+ *   - hasSelection                        → 已定选择（选择做完）        → structure。
+ *   - extractJobId                        → 萃取已起（提取做过）        → select。
+ *   - snapshotId                          → 导入已出快照（导入做完）    → extract。
+ *   - 无任何锚点                           → 还在第一步                 → import。
+ *
+ * 关键：仅有 draftId（无任一上述锚点）绝不构成进度证据——深链 `?draftId=` 到中后段时，
+ *   前序步据本前沿仍判 todo（真实未开始），不被 URL 伪造成 done（脊柱 §8 续传语义 / BUG-009 修复要旨）。
+ *   注：select 是纯前端步、后端 current_step 跳过它，故进度前沿取产物锚点而非后端 currentStep。
+ */
+export function progressFrontier(a: ProgressAnchors): DraftStep {
+  if (a.versionId || a.capabilityId || a.batchId) return 'publish';
+  if (a.hasSelection) return 'structure';
+  if (a.extractJobId) return 'select';
+  if (a.snapshotId) return 'extract';
+  return 'import';
+}

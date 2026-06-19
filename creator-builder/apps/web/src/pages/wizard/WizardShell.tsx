@@ -12,7 +12,13 @@
 import { useEffect, type ReactElement } from 'react';
 import { Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ErrorState } from '../../components/index.js';
-import { stepForPath, buildStepNodes, pathForStep, WIZARD_STEPS } from './wizardMachine.js';
+import {
+  stepForPath,
+  buildStepNodes,
+  pathForStep,
+  progressFrontier,
+  WIZARD_STEPS,
+} from './wizardMachine.js';
 import { StepBar } from './StepBar.js';
 import { WizardFooter } from './WizardFooter.js';
 import { useWizard } from './WizardContext.js';
@@ -34,9 +40,9 @@ export function WizardShell(): ReactElement {
     primaryAction,
     currentStep,
     summaryPrefix,
-    draftId,
     snapshotId,
     extractJobId,
+    selection,
     versionId,
     capabilityId,
     batchId,
@@ -51,26 +57,22 @@ export function WizardShell(): ReactElement {
   const draftIdParam = searchParams.get('draftId') ?? undefined;
   const resume = useResumeDraft(draftIdParam);
 
-  // 步骤条实际进度前沿（BUG-009）：步骤条状态须基于 draft 实际进度，不能让 URL 当前步把前序伪造成已完成。
-  //   「有锚点」判定取 URL 深链锚点 ∪ 上下文已恢复引用：
-  //     - URL 锚点（draftId/snapshotId/extractJobId/version/capability/batchId）是合法续传/前进的权威信号，
-  //       且不被续传 hydrate 副作用污染（避免恢复在途/退化态误判为无锚点）。
-  //     - 上下文引用兜前进流程中已落库、URL 尚未回写的极短窗口。
-  //   有任一锚点 = 合法续传或前进 → 进度前沿取 URL 落点（其前的步骤确实做过、标 done 可回看）。
-  //   无任何锚点的中后段深链（用户直接敲 URL、没做过前序、也无草稿数据）→ 进度前沿退回首步 import，
-  //   前序按 todo（真实「未开始」），绝不伪造前序完成态（脊柱 §8 续传语义）。
-  const hasUrlAnchor = Boolean(
-    draftIdParam ||
-      searchParams.get('snapshotId') ||
-      searchParams.get('extractJobId') ||
-      searchParams.get('version') ||
-      searchParams.get('capability') ||
-      searchParams.get('batchId'),
-  );
-  const hasCtxAnchor = Boolean(
-    draftId || snapshotId || extractJobId || versionId || capabilityId || batchId,
-  );
-  const progressStep = hasUrlAnchor || hasCtxAnchor ? routeStep : WIZARD_STEPS[0]!;
+  // 步骤条实际进度前沿（BUG-009）：步骤条状态须基于 draft 真实产物，不能让 URL 当前步把前序伪造成已完成。
+  //   进度前沿只认「真做过」的产物锚点（progressFrontier）：
+  //     - 锚点来源 = 上下文 snapshot/extract/selection/version/capability/batch（WizardLayout 从 URL 初值播种
+  //       ∪ 各步前进时 set ∪ 续传 hydrateFromDraft 从 DraftView 回填）。三条来源同口径、统一收敛到上下文。
+  //     - 仅有 draftId（深链 `?draftId=` 但草稿没产出过 snapshot/候选/选择/版本）绝不算进度证据——
+  //       前序据前沿仍判 todo（真实未开始），绝不伪造 done（脊柱 §8 续传语义 / 测试员 BUG-009 复测要求）。
+  //   续传深链恢复中（hydrate 未回填前）前沿暂退首步、前序显 todo + 顶「正在恢复你的草稿…」，
+  //   hydrate 落库后前沿据真实产物前移、前序转 done——诚实反映「未知→已知」，不抢先标完成。
+  const progressStep = progressFrontier({
+    snapshotId,
+    extractJobId,
+    hasSelection: Boolean(selection),
+    versionId,
+    capabilityId,
+    batchId,
+  });
   const nodes = buildStepNodes(routeStep, stepErrors, progressStep);
 
   // 点已完成 / 异常步 → 回看 / 重试（贯穿-16）：跳该步路由（保留 ?draftId 续传上下文）。

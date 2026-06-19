@@ -101,18 +101,28 @@ describe('WizardShell（F-09 向导壳）', () => {
     expect(bar.querySelector('[data-step="select"]')?.getAttribute('data-status')).toBe('todo');
   });
 
-  it('select 步（有草稿续传）：前两步 done（可回看）、第3段 current；底栏摘要「第 3 步」', () => {
-    // BUG-009：步骤条 done 须基于 draft 实际进度。带 ?draftId= 即合法续传（草稿锚点托底），前序才标 done。
-    //   续传单条 GET 命中草稿（currentStep=select），prior 两步确实做过。
+  it('select 步（有草稿续传）：hydrate 后前两步 done（可回看）、第3段 current；底栏摘要「第 3 步」', async () => {
+    // BUG-009：步骤条 done 须基于 draft 真实产物。续传单条 GET 命中草稿（snapshot+extract+selection 齐），
+    //   hydrate 回填后产物锚点把进度前沿推到 structure，prior 两步（import/extract）确实做过 → done。
     mock.restore();
     mock = installFetchMock({
       status: 200,
-      json: { data: draftView({ id: 'd1', currentStep: 'select' }) },
+      json: {
+        data: draftView({
+          id: 'd1',
+          currentStep: 'select',
+          snapshotId: 'snap1',
+          extractJobId: 'job1',
+        }),
+      },
     });
     renderWizard('/create/select?draftId=d1');
     expect(screen.getByTestId('step')).toHaveTextContent('select');
     const bar = screen.getByRole('list', { name: '上传五步进度' });
-    expect(bar.querySelector('[data-step="import"]')?.getAttribute('data-status')).toBe('done');
+    // hydrate 落库后前序据真实产物转 done（恢复中短暂 todo 是诚实的，不抢标）。
+    await waitFor(() =>
+      expect(bar.querySelector('[data-step="import"]')?.getAttribute('data-status')).toBe('done'),
+    );
     expect(bar.querySelector('[data-step="extract"]')?.getAttribute('data-status')).toBe('done');
     expect(bar.querySelector('[data-step="select"]')).toHaveAttribute('aria-current', 'step');
     expect(screen.getByText('第 3 步，共 5 步')).toBeInTheDocument();
@@ -135,19 +145,57 @@ describe('WizardShell（F-09 向导壳）', () => {
     expect(screen.queryByRole('button', { name: /第 1 步.*点击回看/ })).toBeNull();
   });
 
-  it('BUG-009：无锚点深链带 snapshotId 锚点 → 视为合法续传，前序据进度标 done', () => {
-    // 锚点不限 draftId：snapshotId（STEP① 产物）等任一落点引用即「确有进度」，前序合法标 done。
+  it('BUG-009：仅 draftId 的深链（草稿无产物）→ 不因 draftId 存在就伪造前序 done', async () => {
+    // 测试员 BUG-009 复测要旨：?draftId= 到中后段，但草稿只 bootstrap 过、无 snapshot/候选/选择/版本。
+    //   续传 hydrate 后上下文仍无任何产物锚点 → 进度前沿退首步 import，前序按 todo，绝不因「有 draftId」标 done。
+    mock.restore();
+    mock = installFetchMock({
+      status: 200,
+      json: { data: draftView({ id: 'd1', currentStep: 'import', selection: undefined }) },
+    });
+    renderWizard('/create/publish?draftId=d1');
+    expect(screen.getByTestId('step')).toHaveTextContent('publish');
+    // 等续传 hydrate 完成（selection=none 确认草稿已恢复且无选择产物）。
+    await waitFor(() => expect(screen.getByTestId('selection')).toHaveTextContent('none'));
+    const bar = screen.getByRole('list', { name: '上传五步进度' });
+    // 草稿无任何产物 → 前序 import~structure 全 todo（不伪造）；publish 是 URL 落点 current。
+    expect(bar.querySelector('[data-step="import"]')?.getAttribute('data-status')).toBe('todo');
+    expect(bar.querySelector('[data-step="extract"]')?.getAttribute('data-status')).toBe('todo');
+    expect(bar.querySelector('[data-step="select"]')?.getAttribute('data-status')).toBe('todo');
+    expect(bar.querySelector('[data-step="structure"]')?.getAttribute('data-status')).toBe('todo');
+    expect(bar.querySelector('[data-step="publish"]')).toHaveAttribute('aria-current', 'step');
+    // 前序未做 → 无伪造的「点击回看」退路。
+    expect(screen.queryByRole('button', { name: /点击回看/ })).toBeNull();
+  });
+
+  it('BUG-009：snapshotId 锚点 → 仅 import 标 done，extract 不被一并伪造（精确前沿）', () => {
+    // ?snapshotId= 经 WizardLayout 同步播种到上下文：导入做完（snapshot 存在）→ 进度前沿 = extract。
+    //   URL 落点 select 远超前沿 → done 前沿取 min(select=3, extract=2)=2：仅 import(1<2) done；
+    //   extract 是前沿但还没做完、URL 又跳过了它 → todo（不因「有 snapshot」就把 extract 也标 done）。
     renderWizard('/create/select?snapshotId=snap1');
     const bar = screen.getByRole('list', { name: '上传五步进度' });
     expect(bar.querySelector('[data-step="import"]')?.getAttribute('data-status')).toBe('done');
-    expect(bar.querySelector('[data-step="extract"]')?.getAttribute('data-status')).toBe('done');
+    expect(bar.querySelector('[data-step="extract"]')?.getAttribute('data-status')).toBe('todo');
     expect(bar.querySelector('[data-step="select"]')).toHaveAttribute('aria-current', 'step');
   });
 
   it('点已完成步 → 路由跳该步回看（贯穿-16），保留 ?draftId', async () => {
+    // 续传命中真实草稿（产物齐到 structure）：hydrate 后 import 据真实产物 done → 可点回看。
+    mock.restore();
+    mock = installFetchMock({
+      status: 200,
+      json: {
+        data: draftView({
+          id: 'd1',
+          currentStep: 'structure',
+          snapshotId: 'snap1',
+          extractJobId: 'job1',
+        }),
+      },
+    });
     renderWizard('/create/structure?draftId=d1');
-    // structure 步：import done 可点。
-    const importBtn = screen.getByRole('button', { name: /第 1 步.*点击回看/ });
+    // structure 步：hydrate 后 import done 可点（恢复中短暂不可点是诚实的）。
+    const importBtn = await screen.findByRole('button', { name: /第 1 步.*点击回看/ });
     await userEvent.click(importBtn);
     await waitFor(() => expect(screen.getByTestId('path')).toHaveTextContent('/create/import'));
   });
@@ -203,8 +251,8 @@ describe('WizardShell（F-09 向导壳）', () => {
     expect(screen.getByRole('heading', { name: '上传能力' })).toBeInTheDocument();
     expect(screen.getByRole('list', { name: '上传五步进度' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '保存草稿' })).toBeInTheDocument();
-    // 跳到 import 步（点回看），三件套仍在、结构不变。
-    await userEvent.click(screen.getByRole('button', { name: /第 1 步.*点击回看/ }));
+    // 跳到 import 步（点回看），三件套仍在、结构不变。续传 hydrate 后 import 据真实产物 done 才可点。
+    await userEvent.click(await screen.findByRole('button', { name: /第 1 步.*点击回看/ }));
     await waitFor(() => expect(screen.getByTestId('path')).toHaveTextContent('/create/import'));
     expect(screen.getByRole('heading', { name: '上传能力' })).toBeInTheDocument();
     expect(screen.getByRole('list', { name: '上传五步进度' })).toBeInTheDocument();

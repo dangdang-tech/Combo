@@ -13,6 +13,7 @@ import {
   isFirstStep,
   isLastStep,
   buildStepNodes,
+  progressFrontier,
   stepSummary,
 } from './wizardMachine.js';
 
@@ -106,5 +107,74 @@ describe('buildStepNodes（步骤条五态 + 续传）', () => {
     const nodes = buildStepNodes('publish');
     expect(nodes.filter((n) => n.status === 'done')).toHaveLength(4);
     expect(nodes.every((n) => (n.status === 'done' ? n.navigable : true))).toBe(true);
+  });
+
+  it('BUG-009：URL 落点(publish)远超真实进度(import) → 仅真做过的前序标 done，不伪造', () => {
+    // progressStep=import（无任何产物锚点），URL 落点=publish：done 前沿取二者小 = import，
+    //   故前序绝不被 URL 标 done（只有 < min(curIdx, progressIdx) 才 done）。
+    const nodes = buildStepNodes('publish', {}, 'import');
+    const byStep = Object.fromEntries(nodes.map((n) => [n.step, n]));
+    expect(byStep.import!.status).toBe('todo'); // 没真做过，不伪造 done
+    expect(byStep.extract!.status).toBe('todo');
+    expect(byStep.select!.status).toBe('todo');
+    expect(byStep.structure!.status).toBe('todo');
+    expect(byStep.publish!.status).toBe('current'); // 用户正看 publish
+    expect(nodes.filter((n) => n.status === 'done')).toHaveLength(0);
+  });
+
+  it('BUG-009：URL 落点(publish)、真实进度到 select → 仅 import/extract done，select/structure 仍 todo', () => {
+    const nodes = buildStepNodes('publish', {}, 'select');
+    const byStep = Object.fromEntries(nodes.map((n) => [n.step, n]));
+    // done 前沿 = min(publish=5, select=3) = 3 → 仅 idx<3（import/extract）done。
+    expect(byStep.import!.status).toBe('done');
+    expect(byStep.extract!.status).toBe('done');
+    expect(byStep.select!.status).toBe('todo'); // 真实进度只到此，未做完
+    expect(byStep.structure!.status).toBe('todo');
+    expect(byStep.publish!.status).toBe('current');
+  });
+});
+
+describe('progressFrontier（真实产物锚点 → 进度前沿，BUG-009）', () => {
+  it('无任何锚点（仅 draftId 不在此 → 等价无锚点）→ import（绝不伪造前序）', () => {
+    expect(progressFrontier({})).toBe('import');
+    expect(progressFrontier({ snapshotId: undefined })).toBe('import');
+  });
+
+  it('snapshotId（导入做完）→ extract', () => {
+    expect(progressFrontier({ snapshotId: 'snap1' })).toBe('extract');
+  });
+
+  it('extractJobId（萃取已起）→ select', () => {
+    expect(progressFrontier({ snapshotId: 'snap1', extractJobId: 'job1' })).toBe('select');
+  });
+
+  it('hasSelection（已定选择）→ structure', () => {
+    expect(
+      progressFrontier({ snapshotId: 'snap1', extractJobId: 'job1', hasSelection: true }),
+    ).toBe('structure');
+  });
+
+  it('versionId / capabilityId / batchId（已建版/批）→ publish', () => {
+    expect(progressFrontier({ versionId: 'v1' })).toBe('publish');
+    expect(progressFrontier({ capabilityId: 'cap1' })).toBe('publish');
+    expect(progressFrontier({ batchId: 'b1' })).toBe('publish');
+  });
+
+  it('取最远证据：齐备全锚点 → publish', () => {
+    expect(
+      progressFrontier({
+        snapshotId: 'snap1',
+        extractJobId: 'job1',
+        hasSelection: true,
+        versionId: 'v1',
+        capabilityId: 'cap1',
+      }),
+    ).toBe('publish');
+  });
+
+  it('hasSelection=false 不算选择证据（仅 extract 锚点 → 仍 select）', () => {
+    expect(
+      progressFrontier({ snapshotId: 'snap1', extractJobId: 'job1', hasSelection: false }),
+    ).toBe('select');
   });
 });
