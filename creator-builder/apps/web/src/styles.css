@@ -1284,24 +1284,24 @@ body {
 }
 
 /* ---------- Profile (F-06 个人主页六分区) ---------- */
+/* 内容区铺满外壳主区（与工作台同口径，无 880px 窄柱；Figma 1152:65 六分区满宽编排，BUG-012）。 */
 .cb-profile {
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  max-width: 880px;
+  gap: 20px;
 }
 
 .cb-profile-section {
   border: 1px solid var(--cb-border);
   border-radius: 10px;
-  padding: 20px;
+  padding: 24px 28px;
   background: var(--cb-surface);
 }
 
 .cb-profile-section__title {
   font-family: var(--cb-font-serif);
-  margin: 0 0 14px;
-  font-size: 15px;
+  margin: 0 0 16px;
+  font-size: 17px;
   font-weight: 600;
 }
 
@@ -1315,19 +1315,43 @@ body {
   margin: 0;
 }
 
-/* ① Hero 身份区 */
+/* ① Hero 身份区（Figma 1152:65：封面横幅 + 头像跨线 + 左身份/右社交同行编排） */
+.cb-profile-hero {
+  padding: 0; /* 封面铺满到卡片边；主体内边距交给 __body */
+  overflow: hidden;
+}
+
+/* 封面横幅：暖米渐变 + 底部砖红细线（头像压在线上）。 */
+.cb-profile-hero__cover {
+  height: 116px;
+  background: linear-gradient(160deg, var(--cb-raised) 0%, var(--cb-rail) 100%);
+  border-bottom: 1px solid var(--cb-accent);
+}
+
+/* 主体行：左身份块、右社交计数，昵称/社交同处封面线下顶对齐。 */
+.cb-profile-hero__body {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 16px 28px 24px; /* 顶 16px：昵称/社交落封面线下 */
+}
+
 .cb-profile-hero__head {
   display: flex;
-  gap: 16px;
+  gap: 18px;
   align-items: flex-start;
+  min-width: 0;
 }
 
 .cb-profile-hero__avatar {
-  width: 64px;
-  height: 64px;
+  width: 72px;
+  height: 72px;
   border-radius: 50%;
   object-fit: cover;
   flex: 0 0 auto;
+  margin-top: -52px; /* 仅头像上提跨封面底线（昵称留线下，Figma） */
+  border: 3px solid var(--cb-surface); /* 与封面分界的描边环 */
 }
 
 .cb-profile-hero__avatar--fallback {
@@ -1371,54 +1395,76 @@ body {
 
 .cb-profile-hero__social {
   display: flex;
-  gap: 28px;
-  margin-top: 16px;
+  gap: 32px;
+  flex: 0 0 auto;
+  margin-top: 4px;
 }
 
 .cb-profile-hero__stat {
   display: flex;
   flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
 }
 
 .cb-profile-hero__stat-value {
   font-family: var(--cb-font-serif);
-  font-size: 18px;
+  font-size: 22px;
   font-weight: 600;
+  line-height: 1;
 }
 
 .cb-profile-hero__stat-label {
-  font-size: 12px;
+  font-family: var(--cb-font-mono);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 11px;
   color: var(--cb-muted);
 }
 
-/* ② 指标带 */
+/* ② 指标带（Figma：4 列等分，列间竖细线分隔，大号衬线值 + 等宽大写标签） */
 .cb-profile-metrics {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  gap: 0;
+  align-items: center;
 }
 
 .cb-profile-metric {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
+  padding: 4px 28px;
+}
+
+.cb-profile-metric + .cb-profile-metric {
+  border-left: 1px solid var(--cb-border); /* 列间竖分隔线（Figma） */
+}
+
+.cb-profile-metric:first-child {
+  padding-left: 0;
+}
+
+.cb-profile-metric:last-child {
+  padding-right: 0;
 }
 
 .cb-profile-metric__value {
   font-family: var(--cb-font-serif);
-  font-size: 22px;
+  font-size: 34px;
   font-weight: 600;
+  line-height: 1.05;
 }
 
 .cb-profile-metric__topic {
-  font-size: 16px;
+  font-size: 26px;
 }
 
 .cb-profile-metric__label {
   font-family: var(--cb-font-mono);
   text-transform: uppercase;
   letter-spacing: 1px;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--cb-muted);
 }
 
@@ -1528,14 +1574,14 @@ body {
   fill: var(--cb-accent);
 }
 
-/* ⑥ 作品墙 */
+/* ⑥ 作品墙（Figma：满宽约 4 列卡片，封面 + 名 + 调用数） */
 .cb-work-grid {
   list-style: none;
   padding: 0;
   margin: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 16px;
 }
 
 .cb-work-card__link {
