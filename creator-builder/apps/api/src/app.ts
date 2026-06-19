@@ -36,6 +36,10 @@ export interface BuildAppOptions {
 export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInstance> {
   const env = opts.env ?? loadEnv();
   const app = Fastify({
+    // 请求体上限（B-20）：presign 的 parts[] 是「每文件一片」的元数据 JSON，导入 .codex/.claude 整目录
+    //   （千级 session 文件）时会超 Fastify 默认 1MB → 413。原文字节直传对象存储不经此，故只需容纳元数据；
+    //   与 infra/nginx.conf client_max_body_size 32m 对齐。
+    bodyLimit: 32 * 1024 * 1024,
     logger: {
       level: env.LOG_LEVEL,
       ...(env.NODE_ENV === 'development' ? { transport: { target: 'pino-pretty' } } : {}),

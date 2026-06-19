@@ -2506,3 +2506,35 @@ docker compose --env-file .env -f infra/docker-compose.yml build web && up -d we
 - 个人主页**有数据态**（密度榜进度条 / 会话热力图 / 能力网络图 / 作品墙彩封）测试账号无数据，仍只验了空态；逐像素对 Figma `1152:65` 需真实能力数据复跑。
 - STEP3 选择页本轮未单独重做（功能与外壳已正确）；如需按 Figma `1777:24` 精修可另立。
 - BUG-017 的 `published` 已上架态「查看市集页」要等公开消费页接通后才有真实可读卡（本期公开页仍占位）。
+
+## BUG-019：导入 .codex / .claude 整目录时 presign 返回 413（nginx 1MB 默认体上限）
+
+严重度：P1（整目录直传主路径被前置代理拦死，用户实测 .codex 目录必现）
+
+状态：已修待回归（nginx + Fastify 请求体上限放宽到 32m；2.2MB 体实测不再 413，透传到 API 返 401）
+
+现象：
+
+- 浏览器选 `.codex` 整目录导入，`POST /api/v1/import/uploads/presign` 返回 **413 Request Entity Too Large**，响应头 `server: nginx/1.31.2`、`content-type: text/html`、585 字节（nginx 默认错误页，未到 API）。
+
+根因：
+
+- B-20 presign 把每个文件切成 part（`PART_SIZE=8MiB`，小文件各成一片），请求体是 `{ parts:[{clientPartId,sizeBytes,contentSha256?}], source, totalBytes }` 的**元数据 JSON**。`.codex` / `.claude` 整目录有成百上千个 session 文件 → `parts[]` 上千项 → 元数据 JSON 超过 **nginx 默认 `client_max_body_size` 1MB** → 被前置 nginx 直接 413（原文字节是直传 MinIO、绕开 nginx 的，不是它撑爆的）。
+- `infra/nginx.conf` 此前未设 `client_max_body_size`；Fastify 默认 `bodyLimit` 也是 1MB（第二道闸）。
+- presign 的 zod schema `parts` 数组**无 `.max()` 上限**，故放宽体上限后整目录可正常签发。
+
+修复：
+
+- `infra/nginx.conf`：server 级加 `client_max_body_size 32m;`（容纳元数据，约 25 万 part；原文不经此）。
+- `apps/api/src/app.ts`：Fastify `bodyLimit: 32 * 1024 * 1024`（与 nginx 对齐）。
+- 重建 infra-web（nginx.conf 烤进镜像）+ infra-api（bodyLimit），重启。
+
+自测证据：
+
+- 构造 16000 part / 2.2MB 的 presign 体 POST（无鉴权）：修复前 nginx 413；**修复后 HTTP=401（透传到 API 鉴权层），不再 413**。
+- 运行中 web 容器 `/etc/nginx/conf.d/default.conf` 已含 `client_max_body_size 32m`；api tsc 0 err；web/api healthy。
+
+剩余风险：
+
+- 极大目录（>25 万文件）仍可能超 32m；本期未给 part 数上限/分批 presign（未来可批量签发或客户端打包）。属可接受边界，已 log 说明。
+- 真实 `.codex` 整目录登录态完整跑通待测试员复跑确认（本地验的是体上限闸门，非整链）。
