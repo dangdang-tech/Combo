@@ -542,6 +542,14 @@ Profile page 自身有错误文案，但未把 401/escalate 连接到 `goToLogin
 
 自测证据：截图 impl-20260619-v2/12-profile.png —— Hero 恒在（头像 + 名 + 0关注/粉丝/赞 + 各分区友好空态），不再整页错误。
 
+## 持续验收记录（2026-06-19 修复 agent，收尾：STEP4/5 CSS 补齐 + sse 测试修复）
+
+本轮收尾两项：
+- STEP4/5（结构化/发布）整套缺失 CSS（~90 个 cb- 类）已按 Figma 节点 1776:24/1778:24 补齐，全用暖米 token，build + web 591 测试通过。登录态截图 impl-20260619-v3/15-create-structure、16-create-publish 确认：换肤、顶栏居中字标、步骤条圆点连线、空态/错误态样式均生效。**主体布局（软硬字段面板 / market-card / cover-picker）因测试账号无能力数据走不到该两步，未能登录态逐像素截图，待有真实数据回归**（CSS 已按 Figma 几何补齐 + StructureStepPage/PublishStepPage 组件单测覆盖）。
+- sse-auth.test.ts「JWKS 不可达→503」用例改用死端口（127.0.0.1:1）确定性触发，不再依赖 dev stack 是否在线；只改测试不动生产逻辑。api 全套件 1056/1056 全绿。
+
+最终核验：web build 通过、web 591/591、api 1056/1056；线上 bundle index-BIZ4gkdM.js。工作树干净。
+
 ## 持续验收记录（2026-06-19 修复 agent，真实登录态全面还原 + 多 bug 修复回归）
 
 修复 agent 照 Figma MCP 实读设计为真源、用测试账号真实登录（Chrome via playwright-core）逐页截图自证。线上 bundle index-BWn5cNrP.js，commit 3f80f40。
