@@ -2555,3 +2555,924 @@ body {
 .cb-draft-chip__phrase { color: var(--cb-muted); font-size: 12px; }
 .cb-draft-strip__cta { border: none; background: none; color: var(--cb-accent); font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
 
+/* ============================================================
+   STEP4/5 结构化与发布（BUG-012 结构精修）
+   Figma XwOk3OdwHGSt6gviqS2Doy（STEP④ 1776:24 / STEP⑤ 1778:24）还原。
+   两列布局（左切换器 ~190px + 右内容 flex-1，gap20）；paper 卡 rounded8 p16；
+   字段行 label ~120px + value-box（surface-raised + seam 边 + rounded6）；
+   软/硬 / 高低置信徽章；market-card；cover-picker 彩点；batch 进度条。
+   卡片无投影（box-shadow:none，靠 seam 描边分层）。复用暖米 token，绝不写死颜色。
+   ============================================================ */
+
+/* ---------- 共用：能力切换器（CapabilitySwitcher，§5.4/§5.5 左列） ----------
+   左列 ~190px：mono caps 列首「切换能力」+ 能力行（选中=accent-soft 底 + accent 边 + accent 字；
+   未选=paper 底 + seam 边）。single 即一项，批量列整批；失败项标红（无连坐）。 */
+.cb-cap-switcher {
+  width: 190px;
+  flex: 0 0 190px;
+}
+.cb-cap-switcher__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cb-cap-switcher__item {
+  margin: 0;
+}
+.cb-cap-switcher__btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 1px solid var(--cb-border);
+  background: var(--cb-surface);
+  color: var(--cb-fg);
+  border-radius: var(--cb-radius-card);
+  padding: 10px 12px;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--cb-shadow-card);
+}
+.cb-cap-switcher__btn::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border-radius: var(--cb-radius-pill);
+  background: var(--cb-border);
+}
+.cb-cap-switcher__btn:hover {
+  border-color: var(--cb-accent);
+}
+.cb-cap-switcher__btn[data-active='true'] {
+  background: var(--cb-accent-soft);
+  border-color: var(--cb-accent);
+  color: var(--cb-accent);
+  font-weight: 500;
+  font-size: 15px;
+}
+.cb-cap-switcher__btn[data-active='true']::before {
+  background: var(--cb-accent);
+}
+.cb-cap-switcher__item[data-failed='true'] .cb-cap-switcher__btn {
+  border-color: var(--cb-danger);
+  color: var(--cb-danger);
+}
+.cb-cap-switcher__item[data-failed='true'] .cb-cap-switcher__btn::before {
+  background: var(--cb-danger);
+}
+.cb-cap-switcher__name {
+  flex: 1;
+  min-width: 0;
+}
+.cb-cap-switcher__badge {
+  font-family: var(--cb-font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--cb-muted);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.cb-cap-switcher__badge[data-failed='true'] {
+  color: var(--cb-danger);
+}
+.cb-cap-switcher__empty {
+  font-size: 13px;
+  color: var(--cb-muted);
+  padding: 12px;
+  border: 1px dashed var(--cb-border);
+  border-radius: var(--cb-radius-card);
+}
+
+/* ======================= STEP④ 结构化（F-13，§5.4 / 节点 1776:24） ======================= */
+.cb-structure {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: var(--cb-content-max);
+}
+
+/* 两列：左能力切换器 + 右 App Identity 面板（gap20）。 */
+.cb-structure__cols {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+.cb-structure__left {
+  flex: 0 0 190px;
+}
+.cb-structure__main {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ---------- App Identity 面板（右列：标题 + 进度 + 软组 + 硬组） ---------- */
+.cb-app-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.cb-app-identity__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.cb-app-identity__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--cb-fg);
+}
+/* 整体生成进度短语「已补全字段 N / 7」（永不裸转圈的量化文案）。 */
+.cb-app-identity__progress {
+  margin: 0;
+  font-size: 13px;
+  color: var(--cb-muted);
+}
+
+/* 软 / 硬两组：paper 卡 rounded8 p16 gap10（box-shadow none，靠 seam 描边分层）。 */
+.cb-app-identity__group {
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-card);
+  background: var(--cb-surface);
+  padding: 16px;
+  box-shadow: var(--cb-shadow-card);
+}
+.cb-app-identity__group-title {
+  margin: 0 0 10px;
+  font-family: var(--cb-font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+/* 软组标题 accent（可改 / 可重生成 = 砖红强调）；硬组标题 muted（平台锁定）。 */
+.cb-app-identity__group--soft .cb-app-identity__group-title {
+  color: var(--cb-accent);
+}
+.cb-app-identity__group--hard .cb-app-identity__group-title {
+  color: var(--cb-muted);
+}
+.cb-app-identity__fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ---------- 软字段卡（一行：label 120px + value-box；四态流式，§5.4.1/§5.4.3） ----------
+   done：value-box 显终值 + 「编辑 / 重新生成」；
+   generating：partial + 骨架（永不裸转圈）；
+   stuck：安抚句 + 就地可手填编辑器（永不裸转圈）；
+   failed：人话 ErrorState（不连坐）。 */
+.cb-soft-field {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  align-items: start;
+  gap: 8px 12px;
+}
+/* 头（label + 软徽章）占第一列；其余内容占第二列，与 value-box 对齐。 */
+.cb-soft-field__head {
+  grid-column: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+}
+.cb-soft-field__label {
+  font-size: 13px;
+  color: var(--cb-muted);
+}
+/* 软徽章「可改 / 可重生成」= accent-soft 底 + accent 字（区别于硬字段锁定）。 */
+.cb-soft-field__badge {
+  align-self: flex-start;
+  font-size: 11px;
+  line-height: 1.4;
+  border-radius: var(--cb-radius-pill);
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+.cb-soft-field__badge--soft {
+  background: var(--cb-accent-soft);
+  color: var(--cb-accent);
+}
+/* 第二列：value-box / 编辑器 / 生成中 / 卡住 / 失败态。 */
+.cb-soft-field__value,
+.cb-soft-field__items,
+.cb-soft-field__editor,
+.cb-soft-field__generating,
+.cb-soft-field__stuck,
+.cb-soft-field > .cb-error-state,
+.cb-soft-field > .cb-skeleton__row {
+  grid-column: 2;
+}
+/* 终值框（surface-raised 抬升面 + seam 边 + rounded6 + px10 py8）。 */
+.cb-soft-field__value {
+  margin: 0;
+  background: var(--cb-surface-raised);
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-control);
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--cb-fg);
+  word-break: break-word;
+}
+/* 数组型软字段：逐项浮现（每项一行 value-box 质感）。 */
+.cb-soft-field__items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cb-soft-field__item {
+  background: var(--cb-surface-raised);
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-control);
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--cb-fg);
+  word-break: break-word;
+}
+/* 生成中：partial 文本 + 骨架条（永不裸转圈，边生成边显示）。 */
+.cb-soft-field__generating {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cb-soft-field__partial {
+  margin: 0;
+  background: var(--cb-surface-raised);
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-control);
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--cb-muted);
+  word-break: break-word;
+}
+/* 编辑器（done「编辑」/ stuck 手填共用）：textarea + 操作行。 */
+.cb-soft-field__editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cb-soft-field__input {
+  width: 100%;
+  background: var(--cb-surface-raised);
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-control);
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--cb-fg);
+  resize: vertical;
+}
+.cb-soft-field__input:focus {
+  outline: none;
+  border-color: var(--cb-accent);
+  box-shadow: 0 0 0 1px var(--cb-accent) inset;
+}
+.cb-soft-field__hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--cb-muted);
+}
+.cb-soft-field__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+/* 软字段操作钮（编辑 / 重新生成）：紧凑次要钮（复用 cb-btn 基线）。 */
+.cb-soft-field__actions .cb-btn {
+  padding: 5px 12px;
+  font-size: 13px;
+  border-radius: var(--cb-radius-control);
+}
+/* 卡住态（偏慢三退路就地可手填）：dashed 边 + warn 提示句，绝不冻在骨架干等（永不裸转圈）。 */
+.cb-soft-field__stuck {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px dashed var(--cb-warn);
+  border-radius: var(--cb-radius-control);
+  background: rgba(184, 137, 58, 0.06);
+  padding: 10px;
+}
+.cb-soft-field__stuck-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--cb-warn);
+}
+.cb-soft-field__stuck .cb-soft-field__editor {
+  grid-column: auto;
+}
+/* 字段级状态色提示（data-status 由组件落）：generating/stuck/failed 给左缘色条语义，永不裸露状态。 */
+.cb-soft-field[data-status='generating'] .cb-soft-field__label,
+.cb-soft-field[data-status='pending'] .cb-soft-field__label {
+  color: var(--cb-accent);
+}
+.cb-soft-field[data-status='stuck'] .cb-soft-field__label {
+  color: var(--cb-warn);
+}
+.cb-soft-field[data-status='failed'] .cb-soft-field__label {
+  color: var(--cb-danger);
+}
+
+/* ---------- 硬字段卡（一行：label 120px + 锁定值框；恒只读，平台锁定） ---------- */
+.cb-hard-field {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  align-items: start;
+  gap: 8px 12px;
+}
+.cb-hard-field__head {
+  grid-column: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+}
+.cb-hard-field__label {
+  font-size: 13px;
+  color: var(--cb-muted);
+}
+/* 硬徽章「平台锁定」= rail 底 + muted 字 + 锁图标（区别于软字段可改）。 */
+.cb-hard-field__badge {
+  align-self: flex-start;
+  font-size: 11px;
+  line-height: 1.4;
+  border-radius: var(--cb-radius-pill);
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+.cb-hard-field__badge--hard {
+  background: var(--cb-rail);
+  border: 1px solid var(--cb-border);
+  color: var(--cb-muted);
+}
+/* 锁定值框（rail 底，与软字段 raised 终值区分：一眼可见锁定不可改）。 */
+.cb-hard-field__value {
+  grid-column: 2;
+  margin: 0;
+  background: var(--cb-rail);
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-control);
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--cb-fg);
+  word-break: break-word;
+}
+
+/* ======================= STEP⑤ 发布（F-14，§5.5 / 节点 1778:24） ======================= */
+.cb-publish {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: var(--cb-content-max);
+}
+/* 两列：左能力切换器 + 右内容（市集卡 + 来源说明 / 批量结果，gap24）。 */
+.cb-publish__cols {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+}
+.cb-publish__left {
+  flex: 0 0 190px;
+}
+.cb-publish__content {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* ---------- 单条发布（中市集卡 + 右来源说明） ---------- */
+.cb-single-publish {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.cb-single-publish__cols {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.cb-single-publish__center {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.cb-single-publish__settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 290px;
+  max-width: 100%;
+}
+
+/* 价格输入（元；留空=免费）。 */
+.cb-price-input {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cb-price-input__label {
+  font-size: 13px;
+  color: var(--cb-muted);
+}
+.cb-price-input__field {
+  background: var(--cb-surface-raised);
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-control);
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--cb-fg);
+}
+.cb-price-input__field:focus {
+  outline: none;
+  border-color: var(--cb-accent);
+  box-shadow: 0 0 0 1px var(--cb-accent) inset;
+}
+.cb-price-input__display {
+  font-size: 13px;
+  color: var(--cb-badge-ok);
+  font-weight: 500;
+}
+
+/* ---------- 市集卡预览（市集里看到的样子；暖米描边卡 radius8） ----------
+   封面金色软底（gold = warn token #b8893a）+ 字形大字 / chip 徽标 / 价格 / 试用钮。 */
+.cb-market-card {
+  width: 290px;
+  max-width: 100%;
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-card);
+  background: var(--cb-surface);
+  overflow: hidden;
+  box-shadow: var(--cb-shadow-card);
+  display: flex;
+  flex-direction: column;
+}
+/* 封面：金色软底 + 底缘 seam 线（h158）。无图走字形大字兜底（主页-22）。 */
+.cb-market-card__cover {
+  position: relative;
+  height: 158px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(184, 137, 58, 0.1);
+  border-bottom: 1px solid var(--cb-border);
+}
+.cb-market-card__cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.cb-market-card__cover-glyph {
+  font-family: var(--cb-font-serif);
+  font-weight: 500;
+  font-size: 58px;
+  line-height: 1;
+  color: var(--cb-warn);
+}
+/* 卡体（pt16 pb24 px24）。 */
+.cb-market-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 24px 24px;
+}
+.cb-market-card__type {
+  font-size: 13px;
+  color: var(--cb-muted);
+}
+.cb-market-card__name {
+  margin: 0;
+  font-family: var(--cb-font-serif);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--cb-fg);
+  line-height: 1.16;
+}
+.cb-market-card__tagline {
+  margin: 0;
+  font-size: 15px;
+  color: var(--cb-muted);
+}
+.cb-market-card__summary {
+  margin: 0;
+  font-size: 13px;
+  color: var(--cb-muted);
+  line-height: 1.55;
+}
+/* 署名 + 可信标记行。 */
+.cb-market-card__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--cb-border);
+  margin-top: 4px;
+}
+.cb-market-card__byline {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--cb-fg);
+}
+.cb-market-card__trust {
+  font-size: 13px;
+  color: var(--cb-muted);
+}
+/* usage 占位（装机量 / 评分，上线后真实数据；绝不显 0）。 */
+.cb-market-card__usage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+}
+/* 卡底：价格（免费=ok 绿）+ 试用钮（accent，本期未开放占位）。 */
+.cb-market-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 4px;
+}
+.cb-market-card__price {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--cb-badge-ok);
+}
+.cb-market-card__trial {
+  background: var(--cb-accent);
+  border-color: var(--cb-accent);
+  color: #fff;
+  border-radius: var(--cb-radius-control);
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 80px;
+}
+/* 本期未开放占位：可见禁用反馈（非裸 preventDefault）。 */
+.cb-market-card__trial[aria-disabled='true'] {
+  opacity: 0.85;
+  cursor: not-allowed;
+}
+
+/* ---------- 封面来源选择（CoverPicker，发布-11~13；三选一彩点） ----------
+   glyph 可用 / image · html_snapshot 本期未开放（disabled 占位，P1-6）。 */
+.cb-cover-picker {
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-card);
+  background: var(--cb-surface);
+  padding: 14px 16px;
+  margin: 0;
+  box-shadow: var(--cb-shadow-card);
+}
+.cb-cover-picker__legend {
+  padding: 0;
+  font-family: var(--cb-font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--cb-accent);
+}
+.cb-cover-picker__options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+/* 每项一行：彩点 radio + label + hint（+ 未开放徽章）。 */
+.cb-cover-picker__option {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 4px 8px;
+  width: 100%;
+  border: 1px solid var(--cb-border);
+  background: var(--cb-surface-raised);
+  border-radius: var(--cb-radius-control);
+  padding: 8px 10px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--cb-fg);
+}
+.cb-cover-picker__option[data-selected='true'] {
+  border-color: var(--cb-accent);
+  background: var(--cb-accent-soft);
+}
+.cb-cover-picker__option[aria-disabled='true'],
+.cb-cover-picker__option:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: var(--cb-rail);
+}
+/* 彩点 radio：选中=accent，未选=border 圈。 */
+.cb-cover-picker__radio {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--cb-border);
+}
+.cb-cover-picker__option[data-selected='true'] .cb-cover-picker__radio {
+  color: var(--cb-accent);
+}
+.cb-cover-picker__label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--cb-fg);
+}
+.cb-cover-picker__hint {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: var(--cb-muted);
+}
+.cb-cover-picker__badge {
+  grid-row: 1;
+  grid-column: 3;
+  font-size: 11px;
+  color: var(--cb-muted);
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-pill);
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+
+/* ---------- 来源说明表（SourceTable，发布-06，静态映射） ---------- */
+.cb-source-table {
+  flex: 1 1 280px;
+  min-width: 260px;
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-card);
+  background: var(--cb-surface);
+  padding: 14px 16px;
+  box-shadow: var(--cb-shadow-card);
+}
+.cb-source-table__title {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--cb-accent);
+}
+.cb-source-table__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.cb-source-table__table th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--cb-muted);
+  font-size: 12px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--cb-border);
+}
+.cb-source-table__table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--cb-border);
+  vertical-align: top;
+}
+.cb-source-table__pos {
+  font-weight: 500;
+  color: var(--cb-fg);
+  white-space: nowrap;
+}
+.cb-source-table__from {
+  color: var(--cb-muted);
+}
+
+/* ---------- 发布态（PublishStatus，发布后「Alpha·审核中」/ 拒绝态可见） ---------- */
+.cb-publish-status {
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-card);
+  background: var(--cb-surface);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 520px;
+  box-shadow: var(--cb-shadow-card);
+}
+.cb-publish-status__title {
+  margin: 0;
+  font-family: var(--cb-font-serif);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--cb-fg);
+}
+.cb-publish-status__hint {
+  margin: 0;
+  font-size: 14px;
+  color: var(--cb-muted);
+  line-height: 1.55;
+}
+/* 拒绝态原因（人话，无 code）：danger 软底安抚条。 */
+.cb-publish-status__reason {
+  margin: 0;
+  font-size: 13px;
+  color: var(--cb-danger);
+  background: rgba(179, 38, 30, 0.07);
+  border: 1px solid rgba(179, 38, 30, 0.25);
+  border-radius: var(--cb-radius-control);
+  padding: 8px 10px;
+}
+.cb-publish-status__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.cb-publish-status__actions .cb-btn {
+  text-decoration: none;
+}
+/* 发布成功（alpha_pending / published）：标题着 ok 绿；拒绝态着 danger。 */
+.cb-publish-status[data-status='alpha_pending'] .cb-publish-status__title,
+.cb-publish-status[data-status='published'] .cb-publish-status__title {
+  color: var(--cb-badge-ok);
+}
+.cb-publish-status[data-status='review_rejected'] .cb-publish-status__title {
+  color: var(--cb-danger);
+}
+
+/* ---------- 批量发布（全部发布：中市集卡预览 + 下结果列表，无连坐） ---------- */
+.cb-batch-publish {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 批量结果列表（逐项浮现 + 量化进度条 + 失败项重试/去补齐）。 */
+.cb-batch-results {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.cb-batch-results__head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cb-batch-results__title {
+  margin: 0;
+  font-family: var(--cb-font-serif);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--cb-fg);
+}
+/* 量化进度短语（永不裸转圈；有失败也满进度）。 */
+.cb-batch-results__progress {
+  margin: 0;
+  font-size: 13px;
+  color: var(--cb-muted);
+}
+.cb-batch-results__price-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--cb-muted);
+}
+/* 进度条（track + accent fill）。 */
+.cb-batch-results__bar {
+  height: 6px;
+  background: var(--cb-rail);
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-pill);
+  overflow: hidden;
+}
+.cb-batch-results__bar-fill {
+  height: 100%;
+  background: var(--cb-accent);
+  transition: width 0.3s ease;
+}
+.cb-batch-results__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* 单项行：name + 状态徽章；失败项展开错误 + 操作。 */
+.cb-batch-results__item {
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-card);
+  background: var(--cb-surface);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cb-batch-results__item[data-failed='true'] {
+  border-color: var(--cb-danger);
+  background: rgba(179, 38, 30, 0.04);
+}
+.cb-batch-results__item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.cb-batch-results__item-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--cb-fg);
+}
+/* 状态徽章：published=ok 绿、failed=danger、整理/发布中=accent、排队=muted。 */
+.cb-batch-results__item-state {
+  font-size: 12px;
+  border-radius: var(--cb-radius-pill);
+  padding: 2px 10px;
+  white-space: nowrap;
+  background: var(--cb-rail);
+  color: var(--cb-muted);
+}
+.cb-batch-results__item-state[data-state='published'] {
+  background: rgba(14, 109, 82, 0.12);
+  color: var(--cb-badge-ok);
+}
+.cb-batch-results__item-state[data-state='failed'] {
+  background: rgba(179, 38, 30, 0.1);
+  color: var(--cb-danger);
+}
+.cb-batch-results__item-state[data-state='structuring'],
+.cb-batch-results__item-state[data-state='publishing'] {
+  background: var(--cb-accent-soft);
+  color: var(--cb-accent);
+}
+.cb-batch-results__item-fail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cb-batch-results__missing {
+  margin: 0;
+  font-size: 13px;
+  color: var(--cb-warn);
+}
+.cb-batch-results__item-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.cb-batch-results__item-actions .cb-btn {
+  padding: 5px 12px;
+  font-size: 13px;
+  border-radius: var(--cb-radius-control);
+}
+
+/* ---- 窄屏：两列堆叠为单列（结构不变，D14） ---- */
+@media (max-width: 900px) {
+  .cb-structure__cols,
+  .cb-publish__cols {
+    flex-direction: column;
+  }
+  .cb-structure__left,
+  .cb-publish__left,
+  .cb-cap-switcher {
+    width: 100%;
+    flex-basis: auto;
+  }
+  .cb-cap-switcher__list {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .cb-cap-switcher__item {
+    flex: 1 1 160px;
+  }
+}
+@media (max-width: 560px) {
+  .cb-soft-field,
+  .cb-hard-field {
+    grid-template-columns: 1fr;
+  }
+  .cb-soft-field__head,
+  .cb-hard-field__head {
+    grid-column: 1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 0;
+  }
+  .cb-soft-field__value,
+  .cb-soft-field__items,
+  .cb-soft-field__editor,
+  .cb-soft-field__generating,
+  .cb-soft-field__stuck,
+  .cb-soft-field > .cb-error-state,
+  .cb-hard-field__value {
+    grid-column: 1;
+  }
+}
+

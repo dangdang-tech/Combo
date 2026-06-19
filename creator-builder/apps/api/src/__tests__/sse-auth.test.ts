@@ -4,6 +4,8 @@
 import { describe, it, expect, afterAll, beforeAll } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../app.js';
+import { loadEnv } from '../config/env.js';
+import { clearJwksCache } from '../infra/logto.js';
 
 let app: FastifyInstance;
 
@@ -72,24 +74,45 @@ describe('SSE auth (same-origin Cookie only, 脊柱 §11.C)', () => {
 
   it('structure SSE with well-formed JWT but JWKS unreachable → 503 (上游不可达≠token无效, Codex#3)', async () => {
     // 结构合法的 JWT（header.payload.signature 均 base64url）→ jose 解析成功、需取 JWKS 验签 →
-    //   测试环境 Logto/JWKS 不可达（localhost:3001）→ 验不了（上游不可达）→ 503 AUTH_UPSTREAM_UNAVAILABLE
+    //   Logto/JWKS 不可达 → 验不了（上游不可达）→ 503 AUTH_UPSTREAM_UNAVAILABLE
     //   （区分「token 真无效」的 401；不裸露原始报错、不含 code，D1）。
-    const b64u = (o: unknown): string => Buffer.from(JSON.stringify(o)).toString('base64url');
-    const header = b64u({ alg: 'RS256', typ: 'JWT', kid: 'test-kid' });
-    const payload = b64u({
-      sub: 'logto-user-1',
-      iss: 'http://localhost:3001/oidc',
-      exp: Math.floor(Date.now() / 1000) + 3600,
+    //
+    // 隔离根因（live 抓到）：不能依赖运行环境「Logto 恰好离线」——dev stack 跑着 Logto 时
+    //   localhost:3001 反而可达，JWKS 取得到、验签失败 → 401，用例不自洽。这里用一个【独立 app】，
+    //   把 LOGTO_ISSUER / LOGTO_JWKS_URI 指向一个【必然连不上】的本地端口（127.0.0.1:1），
+    //   让 discovery 探针与 jose 的 JWKS fetch 都确定地 ECONNREFUSED（上游不可达），
+    //   从而 handler 在【任何环境】都稳定走 503 路径，不再依赖外部 Logto 是否在线。
+    const UNREACHABLE_ISSUER = 'http://127.0.0.1:1/oidc';
+    const UNREACHABLE_JWKS = 'http://127.0.0.1:1/oidc/jwks';
+    // jwksCache 按 jwks_uri 缓存远端集；本用例用独立 URI（127.0.0.1:1）天然不与 localhost:3001 撞，
+    //   仍先清一次确保不串台（防其它用例/环境预热同 URI 的缓存）。
+    clearJwksCache();
+    const unreachableApp = await buildApp({
+      env: { ...loadEnv(), LOGTO_ISSUER: UNREACHABLE_ISSUER, LOGTO_JWKS_URI: UNREACHABLE_JWKS },
     });
-    const sig = Buffer.from('not-a-real-signature').toString('base64url');
-    const wellFormedJwt = `${header}.${payload}.${sig}`;
-    const res = await app.inject({
-      method: 'GET',
-      url: STRUCT_SSE,
-      cookies: { cb_session: wellFormedJwt },
-    });
-    expect(res.statusCode).toBe(503);
-    expect(res.headers['content-type']).not.toContain('text/event-stream');
-    expectNoCodeEnvelope(res);
+    await unreachableApp.ready();
+    try {
+      const b64u = (o: unknown): string => Buffer.from(JSON.stringify(o)).toString('base64url');
+      const header = b64u({ alg: 'RS256', typ: 'JWT', kid: 'test-kid' });
+      const payload = b64u({
+        sub: 'logto-user-1',
+        iss: UNREACHABLE_ISSUER,
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      });
+      const sig = Buffer.from('not-a-real-signature').toString('base64url');
+      const wellFormedJwt = `${header}.${payload}.${sig}`;
+      const res = await unreachableApp.inject({
+        method: 'GET',
+        url: STRUCT_SSE,
+        cookies: { cb_session: wellFormedJwt },
+      });
+      expect(res.statusCode).toBe(503);
+      expect(res.headers['content-type']).not.toContain('text/event-stream');
+      expectNoCodeEnvelope(res);
+    } finally {
+      await unreachableApp.close();
+      // 清掉本用例制造的不可达 JWKS 缓存条目，避免泄漏到后续用例/套件。
+      clearJwksCache();
+    }
   });
 });
