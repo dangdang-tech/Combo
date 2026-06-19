@@ -1,0 +1,29 @@
+{
+  "route": "/creator",
+  "started": "2026-06-18T23:33:28.170Z",
+  "screenshot": null,
+  "screenshotNote": "in-app browser screenshot skipped after Page.captureScreenshot timeout; Chrome CDP screenshots saved separately",
+  "finalUrl": "http://localhost/creator",
+  "title": "创作者中心",
+  "snapshotHead": "- alert:\n  - generic: Agora\n  - paragraph: 请先登录后进入创作者中心。\n  - button \"去登录\"",
+  "dom": {
+    "bodyText": "Agora 请先登录后进入创作者中心。 去登录",
+    "containsBareSpinnerText": false,
+    "controls": [
+      {
+        "aria": null,
+        "href": null,
+        "role": null,
+        "tag": "button",
+        "testid": null,
+        "text": "去登录"
+      }
+    ],
+    "headings": [],
+    "statusLike": [],
+    "textLength": 23,
+    "title": "创作者中心",
+    "visibleErrorCodeLike": false
+  },
+  "logsTail": []
+}

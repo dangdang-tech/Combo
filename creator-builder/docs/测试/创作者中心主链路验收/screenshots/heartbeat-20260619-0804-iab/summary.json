@@ -1,0 +1,160 @@
+{
+  "runAt": "2026-06-19T00:08:07.770Z",
+  "base": "http://localhost",
+  "routes": [
+    {
+      "route": "/create/import",
+      "finalUrl": "http://localhost/create/import",
+      "title": "创作者中心",
+      "headings": [],
+      "buttons": [
+        "去登录"
+      ],
+      "links": [],
+      "bodyTextSample": "Agora 请先登录后进入创作者中心。 去登录",
+      "hasLoginGate": true,
+      "hasStepLeak": false,
+      "visibleErrorCode": false,
+      "bareSpinner": false,
+      "spinnerish": 0
+    },
+    {
+      "route": "/create/extract",
+      "finalUrl": "http://localhost/create/extract",
+      "title": "创作者中心",
+      "headings": [],
+      "buttons": [
+        "去登录"
+      ],
+      "links": [],
+      "bodyTextSample": "Agora 请先登录后进入创作者中心。 去登录",
+      "hasLoginGate": true,
+      "hasStepLeak": false,
+      "visibleErrorCode": false,
+      "bareSpinner": false,
+      "spinnerish": 0
+    },
+    {
+      "route": "/create/select",
+      "finalUrl": "http://localhost/create/select",
+      "title": "创作者中心",
+      "headings": [],
+      "buttons": [
+        "去登录"
+      ],
+      "links": [],
+      "bodyTextSample": "Agora 请先登录后进入创作者中心。 去登录",
+      "hasLoginGate": true,
+      "hasStepLeak": false,
+      "visibleErrorCode": false,
+      "bareSpinner": false,
+      "spinnerish": 0
+    },
+    {
+      "route": "/create/structure",
+      "finalUrl": "http://localhost/create/structure",
+      "title": "创作者中心",
+      "headings": [],
+      "buttons": [
+        "去登录"
+      ],
+      "links": [],
+      "bodyTextSample": "Agora 请先登录后进入创作者中心。 去登录",
+      "hasLoginGate": true,
+      "hasStepLeak": false,
+      "visibleErrorCode": false,
+      "bareSpinner": false,
+      "spinnerish": 0
+    },
+    {
+      "route": "/create/publish",
+      "finalUrl": "http://localhost/create/publish",
+      "title": "创作者中心",
+      "headings": [],
+      "buttons": [
+        "去登录"
+      ],
+      "links": [],
+      "bodyTextSample": "Agora 请先登录后进入创作者中心。 去登录",
+      "hasLoginGate": true,
+      "hasStepLeak": false,
+      "visibleErrorCode": false,
+      "bareSpinner": false,
+      "spinnerish": 0
+    },
+    {
+      "route": "/creator",
+      "finalUrl": "http://localhost/creator",
+      "title": "创作者中心",
+      "headings": [],
+      "buttons": [
+        "去登录"
+      ],
+      "links": [],
+      "bodyTextSample": "Agora 请先登录后进入创作者中心。 去登录",
+      "hasLoginGate": true,
+      "hasStepLeak": false,
+      "visibleErrorCode": false,
+      "bareSpinner": false,
+      "spinnerish": 0
+    },
+    {
+      "route": "/profile",
+      "finalUrl": "http://localhost/profile",
+      "title": "创作者中心",
+      "headings": [],
+      "buttons": [
+        "去登录"
+      ],
+      "links": [],
+      "bodyTextSample": "Agora 请先登录后进入创作者中心。 去登录",
+      "hasLoginGate": true,
+      "hasStepLeak": false,
+      "visibleErrorCode": false,
+      "bareSpinner": false,
+      "spinnerish": 0
+    },
+    {
+      "route": "/login?failureId=fake-check",
+      "finalUrl": "http://localhost/login?failureId=fake-check",
+      "title": "创作者中心",
+      "headings": [
+        "登录没能完成"
+      ],
+      "buttons": [],
+      "links": [
+        {
+          "href": "/",
+          "text": "A Agora"
+        },
+        {
+          "href": "/api/v1/auth/login",
+          "text": "去登录"
+        },
+        {
+          "href": "/",
+          "text": "回到首页"
+        }
+      ],
+      "bodyTextSample": "A Agora 登录没能完成 这次登录没能完成，请重新登录。如果多次失败，可凭下方反馈代码联系我们。 去登录 回到首页 反馈代码：fake-check",
+      "hasLoginGate": true,
+      "hasStepLeak": false,
+      "visibleErrorCode": false,
+      "bareSpinner": false,
+      "spinnerish": 0
+    }
+  ],
+  "loginClick": {
+    "attempted": true,
+    "buttonCount": 1,
+    "navigationError": "Timed out after 3000ms waiting for selector internal:role=button[name=\"去登录\"s]: Timed out running CDP command \"Runtime.evaluate\" for tab 9\nwaiting on click for selector internal:role=button[name=\"去登录\"s]",
+    "afterUrl": "http://localhost/create/import"
+  },
+  "logs": [],
+  "verdict": {
+    "noVisibleErrorCodes": true,
+    "noBareSpinner": true,
+    "privateRoutesGateUnauth": true,
+    "loginClickLeavesLocalhost": false
+  }
+}

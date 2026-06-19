@@ -1,0 +1,54 @@
+{
+  "route": "/login?failureId=fake-check",
+  "started": "2026-06-18T23:33:59.357Z",
+  "screenshot": null,
+  "screenshotNote": "in-app browser screenshot skipped after Page.captureScreenshot timeout; Chrome CDP screenshots saved separately",
+  "finalUrl": "http://localhost/login?failureId=fake-check",
+  "title": "创作者中心",
+  "snapshotHead": "- banner:\n  - link \"Agora 首页\":\n    - /url: /\n    - generic: A\n    - generic: Agora\n- main:\n  - region \"登录没能完成\":\n    - heading \"登录没能完成\" [level=2]\n    - paragraph: 这次登录没能完成，请重新登录。如果多次失败，可凭下方反馈代码联系我们。\n    - link \"去登录\":\n      - /url: /api/v1/auth/login\n    - link \"回到首页\":\n      - /url: /\n    - paragraph: 反馈代码：fake-check",
+  "dom": {
+    "bodyText": "A Agora 登录没能完成 这次登录没能完成，请重新登录。如果多次失败，可凭下方反馈代码联系我们。 去登录 回到首页 反馈代码：fake-check",
+    "containsBareSpinnerText": false,
+    "controls": [
+      {
+        "aria": "Agora 首页",
+        "href": "/",
+        "role": null,
+        "tag": "a",
+        "testid": null,
+        "text": "A Agora"
+      },
+      {
+        "aria": null,
+        "href": "/api/v1/auth/login",
+        "role": null,
+        "tag": "a",
+        "testid": null,
+        "text": "去登录"
+      },
+      {
+        "aria": null,
+        "href": "/",
+        "role": null,
+        "tag": "a",
+        "testid": null,
+        "text": "回到首页"
+      }
+    ],
+    "headings": [
+      {
+        "aria": null,
+        "href": null,
+        "role": null,
+        "tag": "h2",
+        "testid": null,
+        "text": "登录没能完成"
+      }
+    ],
+    "statusLike": [],
+    "textLength": 75,
+    "title": "创作者中心",
+    "visibleErrorCodeLike": false
+  },
+  "logsTail": []
+}

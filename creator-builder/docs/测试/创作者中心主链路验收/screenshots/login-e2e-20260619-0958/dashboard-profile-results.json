@@ -1,0 +1,123 @@
+[
+  {
+    "name": "dashboard",
+    "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/login-e2e-20260619-0958/dashboard.png",
+    "state": {
+      "buttons": [
+        {
+          "disabled": false,
+          "text": ""
+        },
+        {
+          "disabled": false,
+          "text": "创作者视角"
+        },
+        {
+          "disabled": false,
+          "text": "+ 上传新能力"
+        },
+        {
+          "disabled": false,
+          "text": "近 7 天"
+        },
+        {
+          "disabled": false,
+          "text": "近 30 天"
+        },
+        {
+          "disabled": false,
+          "text": "全部"
+        },
+        {
+          "disabled": false,
+          "text": "tokens"
+        },
+        {
+          "disabled": false,
+          "text": "调用次数"
+        },
+        {
+          "disabled": false,
+          "text": "+ 上传新能力"
+        },
+        {
+          "disabled": false,
+          "text": "去上传流程 →"
+        },
+        {
+          "disabled": false,
+          "text": "去上传流程 →"
+        },
+        {
+          "disabled": false,
+          "text": "去上传流程 →"
+        }
+      ],
+      "text": "A Agora 创作 工作台 我的能力 上传能力 数据分析 收益 我的 个人主页 F f645ddpk87wi 创作者 Creator Builder 创作者视角 F 创作者中心 你发布的 0 个能力体，暂无数据 / 上线后填充 次调用 + 上传新能力 近 7 天 近 30 天 全部 已发布能力体 0能力体 累计调用 暂无数据 / 上线后填充 本月消耗 暂无数据 / 上线后填充 活跃消费者 暂无数据 / 上线后填充 每日 token 消耗趋势 tokens 调用次数 暂无数据 / 上线后填充 我的能力体 + 上传新能力 能力体 状态 本月调用 消耗趋势 收益 操作 还没有能力体，点右上「上传新能力」开始第一个。 草稿与上传中 STEP1 未命名草稿 去上传流程 → STEP1 未命名草稿 去上传流程 → STEP1 未命名草稿 去上传流程 →",
+      "url": "http://localhost/creator"
+    },
+    "logs": []
+  },
+  {
+    "name": "profile",
+    "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/login-e2e-20260619-0958/profile.png",
+    "state": {
+      "buttons": [
+        {
+          "disabled": false,
+          "text": ""
+        },
+        {
+          "disabled": false,
+          "text": "创作者视角"
+        },
+        {
+          "disabled": false,
+          "text": "去修改"
+        }
+      ],
+      "text": "A Agora 创作 工作台 我的能力 上传能力 数据分析 收益 我的 个人主页 F f645ddpk87wi 创作者 Creator Builder / 个人主页 创作者视角 F 没找到这个创作者，可能链接失效了。 去修改 反馈代码：e32612d0-2ae6-4c73-bd7a-095a7369a4a3",
+      "url": "http://localhost/profile"
+    },
+    "logs": []
+  },
+  {
+    "name": "capabilities",
+    "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/login-e2e-20260619-0958/capabilities.png",
+    "state": {
+      "buttons": [
+        {
+          "disabled": false,
+          "text": ""
+        },
+        {
+          "disabled": false,
+          "text": "创作者视角"
+        },
+        {
+          "disabled": false,
+          "text": "全部"
+        },
+        {
+          "disabled": false,
+          "text": "已上架"
+        },
+        {
+          "disabled": false,
+          "text": "Alpha·审核中"
+        },
+        {
+          "disabled": false,
+          "text": "草稿"
+        },
+        {
+          "disabled": false,
+          "text": "已退回"
+        }
+      ],
+      "text": "A Agora 创作 工作台 我的能力 上传能力 数据分析 收益 我的 个人主页 F f645ddpk87wi 创作者 Creator Builder / 我的能力 创作者视角 F 我的能力 管理你创建的能力体：查看状态、编辑、试用与更多操作。 全部 已上架 Alpha·审核中 草稿 已退回 还没有能力体 从「上传能力」开始，导入素材并发布你的第一个能力体。",
+      "url": "http://localhost/capabilities"
+    },
+    "logs": []
+  }
+]

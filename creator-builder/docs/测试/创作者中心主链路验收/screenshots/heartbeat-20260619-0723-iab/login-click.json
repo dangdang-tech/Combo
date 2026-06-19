@@ -1,0 +1,12 @@
+{
+  "route": "/create/import",
+  "beforeUrl": "http://localhost/create/import",
+  "beforeSnapshotHead": "- alert:\n  - generic: Agora\n  - paragraph: 请先登录后进入创作者中心。\n  - button \"去登录\"",
+  "buttonCount": 1,
+  "afterUrl": "http://localhost/create/import",
+  "afterSnapshotHead": null,
+  "logsTail": [],
+  "error": "Error: Timed out after 3000ms waiting for selector internal:role=button[name=\"去登录\"s]: Timed out running CDP command \"Runtime.evaluate\" for tab 9\nwaiting on click for selector internal:role=button[name=\"去登录\"s]\nError: Timed out after 3000ms waiting for selector internal:role=button[name=\"去登录\"s]: Timed out running CDP command \"Runtime.evaluate\" for tab 9\n    at e.evaluateOnPlaywrightSelectorWithTarget (/Users/danielxing/.codex/plugins/cache/openai-bundled/browser/26.611.61753/scripts/browser-client.mjs:2844:628)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async e.resolvePointerActionTarget (/Users/danielxing/.codex/plugins/cache/openai-bundled/browser/26.611.61753/scripts/browser-client.mjs:2857:2588)\n    at async e.performPointerAction (/Users/danielxing/.codex/plugins/cache/openai-bundled/browser/26.611.61753/scripts/browser-client.mjs:2857:2188)\n    at async e.clickLocator (/Users/danielxing/.codex/plugins/cache/openai-bundled/browser/26.611.61753/scripts/browser-client.mjs:2857:299)\n    at async /Users/danielxing/.codex/plugins/cache/openai-bundled/browser/26.611.61753/scripts/browser-client.mjs:125:61039\n    at async wm (/Users/danielxing/.codex/plugins/cache/openai-bundled/browser/26.611.61753/scripts/browser-client.mjs:69:5638)\n    at async /Users/danielxing/.codex/plugins/cache/openai-bundled/browser/26.611.61753/scripts/browser-client.mjs:69:5918\n    at async Za (/Users/danielxing/.codex/plugins/cache/openai-bundled/browser/26.611.61753/scripts/browser-client.mjs:69:5876)\n    at async n (/Users/danielxing/.codex/plugins/cache/openai-bundled/browser/26.611.61753/scripts/browser-client.mjs:70:463)",
+  "screenshot": null,
+  "screenshotNote": "in-app browser screenshot skipped after Page.captureScreenshot timeout; Chrome CDP screenshots saved separately"
+}

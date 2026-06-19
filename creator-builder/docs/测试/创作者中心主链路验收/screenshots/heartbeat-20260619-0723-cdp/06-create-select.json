@@ -1,0 +1,52 @@
+{
+  "route": "/create/select",
+  "started": "2026-06-18T23:37:53.003Z",
+  "finalUrl": "http://localhost/create/select",
+  "title": "创作者中心",
+  "bodyText": "Agora 请先登录后进入创作者中心。 去登录",
+  "visibleErrorCodeLike": false,
+  "visibleFeedbackCode": false,
+  "containsBareSpinnerText": false,
+  "spinnerLikeCount": 0,
+  "controls": [
+    {
+      "tag": "button",
+      "text": "去登录",
+      "role": null,
+      "href": null,
+      "aria": null,
+      "testid": null
+    }
+  ],
+  "headings": [],
+  "requests": [
+    {
+      "method": "GET",
+      "url": "http://localhost/api/v1/me",
+      "resourceType": "fetch"
+    }
+  ],
+  "responses": [
+    {
+      "status": 401,
+      "url": "http://localhost/api/v1/me",
+      "requestMethod": "GET"
+    }
+  ],
+  "consoleEntries": [
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://localhost/api/v1/me",
+        "line": 0,
+        "column": 0,
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    }
+  ],
+  "pageErrors": [],
+  "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0723-cdp/06-create-select.png",
+  "error": null
+}

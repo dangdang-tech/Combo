@@ -1,0 +1,542 @@
+{
+  "runAt": "2026-06-19T00:29:00.664Z",
+  "base": "http://localhost",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "routes": [
+    {
+      "route": "/create/select",
+      "screenshot": "01-create-select.png",
+      "finalUrl": "http://localhost/create/select",
+      "title": "创作者中心",
+      "headings": [],
+      "buttons": [
+        "去登录"
+      ],
+      "links": [],
+      "bodyTextSample": "Agora 请先登录后进入创作者中心。 去登录",
+      "hasLoginGate": true,
+      "hasStepLeak": false,
+      "visibleErrorCode": false,
+      "bareSpinner": false,
+      "progressbars": 0,
+      "apiResponses": [
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "contentType": "application/json; charset=utf-8"
+        }
+      ],
+      "apiWrites": [],
+      "me401Count": 1,
+      "consoleErrors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+        }
+      ],
+      "consoleWarnings": []
+    },
+    {
+      "route": "/create/structure",
+      "screenshot": "02-create-structure.png",
+      "finalUrl": "http://localhost/create/structure",
+      "title": "创作者中心",
+      "headings": [],
+      "buttons": [
+        "去登录"
+      ],
+      "links": [],
+      "bodyTextSample": "Agora 请先登录后进入创作者中心。 去登录",
+      "hasLoginGate": true,
+      "hasStepLeak": false,
+      "visibleErrorCode": false,
+      "bareSpinner": false,
+      "progressbars": 0,
+      "apiResponses": [
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "contentType": "application/json; charset=utf-8"
+        }
+      ],
+      "apiWrites": [],
+      "me401Count": 1,
+      "consoleErrors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+        }
+      ],
+      "consoleWarnings": []
+    },
+    {
+      "route": "/create/publish",
+      "screenshot": "03-create-publish.png",
+      "finalUrl": "http://localhost/create/publish",
+      "title": "创作者中心",
+      "headings": [],
+      "buttons": [
+        "去登录"
+      ],
+      "links": [],
+      "bodyTextSample": "Agora 请先登录后进入创作者中心。 去登录",
+      "hasLoginGate": true,
+      "hasStepLeak": false,
+      "visibleErrorCode": false,
+      "bareSpinner": false,
+      "progressbars": 0,
+      "apiResponses": [
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "contentType": "application/json; charset=utf-8"
+        }
+      ],
+      "apiWrites": [],
+      "me401Count": 1,
+      "consoleErrors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+        }
+      ],
+      "consoleWarnings": []
+    },
+    {
+      "route": "/capabilities",
+      "screenshot": "04-capabilities.png",
+      "finalUrl": "http://localhost/capabilities",
+      "title": "创作者中心",
+      "headings": [],
+      "buttons": [
+        "去登录"
+      ],
+      "links": [],
+      "bodyTextSample": "Agora 请先登录后进入创作者中心。 去登录",
+      "hasLoginGate": true,
+      "hasStepLeak": false,
+      "visibleErrorCode": false,
+      "bareSpinner": false,
+      "progressbars": 0,
+      "apiResponses": [
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "contentType": "application/json; charset=utf-8"
+        }
+      ],
+      "apiWrites": [],
+      "me401Count": 1,
+      "consoleErrors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+        }
+      ],
+      "consoleWarnings": []
+    },
+    {
+      "route": "/creator",
+      "screenshot": "05-creator.png",
+      "finalUrl": "http://localhost/creator",
+      "title": "创作者中心",
+      "headings": [],
+      "buttons": [
+        "去登录"
+      ],
+      "links": [],
+      "bodyTextSample": "Agora 请先登录后进入创作者中心。 去登录",
+      "hasLoginGate": true,
+      "hasStepLeak": false,
+      "visibleErrorCode": false,
+      "bareSpinner": false,
+      "progressbars": 0,
+      "apiResponses": [
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "contentType": "application/json; charset=utf-8"
+        }
+      ],
+      "apiWrites": [],
+      "me401Count": 1,
+      "consoleErrors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+        }
+      ],
+      "consoleWarnings": []
+    },
+    {
+      "route": "/profile",
+      "screenshot": "06-profile.png",
+      "finalUrl": "http://localhost/profile",
+      "title": "创作者中心",
+      "headings": [],
+      "buttons": [
+        "去登录"
+      ],
+      "links": [],
+      "bodyTextSample": "Agora 请先登录后进入创作者中心。 去登录",
+      "hasLoginGate": true,
+      "hasStepLeak": false,
+      "visibleErrorCode": false,
+      "bareSpinner": false,
+      "progressbars": 0,
+      "apiResponses": [
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "contentType": "application/json; charset=utf-8"
+        }
+      ],
+      "apiWrites": [],
+      "me401Count": 1,
+      "consoleErrors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+        }
+      ],
+      "consoleWarnings": []
+    },
+    {
+      "route": "/login?failureId=fake-check",
+      "screenshot": "07-login-failureId-fake-check.png",
+      "finalUrl": "http://localhost/login?failureId=fake-check",
+      "title": "创作者中心",
+      "headings": [
+        "登录没能完成"
+      ],
+      "buttons": [],
+      "links": [
+        {
+          "text": "A Agora",
+          "href": "/"
+        },
+        {
+          "text": "去登录",
+          "href": "/api/v1/auth/login"
+        },
+        {
+          "text": "回到首页",
+          "href": "/"
+        }
+      ],
+      "bodyTextSample": "A Agora 登录没能完成 这次登录没能完成，请重新登录。如果多次失败，可凭下方反馈代码联系我们。 去登录 回到首页 反馈代码：fake-check",
+      "hasLoginGate": true,
+      "hasStepLeak": false,
+      "visibleErrorCode": false,
+      "bareSpinner": false,
+      "progressbars": 0,
+      "apiResponses": [
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "contentType": "application/json; charset=utf-8"
+        }
+      ],
+      "apiWrites": [],
+      "me401Count": 1,
+      "consoleErrors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+        }
+      ],
+      "consoleWarnings": []
+    },
+    {
+      "route": "/definitely-not-a-real-route",
+      "screenshot": "08-definitely-not-a-real-route.png",
+      "finalUrl": "http://localhost/definitely-not-a-real-route",
+      "title": "创作者中心",
+      "headings": [
+        "页面不存在或已失效"
+      ],
+      "buttons": [],
+      "links": [
+        {
+          "text": "A Agora",
+          "href": "/"
+        },
+        {
+          "text": "回到首页",
+          "href": "/"
+        },
+        {
+          "text": "去登录",
+          "href": "/api/v1/auth/login"
+        }
+      ],
+      "bodyTextSample": "A Agora 页面不存在或已失效 你访问的链接可能已变更或不再可用。 回到首页 去登录",
+      "hasLoginGate": true,
+      "hasStepLeak": false,
+      "visibleErrorCode": false,
+      "bareSpinner": false,
+      "progressbars": 0,
+      "apiResponses": [
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "contentType": "application/json; charset=utf-8"
+        }
+      ],
+      "apiWrites": [],
+      "me401Count": 1,
+      "consoleErrors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+        }
+      ],
+      "consoleWarnings": []
+    },
+    {
+      "route": "/a/nonexistent-e2e-test-slug",
+      "screenshot": "09-a-nonexistent-e2e-test-slug.png",
+      "finalUrl": "http://localhost/a/nonexistent-e2e-test-slug",
+      "title": "创作者中心",
+      "headings": [
+        "公开能力页即将上线"
+      ],
+      "buttons": [],
+      "links": [
+        {
+          "text": "A Agora",
+          "href": "/"
+        }
+      ],
+      "bodyTextSample": "A Agora 公开能力页即将上线 能力的对外只读页正在筹备中，将随市集消费侧一起开放。敬请期待。",
+      "hasLoginGate": false,
+      "hasStepLeak": false,
+      "visibleErrorCode": false,
+      "bareSpinner": false,
+      "progressbars": 0,
+      "apiResponses": [
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "contentType": "application/json; charset=utf-8"
+        }
+      ],
+      "apiWrites": [],
+      "me401Count": 1,
+      "consoleErrors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+        }
+      ],
+      "consoleWarnings": []
+    },
+    {
+      "route": "/c/nonexistent-creator-e2e",
+      "screenshot": "10-c-nonexistent-creator-e2e.png",
+      "finalUrl": "http://localhost/c/nonexistent-creator-e2e",
+      "title": "创作者中心",
+      "headings": [
+        "公开创作者主页即将上线"
+      ],
+      "buttons": [],
+      "links": [
+        {
+          "text": "A Agora",
+          "href": "/"
+        }
+      ],
+      "bodyTextSample": "A Agora 公开创作者主页即将上线 创作者的对外只读主页正在筹备中，将随市集消费侧一起开放。敬请期待。",
+      "hasLoginGate": false,
+      "hasStepLeak": false,
+      "visibleErrorCode": false,
+      "bareSpinner": false,
+      "progressbars": 0,
+      "apiResponses": [
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "contentType": "application/json; charset=utf-8"
+        }
+      ],
+      "apiWrites": [],
+      "me401Count": 1,
+      "consoleErrors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+        }
+      ],
+      "consoleWarnings": []
+    }
+  ],
+  "apiChecks": [
+    {
+      "name": "me",
+      "method": "GET",
+      "path": "/api/v1/me",
+      "status": 401,
+      "contentType": "application/json; charset=utf-8",
+      "text": "{\"error\":{\"userMessage\":\"登录态失效了，请重新登录。\",\"retriable\":false,\"action\":\"escalate\",\"traceId\":\"892bc211-878b-47d8-8e48-d499e7d3d846\"}}",
+      "json": {
+        "error": {
+          "userMessage": "登录态失效了，请重新登录。",
+          "retriable": false,
+          "action": "escalate",
+          "traceId": "892bc211-878b-47d8-8e48-d499e7d3d846"
+        }
+      }
+    },
+    {
+      "name": "draftSelectionUnauthWriteProbe",
+      "method": "PATCH",
+      "path": "/api/v1/drafts/00000000-0000-4000-8000-000000000000/selection",
+      "status": 401,
+      "contentType": "application/json; charset=utf-8",
+      "text": "{\"error\":{\"userMessage\":\"登录态失效了，请重新登录。\",\"retriable\":false,\"action\":\"escalate\",\"traceId\":\"fcf9f308-e101-4c67-9404-b74859d4d2b1\"}}",
+      "json": {
+        "error": {
+          "userMessage": "登录态失效了，请重新登录。",
+          "retriable": false,
+          "action": "escalate",
+          "traceId": "fcf9f308-e101-4c67-9404-b74859d4d2b1"
+        }
+      }
+    },
+    {
+      "name": "capabilityCreateUnauthWriteProbe",
+      "method": "POST",
+      "path": "/api/v1/capabilities",
+      "status": 401,
+      "contentType": "application/json; charset=utf-8",
+      "text": "{\"error\":{\"userMessage\":\"登录态失效了，请重新登录。\",\"retriable\":false,\"action\":\"escalate\",\"traceId\":\"0c81e0e8-935f-4256-b552-885e82effb23\"}}",
+      "json": {
+        "error": {
+          "userMessage": "登录态失效了，请重新登录。",
+          "retriable": false,
+          "action": "escalate",
+          "traceId": "0c81e0e8-935f-4256-b552-885e82effb23"
+        }
+      }
+    },
+    {
+      "name": "manifestReadUnauth",
+      "method": "GET",
+      "path": "/api/v1/versions/00000000-0000-4000-8000-000000000000/manifest",
+      "status": 401,
+      "contentType": "application/json; charset=utf-8",
+      "text": "{\"error\":{\"userMessage\":\"登录态失效了，请重新登录。\",\"retriable\":false,\"action\":\"escalate\",\"traceId\":\"2f778ef4-8ca8-4c8f-9d26-29b1879d0d6e\"}}",
+      "json": {
+        "error": {
+          "userMessage": "登录态失效了，请重新登录。",
+          "retriable": false,
+          "action": "escalate",
+          "traceId": "2f778ef4-8ca8-4c8f-9d26-29b1879d0d6e"
+        }
+      }
+    },
+    {
+      "name": "structureStartUnauthWriteProbe",
+      "method": "POST",
+      "path": "/api/v1/versions/00000000-0000-4000-8000-000000000000/structure",
+      "status": 401,
+      "contentType": "application/json; charset=utf-8",
+      "text": "{\"error\":{\"userMessage\":\"登录态失效了，请重新登录。\",\"retriable\":false,\"action\":\"escalate\",\"traceId\":\"8a4e085d-83b5-45aa-ae38-f2b1db202a92\"}}",
+      "json": {
+        "error": {
+          "userMessage": "登录态失效了，请重新登录。",
+          "retriable": false,
+          "action": "escalate",
+          "traceId": "8a4e085d-83b5-45aa-ae38-f2b1db202a92"
+        }
+      }
+    },
+    {
+      "name": "structureSseUnauth",
+      "method": "GET",
+      "path": "/api/v1/versions/00000000-0000-4000-8000-000000000000/structure/events",
+      "status": 401,
+      "contentType": "application/json; charset=utf-8",
+      "text": "{\"error\":{\"userMessage\":\"登录态失效了，请重新登录。\",\"retriable\":false,\"action\":\"escalate\",\"traceId\":\"9c23917b-a310-4841-b5b7-9acbdeb36d15\"}}",
+      "json": {
+        "error": {
+          "userMessage": "登录态失效了，请重新登录。",
+          "retriable": false,
+          "action": "escalate",
+          "traceId": "9c23917b-a310-4841-b5b7-9acbdeb36d15"
+        }
+      }
+    },
+    {
+      "name": "manifestPatchUnauthWriteProbe",
+      "method": "PATCH",
+      "path": "/api/v1/versions/00000000-0000-4000-8000-000000000000/manifest",
+      "status": 401,
+      "contentType": "application/json; charset=utf-8",
+      "text": "{\"error\":{\"userMessage\":\"登录态失效了，请重新登录。\",\"retriable\":false,\"action\":\"escalate\",\"traceId\":\"01b29942-5d11-4883-9158-6894d51e6a69\"}}",
+      "json": {
+        "error": {
+          "userMessage": "登录态失效了，请重新登录。",
+          "retriable": false,
+          "action": "escalate",
+          "traceId": "01b29942-5d11-4883-9158-6894d51e6a69"
+        }
+      }
+    },
+    {
+      "name": "fieldRegenerateUnauthWriteProbe",
+      "method": "POST",
+      "path": "/api/v1/versions/00000000-0000-4000-8000-000000000000/manifest/fields/tagline/regenerate",
+      "status": 401,
+      "contentType": "application/json; charset=utf-8",
+      "text": "{\"error\":{\"userMessage\":\"登录态失效了，请重新登录。\",\"retriable\":false,\"action\":\"escalate\",\"traceId\":\"0d12e4ab-1188-4ba6-98cc-a2fbdfa80613\"}}",
+      "json": {
+        "error": {
+          "userMessage": "登录态失效了，请重新登录。",
+          "retriable": false,
+          "action": "escalate",
+          "traceId": "0d12e4ab-1188-4ba6-98cc-a2fbdfa80613"
+        }
+      }
+    }
+  ],
+  "loginClick": {
+    "buttonCount": 1,
+    "beforeUrl": "http://localhost/create/structure",
+    "afterUrl": "https://andkzt.logto.app/sign-in?app_id=vbu4vp7h0nczrddmzcpq1",
+    "console": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+      }
+    ]
+  },
+  "verdict": {
+    "noVisibleErrorCodes": true,
+    "noSpinnerOnly": true,
+    "privateRoutesGateUnauth": true,
+    "noRouteApiWrites": true,
+    "directWriteProbesAllBlocked": true,
+    "step34Api401Human": true,
+    "structureSse401Human": true,
+    "loginClickLeavesLocalhost": true,
+    "publicMe401Noise": true,
+    "me401Count": 10,
+    "publicMe401Count": 4,
+    "consoleErrorCount": 10,
+    "consoleWarningCount": 0
+  }
+}

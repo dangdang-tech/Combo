@@ -1,0 +1,54 @@
+{
+  "route": "/definitely-not-a-real-route",
+  "started": "2026-06-18T23:34:00.211Z",
+  "screenshot": null,
+  "screenshotNote": "in-app browser screenshot skipped after Page.captureScreenshot timeout; Chrome CDP screenshots saved separately",
+  "finalUrl": "http://localhost/definitely-not-a-real-route",
+  "title": "创作者中心",
+  "snapshotHead": "- banner:\n  - link \"Agora 首页\":\n    - /url: /\n    - generic: A\n    - generic: Agora\n- main:\n  - region \"页面不存在或已失效\":\n    - heading \"页面不存在或已失效\" [level=2]\n    - paragraph: 你访问的链接可能已变更或不再可用。\n    - link \"回到首页\":\n      - /url: /\n    - link \"去登录\":\n      - /url: /api/v1/auth/login",
+  "dom": {
+    "bodyText": "A Agora 页面不存在或已失效 你访问的链接可能已变更或不再可用。 回到首页 去登录",
+    "containsBareSpinnerText": false,
+    "controls": [
+      {
+        "aria": "Agora 首页",
+        "href": "/",
+        "role": null,
+        "tag": "a",
+        "testid": null,
+        "text": "A Agora"
+      },
+      {
+        "aria": null,
+        "href": "/",
+        "role": null,
+        "tag": "a",
+        "testid": null,
+        "text": "回到首页"
+      },
+      {
+        "aria": null,
+        "href": "/api/v1/auth/login",
+        "role": null,
+        "tag": "a",
+        "testid": null,
+        "text": "去登录"
+      }
+    ],
+    "headings": [
+      {
+        "aria": null,
+        "href": null,
+        "role": null,
+        "tag": "h2",
+        "testid": null,
+        "text": "页面不存在或已失效"
+      }
+    ],
+    "statusLike": [],
+    "textLength": 44,
+    "title": "创作者中心",
+    "visibleErrorCodeLike": false
+  },
+  "logsTail": []
+}

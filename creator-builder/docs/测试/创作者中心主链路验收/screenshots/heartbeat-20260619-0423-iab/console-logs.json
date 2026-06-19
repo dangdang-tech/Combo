@@ -1,0 +1,27 @@
+[
+  {
+    "name": "home",
+    "url": "http://localhost/",
+    "logs": []
+  },
+  {
+    "name": "create-publish",
+    "url": "http://localhost/create/publish",
+    "logs": []
+  },
+  {
+    "name": "public-capability",
+    "url": "http://localhost/a/nonexistent-e2e-test-slug",
+    "logs": []
+  },
+  {
+    "name": "login-failure",
+    "url": "http://localhost/login?failureId=fake-check",
+    "logs": []
+  },
+  {
+    "name": "not-found",
+    "url": "http://localhost/definitely-not-a-real-route",
+    "logs": []
+  }
+]

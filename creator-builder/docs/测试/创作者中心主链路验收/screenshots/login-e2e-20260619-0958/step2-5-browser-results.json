@@ -1,0 +1,184 @@
+[
+  {
+    "name": "step2-extract",
+    "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/login-e2e-20260619-0958/step2-extract.png",
+    "pageState": {
+      "alerts": [
+        "没找到要提取的原始数据，回上一步重新导入。 重试"
+      ],
+      "buttons": [
+        {
+          "disabled": false,
+          "text": ""
+        },
+        {
+          "disabled": false,
+          "text": "创作者视角"
+        },
+        {
+          "disabled": false,
+          "text": "保存草稿"
+        },
+        {
+          "disabled": false,
+          "text": "✓ STEP① 导入 已完成"
+        },
+        {
+          "disabled": false,
+          "text": "重试"
+        },
+        {
+          "disabled": true,
+          "text": "下一步：选择能力 →"
+        }
+      ],
+      "inputs": [],
+      "text": "A Agora 创作 工作台 我的能力 上传能力 数据分析 收益 我的 个人主页 F f645ddpk87wi 创作者 Creator Builder / 上传能力 / STEP② 提取 创作者视角 F 上传能力 保存草稿 ✓ STEP① 导入 已完成 2 STEP② 提取 进行中 3 STEP③ 选择 待办 4 STEP④ 结构化 待办 5 STEP⑤ 发布 待办 没找到要提取的原始数据，回上一步重新导入。 重试 第 2 步，共 5 步 下一步：选择能力 →",
+      "title": "创作者中心",
+      "url": "http://localhost/create/extract?draftId=019edd9b-f2e6-78b1-89fd-edc242dd1dcf"
+    },
+    "logs": []
+  },
+  {
+    "name": "step3-select",
+    "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/login-e2e-20260619-0958/step3-select.png",
+    "pageState": {
+      "alerts": [],
+      "buttons": [
+        {
+          "disabled": false,
+          "text": ""
+        },
+        {
+          "disabled": false,
+          "text": "创作者视角"
+        },
+        {
+          "disabled": false,
+          "text": "保存草稿"
+        },
+        {
+          "disabled": false,
+          "text": "✓ STEP① 导入 已完成"
+        },
+        {
+          "disabled": false,
+          "text": "✓ STEP② 提取 已完成"
+        },
+        {
+          "disabled": true,
+          "text": "全部发布（不逐个选） 把识别出的 0 个能力一次性自动整理、批量发布，跳过逐个展开。"
+        },
+        {
+          "disabled": true,
+          "text": "下一步：结构化 →"
+        }
+      ],
+      "inputs": [],
+      "text": "A Agora 创作 工作台 我的能力 上传能力 数据分析 收益 我的 个人主页 F f645ddpk87wi 创作者 Creator Builder / 上传能力 / STEP③ 选择 创作者视角 F 上传能力 保存草稿 ✓ STEP① 导入 已完成 ✓ STEP② 提取 已完成 3 STEP③ 选择 进行中 4 STEP④ 结构化 待办 5 STEP⑤ 发布 待办 全部发布（不逐个选） 把识别出的 0 个能力一次性自动整理、批量发布，跳过逐个展开。 或逐个选定一个 没有可选的能力，回上一步再提取试试。 第 3 步，共 5 步 下一步：结构化 →",
+      "title": "创作者中心",
+      "url": "http://localhost/create/select?draftId=019edd9b-f2e6-78b1-89fd-edc242dd1dcf"
+    },
+    "logs": []
+  },
+  {
+    "name": "step4-structure",
+    "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/login-e2e-20260619-0958/step4-structure.png",
+    "pageState": {
+      "alerts": [
+        "还没选好要结构化的能力，回上一步选一个。 去修改"
+      ],
+      "buttons": [
+        {
+          "disabled": false,
+          "text": ""
+        },
+        {
+          "disabled": false,
+          "text": "创作者视角"
+        },
+        {
+          "disabled": false,
+          "text": "保存草稿"
+        },
+        {
+          "disabled": false,
+          "text": "✓ STEP① 导入 已完成"
+        },
+        {
+          "disabled": false,
+          "text": "✓ STEP② 提取 已完成"
+        },
+        {
+          "disabled": false,
+          "text": "✓ STEP③ 选择 已完成"
+        },
+        {
+          "disabled": false,
+          "text": "去修改"
+        },
+        {
+          "disabled": true,
+          "text": "下一步：发布到市集 →"
+        }
+      ],
+      "inputs": [],
+      "text": "A Agora 创作 工作台 我的能力 上传能力 数据分析 收益 我的 个人主页 F f645ddpk87wi 创作者 Creator Builder / 上传能力 / STEP④ 结构化 创作者视角 F 上传能力 保存草稿 ✓ STEP① 导入 已完成 ✓ STEP② 提取 已完成 ✓ STEP③ 选择 已完成 4 STEP④ 结构化 进行中 5 STEP⑤ 发布 待办 还没选好要结构化的能力，回上一步选一个。 去修改 第 4 步，共 5 步 下一步：发布到市集 →",
+      "title": "创作者中心",
+      "url": "http://localhost/create/structure?draftId=019edd9b-f2e6-78b1-89fd-edc242dd1dcf"
+    },
+    "logs": []
+  },
+  {
+    "name": "step5-publish",
+    "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/login-e2e-20260619-0958/step5-publish.png",
+    "pageState": {
+      "alerts": [
+        "还没选好要发布的能力，回上一步选一下。 去修改"
+      ],
+      "buttons": [
+        {
+          "disabled": false,
+          "text": ""
+        },
+        {
+          "disabled": false,
+          "text": "创作者视角"
+        },
+        {
+          "disabled": false,
+          "text": "保存草稿"
+        },
+        {
+          "disabled": false,
+          "text": "✓ STEP① 导入 已完成"
+        },
+        {
+          "disabled": false,
+          "text": "✓ STEP② 提取 已完成"
+        },
+        {
+          "disabled": false,
+          "text": "✓ STEP③ 选择 已完成"
+        },
+        {
+          "disabled": false,
+          "text": "✓ STEP④ 结构化 已完成"
+        },
+        {
+          "disabled": false,
+          "text": "去修改"
+        },
+        {
+          "disabled": false,
+          "text": "回工作台"
+        }
+      ],
+      "inputs": [],
+      "text": "A Agora 创作 工作台 我的能力 上传能力 数据分析 收益 我的 个人主页 F f645ddpk87wi 创作者 Creator Builder / 上传能力 / STEP⑤ 发布 创作者视角 F 上传能力 保存草稿 ✓ STEP① 导入 已完成 ✓ STEP② 提取 已完成 ✓ STEP③ 选择 已完成 ✓ STEP④ 结构化 已完成 5 STEP⑤ 发布 进行中 还没选好要发布的能力，回上一步选一下。 去修改 第 5 步，共 5 步 回工作台",
+      "title": "创作者中心",
+      "url": "http://localhost/create/publish?draftId=019edd9b-f2e6-78b1-89fd-edc242dd1dcf"
+    },
+    "logs": []
+  }
+]

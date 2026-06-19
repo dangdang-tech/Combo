@@ -24,6 +24,7 @@ interface Sent {
 }
 function makeReqReply(opts: {
   userId?: string;
+  account?: string;
   params?: Record<string, string>;
   query?: Record<string, string>;
   db: ProfileFakeDb;
@@ -44,7 +45,9 @@ function makeReqReply(opts: {
   };
   const req = {
     id: 'trace-1',
-    auth: opts.userId ? { userId: opts.userId } : undefined,
+    auth: opts.userId
+      ? { userId: opts.userId, account: opts.account ?? '测试账号' }
+      : undefined,
     params: opts.params ?? {},
     query: opts.query ?? {},
     headers: {},
@@ -190,6 +193,81 @@ describe('self 别名 me（鉴权态自身主页）', () => {
     const body = ctx.sent.body as { data: { creatorId: string; hero: { displayName: string } } };
     expect(body.data.creatorId).toBe(creatorId);
     expect(body.data.hero.displayName).toBe('本人韦恩');
+  });
+
+  // —— BUG-014：登录用户访问自己主页但无 creator_profiles 行 → 不该 404「没找到创作者」，Hero 恒在 ——
+  it('me 别名无 profile 数据 → 200 最小 Hero（账号名 displayName），非 404（BUG-014）', async () => {
+    const db = new ProfileFakeDb(); // 不 seed profile：自己还没建名片。
+    const ctx = makeReqReply({
+      params: { creatorId: 'me' },
+      userId: 'self-no-profile',
+      account: '新创作者A',
+      db,
+    });
+    await call(getCreatorProfileHandler(), ctx);
+    expect(ctx.sent.code).toBe(200); // 不是 404
+    const body = ctx.sent.body as {
+      data: {
+        creatorId: string;
+        hero: { displayName: string; social: { viewerIsFollowing: boolean | null } };
+        metrics: { capabilityCount: number } | null;
+        density: { rows: unknown[] } | null;
+        works: { cards: unknown[] } | null;
+        network: { thumbnailOnly: boolean } | null;
+        heatmap: unknown;
+        heatmapEnabled: boolean;
+        sectionErrors: unknown[];
+      };
+      meta: { placeholders: Record<string, string> };
+    };
+    // Hero 恒在：用登录账号身份兜底（displayName=account）。
+    expect(body.data.creatorId).toBe('self-no-profile');
+    expect(body.data.hero.displayName).toBe('新创作者A');
+    expect(body.data.hero.social.viewerIsFollowing).toBeNull(); // 自己看自己无关注语义
+    // 空分区（非失败）：有结构、零内容，无 sectionErrors（前端各分区出空态，不出局部错误条）。
+    expect(body.data.metrics?.capabilityCount).toBe(0);
+    expect(body.data.density?.rows).toEqual([]);
+    expect(body.data.works?.cards).toEqual([]);
+    expect(body.data.network?.thumbnailOnly).toBe(true);
+    expect(body.data.heatmap).toBeNull();
+    expect(body.data.heatmapEnabled).toBe(false);
+    expect(body.data.sectionErrors).toEqual([]);
+    // usage 占位键照常（与有数据时一致，前端单键读不漂移）。
+    expect(body.meta.placeholders['totalInvocations']).toBe('暂无数据 / 上线后填充');
+    assertNoCode(body);
+  });
+
+  it('登录用户用自己真实 id（非 me 别名）访问无 profile 的自己 → 同样 200 最小 Hero（BUG-014）', async () => {
+    const db = new ProfileFakeDb(); // 无 profile 行。
+    const myId = 'real-self-id';
+    const ctx = makeReqReply({
+      params: { creatorId: myId }, // 真实 id（不是 'me' 别名），但 == viewerId。
+      userId: myId,
+      account: '本人',
+      db,
+    });
+    await call(getCreatorProfileHandler(), ctx);
+    expect(ctx.sent.code).toBe(200);
+    const body = ctx.sent.body as { data: { hero: { displayName: string } } };
+    expect(body.data.hero.displayName).toBe('本人');
+    assertNoCode(body);
+  });
+
+  it('他人主页无 profile 数据仍 404（不下钻、不暴露存在性，§2.7；self 兜底不外溢）', async () => {
+    const db = new ProfileFakeDb(); // 无 profile 行。
+    // 登录用户 viewer1 访问别人的 id（!= 自己）→ 仍 404，不构造他人最小名片。
+    const ctx = makeReqReply({
+      params: { creatorId: 'someone-else' },
+      userId: 'viewer1',
+      account: 'viewer1账号',
+      db,
+    });
+    await call(getCreatorProfileHandler(), ctx);
+    expect(ctx.sent.code).toBe(404);
+    const body = ctx.sent.body as { error: { action: string; userMessage: string } };
+    expect(body.error.action).toBe('change_input');
+    expect(body.error.userMessage).toContain('没找到');
+    assertNoCode(body);
   });
 
   it('未登录 GET /creators/me/profile → 401 escalate（self 需鉴权，不下钻不当 404）', async () => {

@@ -1,0 +1,183 @@
+{
+  "routes": [
+    {
+      "name": "home",
+      "requestedUrl": "http://localhost/",
+      "finalUrl": "http://localhost/",
+      "title": "创作者中心",
+      "text": "Agora 请先登录后进入创作者中心。 去登录",
+      "links": [],
+      "buttons": [
+        {
+          "disabled": false,
+          "text": "去登录"
+        }
+      ],
+      "hasShellLeak": false,
+      "hasVisibleErrorCode": false,
+      "spinnerOnly": false
+    },
+    {
+      "name": "creator",
+      "requestedUrl": "http://localhost/creator",
+      "finalUrl": "http://localhost/creator",
+      "title": "创作者中心",
+      "text": "Agora 请先登录后进入创作者中心。 去登录",
+      "links": [],
+      "buttons": [
+        {
+          "disabled": false,
+          "text": "去登录"
+        }
+      ],
+      "hasShellLeak": false,
+      "hasVisibleErrorCode": false,
+      "spinnerOnly": false
+    },
+    {
+      "name": "capabilities",
+      "requestedUrl": "http://localhost/capabilities",
+      "finalUrl": "http://localhost/capabilities",
+      "title": "创作者中心",
+      "text": "Agora 请先登录后进入创作者中心。 去登录",
+      "links": [],
+      "buttons": [
+        {
+          "disabled": false,
+          "text": "去登录"
+        }
+      ],
+      "hasShellLeak": false,
+      "hasVisibleErrorCode": false,
+      "spinnerOnly": false
+    },
+    {
+      "name": "create-import",
+      "requestedUrl": "http://localhost/create/import",
+      "finalUrl": "http://localhost/create/import",
+      "title": "创作者中心",
+      "text": "Agora 请先登录后进入创作者中心。 去登录",
+      "links": [],
+      "buttons": [
+        {
+          "disabled": false,
+          "text": "去登录"
+        }
+      ],
+      "hasShellLeak": false,
+      "hasVisibleErrorCode": false,
+      "spinnerOnly": false
+    },
+    {
+      "name": "create-publish",
+      "requestedUrl": "http://localhost/create/publish",
+      "finalUrl": "http://localhost/create/publish",
+      "title": "创作者中心",
+      "text": "Agora 请先登录后进入创作者中心。 去登录",
+      "links": [],
+      "buttons": [
+        {
+          "disabled": false,
+          "text": "去登录"
+        }
+      ],
+      "hasShellLeak": false,
+      "hasVisibleErrorCode": false,
+      "spinnerOnly": false
+    },
+    {
+      "name": "public-capability",
+      "requestedUrl": "http://localhost/a/nonexistent-e2e-test-slug",
+      "finalUrl": "http://localhost/a/nonexistent-e2e-test-slug",
+      "title": "创作者中心",
+      "text": "A Agora 公开能力页即将上线 能力的对外只读页正在筹备中，将随市集消费侧一起开放。敬请期待。",
+      "links": [
+        {
+          "href": "http://localhost/",
+          "text": "AAgora"
+        }
+      ],
+      "buttons": [],
+      "hasShellLeak": false,
+      "hasVisibleErrorCode": false,
+      "spinnerOnly": false
+    },
+    {
+      "name": "public-creator",
+      "requestedUrl": "http://localhost/c/nonexistent-creator-e2e",
+      "finalUrl": "http://localhost/c/nonexistent-creator-e2e",
+      "title": "创作者中心",
+      "text": "A Agora 公开创作者主页即将上线 创作者的对外只读主页正在筹备中，将随市集消费侧一起开放。敬请期待。",
+      "links": [
+        {
+          "href": "http://localhost/",
+          "text": "AAgora"
+        }
+      ],
+      "buttons": [],
+      "hasShellLeak": false,
+      "hasVisibleErrorCode": false,
+      "spinnerOnly": false
+    },
+    {
+      "name": "login-failure",
+      "requestedUrl": "http://localhost/login?failureId=fake-check",
+      "finalUrl": "http://localhost/login?failureId=fake-check",
+      "title": "创作者中心",
+      "text": "A Agora 登录没能完成 这次登录没能完成，请重新登录。如果多次失败，可凭下方反馈代码联系我们。 去登录 回到首页 反馈代码：fake-check",
+      "links": [
+        {
+          "href": "http://localhost/",
+          "text": "AAgora"
+        },
+        {
+          "href": "http://localhost/api/v1/auth/login",
+          "text": "去登录"
+        },
+        {
+          "href": "http://localhost/",
+          "text": "回到首页"
+        }
+      ],
+      "buttons": [],
+      "hasShellLeak": false,
+      "hasVisibleErrorCode": false,
+      "spinnerOnly": false
+    },
+    {
+      "name": "not-found",
+      "requestedUrl": "http://localhost/definitely-not-a-real-route",
+      "finalUrl": "http://localhost/definitely-not-a-real-route",
+      "title": "创作者中心",
+      "text": "A Agora 页面不存在或已失效 你访问的链接可能已变更或不再可用。 回到首页 去登录",
+      "links": [
+        {
+          "href": "http://localhost/",
+          "text": "AAgora"
+        },
+        {
+          "href": "http://localhost/",
+          "text": "回到首页"
+        },
+        {
+          "href": "http://localhost/api/v1/auth/login",
+          "text": "去登录"
+        }
+      ],
+      "buttons": [],
+      "hasShellLeak": false,
+      "hasVisibleErrorCode": false,
+      "spinnerOnly": false
+    }
+  ],
+  "verdict": {
+    "noShellLeak": true,
+    "spinnerOnly": false,
+    "visibleErrorCodeText": false,
+    "privateRoutesGateUnauth": true
+  },
+  "loginClick": {
+    "loginCount": 1,
+    "afterUrl": "https://andkzt.logto.app/sign-in?app_id=vbu4vp7h0nczrddmzcpq1"
+  }
+}

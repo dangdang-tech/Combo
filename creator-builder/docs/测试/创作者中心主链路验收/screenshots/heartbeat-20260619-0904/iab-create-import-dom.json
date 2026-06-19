@@ -1,0 +1,37 @@
+{
+  "snapshot": "- alert:\n  - generic: Agora\n  - paragraph: 请先登录后进入创作者中心。\n  - button \"去登录\"",
+  "data": {
+    "bodyTextSample": "Agora 请先登录后进入创作者中心。 去登录",
+    "buttons": [
+      {
+        "disabled": false,
+        "href": null,
+        "role": null,
+        "tag": "button",
+        "text": "去登录"
+      }
+    ],
+    "fileInputCount": 0,
+    "fileInputs": [],
+    "hasImportConnectCopy": false,
+    "hasLoginGate": true,
+    "texts": [
+      {
+        "href": null,
+        "role": null,
+        "tag": "p",
+        "text": "请先登录后进入创作者中心。",
+        "type": null
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "button",
+        "text": "去登录",
+        "type": "button"
+      }
+    ],
+    "title": "创作者中心",
+    "url": "http://localhost/create/import"
+  }
+}

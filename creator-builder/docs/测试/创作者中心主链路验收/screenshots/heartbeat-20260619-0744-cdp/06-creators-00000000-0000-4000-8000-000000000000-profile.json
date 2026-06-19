@@ -1,0 +1,81 @@
+{
+  "route": "/creators/00000000-0000-4000-8000-000000000000/profile",
+  "started": "2026-06-18T23:47:32.306Z",
+  "finalUrl": "http://localhost/creators/00000000-0000-4000-8000-000000000000/profile",
+  "title": "创作者中心",
+  "bodyText": "A Agora 没找到这个创作者，可能链接失效了。 去修改 反馈代码：07d37580-197f-42d9-9316-19f56040e878",
+  "controls": [
+    {
+      "tag": "a",
+      "text": "A Agora",
+      "role": null,
+      "href": "/",
+      "aria": "Agora 首页",
+      "testid": null
+    },
+    {
+      "tag": "button",
+      "text": "去修改",
+      "role": null,
+      "href": null,
+      "aria": null,
+      "testid": null
+    }
+  ],
+  "headings": [],
+  "requests": [
+    {
+      "method": "GET",
+      "url": "http://localhost/api/v1/creators/00000000-0000-4000-8000-000000000000/profile",
+      "resourceType": "fetch"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost/api/v1/me",
+      "resourceType": "fetch"
+    }
+  ],
+  "responses": [
+    {
+      "status": 404,
+      "url": "http://localhost/api/v1/creators/00000000-0000-4000-8000-000000000000/profile",
+      "requestMethod": "GET"
+    },
+    {
+      "status": 401,
+      "url": "http://localhost/api/v1/me",
+      "requestMethod": "GET"
+    }
+  ],
+  "consoleEntries": [
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "location": {
+        "url": "http://localhost/api/v1/creators/00000000-0000-4000-8000-000000000000/profile",
+        "line": 0,
+        "column": 0,
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://localhost/api/v1/me",
+        "line": 0,
+        "column": 0,
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    }
+  ],
+  "pageErrors": [],
+  "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0744-cdp/06-creators-00000000-0000-4000-8000-000000000000-profile.png",
+  "error": null,
+  "spinnerLikeCount": 0,
+  "visibleErrorCodeLike": false,
+  "visibleFeedbackCode": true,
+  "containsBareSpinnerText": false
+}

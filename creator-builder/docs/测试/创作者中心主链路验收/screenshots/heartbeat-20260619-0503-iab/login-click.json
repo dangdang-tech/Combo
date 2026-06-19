@@ -1,0 +1,6 @@
+{
+  "beforeUrl": "http://localhost/create/import",
+  "snapshotExcerpt": "- alert:\n  - generic: Agora\n  - paragraph: 请先登录后进入创作者中心。\n  - button \"去登录\"",
+  "loginBtnCount": 1,
+  "afterUrl": "https://andkzt.logto.app/sign-in?app_id=vbu4vp7h0nczrddmzcpq1"
+}

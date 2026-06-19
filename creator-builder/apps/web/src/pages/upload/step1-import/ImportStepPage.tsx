@@ -1,10 +1,12 @@
 // STEP① 导入页容器（F-10，开工总纲 §5.1）——空态 → 配对 → SSE 加载 → 完成 的状态编排。
 //
-// 链路（主推本机助手路径，导入-25）：
-//   1. 空态 ImportEmptyState：点「开始导入」→ createPair 铸码 → 进配对态。
-//   2. 配对态 CommandBox：展示一行命令 + usePairPolling 轮询 → 拿 jobId 进加载态。
-//   3. 加载态 ImportLoading：useSSE(job 流) 三层进度 + 落库卡逐条 + 取消；done.result.snapshotId → 完成。
-//   4. 完成态 ImportComplete：取快照统计 + 会话节选；底栏注册「下一步：提取能力项 →」（带 snapshotId 进 STEP②）。
+// 链路（主路径浏览器直传，BUG-013；本机助手 / CURL 为高级入口）：
+//   1. 空态 ImportEmptyState：主卡「从浏览器导入」选文件/目录/拖拽 → useBrowserImport 编排 → 进上传中态。
+//      高级入口点「开始导入」→ createPair 铸码 → 进配对态。
+//   2. 上传中态 BrowserUploadProgress：presign → 分批 PUT 进度条 → 拿 jobId 进加载态（断点续传/重试）。
+//   3. 配对态 CommandBox：展示一行命令 + usePairPolling 轮询 → 拿 jobId 进加载态。
+//   4. 加载态 ImportLoading：useSSE(job 流) 三层进度 + 落库卡逐条 + 取消；done.result.snapshotId → 完成。
+//   5. 完成态 ImportComplete：取快照统计 + 会话节选；底栏注册「下一步：提取能力项 →」（带 snapshotId 进 STEP②）。
 // 续传（F-15）：URL ?jobId= / ?snapshotId= 深链直进加载态 / 完成态（工作台草稿条可带）。
 // 退路：整体失败由 useSSE error → StreamLoading 内 ErrorState（重试重连）；两次失败 markStepError('import')。
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
@@ -14,6 +16,8 @@ import { ApiError, useSSE, type UseSSEState } from '../../../api/index.js';
 import { ErrorState, LoadingState } from '../../../components/index.js';
 import { useWizard, pathForStep, useBootstrapDraft } from '../../wizard/index.js';
 import { ImportEmptyState } from './ImportEmptyState.js';
+import { BrowserUploadProgress } from './BrowserUploadProgress.js';
+import { useBrowserImport } from './useBrowserImport.js';
 import { CommandBox } from './CommandBox.js';
 import { ImportLoading } from './ImportLoading.js';
 import { ImportComplete } from './ImportComplete.js';
@@ -28,6 +32,7 @@ import {
 
 type Phase =
   | { kind: 'empty' }
+  | { kind: 'uploading' } // 浏览器直传中（BUG-013）：presign → 分批 PUT，进度由 useBrowserImport 承载
   | { kind: 'pairing'; pair: PairResult }
   | { kind: 'loading'; jobId: string }
   | { kind: 'restoring' } // 深链 ?snapshotId=：异步取完成态前的占位
@@ -133,6 +138,13 @@ export function ImportStepPage(): ReactElement {
   const pairId = phase.kind === 'pairing' ? phase.pair.pairId : undefined;
   const poll = usePairPolling(pairId);
 
+  // 浏览器直传编排（BUG-013 主路径）：选文件 → presign → 分批 PUT → 建 Job → 拿 jobId 转 SSE 加载态。
+  //   拿到 jobId 即进现有 loading 链路复用（jobId → SSE → 完成态）。
+  const browserImport = useBrowserImport({
+    onJobId: (jobId) => setPhase({ kind: 'loading', jobId }),
+    ...(draftId ? { draftId } : {}),
+  });
+
   // 配对拿到 jobId → 进加载态。
   useEffect(() => {
     if (phase.kind === 'pairing' && poll.jobId) {
@@ -212,6 +224,27 @@ export function ImportStepPage(): ReactElement {
     }
   }, [draftId]);
 
+  // 浏览器直传：选了文件/目录或拖拽 → 进上传中态 + 启动编排（BUG-013 主路径）。
+  const handleBrowserFiles = useCallback(
+    (files: File[]): void => {
+      setStartError(null);
+      setPhase({ kind: 'uploading' });
+      browserImport.start(files);
+    },
+    [browserImport],
+  );
+
+  // 上传中取消 / 出错回退：abort 编排 + 回空态（已传分片后端可清，前端回可重选态，不卡死）。
+  const handleBrowserCancel = useCallback((): void => {
+    browserImport.reset();
+    setPhase({ kind: 'empty' });
+  }, [browserImport]);
+
+  // 上传失败重试：续传（已传分片不重传，建 Job 复用同 key，硬规则③）。
+  const handleBrowserRetry = useCallback((): void => {
+    browserImport.retry();
+  }, [browserImport]);
+
   const handleCopy = useCallback((): void => {
     if (phase.kind !== 'pairing') return;
     void navigator.clipboard?.writeText(phase.pair.command).catch(() => undefined);
@@ -269,11 +302,32 @@ export function ImportStepPage(): ReactElement {
   }
 
   if (phase.kind === 'empty') {
-    // 全新进入：建草稿在途时禁用「开始导入」（拿到真实 draftId 才铸码，确保 pair/job 挂在真实 draft 上）；
+    // 全新进入：建草稿在途时禁用入口（拿到真实 draftId 才铸码/挂 job，确保挂在真实 draft 上）；
     //   永不裸转圈靠按钮内联「准备中…」（ImportEmptyState starting）。
     const bootstrapBusy = bootstrap.status === 'creating';
     return (
-      <ImportEmptyState onStart={() => void handleStart()} starting={starting || bootstrapBusy} />
+      <ImportEmptyState
+        onFiles={handleBrowserFiles}
+        uploading={bootstrapBusy}
+        onStart={() => void handleStart()}
+        starting={starting || bootstrapBusy}
+      />
+    );
+  }
+
+  if (phase.kind === 'uploading') {
+    // 浏览器直传出错（presign / PUT / 建 Job 失败）→ 就地人话错误 + 退路（重试续传 / 换输入回空态）。
+    if (browserImport.progress.phase === 'error' && browserImport.progress.error) {
+      return (
+        <ErrorState
+          error={browserImport.progress.error}
+          onRetry={handleBrowserRetry}
+          onChangeInput={handleBrowserCancel}
+        />
+      );
+    }
+    return (
+      <BrowserUploadProgress progress={browserImport.progress} onCancel={handleBrowserCancel} />
     );
   }
 

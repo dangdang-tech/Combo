@@ -1,0 +1,417 @@
+{
+  "generatedAt": "2026-06-18T18:45:15.796Z",
+  "bundle": "index-D8pltqU2.js",
+  "results": [
+    {
+      "name": "home",
+      "route": "/",
+      "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0243/home.png",
+      "dom": {
+        "url": "http://localhost/",
+        "title": "创作者中心",
+        "text": "Agora\n\n请先登录后进入创作者中心。\n\n去登录",
+        "hasShell": false,
+        "hasAuthGate": true,
+        "hasPublicLayout": false,
+        "hasWayne": false,
+        "leaksPhase": false,
+        "buttons": [
+          {
+            "tag": "BUTTON",
+            "text": "去登录",
+            "href": null,
+            "disabled": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "/api/v1/me"
+        }
+      ],
+      "api": [
+        {
+          "status": 401,
+          "url": "/api/v1/me"
+        }
+      ],
+      "consoleLogs": [
+        {
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "url": "http://localhost/api/v1/me"
+        }
+      ],
+      "exceptions": []
+    },
+    {
+      "name": "creator",
+      "route": "/creator",
+      "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0243/creator.png",
+      "dom": {
+        "url": "http://localhost/creator",
+        "title": "创作者中心",
+        "text": "Agora\n\n请先登录后进入创作者中心。\n\n去登录",
+        "hasShell": false,
+        "hasAuthGate": true,
+        "hasPublicLayout": false,
+        "hasWayne": false,
+        "leaksPhase": false,
+        "buttons": [
+          {
+            "tag": "BUTTON",
+            "text": "去登录",
+            "href": null,
+            "disabled": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "/api/v1/me"
+        }
+      ],
+      "api": [
+        {
+          "status": 401,
+          "url": "/api/v1/me"
+        }
+      ],
+      "consoleLogs": [
+        {
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "url": "http://localhost/api/v1/me"
+        }
+      ],
+      "exceptions": []
+    },
+    {
+      "name": "create-import",
+      "route": "/create/import",
+      "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0243/create-import.png",
+      "dom": {
+        "url": "http://localhost/create/import",
+        "title": "创作者中心",
+        "text": "Agora\n\n请先登录后进入创作者中心。\n\n去登录",
+        "hasShell": false,
+        "hasAuthGate": true,
+        "hasPublicLayout": false,
+        "hasWayne": false,
+        "leaksPhase": false,
+        "buttons": [
+          {
+            "tag": "BUTTON",
+            "text": "去登录",
+            "href": null,
+            "disabled": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "/api/v1/me"
+        }
+      ],
+      "api": [
+        {
+          "status": 401,
+          "url": "/api/v1/me"
+        }
+      ],
+      "consoleLogs": [
+        {
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "url": "http://localhost/api/v1/me"
+        }
+      ],
+      "exceptions": []
+    },
+    {
+      "name": "public-capability",
+      "route": "/a/nonexistent-e2e-test-slug",
+      "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0243/public-capability.png",
+      "dom": {
+        "url": "http://localhost/a/nonexistent-e2e-test-slug",
+        "title": "创作者中心",
+        "text": "A\nAgora\n公开能力页即将上线\n\n能力的对外只读页正在筹备中，将随市集消费侧一起开放。敬请期待。",
+        "hasShell": false,
+        "hasAuthGate": false,
+        "hasPublicLayout": true,
+        "hasWayne": false,
+        "leaksPhase": false,
+        "buttons": [
+          {
+            "tag": "A",
+            "text": "A\nAgora",
+            "href": "http://localhost/",
+            "disabled": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "/api/v1/me"
+        }
+      ],
+      "api": [
+        {
+          "status": 401,
+          "url": "/api/v1/me"
+        }
+      ],
+      "consoleLogs": [
+        {
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "url": "http://localhost/api/v1/me"
+        }
+      ],
+      "exceptions": []
+    },
+    {
+      "name": "public-creator",
+      "route": "/c/nonexistent-creator-e2e",
+      "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0243/public-creator.png",
+      "dom": {
+        "url": "http://localhost/c/nonexistent-creator-e2e",
+        "title": "创作者中心",
+        "text": "A\nAgora\n公开创作者主页即将上线\n\n创作者的对外只读主页正在筹备中，将随市集消费侧一起开放。敬请期待。",
+        "hasShell": false,
+        "hasAuthGate": false,
+        "hasPublicLayout": true,
+        "hasWayne": false,
+        "leaksPhase": false,
+        "buttons": [
+          {
+            "tag": "A",
+            "text": "A\nAgora",
+            "href": "http://localhost/",
+            "disabled": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "/api/v1/me"
+        }
+      ],
+      "api": [
+        {
+          "status": 401,
+          "url": "/api/v1/me"
+        }
+      ],
+      "consoleLogs": [
+        {
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "url": "http://localhost/api/v1/me"
+        }
+      ],
+      "exceptions": []
+    },
+    {
+      "name": "login-failure",
+      "route": "/login?failureId=fake-check",
+      "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0243/login-failure.png",
+      "dom": {
+        "url": "http://localhost/login?failureId=fake-check",
+        "title": "创作者中心",
+        "text": "A\nAgora\n登录没能完成\n\n这次登录没能完成，请重新登录。如果多次失败，可凭下方反馈代码联系我们。\n\n去登录\n回到首页\n\n反馈代码：fake-check",
+        "hasShell": false,
+        "hasAuthGate": false,
+        "hasPublicLayout": true,
+        "hasWayne": false,
+        "leaksPhase": false,
+        "buttons": [
+          {
+            "tag": "A",
+            "text": "A\nAgora",
+            "href": "http://localhost/",
+            "disabled": false
+          },
+          {
+            "tag": "A",
+            "text": "去登录",
+            "href": "http://localhost/api/v1/auth/login",
+            "disabled": false
+          },
+          {
+            "tag": "A",
+            "text": "回到首页",
+            "href": "http://localhost/",
+            "disabled": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "/api/v1/me"
+        }
+      ],
+      "api": [
+        {
+          "status": 401,
+          "url": "/api/v1/me"
+        }
+      ],
+      "consoleLogs": [
+        {
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "url": "http://localhost/api/v1/me"
+        }
+      ],
+      "exceptions": []
+    },
+    {
+      "name": "not-found",
+      "route": "/definitely-not-a-real-route",
+      "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0243/not-found.png",
+      "dom": {
+        "url": "http://localhost/definitely-not-a-real-route",
+        "title": "创作者中心",
+        "text": "A\nAgora\n页面不存在或已失效\n\n你访问的链接可能已变更或不再可用。\n\n回到首页\n去登录",
+        "hasShell": false,
+        "hasAuthGate": false,
+        "hasPublicLayout": true,
+        "hasWayne": false,
+        "leaksPhase": false,
+        "buttons": [
+          {
+            "tag": "A",
+            "text": "A\nAgora",
+            "href": "http://localhost/",
+            "disabled": false
+          },
+          {
+            "tag": "A",
+            "text": "回到首页",
+            "href": "http://localhost/",
+            "disabled": false
+          },
+          {
+            "tag": "A",
+            "text": "去登录",
+            "href": "http://localhost/api/v1/auth/login",
+            "disabled": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "/api/v1/me"
+        }
+      ],
+      "api": [
+        {
+          "status": 401,
+          "url": "/api/v1/me"
+        }
+      ],
+      "consoleLogs": [
+        {
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "url": "http://localhost/api/v1/me"
+        }
+      ],
+      "exceptions": []
+    },
+    {
+      "name": "creators-me-profile",
+      "route": "/creators/me/profile",
+      "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0243/creators-me-profile.png",
+      "dom": {
+        "url": "http://localhost/creators/me/profile",
+        "title": "创作者中心",
+        "text": "A\nAgora\n\n登录后才能查看“我的个人主页”，请先登录。\n\n去登录\n\n反馈代码：bdae5862-d5cb-4757-a0a8-c62672ce82b7",
+        "hasShell": false,
+        "hasAuthGate": false,
+        "hasPublicLayout": true,
+        "hasWayne": false,
+        "leaksPhase": false,
+        "buttons": [
+          {
+            "tag": "A",
+            "text": "A\nAgora",
+            "href": "http://localhost/",
+            "disabled": false
+          },
+          {
+            "tag": "BUTTON",
+            "text": "去登录",
+            "href": null,
+            "disabled": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "/api/v1/creators/me/profile"
+        },
+        {
+          "method": "GET",
+          "url": "/api/v1/me"
+        }
+      ],
+      "api": [
+        {
+          "status": 401,
+          "url": "/api/v1/creators/me/profile"
+        },
+        {
+          "status": 401,
+          "url": "/api/v1/me"
+        }
+      ],
+      "consoleLogs": [
+        {
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "url": "http://localhost/api/v1/creators/me/profile"
+        },
+        {
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "url": "http://localhost/api/v1/me"
+        }
+      ],
+      "exceptions": []
+    },
+    {
+      "name": "click-login-create-import",
+      "route": "/create/import click 去登录",
+      "screenshot": null,
+      "dom": {
+        "url": "https://andkzt.logto.app/sign-in?app_id=vbu4vp7h0nczrddmzcpq1",
+        "text": ""
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "/api/v1/auth/login?returnTo=%2Fcreate%2Fimport"
+        }
+      ],
+      "api": [],
+      "consoleLogs": [
+        {
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "url": "http://localhost/api/v1/me"
+        }
+      ],
+      "exceptions": []
+    }
+  ]
+}

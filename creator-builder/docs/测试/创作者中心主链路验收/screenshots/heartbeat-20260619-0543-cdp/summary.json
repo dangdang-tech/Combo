@@ -1,0 +1,1835 @@
+{
+  "generatedAt": "2026-06-18T21:49:56.355Z",
+  "viewport": {
+    "width": 1408,
+    "height": 900
+  },
+  "routeSummaries": [
+    {
+      "name": "home",
+      "route": "/",
+      "mainStatus": 200,
+      "gotoError": null,
+      "dom": {
+        "url": "http://localhost/",
+        "title": "创作者中心",
+        "textSample": "Agora 请先登录后进入创作者中心。 去登录",
+        "textLength": 23,
+        "hasLoginGate": true,
+        "hasShellLeak": false,
+        "hasVisibleErrorCode": false,
+        "hasSpinnerOnly": false,
+        "hasStep4DesignCopy": false,
+        "hasStep5DesignCopy": false,
+        "hasHumanInvalidProfileCopy": false,
+        "controls": [
+          {
+            "tag": "button",
+            "text": "去登录",
+            "href": "",
+            "disabled": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "http://localhost/",
+          "resourceType": "document",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "resourceType": "script",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "resourceType": "stylesheet",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/api/v1/me",
+          "resourceType": "fetch",
+          "postData": null
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "url": "http://localhost/",
+          "requestMethod": "GET",
+          "resourceType": "document"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "requestMethod": "GET",
+          "resourceType": "stylesheet"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "requestMethod": "GET",
+          "resourceType": "script"
+        },
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "resourceType": "fetch"
+        }
+      ],
+      "failed": [],
+      "me401Count": 1,
+      "draftPostCount": 0,
+      "selectionPatchCount": 0,
+      "publishPostCount": 0,
+      "batchPostCount": 0,
+      "profileApiStatuses": []
+    },
+    {
+      "name": "creator",
+      "route": "/creator",
+      "mainStatus": 200,
+      "gotoError": null,
+      "dom": {
+        "url": "http://localhost/creator",
+        "title": "创作者中心",
+        "textSample": "Agora 请先登录后进入创作者中心。 去登录",
+        "textLength": 23,
+        "hasLoginGate": true,
+        "hasShellLeak": false,
+        "hasVisibleErrorCode": false,
+        "hasSpinnerOnly": false,
+        "hasStep4DesignCopy": false,
+        "hasStep5DesignCopy": false,
+        "hasHumanInvalidProfileCopy": false,
+        "controls": [
+          {
+            "tag": "button",
+            "text": "去登录",
+            "href": "",
+            "disabled": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "http://localhost/creator",
+          "resourceType": "document",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "resourceType": "script",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "resourceType": "stylesheet",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/api/v1/me",
+          "resourceType": "fetch",
+          "postData": null
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "url": "http://localhost/creator",
+          "requestMethod": "GET",
+          "resourceType": "document"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "requestMethod": "GET",
+          "resourceType": "script"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "requestMethod": "GET",
+          "resourceType": "stylesheet"
+        },
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "resourceType": "fetch"
+        }
+      ],
+      "failed": [],
+      "me401Count": 1,
+      "draftPostCount": 0,
+      "selectionPatchCount": 0,
+      "publishPostCount": 0,
+      "batchPostCount": 0,
+      "profileApiStatuses": []
+    },
+    {
+      "name": "profile",
+      "route": "/profile",
+      "mainStatus": 200,
+      "gotoError": null,
+      "dom": {
+        "url": "http://localhost/profile",
+        "title": "创作者中心",
+        "textSample": "Agora 请先登录后进入创作者中心。 去登录",
+        "textLength": 23,
+        "hasLoginGate": true,
+        "hasShellLeak": false,
+        "hasVisibleErrorCode": false,
+        "hasSpinnerOnly": false,
+        "hasStep4DesignCopy": false,
+        "hasStep5DesignCopy": false,
+        "hasHumanInvalidProfileCopy": false,
+        "controls": [
+          {
+            "tag": "button",
+            "text": "去登录",
+            "href": "",
+            "disabled": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "http://localhost/profile",
+          "resourceType": "document",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "resourceType": "script",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "resourceType": "stylesheet",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/api/v1/me",
+          "resourceType": "fetch",
+          "postData": null
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "url": "http://localhost/profile",
+          "requestMethod": "GET",
+          "resourceType": "document"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "requestMethod": "GET",
+          "resourceType": "script"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "requestMethod": "GET",
+          "resourceType": "stylesheet"
+        },
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "resourceType": "fetch"
+        }
+      ],
+      "failed": [],
+      "me401Count": 1,
+      "draftPostCount": 0,
+      "selectionPatchCount": 0,
+      "publishPostCount": 0,
+      "batchPostCount": 0,
+      "profileApiStatuses": []
+    },
+    {
+      "name": "capabilities",
+      "route": "/capabilities",
+      "mainStatus": 200,
+      "gotoError": null,
+      "dom": {
+        "url": "http://localhost/capabilities",
+        "title": "创作者中心",
+        "textSample": "Agora 请先登录后进入创作者中心。 去登录",
+        "textLength": 23,
+        "hasLoginGate": true,
+        "hasShellLeak": false,
+        "hasVisibleErrorCode": false,
+        "hasSpinnerOnly": false,
+        "hasStep4DesignCopy": false,
+        "hasStep5DesignCopy": false,
+        "hasHumanInvalidProfileCopy": false,
+        "controls": [
+          {
+            "tag": "button",
+            "text": "去登录",
+            "href": "",
+            "disabled": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "http://localhost/capabilities",
+          "resourceType": "document",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "resourceType": "script",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "resourceType": "stylesheet",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/api/v1/me",
+          "resourceType": "fetch",
+          "postData": null
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "url": "http://localhost/capabilities",
+          "requestMethod": "GET",
+          "resourceType": "document"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "requestMethod": "GET",
+          "resourceType": "script"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "requestMethod": "GET",
+          "resourceType": "stylesheet"
+        },
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "resourceType": "fetch"
+        }
+      ],
+      "failed": [],
+      "me401Count": 1,
+      "draftPostCount": 0,
+      "selectionPatchCount": 0,
+      "publishPostCount": 0,
+      "batchPostCount": 0,
+      "profileApiStatuses": []
+    },
+    {
+      "name": "create-import",
+      "route": "/create/import",
+      "mainStatus": 200,
+      "gotoError": null,
+      "dom": {
+        "url": "http://localhost/create/import",
+        "title": "创作者中心",
+        "textSample": "Agora 请先登录后进入创作者中心。 去登录",
+        "textLength": 23,
+        "hasLoginGate": true,
+        "hasShellLeak": false,
+        "hasVisibleErrorCode": false,
+        "hasSpinnerOnly": false,
+        "hasStep4DesignCopy": false,
+        "hasStep5DesignCopy": false,
+        "hasHumanInvalidProfileCopy": false,
+        "controls": [
+          {
+            "tag": "button",
+            "text": "去登录",
+            "href": "",
+            "disabled": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "http://localhost/create/import",
+          "resourceType": "document",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "resourceType": "script",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "resourceType": "stylesheet",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/api/v1/me",
+          "resourceType": "fetch",
+          "postData": null
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "url": "http://localhost/create/import",
+          "requestMethod": "GET",
+          "resourceType": "document"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "requestMethod": "GET",
+          "resourceType": "script"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "requestMethod": "GET",
+          "resourceType": "stylesheet"
+        },
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "resourceType": "fetch"
+        }
+      ],
+      "failed": [],
+      "me401Count": 1,
+      "draftPostCount": 0,
+      "selectionPatchCount": 0,
+      "publishPostCount": 0,
+      "batchPostCount": 0,
+      "profileApiStatuses": []
+    },
+    {
+      "name": "create-select",
+      "route": "/create/select",
+      "mainStatus": 200,
+      "gotoError": null,
+      "dom": {
+        "url": "http://localhost/create/select",
+        "title": "创作者中心",
+        "textSample": "Agora 请先登录后进入创作者中心。 去登录",
+        "textLength": 23,
+        "hasLoginGate": true,
+        "hasShellLeak": false,
+        "hasVisibleErrorCode": false,
+        "hasSpinnerOnly": false,
+        "hasStep4DesignCopy": false,
+        "hasStep5DesignCopy": false,
+        "hasHumanInvalidProfileCopy": false,
+        "controls": [
+          {
+            "tag": "button",
+            "text": "去登录",
+            "href": "",
+            "disabled": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "http://localhost/create/select",
+          "resourceType": "document",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "resourceType": "script",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "resourceType": "stylesheet",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/api/v1/me",
+          "resourceType": "fetch",
+          "postData": null
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "url": "http://localhost/create/select",
+          "requestMethod": "GET",
+          "resourceType": "document"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "requestMethod": "GET",
+          "resourceType": "script"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "requestMethod": "GET",
+          "resourceType": "stylesheet"
+        },
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "resourceType": "fetch"
+        }
+      ],
+      "failed": [],
+      "me401Count": 1,
+      "draftPostCount": 0,
+      "selectionPatchCount": 0,
+      "publishPostCount": 0,
+      "batchPostCount": 0,
+      "profileApiStatuses": []
+    },
+    {
+      "name": "create-extract",
+      "route": "/create/extract",
+      "mainStatus": 200,
+      "gotoError": null,
+      "dom": {
+        "url": "http://localhost/create/extract",
+        "title": "创作者中心",
+        "textSample": "Agora 请先登录后进入创作者中心。 去登录",
+        "textLength": 23,
+        "hasLoginGate": true,
+        "hasShellLeak": false,
+        "hasVisibleErrorCode": false,
+        "hasSpinnerOnly": false,
+        "hasStep4DesignCopy": false,
+        "hasStep5DesignCopy": false,
+        "hasHumanInvalidProfileCopy": false,
+        "controls": [
+          {
+            "tag": "button",
+            "text": "去登录",
+            "href": "",
+            "disabled": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "http://localhost/create/extract",
+          "resourceType": "document",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "resourceType": "script",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "resourceType": "stylesheet",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/api/v1/me",
+          "resourceType": "fetch",
+          "postData": null
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "url": "http://localhost/create/extract",
+          "requestMethod": "GET",
+          "resourceType": "document"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "requestMethod": "GET",
+          "resourceType": "script"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "requestMethod": "GET",
+          "resourceType": "stylesheet"
+        },
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "resourceType": "fetch"
+        }
+      ],
+      "failed": [],
+      "me401Count": 1,
+      "draftPostCount": 0,
+      "selectionPatchCount": 0,
+      "publishPostCount": 0,
+      "batchPostCount": 0,
+      "profileApiStatuses": []
+    },
+    {
+      "name": "create-structure",
+      "route": "/create/structure",
+      "mainStatus": 200,
+      "gotoError": null,
+      "dom": {
+        "url": "http://localhost/create/structure",
+        "title": "创作者中心",
+        "textSample": "Agora 请先登录后进入创作者中心。 去登录",
+        "textLength": 23,
+        "hasLoginGate": true,
+        "hasShellLeak": false,
+        "hasVisibleErrorCode": false,
+        "hasSpinnerOnly": false,
+        "hasStep4DesignCopy": false,
+        "hasStep5DesignCopy": false,
+        "hasHumanInvalidProfileCopy": false,
+        "controls": [
+          {
+            "tag": "button",
+            "text": "去登录",
+            "href": "",
+            "disabled": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "http://localhost/create/structure",
+          "resourceType": "document",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "resourceType": "script",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "resourceType": "stylesheet",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/api/v1/me",
+          "resourceType": "fetch",
+          "postData": null
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "url": "http://localhost/create/structure",
+          "requestMethod": "GET",
+          "resourceType": "document"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "requestMethod": "GET",
+          "resourceType": "script"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "requestMethod": "GET",
+          "resourceType": "stylesheet"
+        },
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "resourceType": "fetch"
+        }
+      ],
+      "failed": [],
+      "me401Count": 1,
+      "draftPostCount": 0,
+      "selectionPatchCount": 0,
+      "publishPostCount": 0,
+      "batchPostCount": 0,
+      "profileApiStatuses": []
+    },
+    {
+      "name": "create-publish",
+      "route": "/create/publish",
+      "mainStatus": 200,
+      "gotoError": null,
+      "dom": {
+        "url": "http://localhost/create/publish",
+        "title": "创作者中心",
+        "textSample": "Agora 请先登录后进入创作者中心。 去登录",
+        "textLength": 23,
+        "hasLoginGate": true,
+        "hasShellLeak": false,
+        "hasVisibleErrorCode": false,
+        "hasSpinnerOnly": false,
+        "hasStep4DesignCopy": false,
+        "hasStep5DesignCopy": false,
+        "hasHumanInvalidProfileCopy": false,
+        "controls": [
+          {
+            "tag": "button",
+            "text": "去登录",
+            "href": "",
+            "disabled": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "http://localhost/create/publish",
+          "resourceType": "document",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "resourceType": "script",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "resourceType": "stylesheet",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/api/v1/me",
+          "resourceType": "fetch",
+          "postData": null
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "url": "http://localhost/create/publish",
+          "requestMethod": "GET",
+          "resourceType": "document"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "requestMethod": "GET",
+          "resourceType": "script"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "requestMethod": "GET",
+          "resourceType": "stylesheet"
+        },
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "resourceType": "fetch"
+        }
+      ],
+      "failed": [],
+      "me401Count": 1,
+      "draftPostCount": 0,
+      "selectionPatchCount": 0,
+      "publishPostCount": 0,
+      "batchPostCount": 0,
+      "profileApiStatuses": []
+    },
+    {
+      "name": "public-capability",
+      "route": "/a/nonexistent-e2e-test-slug",
+      "mainStatus": 200,
+      "gotoError": null,
+      "dom": {
+        "url": "http://localhost/a/nonexistent-e2e-test-slug",
+        "title": "创作者中心",
+        "textSample": "A Agora 公开能力页即将上线 能力的对外只读页正在筹备中，将随市集消费侧一起开放。敬请期待。",
+        "textLength": 49,
+        "hasLoginGate": false,
+        "hasShellLeak": false,
+        "hasVisibleErrorCode": false,
+        "hasSpinnerOnly": false,
+        "hasStep4DesignCopy": false,
+        "hasStep5DesignCopy": false,
+        "hasHumanInvalidProfileCopy": false,
+        "controls": [
+          {
+            "tag": "a",
+            "text": "AAgora",
+            "href": "/",
+            "disabled": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "http://localhost/a/nonexistent-e2e-test-slug",
+          "resourceType": "document",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "resourceType": "script",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "resourceType": "stylesheet",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/api/v1/me",
+          "resourceType": "fetch",
+          "postData": null
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "url": "http://localhost/a/nonexistent-e2e-test-slug",
+          "requestMethod": "GET",
+          "resourceType": "document"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "requestMethod": "GET",
+          "resourceType": "script"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "requestMethod": "GET",
+          "resourceType": "stylesheet"
+        },
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "resourceType": "fetch"
+        }
+      ],
+      "failed": [],
+      "me401Count": 1,
+      "draftPostCount": 0,
+      "selectionPatchCount": 0,
+      "publishPostCount": 0,
+      "batchPostCount": 0,
+      "profileApiStatuses": []
+    },
+    {
+      "name": "public-creator",
+      "route": "/c/nonexistent-creator-e2e",
+      "mainStatus": 200,
+      "gotoError": null,
+      "dom": {
+        "url": "http://localhost/c/nonexistent-creator-e2e",
+        "title": "创作者中心",
+        "textSample": "A Agora 公开创作者主页即将上线 创作者的对外只读主页正在筹备中，将随市集消费侧一起开放。敬请期待。",
+        "textLength": 53,
+        "hasLoginGate": false,
+        "hasShellLeak": false,
+        "hasVisibleErrorCode": false,
+        "hasSpinnerOnly": false,
+        "hasStep4DesignCopy": false,
+        "hasStep5DesignCopy": false,
+        "hasHumanInvalidProfileCopy": false,
+        "controls": [
+          {
+            "tag": "a",
+            "text": "AAgora",
+            "href": "/",
+            "disabled": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "http://localhost/c/nonexistent-creator-e2e",
+          "resourceType": "document",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "resourceType": "script",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "resourceType": "stylesheet",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/api/v1/me",
+          "resourceType": "fetch",
+          "postData": null
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "url": "http://localhost/c/nonexistent-creator-e2e",
+          "requestMethod": "GET",
+          "resourceType": "document"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "requestMethod": "GET",
+          "resourceType": "script"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "requestMethod": "GET",
+          "resourceType": "stylesheet"
+        },
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "resourceType": "fetch"
+        }
+      ],
+      "failed": [],
+      "me401Count": 1,
+      "draftPostCount": 0,
+      "selectionPatchCount": 0,
+      "publishPostCount": 0,
+      "batchPostCount": 0,
+      "profileApiStatuses": []
+    },
+    {
+      "name": "creators-me-profile",
+      "route": "/creators/me/profile",
+      "mainStatus": 200,
+      "gotoError": null,
+      "dom": {
+        "url": "http://localhost/creators/me/profile",
+        "title": "创作者中心",
+        "textSample": "A Agora 登录后才能查看“我的个人主页”，请先登录。 去登录 反馈代码：8d945897-19ad-430d-957b-086798a0c4cb",
+        "textLength": 75,
+        "hasLoginGate": true,
+        "hasShellLeak": false,
+        "hasVisibleErrorCode": false,
+        "hasSpinnerOnly": false,
+        "hasStep4DesignCopy": false,
+        "hasStep5DesignCopy": false,
+        "hasHumanInvalidProfileCopy": false,
+        "controls": [
+          {
+            "tag": "a",
+            "text": "AAgora",
+            "href": "/",
+            "disabled": false
+          },
+          {
+            "tag": "button",
+            "text": "去登录",
+            "href": "",
+            "disabled": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "http://localhost/creators/me/profile",
+          "resourceType": "document",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "resourceType": "script",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "resourceType": "stylesheet",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/api/v1/creators/me/profile",
+          "resourceType": "fetch",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/api/v1/me",
+          "resourceType": "fetch",
+          "postData": null
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "url": "http://localhost/creators/me/profile",
+          "requestMethod": "GET",
+          "resourceType": "document"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "requestMethod": "GET",
+          "resourceType": "script"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "requestMethod": "GET",
+          "resourceType": "stylesheet"
+        },
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/creators/me/profile",
+          "requestMethod": "GET",
+          "resourceType": "fetch"
+        },
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "resourceType": "fetch"
+        }
+      ],
+      "failed": [],
+      "me401Count": 1,
+      "draftPostCount": 0,
+      "selectionPatchCount": 0,
+      "publishPostCount": 0,
+      "batchPostCount": 0,
+      "profileApiStatuses": [
+        {
+          "url": "http://localhost/api/v1/creators/me/profile",
+          "status": 401
+        }
+      ]
+    },
+    {
+      "name": "creators-invalid-profile",
+      "route": "/creators/not-a-uuid/profile",
+      "mainStatus": 200,
+      "gotoError": null,
+      "dom": {
+        "url": "http://localhost/creators/not-a-uuid/profile",
+        "title": "创作者中心",
+        "textSample": "A Agora 没找到这个创作者，可能链接失效了。 去修改 反馈代码：e72904ac-5fbd-47d5-8c93-9ff542dee602",
+        "textLength": 71,
+        "hasLoginGate": false,
+        "hasShellLeak": false,
+        "hasVisibleErrorCode": false,
+        "hasSpinnerOnly": false,
+        "hasStep4DesignCopy": false,
+        "hasStep5DesignCopy": false,
+        "hasHumanInvalidProfileCopy": true,
+        "controls": [
+          {
+            "tag": "a",
+            "text": "AAgora",
+            "href": "/",
+            "disabled": false
+          },
+          {
+            "tag": "button",
+            "text": "去修改",
+            "href": "",
+            "disabled": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "http://localhost/creators/not-a-uuid/profile",
+          "resourceType": "document",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "resourceType": "script",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "resourceType": "stylesheet",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/api/v1/creators/not-a-uuid/profile",
+          "resourceType": "fetch",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/api/v1/me",
+          "resourceType": "fetch",
+          "postData": null
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "url": "http://localhost/creators/not-a-uuid/profile",
+          "requestMethod": "GET",
+          "resourceType": "document"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "requestMethod": "GET",
+          "resourceType": "script"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "requestMethod": "GET",
+          "resourceType": "stylesheet"
+        },
+        {
+          "status": 404,
+          "url": "http://localhost/api/v1/creators/not-a-uuid/profile",
+          "requestMethod": "GET",
+          "resourceType": "fetch"
+        },
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "resourceType": "fetch"
+        }
+      ],
+      "failed": [],
+      "me401Count": 1,
+      "draftPostCount": 0,
+      "selectionPatchCount": 0,
+      "publishPostCount": 0,
+      "batchPostCount": 0,
+      "profileApiStatuses": [
+        {
+          "url": "http://localhost/api/v1/creators/not-a-uuid/profile",
+          "status": 404
+        }
+      ]
+    },
+    {
+      "name": "creators-valid-missing-profile",
+      "route": "/creators/00000000-0000-4000-8000-000000000000/profile",
+      "mainStatus": 200,
+      "gotoError": null,
+      "dom": {
+        "url": "http://localhost/creators/00000000-0000-4000-8000-000000000000/profile",
+        "title": "创作者中心",
+        "textSample": "A Agora 没找到这个创作者，可能链接失效了。 去修改 反馈代码：f8d45df9-86f9-40d1-bb24-29e2bf0a527b",
+        "textLength": 71,
+        "hasLoginGate": false,
+        "hasShellLeak": false,
+        "hasVisibleErrorCode": false,
+        "hasSpinnerOnly": false,
+        "hasStep4DesignCopy": false,
+        "hasStep5DesignCopy": false,
+        "hasHumanInvalidProfileCopy": true,
+        "controls": [
+          {
+            "tag": "a",
+            "text": "AAgora",
+            "href": "/",
+            "disabled": false
+          },
+          {
+            "tag": "button",
+            "text": "去修改",
+            "href": "",
+            "disabled": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "http://localhost/creators/00000000-0000-4000-8000-000000000000/profile",
+          "resourceType": "document",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "resourceType": "script",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "resourceType": "stylesheet",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/api/v1/creators/00000000-0000-4000-8000-000000000000/profile",
+          "resourceType": "fetch",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/api/v1/me",
+          "resourceType": "fetch",
+          "postData": null
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "url": "http://localhost/creators/00000000-0000-4000-8000-000000000000/profile",
+          "requestMethod": "GET",
+          "resourceType": "document"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "requestMethod": "GET",
+          "resourceType": "script"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "requestMethod": "GET",
+          "resourceType": "stylesheet"
+        },
+        {
+          "status": 404,
+          "url": "http://localhost/api/v1/creators/00000000-0000-4000-8000-000000000000/profile",
+          "requestMethod": "GET",
+          "resourceType": "fetch"
+        },
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "resourceType": "fetch"
+        }
+      ],
+      "failed": [],
+      "me401Count": 1,
+      "draftPostCount": 0,
+      "selectionPatchCount": 0,
+      "publishPostCount": 0,
+      "batchPostCount": 0,
+      "profileApiStatuses": [
+        {
+          "url": "http://localhost/api/v1/creators/00000000-0000-4000-8000-000000000000/profile",
+          "status": 404
+        }
+      ]
+    },
+    {
+      "name": "login-failure",
+      "route": "/login?failureId=fake-check",
+      "mainStatus": 200,
+      "gotoError": null,
+      "dom": {
+        "url": "http://localhost/login?failureId=fake-check",
+        "title": "创作者中心",
+        "textSample": "A Agora 登录没能完成 这次登录没能完成，请重新登录。如果多次失败，可凭下方反馈代码联系我们。 去登录 回到首页 反馈代码：fake-check",
+        "textLength": 75,
+        "hasLoginGate": true,
+        "hasShellLeak": false,
+        "hasVisibleErrorCode": false,
+        "hasSpinnerOnly": false,
+        "hasStep4DesignCopy": false,
+        "hasStep5DesignCopy": false,
+        "hasHumanInvalidProfileCopy": false,
+        "controls": [
+          {
+            "tag": "a",
+            "text": "AAgora",
+            "href": "/",
+            "disabled": false
+          },
+          {
+            "tag": "a",
+            "text": "去登录",
+            "href": "/api/v1/auth/login",
+            "disabled": false
+          },
+          {
+            "tag": "a",
+            "text": "回到首页",
+            "href": "/",
+            "disabled": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "http://localhost/login?failureId=fake-check",
+          "resourceType": "document",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "resourceType": "script",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "resourceType": "stylesheet",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/api/v1/me",
+          "resourceType": "fetch",
+          "postData": null
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "url": "http://localhost/login?failureId=fake-check",
+          "requestMethod": "GET",
+          "resourceType": "document"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "requestMethod": "GET",
+          "resourceType": "script"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "requestMethod": "GET",
+          "resourceType": "stylesheet"
+        },
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "resourceType": "fetch"
+        }
+      ],
+      "failed": [],
+      "me401Count": 1,
+      "draftPostCount": 0,
+      "selectionPatchCount": 0,
+      "publishPostCount": 0,
+      "batchPostCount": 0,
+      "profileApiStatuses": []
+    },
+    {
+      "name": "not-found",
+      "route": "/definitely-not-a-real-route",
+      "mainStatus": 200,
+      "gotoError": null,
+      "dom": {
+        "url": "http://localhost/definitely-not-a-real-route",
+        "title": "创作者中心",
+        "textSample": "A Agora 页面不存在或已失效 你访问的链接可能已变更或不再可用。 回到首页 去登录",
+        "textLength": 44,
+        "hasLoginGate": true,
+        "hasShellLeak": false,
+        "hasVisibleErrorCode": false,
+        "hasSpinnerOnly": false,
+        "hasStep4DesignCopy": false,
+        "hasStep5DesignCopy": false,
+        "hasHumanInvalidProfileCopy": false,
+        "controls": [
+          {
+            "tag": "a",
+            "text": "AAgora",
+            "href": "/",
+            "disabled": false
+          },
+          {
+            "tag": "a",
+            "text": "回到首页",
+            "href": "/",
+            "disabled": false
+          },
+          {
+            "tag": "a",
+            "text": "去登录",
+            "href": "/api/v1/auth/login",
+            "disabled": false
+          }
+        ]
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "http://localhost/definitely-not-a-real-route",
+          "resourceType": "document",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "resourceType": "script",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "resourceType": "stylesheet",
+          "postData": null
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost/api/v1/me",
+          "resourceType": "fetch",
+          "postData": null
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "url": "http://localhost/definitely-not-a-real-route",
+          "requestMethod": "GET",
+          "resourceType": "document"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "requestMethod": "GET",
+          "resourceType": "script"
+        },
+        {
+          "status": 200,
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "requestMethod": "GET",
+          "resourceType": "stylesheet"
+        },
+        {
+          "status": 401,
+          "url": "http://localhost/api/v1/me",
+          "requestMethod": "GET",
+          "resourceType": "fetch"
+        }
+      ],
+      "failed": [],
+      "me401Count": 1,
+      "draftPostCount": 0,
+      "selectionPatchCount": 0,
+      "publishPostCount": 0,
+      "batchPostCount": 0,
+      "profileApiStatuses": []
+    }
+  ],
+  "apiChecks": {
+    "invalidProfile": {
+      "status": 404,
+      "body": "{\"error\":{\"userMessage\":\"没找到这个创作者，可能链接失效了。\",\"retriable\":false,\"action\":\"change_input\",\"traceId\":\"81366c39-18cd-4c7b-b763-42a7926ff2c0\"}}"
+    },
+    "validMissingProfile": {
+      "status": 404,
+      "body": "{\"error\":{\"userMessage\":\"没找到这个创作者，可能链接失效了。\",\"retriable\":false,\"action\":\"change_input\",\"traceId\":\"b2eef722-33ae-4258-8601-0f7d46be84bc\"}}"
+    }
+  },
+  "console": [
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://localhost/api/v1/me",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://localhost/api/v1/me",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://localhost/api/v1/me",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://localhost/api/v1/me",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://localhost/api/v1/me",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://localhost/api/v1/me",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://localhost/api/v1/me",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://localhost/api/v1/me",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://localhost/api/v1/me",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://localhost/api/v1/me",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://localhost/api/v1/me",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://localhost/api/v1/creators/me/profile",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://localhost/api/v1/me",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "location": {
+        "url": "http://localhost/api/v1/creators/not-a-uuid/profile",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://localhost/api/v1/me",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "location": {
+        "url": "http://localhost/api/v1/creators/00000000-0000-4000-8000-000000000000/profile",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://localhost/api/v1/me",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://localhost/api/v1/me",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://localhost/api/v1/me",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    }
+  ],
+  "pageErrors": [],
+  "verdict": {
+    "noShellLeakOnTestedRoutes": true,
+    "noVisibleErrorCodes": true,
+    "noSpinnerOnly": true,
+    "privateRoutesGateUnauth": true,
+    "publicMe401Noise": true,
+    "anyMe401": true,
+    "invalidProfile500": false,
+    "invalidProfile400or404": true,
+    "validMissingProfile404": true,
+    "createDraftPostUnauth": false,
+    "selectionPatchUnauth": false,
+    "publishPostUnauth": false,
+    "step4CopyVisibleUnauth": false,
+    "step5CopyVisibleUnauth": false,
+    "console401Messages": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+        "location": {
+          "url": "http://localhost/api/v1/me",
+          "lineNumber": 0,
+          "columnNumber": 0
+        }
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+        "location": {
+          "url": "http://localhost/api/v1/me",
+          "lineNumber": 0,
+          "columnNumber": 0
+        }
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+        "location": {
+          "url": "http://localhost/api/v1/me",
+          "lineNumber": 0,
+          "columnNumber": 0
+        }
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+        "location": {
+          "url": "http://localhost/api/v1/me",
+          "lineNumber": 0,
+          "columnNumber": 0
+        }
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+        "location": {
+          "url": "http://localhost/api/v1/me",
+          "lineNumber": 0,
+          "columnNumber": 0
+        }
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+        "location": {
+          "url": "http://localhost/api/v1/me",
+          "lineNumber": 0,
+          "columnNumber": 0
+        }
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+        "location": {
+          "url": "http://localhost/api/v1/me",
+          "lineNumber": 0,
+          "columnNumber": 0
+        }
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+        "location": {
+          "url": "http://localhost/api/v1/me",
+          "lineNumber": 0,
+          "columnNumber": 0
+        }
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+        "location": {
+          "url": "http://localhost/api/v1/me",
+          "lineNumber": 0,
+          "columnNumber": 0
+        }
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+        "location": {
+          "url": "http://localhost/api/v1/me",
+          "lineNumber": 0,
+          "columnNumber": 0
+        }
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+        "location": {
+          "url": "http://localhost/api/v1/me",
+          "lineNumber": 0,
+          "columnNumber": 0
+        }
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+        "location": {
+          "url": "http://localhost/api/v1/creators/me/profile",
+          "lineNumber": 0,
+          "columnNumber": 0
+        }
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+        "location": {
+          "url": "http://localhost/api/v1/me",
+          "lineNumber": 0,
+          "columnNumber": 0
+        }
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+        "location": {
+          "url": "http://localhost/api/v1/me",
+          "lineNumber": 0,
+          "columnNumber": 0
+        }
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+        "location": {
+          "url": "http://localhost/api/v1/me",
+          "lineNumber": 0,
+          "columnNumber": 0
+        }
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+        "location": {
+          "url": "http://localhost/api/v1/me",
+          "lineNumber": 0,
+          "columnNumber": 0
+        }
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+        "location": {
+          "url": "http://localhost/api/v1/me",
+          "lineNumber": 0,
+          "columnNumber": 0
+        }
+      }
+    ],
+    "consoleErrorCount": 19,
+    "pageErrorCount": 0
+  }
+}

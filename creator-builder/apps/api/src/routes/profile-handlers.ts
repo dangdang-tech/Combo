@@ -24,10 +24,62 @@ import {
   readNetwork,
   readWorksPage,
   PROFILE_USAGE_PLACEHOLDER,
+  PROFILE_SECTIONS_ORDER,
+  type CreatorProfileResult,
 } from '../profile/profile-repo.js';
 
 /** 自身主页别名（鉴权态 self，§2.0 / Codex r1#1 P0）：/creators/me/* 解析为当前登录用户的 creatorId。 */
 export const SELF_CREATOR_ALIAS = 'me';
+
+/** slug 占位：账号尚无 creator_profiles 行的 self 兜底名片用 userId 当展示 slug（UUID 全小写 + 连字符，合 SlugSchema）。 */
+function selfFallbackSlug(userId: string): string {
+  // SlugSchema 要求小写字母数字 + 连字符；UUID 已满足。极端非常规 id 兜底成稳定占位，避免空 slug。
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(userId) ? userId : 'me';
+}
+
+/**
+ * self 最小 Hero 兜底（BUG-014）：登录用户访问【自己】主页但还没建过 creator_profiles 行时，
+ *   不该对自己显示「没找到这个创作者」整页 404——「自己的个人主页」Hero 身份区应恒在（主页-01/02）。
+ *   据登录账号身份（req.auth.account 作 displayName，无头像走前端兜底）构造一张最小公开名片：
+ *     · hero 恒在（账号名 + 空身份标签/简介 + 三社交计数 0，viewerIsFollowing=null 自己看自己无关注语义）；
+ *     · metrics/density/network/works 为空分区（非失败，故不进 sectionErrors）——前端走各分区「还没有内容」空态（主页-14）；
+ *     · heatmap=null + heatmapEnabled=false（无会话足迹，前端整段跳过，主页-20）；
+ *     · usage 占位键照常（meta.placeholders 与有数据时一致，前端单键读不漂移）。
+ *   仅 self 走此兜底；他人主页无数据仍 404（不下钻、不暴露存在性，§2.7）。
+ */
+function buildSelfFallbackProfile(auth: { userId: string; account: string }): CreatorProfileResult {
+  const hero: CreatorProfile['hero'] = {
+    avatarUrl: null,
+    displayName: auth.account,
+    identityTags: [],
+    bio: '',
+    social: { following: 0, followers: 0, likes: 0, viewerIsFollowing: null },
+  };
+  const profile: CreatorProfile = {
+    creatorId: auth.userId,
+    slug: selfFallbackSlug(auth.userId),
+    sectionsOrder: PROFILE_SECTIONS_ORDER,
+    hero,
+    // 空分区（非失败）：有结构、零内容，前端各分区出「还没有内容」空态而非局部错误条。
+    metrics: {
+      capabilityCount: 0,
+      domainCount: 0,
+      totalInvocations: null, // usage 占位
+      hottestTopic: { name: null, heatValue: null },
+      readonly: true,
+    },
+    density: { rows: [], hasMore: false },
+    heatmap: null, // 无会话足迹：heatmapEnabled=false → 前端整段跳过（主页-20），不留空框。
+    network: { nodes: [], edges: [], thumbnailOnly: true },
+    works: { cards: [], hasMore: false, nextCursor: null },
+    heatmapEnabled: false,
+    sectionErrors: [], // 全分区成功（只是空），无局部错误条。
+  };
+  return {
+    profile,
+    usagePlaceholderKeys: ['totalInvocations', 'hottestTopic.heatValue', 'works.invocations'],
+  };
+}
 
 /** 401 未登录访问 self 别名（me 需鉴权；公开他人主页仍走 optionalAuth 放行匿名）。 */
 function reply401Self(req: FastifyRequest, reply: FastifyReply): FastifyReply {
@@ -135,6 +187,13 @@ export function getCreatorProfileHandler(): RouteHandlerMethod {
       // 非法 UUID 文本（22P02）→ 404 链接失效（非可重试 500，BUG-011）。
       if (isInvalidIdError(err)) return reply404(req, reply);
       return reply500Aggregate(req, reply);
+    }
+    // self（'me' 别名 / 解析出 == viewerId）但还没建过 creator_profiles 行：不该对自己显示「没找到创作者」，
+    //   Hero 身份区恒在（主页-01/02）——据登录账号身份构造最小公开名片，返回 200（BUG-014）。
+    //   他人主页无数据仍 404（不下钻、不暴露存在性，§2.7）。
+    const isSelf = rawId === SELF_CREATOR_ALIAS || (viewerId !== null && creatorId === viewerId);
+    if (!result && isSelf && req.auth) {
+      result = buildSelfFallbackProfile({ userId: req.auth.userId, account: req.auth.account });
     }
     if (!result) return reply404(req, reply);
 

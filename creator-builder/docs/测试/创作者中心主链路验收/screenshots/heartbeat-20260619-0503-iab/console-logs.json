@@ -1,0 +1,77 @@
+[
+  {
+    "name": "home",
+    "route": "/",
+    "logs": []
+  },
+  {
+    "name": "creator",
+    "route": "/creator",
+    "logs": []
+  },
+  {
+    "name": "profile",
+    "route": "/profile",
+    "logs": []
+  },
+  {
+    "name": "capabilities",
+    "route": "/capabilities",
+    "logs": []
+  },
+  {
+    "name": "create-import",
+    "route": "/create/import",
+    "logs": []
+  },
+  {
+    "name": "create-extract",
+    "route": "/create/extract",
+    "logs": []
+  },
+  {
+    "name": "create-structure",
+    "route": "/create/structure",
+    "logs": []
+  },
+  {
+    "name": "create-publish",
+    "route": "/create/publish",
+    "logs": []
+  },
+  {
+    "name": "public-capability",
+    "route": "/a/nonexistent-e2e-test-slug",
+    "logs": []
+  },
+  {
+    "name": "public-creator",
+    "route": "/c/nonexistent-creator-e2e",
+    "logs": []
+  },
+  {
+    "name": "creators-me-profile",
+    "route": "/creators/me/profile",
+    "logs": []
+  },
+  {
+    "name": "creators-invalid-profile",
+    "route": "/creators/not-a-uuid/profile",
+    "logs": []
+  },
+  {
+    "name": "creators-valid-missing-profile",
+    "route": "/creators/00000000-0000-4000-8000-000000000000/profile",
+    "logs": []
+  },
+  {
+    "name": "login-failure",
+    "route": "/login?failureId=fake-check",
+    "logs": []
+  },
+  {
+    "name": "not-found",
+    "route": "/definitely-not-a-real-route",
+    "logs": []
+  }
+]

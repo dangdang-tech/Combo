@@ -99,22 +99,39 @@ export interface StepNodeView {
 export type StepErrors = Partial<Record<DraftStep, boolean>>;
 
 /**
- * 据「当前步 + 异常覆写」算出五段步骤条视图（F-09 步骤条真源 + F-15 续传：current 前皆 done 可回看）。
- *   - current 之前：done（navigable，贯穿-16 可回看）。
- *   - current：current（不可点自身回跳）。
- *   - current 之后：todo（显数字，不可点——还没到，§5.0）。
- *   - errors[step]=true：覆写为 error（无论它在 current 前后，局部失败不阻塞）；error 步仍可点进去重试。
+ * 据「当前步（URL 落点）+ 实际进度 + 异常覆写」算出五段步骤条视图
+ *   （F-09 步骤条真源 + F-15 续传：脊柱 §8「步骤条状态由 draft 实际进度推导，非 URL 伪造」）。
+ *
+ * 两个游标分工（BUG-009 修复核心）：
+ *   - currentStep = URL 落点（用户正看哪一步）→ 该步 current。
+ *   - progressStep = 实际进度前沿（草稿 DraftView.currentStep；无草稿/无锚点时退回首步 import）。
+ *     某步只有「既在 URL 落点之前、又在实际进度之内」才算 done——避免无锚点深链把没做过的前序伪造成已完成。
+ *
+ * 状态推导：
+ *   - errors[step]=true：覆写为 error（无论前后，局部失败不阻塞）；error 步可点进去重试。
+ *   - idx === curIdx：current（不可点自身回跳）。
+ *   - idx < min(curIdx, progressIdx)：done（真实已完成，navigable 可回看，贯穿-16）。
+ *   - 其余（URL 跳到了实际进度之外的前序 / current 之后）：todo（显数字，不可点——没真做过 / 还没到，§5.0）。
+ *
+ * @param progressStep 实际进度前沿步；缺省退回 currentStep（纯函数单测口径不变：有进度即按 URL 推 done）。
+ *   WizardShell 据 draft 锚点判定：有 draft/锚点 → 传 URL 落点（合法续传/前进）；无任何锚点 → 传首步（不伪造前序 done）。
  */
-export function buildStepNodes(currentStep: DraftStep, errors: StepErrors = {}): StepNodeView[] {
+export function buildStepNodes(
+  currentStep: DraftStep,
+  errors: StepErrors = {},
+  progressStep: DraftStep = currentStep,
+): StepNodeView[] {
   const curIdx = stepIndex(currentStep);
+  // done 前沿 = URL 落点与实际进度二者取小：URL 再深，没真实进度托底也不标前序 done（BUG-009）。
+  const doneFrontier = Math.min(curIdx, stepIndex(progressStep));
   return WIZARD_STEPS.map((step) => {
     const idx = stepIndex(step);
     let status: StepStatus;
     if (errors[step]) status = 'error';
-    else if (idx < curIdx) status = 'done';
     else if (idx === curIdx) status = 'current';
+    else if (idx < doneFrontier) status = 'done';
     else status = 'todo';
-    // 可回看 = 已完成步；异常步也允许点进去重试（开工总纲 §八②带退路）；待办步未到、不可点。
+    // 可回看 = 已完成步；异常步也允许点进去重试（开工总纲 §八②带退路）；待办步未到/未做、不可点。
     const navigable = status === 'done' || status === 'error';
     return { step, index: idx, label: stepLabel(step), status, navigable };
   });

@@ -1,0 +1,44 @@
+[
+  {
+    "path": "/api/v1/me",
+    "status": 401,
+    "url": "http://localhost/api/v1/me",
+    "text": "{\"error\":{\"userMessage\":\"登录态失效了，请重新登录。\",\"retriable\":false,\"action\":\"escalate\",\"traceId\":\"bd487046-9422-4188-a514-3778b2549d10\"}}",
+    "error": null
+  },
+  {
+    "path": "/api/v1/dashboard/summary",
+    "status": 401,
+    "url": "http://localhost/api/v1/dashboard/summary",
+    "text": "{\"error\":{\"userMessage\":\"登录态失效了，请重新登录。\",\"retriable\":false,\"action\":\"escalate\",\"traceId\":\"b51f78b7-2970-40b9-8ae9-fb78720463de\"}}",
+    "error": null
+  },
+  {
+    "path": "/api/v1/dashboard/metrics",
+    "status": 401,
+    "url": "http://localhost/api/v1/dashboard/metrics",
+    "text": "{\"error\":{\"userMessage\":\"登录态失效了，请重新登录。\",\"retriable\":false,\"action\":\"escalate\",\"traceId\":\"b6f81d45-7dcc-43ea-b88e-880fc0cf692f\"}}",
+    "error": null
+  },
+  {
+    "path": "/api/v1/creators/me/profile",
+    "status": 401,
+    "url": "http://localhost/api/v1/creators/me/profile",
+    "text": "{\"error\":{\"userMessage\":\"登录后才能查看“我的个人主页”，请先登录。\",\"retriable\":false,\"action\":\"escalate\",\"traceId\":\"bc560d66-9573-4722-abdf-8131cc9f2d1a\"}}",
+    "error": null
+  },
+  {
+    "path": "/api/v1/creators/not-a-uuid/profile",
+    "status": 404,
+    "url": "http://localhost/api/v1/creators/not-a-uuid/profile",
+    "text": "{\"error\":{\"userMessage\":\"没找到这个创作者，可能链接失效了。\",\"retriable\":false,\"action\":\"change_input\",\"traceId\":\"88a0925c-3b9d-48f0-b916-b8b72a25825a\"}}",
+    "error": null
+  },
+  {
+    "path": "/api/v1/creators/00000000-0000-4000-8000-000000000000/profile",
+    "status": 404,
+    "url": "http://localhost/api/v1/creators/00000000-0000-4000-8000-000000000000/profile",
+    "text": "{\"error\":{\"userMessage\":\"没找到这个创作者，可能链接失效了。\",\"retriable\":false,\"action\":\"change_input\",\"traceId\":\"ca8f250c-696c-43f1-aeeb-f11108b3f1f0\"}}",
+    "error": null
+  }
+]

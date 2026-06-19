@@ -7,7 +7,7 @@
 //   公开只读个人名片 /creators/:creatorId/profile（后端 optionalAuth，匿名可看，绝不挂登录闸门/创作者外壳）、
 //   登录页 + 404 兜底，均诚实人话态、无内部文案渗漏、不包创作者外壳（BUG-005/006）。
 import type { ReactElement } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { ViewModeProvider } from './shell/viewMode.js';
 import { AuthProvider, RequireAuth } from './shell/auth.js';
 import { ProtectedLayout } from './shell/ProtectedLayout.js';
@@ -30,13 +30,27 @@ import {
 // 五步上传向导（F-09 WizardShell + F-12 STEP③ + F-15 续传）；STEP①②④⑤ 渲染其 Outlet（后续模块填）。
 import { WizardLayout, SelectStepPage } from './pages/wizard/index.js';
 
-export function App(): ReactElement {
+/**
+ * 受保护组根：把 AuthProvider 下移到这里（只包受保护子树），故只有受保护路由命中时才挂载
+ * AuthProvider → 触发 useMe() 请求 GET /api/v1/me。公开 / 登录 / 404 组在它之外，匿名访问
+ * 根本不发 /me（消除 BUG-010 的 401 console 噪声）。AuthProvider 经 <Outlet/> 把会话四态
+ * 喂给内层 RequireAuth（守卫）与 ProtectedLayout（外壳账号区），鉴权链结构不变。
+ */
+function ProtectedRoot(): ReactElement {
   return (
     <AuthProvider>
-      <ViewModeProvider>
-        <BrowserRouter>
-          <Routes>
-            {/* 受保护组：守卫放行后才进创作者外壳（真实账号），未登录 → 裸登录闸门。 */}
+      <Outlet />
+    </AuthProvider>
+  );
+}
+
+export function App(): ReactElement {
+  return (
+    <ViewModeProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* 受保护组：AuthProvider（仅此子树发 /me）→ 守卫放行后才进创作者外壳（真实账号），未登录 → 裸登录闸门。 */}
+          <Route element={<ProtectedRoot />}>
             <Route element={<RequireAuth />}>
               <Route element={<ProtectedLayout />}>
                 <Route index element={<Navigate to="/creator" replace />} />
@@ -59,24 +73,25 @@ export function App(): ReactElement {
                 </Route>
               </Route>
             </Route>
+          </Route>
 
-            {/* 公开组：裸壳（无创作者外壳/侧栏/账号）。公开页 + 登录 + 404 都诚实人话、无内部文案渗漏。 */}
-            <Route element={<PublicLayout />}>
-              {/* 登录页：承接 OIDC 回调失败回跳 /login?failureId=<opaque>（10-auth §3.2）+ 通用登录引导。 */}
-              <Route path="/login" element={<LoginPage />} />
-              {/* 公开只读个人名片（访客同视图）：/creators/:creatorId/profile（60 §2，后端 optionalAuth）。
-                  在公开裸壳下：匿名直达拿到公开名片（不挂登录闸门）；ProfilePage 不依赖 Shell context，
-                  按 URL :creatorId 解析（非 self 'me'），与受保护组的 /profile（self）分流互不影响。 */}
-              <Route path="/creators/:creatorId/profile" element={<ProfilePage />} />
-              {/* 公开能力页（对外只读）：工作台「查看公开页」/ 作品墙卡片落点 /a/:slug。 */}
-              <Route path="/a/:slug" element={<PublicCapabilityPage />} />
-              {/* 公开创作者主页（对外只读）：/c/:slug。 */}
-              <Route path="/c/:slug" element={<PublicCreatorPage />} />
-              <Route path="*" element={<NotFoundPage />} />
-            </Route>
-          </Routes>
-        </BrowserRouter>
-      </ViewModeProvider>
-    </AuthProvider>
+          {/* 公开组：裸壳（无创作者外壳/侧栏/账号），且在 AuthProvider 之外——匿名访问不发 /me（BUG-010）。
+              公开页 + 登录 + 404 都诚实人话、无内部文案渗漏。 */}
+          <Route element={<PublicLayout />}>
+            {/* 登录页：承接 OIDC 回调失败回跳 /login?failureId=<opaque>（10-auth §3.2）+ 通用登录引导。 */}
+            <Route path="/login" element={<LoginPage />} />
+            {/* 公开只读个人名片（访客同视图）：/creators/:creatorId/profile（60 §2，后端 optionalAuth）。
+                在公开裸壳下：匿名直达拿到公开名片（不挂登录闸门）；ProfilePage 不依赖 Shell context，
+                按 URL :creatorId 解析（非 self 'me'），与受保护组的 /profile（self）分流互不影响。 */}
+            <Route path="/creators/:creatorId/profile" element={<ProfilePage />} />
+            {/* 公开能力页（对外只读）：工作台「查看公开页」/ 作品墙卡片落点 /a/:slug。 */}
+            <Route path="/a/:slug" element={<PublicCapabilityPage />} />
+            {/* 公开创作者主页（对外只读）：/c/:slug。 */}
+            <Route path="/c/:slug" element={<PublicCreatorPage />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </ViewModeProvider>
   );
 }

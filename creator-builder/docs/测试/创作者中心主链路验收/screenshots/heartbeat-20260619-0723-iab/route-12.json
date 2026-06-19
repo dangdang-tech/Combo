@@ -1,0 +1,37 @@
+{
+  "route": "/creators/me/profile",
+  "started": "2026-06-18T23:33:46.530Z",
+  "screenshot": null,
+  "screenshotNote": "in-app browser screenshot skipped after Page.captureScreenshot timeout; Chrome CDP screenshots saved separately",
+  "finalUrl": "http://localhost/creators/me/profile",
+  "title": "创作者中心",
+  "snapshotHead": "- banner:\n  - link \"Agora 首页\":\n    - /url: /\n    - generic: A\n    - generic: Agora\n- main:\n  - alert:\n    - paragraph: 登录后才能查看“我的个人主页”，请先登录。\n    - button \"去登录\"\n    - paragraph:\n      - text: 反馈代码：\n      - code: 6505a996-e88d-4809-9980-4101198c46e9",
+  "dom": {
+    "bodyText": "A Agora 登录后才能查看“我的个人主页”，请先登录。 去登录 反馈代码：6505a996-e88d-4809-9980-4101198c46e9",
+    "containsBareSpinnerText": false,
+    "controls": [
+      {
+        "aria": "Agora 首页",
+        "href": "/",
+        "role": null,
+        "tag": "a",
+        "testid": null,
+        "text": "A Agora"
+      },
+      {
+        "aria": null,
+        "href": null,
+        "role": null,
+        "tag": "button",
+        "testid": null,
+        "text": "去登录"
+      }
+    ],
+    "headings": [],
+    "statusLike": [],
+    "textLength": 75,
+    "title": "创作者中心",
+    "visibleErrorCodeLike": false
+  },
+  "logsTail": []
+}

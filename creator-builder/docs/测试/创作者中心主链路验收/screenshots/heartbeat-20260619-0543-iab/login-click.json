@@ -1,0 +1,6 @@
+{
+  "loginCount": 1,
+  "snapshotExcerpt": "- alert:\n  - generic: Agora\n  - paragraph: 请先登录后进入创作者中心。\n  - button \"去登录\"",
+  "afterClickUrl": "https://andkzt.logto.app/sign-in?app_id=vbu4vp7h0nczrddmzcpq1",
+  "afterClickTitle": "andkzt.logto.app/sign-in?app_id=vbu4vp7h0nczrddmzcpq1"
+}

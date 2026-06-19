@@ -1,0 +1,36 @@
+{
+  "route": "/create/import",
+  "beforeUrl": "http://localhost/create/import",
+  "beforeText": "Agora 请先登录后进入创作者中心。 去登录",
+  "buttonCount": 1,
+  "afterUrl": "https://andkzt.logto.app/sign-in?app_id=vbu4vp7h0nczrddmzcpq1",
+  "afterTitle": "登录你的账号",
+  "afterText": "登录你的账号 +86 邮箱 密码 登录 还没有账号？ 注册 Powered by 你处于开发模式",
+  "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0723-cdp/login-click-after.png",
+  "consoleEntries": [
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://localhost/api/v1/me",
+        "line": 0,
+        "column": 0,
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    }
+  ],
+  "responses": [
+    {
+      "status": 401,
+      "url": "http://localhost/api/v1/me",
+      "requestMethod": "GET"
+    },
+    {
+      "status": 302,
+      "url": "http://localhost/api/v1/auth/login?returnTo=%2Fcreate%2Fimport",
+      "requestMethod": "GET"
+    }
+  ],
+  "error": null
+}

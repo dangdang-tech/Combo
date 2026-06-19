@@ -1,0 +1,1335 @@
+{
+  "generatedAt": "2026-06-18T21:07:25.750Z",
+  "base": "http://localhost",
+  "routes": [
+    {
+      "name": "home",
+      "route": "/",
+      "finalUrl": "http://localhost/",
+      "title": "创作者中心",
+      "visibleText": "Agora 请先登录后进入创作者中心。 去登录",
+      "buttons": [
+        {
+          "text": "去登录",
+          "disabled": false,
+          "title": ""
+        }
+      ],
+      "links": [],
+      "responses": [
+        {
+          "url": "http://localhost/",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "status": 200,
+          "mimeType": "text/css",
+          "type": "Stylesheet"
+        },
+        {
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "status": 200,
+          "mimeType": "application/javascript",
+          "type": "Script"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "mimeType": "application/json",
+          "type": "Fetch"
+        },
+        {
+          "url": "http://localhost/favicon.ico",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Other"
+        }
+      ],
+      "failures": [],
+      "consoleLogs": [],
+      "logEntries": [
+        {
+          "source": "network",
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "timestamp": 1781816817731.133,
+          "url": "http://localhost/api/v1/me",
+          "networkRequestId": "83952.6"
+        }
+      ],
+      "checks": {
+        "forbiddenVisible": [],
+        "visibleErrorCodeText": [],
+        "spinnerOnly": false,
+        "me401": true,
+        "invalidProfile500": false,
+        "invalidProfile400or404": false,
+        "validMissingProfile404": false,
+        "createDraftPostUnauth": false,
+        "profileDesignCopyVisible": false
+      }
+    },
+    {
+      "name": "creator",
+      "route": "/creator",
+      "finalUrl": "http://localhost/creator",
+      "title": "创作者中心",
+      "visibleText": "Agora 请先登录后进入创作者中心。 去登录",
+      "buttons": [
+        {
+          "text": "去登录",
+          "disabled": false,
+          "title": ""
+        }
+      ],
+      "links": [],
+      "responses": [
+        {
+          "url": "http://localhost/creator",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "status": 200,
+          "mimeType": "application/javascript",
+          "type": "Script"
+        },
+        {
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "status": 200,
+          "mimeType": "text/css",
+          "type": "Stylesheet"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "mimeType": "application/json",
+          "type": "Fetch"
+        },
+        {
+          "url": "http://localhost/favicon.ico",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Other"
+        }
+      ],
+      "failures": [],
+      "consoleLogs": [],
+      "logEntries": [
+        {
+          "source": "network",
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "timestamp": 1781816819529.736,
+          "url": "http://localhost/api/v1/me",
+          "networkRequestId": "83952.13"
+        }
+      ],
+      "checks": {
+        "forbiddenVisible": [],
+        "visibleErrorCodeText": [],
+        "spinnerOnly": false,
+        "me401": true,
+        "invalidProfile500": false,
+        "invalidProfile400or404": false,
+        "validMissingProfile404": false,
+        "createDraftPostUnauth": false,
+        "profileDesignCopyVisible": false
+      }
+    },
+    {
+      "name": "profile",
+      "route": "/profile",
+      "finalUrl": "http://localhost/profile",
+      "title": "创作者中心",
+      "visibleText": "Agora 请先登录后进入创作者中心。 去登录",
+      "buttons": [
+        {
+          "text": "去登录",
+          "disabled": false,
+          "title": ""
+        }
+      ],
+      "links": [],
+      "responses": [
+        {
+          "url": "http://localhost/profile",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "status": 200,
+          "mimeType": "application/javascript",
+          "type": "Script"
+        },
+        {
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "status": 200,
+          "mimeType": "text/css",
+          "type": "Stylesheet"
+        },
+        {
+          "url": "http://localhost/favicon.ico",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Other"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "mimeType": "application/json",
+          "type": "Fetch"
+        }
+      ],
+      "failures": [],
+      "consoleLogs": [],
+      "logEntries": [
+        {
+          "source": "network",
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "timestamp": 1781816821437.56,
+          "url": "http://localhost/api/v1/me",
+          "networkRequestId": "83952.20"
+        }
+      ],
+      "checks": {
+        "forbiddenVisible": [],
+        "visibleErrorCodeText": [],
+        "spinnerOnly": false,
+        "me401": true,
+        "invalidProfile500": false,
+        "invalidProfile400or404": false,
+        "validMissingProfile404": false,
+        "createDraftPostUnauth": false,
+        "profileDesignCopyVisible": false
+      }
+    },
+    {
+      "name": "capabilities",
+      "route": "/capabilities",
+      "finalUrl": "http://localhost/capabilities",
+      "title": "创作者中心",
+      "visibleText": "Agora 请先登录后进入创作者中心。 去登录",
+      "buttons": [
+        {
+          "text": "去登录",
+          "disabled": false,
+          "title": ""
+        }
+      ],
+      "links": [],
+      "responses": [
+        {
+          "url": "http://localhost/capabilities",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "status": 200,
+          "mimeType": "application/javascript",
+          "type": "Script"
+        },
+        {
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "status": 200,
+          "mimeType": "text/css",
+          "type": "Stylesheet"
+        },
+        {
+          "url": "http://localhost/favicon.ico",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Other"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "mimeType": "application/json",
+          "type": "Fetch"
+        }
+      ],
+      "failures": [],
+      "consoleLogs": [],
+      "logEntries": [
+        {
+          "source": "network",
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "timestamp": 1781816823282.704,
+          "url": "http://localhost/api/v1/me",
+          "networkRequestId": "83952.27"
+        }
+      ],
+      "checks": {
+        "forbiddenVisible": [],
+        "visibleErrorCodeText": [],
+        "spinnerOnly": false,
+        "me401": true,
+        "invalidProfile500": false,
+        "invalidProfile400or404": false,
+        "validMissingProfile404": false,
+        "createDraftPostUnauth": false,
+        "profileDesignCopyVisible": false
+      }
+    },
+    {
+      "name": "create-import",
+      "route": "/create/import",
+      "finalUrl": "http://localhost/create/import",
+      "title": "创作者中心",
+      "visibleText": "Agora 请先登录后进入创作者中心。 去登录",
+      "buttons": [
+        {
+          "text": "去登录",
+          "disabled": false,
+          "title": ""
+        }
+      ],
+      "links": [],
+      "responses": [
+        {
+          "url": "http://localhost/create/import",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "status": 200,
+          "mimeType": "application/javascript",
+          "type": "Script"
+        },
+        {
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "status": 200,
+          "mimeType": "text/css",
+          "type": "Stylesheet"
+        },
+        {
+          "url": "http://localhost/favicon.ico",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Other"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "mimeType": "application/json",
+          "type": "Fetch"
+        }
+      ],
+      "failures": [],
+      "consoleLogs": [],
+      "logEntries": [
+        {
+          "source": "network",
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "timestamp": 1781816825170.337,
+          "url": "http://localhost/api/v1/me",
+          "networkRequestId": "83952.34"
+        }
+      ],
+      "checks": {
+        "forbiddenVisible": [],
+        "visibleErrorCodeText": [],
+        "spinnerOnly": false,
+        "me401": true,
+        "invalidProfile500": false,
+        "invalidProfile400or404": false,
+        "validMissingProfile404": false,
+        "createDraftPostUnauth": false,
+        "profileDesignCopyVisible": false
+      }
+    },
+    {
+      "name": "create-extract",
+      "route": "/create/extract",
+      "finalUrl": "http://localhost/create/extract",
+      "title": "创作者中心",
+      "visibleText": "Agora 请先登录后进入创作者中心。 去登录",
+      "buttons": [
+        {
+          "text": "去登录",
+          "disabled": false,
+          "title": ""
+        }
+      ],
+      "links": [],
+      "responses": [
+        {
+          "url": "http://localhost/create/extract",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "status": 200,
+          "mimeType": "application/javascript",
+          "type": "Script"
+        },
+        {
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "status": 200,
+          "mimeType": "text/css",
+          "type": "Stylesheet"
+        },
+        {
+          "url": "http://localhost/favicon.ico",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Other"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "mimeType": "application/json",
+          "type": "Fetch"
+        }
+      ],
+      "failures": [],
+      "consoleLogs": [],
+      "logEntries": [
+        {
+          "source": "network",
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "timestamp": 1781816827040.544,
+          "url": "http://localhost/api/v1/me",
+          "networkRequestId": "83952.41"
+        }
+      ],
+      "checks": {
+        "forbiddenVisible": [],
+        "visibleErrorCodeText": [],
+        "spinnerOnly": false,
+        "me401": true,
+        "invalidProfile500": false,
+        "invalidProfile400or404": false,
+        "validMissingProfile404": false,
+        "createDraftPostUnauth": false,
+        "profileDesignCopyVisible": false
+      }
+    },
+    {
+      "name": "create-structure",
+      "route": "/create/structure",
+      "finalUrl": "http://localhost/create/structure",
+      "title": "创作者中心",
+      "visibleText": "Agora 请先登录后进入创作者中心。 去登录",
+      "buttons": [
+        {
+          "text": "去登录",
+          "disabled": false,
+          "title": ""
+        }
+      ],
+      "links": [],
+      "responses": [
+        {
+          "url": "http://localhost/create/structure",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "status": 200,
+          "mimeType": "application/javascript",
+          "type": "Script"
+        },
+        {
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "status": 200,
+          "mimeType": "text/css",
+          "type": "Stylesheet"
+        },
+        {
+          "url": "http://localhost/favicon.ico",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Other"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "mimeType": "application/json",
+          "type": "Fetch"
+        }
+      ],
+      "failures": [],
+      "consoleLogs": [],
+      "logEntries": [
+        {
+          "source": "network",
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "timestamp": 1781816828903.077,
+          "url": "http://localhost/api/v1/me",
+          "networkRequestId": "83952.48"
+        }
+      ],
+      "checks": {
+        "forbiddenVisible": [],
+        "visibleErrorCodeText": [],
+        "spinnerOnly": false,
+        "me401": true,
+        "invalidProfile500": false,
+        "invalidProfile400or404": false,
+        "validMissingProfile404": false,
+        "createDraftPostUnauth": false,
+        "profileDesignCopyVisible": false
+      }
+    },
+    {
+      "name": "create-publish",
+      "route": "/create/publish",
+      "finalUrl": "http://localhost/create/publish",
+      "title": "创作者中心",
+      "visibleText": "Agora 请先登录后进入创作者中心。 去登录",
+      "buttons": [
+        {
+          "text": "去登录",
+          "disabled": false,
+          "title": ""
+        }
+      ],
+      "links": [],
+      "responses": [
+        {
+          "url": "http://localhost/create/publish",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "status": 200,
+          "mimeType": "application/javascript",
+          "type": "Script"
+        },
+        {
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "status": 200,
+          "mimeType": "text/css",
+          "type": "Stylesheet"
+        },
+        {
+          "url": "http://localhost/favicon.ico",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Other"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "mimeType": "application/json",
+          "type": "Fetch"
+        }
+      ],
+      "failures": [],
+      "consoleLogs": [],
+      "logEntries": [
+        {
+          "source": "network",
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "timestamp": 1781816830787.13,
+          "url": "http://localhost/api/v1/me",
+          "networkRequestId": "83952.55"
+        }
+      ],
+      "checks": {
+        "forbiddenVisible": [],
+        "visibleErrorCodeText": [],
+        "spinnerOnly": false,
+        "me401": true,
+        "invalidProfile500": false,
+        "invalidProfile400or404": false,
+        "validMissingProfile404": false,
+        "createDraftPostUnauth": false,
+        "profileDesignCopyVisible": false
+      }
+    },
+    {
+      "name": "public-capability",
+      "route": "/a/nonexistent-e2e-test-slug",
+      "finalUrl": "http://localhost/a/nonexistent-e2e-test-slug",
+      "title": "创作者中心",
+      "visibleText": "A Agora 公开能力页即将上线 能力的对外只读页正在筹备中，将随市集消费侧一起开放。敬请期待。",
+      "buttons": [],
+      "links": [
+        {
+          "text": "A\nAgora",
+          "href": "http://localhost/"
+        }
+      ],
+      "responses": [
+        {
+          "url": "http://localhost/a/nonexistent-e2e-test-slug",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "status": 200,
+          "mimeType": "application/javascript",
+          "type": "Script"
+        },
+        {
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "status": 200,
+          "mimeType": "text/css",
+          "type": "Stylesheet"
+        },
+        {
+          "url": "http://localhost/favicon.ico",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Other"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "mimeType": "application/json",
+          "type": "Fetch"
+        }
+      ],
+      "failures": [],
+      "consoleLogs": [],
+      "logEntries": [
+        {
+          "source": "network",
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "timestamp": 1781816832653.133,
+          "url": "http://localhost/api/v1/me",
+          "networkRequestId": "83952.62"
+        }
+      ],
+      "checks": {
+        "forbiddenVisible": [],
+        "visibleErrorCodeText": [],
+        "spinnerOnly": false,
+        "me401": true,
+        "invalidProfile500": false,
+        "invalidProfile400or404": false,
+        "validMissingProfile404": false,
+        "createDraftPostUnauth": false,
+        "profileDesignCopyVisible": false
+      }
+    },
+    {
+      "name": "public-creator",
+      "route": "/c/nonexistent-creator-e2e",
+      "finalUrl": "http://localhost/c/nonexistent-creator-e2e",
+      "title": "创作者中心",
+      "visibleText": "A Agora 公开创作者主页即将上线 创作者的对外只读主页正在筹备中，将随市集消费侧一起开放。敬请期待。",
+      "buttons": [],
+      "links": [
+        {
+          "text": "A\nAgora",
+          "href": "http://localhost/"
+        }
+      ],
+      "responses": [
+        {
+          "url": "http://localhost/c/nonexistent-creator-e2e",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "status": 200,
+          "mimeType": "application/javascript",
+          "type": "Script"
+        },
+        {
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "status": 200,
+          "mimeType": "text/css",
+          "type": "Stylesheet"
+        },
+        {
+          "url": "http://localhost/favicon.ico",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Other"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "mimeType": "application/json",
+          "type": "Fetch"
+        }
+      ],
+      "failures": [],
+      "consoleLogs": [],
+      "logEntries": [
+        {
+          "source": "network",
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "timestamp": 1781816834567.882,
+          "url": "http://localhost/api/v1/me",
+          "networkRequestId": "83952.69"
+        }
+      ],
+      "checks": {
+        "forbiddenVisible": [],
+        "visibleErrorCodeText": [],
+        "spinnerOnly": false,
+        "me401": true,
+        "invalidProfile500": false,
+        "invalidProfile400or404": false,
+        "validMissingProfile404": false,
+        "createDraftPostUnauth": false,
+        "profileDesignCopyVisible": false
+      }
+    },
+    {
+      "name": "creators-me-profile",
+      "route": "/creators/me/profile",
+      "finalUrl": "http://localhost/creators/me/profile",
+      "title": "创作者中心",
+      "visibleText": "A Agora 登录后才能查看“我的个人主页”，请先登录。 去登录 反馈代码：4c554bd1-7ffa-48c9-b3c6-1384c83ae197",
+      "buttons": [
+        {
+          "text": "去登录",
+          "disabled": false,
+          "title": ""
+        }
+      ],
+      "links": [
+        {
+          "text": "A\nAgora",
+          "href": "http://localhost/"
+        }
+      ],
+      "responses": [
+        {
+          "url": "http://localhost/creators/me/profile",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "status": 200,
+          "mimeType": "application/javascript",
+          "type": "Script"
+        },
+        {
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "status": 200,
+          "mimeType": "text/css",
+          "type": "Stylesheet"
+        },
+        {
+          "url": "http://localhost/favicon.ico",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Other"
+        },
+        {
+          "url": "http://localhost/api/v1/creators/me/profile",
+          "status": 401,
+          "mimeType": "application/json",
+          "type": "Fetch"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "mimeType": "application/json",
+          "type": "Fetch"
+        }
+      ],
+      "failures": [],
+      "consoleLogs": [],
+      "logEntries": [
+        {
+          "source": "network",
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "timestamp": 1781816836429.224,
+          "url": "http://localhost/api/v1/creators/me/profile",
+          "networkRequestId": "83952.76"
+        },
+        {
+          "source": "network",
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "timestamp": 1781816836442.172,
+          "url": "http://localhost/api/v1/me",
+          "networkRequestId": "83952.77"
+        }
+      ],
+      "checks": {
+        "forbiddenVisible": [],
+        "visibleErrorCodeText": [],
+        "spinnerOnly": false,
+        "me401": true,
+        "invalidProfile500": false,
+        "invalidProfile400or404": false,
+        "validMissingProfile404": false,
+        "createDraftPostUnauth": false,
+        "profileDesignCopyVisible": false
+      }
+    },
+    {
+      "name": "creators-invalid-profile",
+      "route": "/creators/not-a-uuid/profile",
+      "finalUrl": "http://localhost/creators/not-a-uuid/profile",
+      "title": "创作者中心",
+      "visibleText": "A Agora 没找到这个创作者，可能链接失效了。 去修改 反馈代码：c5c73575-e0cf-40f8-b4e0-42ae4c945e6c",
+      "buttons": [
+        {
+          "text": "去修改",
+          "disabled": false,
+          "title": ""
+        }
+      ],
+      "links": [
+        {
+          "text": "A\nAgora",
+          "href": "http://localhost/"
+        }
+      ],
+      "responses": [
+        {
+          "url": "http://localhost/creators/not-a-uuid/profile",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "status": 200,
+          "mimeType": "application/javascript",
+          "type": "Script"
+        },
+        {
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "status": 200,
+          "mimeType": "text/css",
+          "type": "Stylesheet"
+        },
+        {
+          "url": "http://localhost/favicon.ico",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Other"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "mimeType": "application/json",
+          "type": "Fetch"
+        },
+        {
+          "url": "http://localhost/api/v1/creators/not-a-uuid/profile",
+          "status": 404,
+          "mimeType": "application/json",
+          "type": "Fetch"
+        }
+      ],
+      "failures": [],
+      "consoleLogs": [],
+      "logEntries": [
+        {
+          "source": "network",
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "timestamp": 1781816838318.252,
+          "url": "http://localhost/api/v1/me",
+          "networkRequestId": "83952.85"
+        },
+        {
+          "source": "network",
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+          "timestamp": 1781816838327.063,
+          "url": "http://localhost/api/v1/creators/not-a-uuid/profile",
+          "networkRequestId": "83952.84"
+        }
+      ],
+      "checks": {
+        "forbiddenVisible": [],
+        "visibleErrorCodeText": [],
+        "spinnerOnly": false,
+        "me401": true,
+        "invalidProfile500": false,
+        "invalidProfile400or404": true,
+        "validMissingProfile404": false,
+        "createDraftPostUnauth": false,
+        "profileDesignCopyVisible": false
+      }
+    },
+    {
+      "name": "creators-valid-missing-profile",
+      "route": "/creators/00000000-0000-4000-8000-000000000000/profile",
+      "finalUrl": "http://localhost/creators/00000000-0000-4000-8000-000000000000/profile",
+      "title": "创作者中心",
+      "visibleText": "A Agora 没找到这个创作者，可能链接失效了。 去修改 反馈代码：72702991-bdb2-499a-872b-32f079bee75e",
+      "buttons": [
+        {
+          "text": "去修改",
+          "disabled": false,
+          "title": ""
+        }
+      ],
+      "links": [
+        {
+          "text": "A\nAgora",
+          "href": "http://localhost/"
+        }
+      ],
+      "responses": [
+        {
+          "url": "http://localhost/creators/00000000-0000-4000-8000-000000000000/profile",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "status": 200,
+          "mimeType": "application/javascript",
+          "type": "Script"
+        },
+        {
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "status": 200,
+          "mimeType": "text/css",
+          "type": "Stylesheet"
+        },
+        {
+          "url": "http://localhost/favicon.ico",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Other"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "mimeType": "application/json",
+          "type": "Fetch"
+        },
+        {
+          "url": "http://localhost/api/v1/creators/00000000-0000-4000-8000-000000000000/profile",
+          "status": 404,
+          "mimeType": "application/json",
+          "type": "Fetch"
+        }
+      ],
+      "failures": [],
+      "consoleLogs": [],
+      "logEntries": [
+        {
+          "source": "network",
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "timestamp": 1781816840194.296,
+          "url": "http://localhost/api/v1/me",
+          "networkRequestId": "83952.93"
+        },
+        {
+          "source": "network",
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+          "timestamp": 1781816840206.894,
+          "url": "http://localhost/api/v1/creators/00000000-0000-4000-8000-000000000000/profile",
+          "networkRequestId": "83952.92"
+        }
+      ],
+      "checks": {
+        "forbiddenVisible": [],
+        "visibleErrorCodeText": [],
+        "spinnerOnly": false,
+        "me401": true,
+        "invalidProfile500": false,
+        "invalidProfile400or404": false,
+        "validMissingProfile404": true,
+        "createDraftPostUnauth": false,
+        "profileDesignCopyVisible": false
+      }
+    },
+    {
+      "name": "login-failure",
+      "route": "/login?failureId=fake-check",
+      "finalUrl": "http://localhost/login?failureId=fake-check",
+      "title": "创作者中心",
+      "visibleText": "A Agora 登录没能完成 这次登录没能完成，请重新登录。如果多次失败，可凭下方反馈代码联系我们。 去登录 回到首页 反馈代码：fake-check",
+      "buttons": [],
+      "links": [
+        {
+          "text": "A\nAgora",
+          "href": "http://localhost/"
+        },
+        {
+          "text": "去登录",
+          "href": "http://localhost/api/v1/auth/login"
+        },
+        {
+          "text": "回到首页",
+          "href": "http://localhost/"
+        }
+      ],
+      "responses": [
+        {
+          "url": "http://localhost/login?failureId=fake-check",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "status": 200,
+          "mimeType": "application/javascript",
+          "type": "Script"
+        },
+        {
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "status": 200,
+          "mimeType": "text/css",
+          "type": "Stylesheet"
+        },
+        {
+          "url": "http://localhost/favicon.ico",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Other"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "mimeType": "application/json",
+          "type": "Fetch"
+        }
+      ],
+      "failures": [],
+      "consoleLogs": [],
+      "logEntries": [
+        {
+          "source": "network",
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "timestamp": 1781816842074.107,
+          "url": "http://localhost/api/v1/me",
+          "networkRequestId": "83952.100"
+        }
+      ],
+      "checks": {
+        "forbiddenVisible": [],
+        "visibleErrorCodeText": [],
+        "spinnerOnly": false,
+        "me401": true,
+        "invalidProfile500": false,
+        "invalidProfile400or404": false,
+        "validMissingProfile404": false,
+        "createDraftPostUnauth": false,
+        "profileDesignCopyVisible": false
+      }
+    },
+    {
+      "name": "not-found",
+      "route": "/definitely-not-a-real-route",
+      "finalUrl": "http://localhost/definitely-not-a-real-route",
+      "title": "创作者中心",
+      "visibleText": "A Agora 页面不存在或已失效 你访问的链接可能已变更或不再可用。 回到首页 去登录",
+      "buttons": [],
+      "links": [
+        {
+          "text": "A\nAgora",
+          "href": "http://localhost/"
+        },
+        {
+          "text": "回到首页",
+          "href": "http://localhost/"
+        },
+        {
+          "text": "去登录",
+          "href": "http://localhost/api/v1/auth/login"
+        }
+      ],
+      "responses": [
+        {
+          "url": "http://localhost/definitely-not-a-real-route",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/assets/index-zjwzbwW2.js",
+          "status": 200,
+          "mimeType": "application/javascript",
+          "type": "Script"
+        },
+        {
+          "url": "http://localhost/assets/index-CMiPoXZv.css",
+          "status": 200,
+          "mimeType": "text/css",
+          "type": "Stylesheet"
+        },
+        {
+          "url": "http://localhost/favicon.ico",
+          "status": 200,
+          "mimeType": "text/html",
+          "type": "Other"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "mimeType": "application/json",
+          "type": "Fetch"
+        }
+      ],
+      "failures": [],
+      "consoleLogs": [],
+      "logEntries": [
+        {
+          "source": "network",
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "timestamp": 1781816843953.73,
+          "url": "http://localhost/api/v1/me",
+          "networkRequestId": "83952.107"
+        }
+      ],
+      "checks": {
+        "forbiddenVisible": [],
+        "visibleErrorCodeText": [],
+        "spinnerOnly": false,
+        "me401": true,
+        "invalidProfile500": false,
+        "invalidProfile400or404": false,
+        "validMissingProfile404": false,
+        "createDraftPostUnauth": false,
+        "profileDesignCopyVisible": false
+      }
+    }
+  ],
+  "verdict": {
+    "noShellLeakOnTestedRoutes": true,
+    "noVisibleErrorCodes": true,
+    "noSpinnerOnly": true,
+    "privateRoutesGateUnauth": true,
+    "publicMe401Noise": true,
+    "anyMe401": true,
+    "invalidProfile500": false,
+    "invalidProfile400or404": true,
+    "validMissingProfile404": true,
+    "createDraftPostUnauth": false,
+    "profileDesignCopyVisibleUnauth": false,
+    "routeStatuses": {
+      "/": [
+        {
+          "url": "http://localhost/",
+          "status": 200,
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "type": "Fetch"
+        }
+      ],
+      "/creator": [
+        {
+          "url": "http://localhost/creator",
+          "status": 200,
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "type": "Fetch"
+        }
+      ],
+      "/profile": [
+        {
+          "url": "http://localhost/profile",
+          "status": 200,
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "type": "Fetch"
+        }
+      ],
+      "/capabilities": [
+        {
+          "url": "http://localhost/capabilities",
+          "status": 200,
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "type": "Fetch"
+        }
+      ],
+      "/create/import": [
+        {
+          "url": "http://localhost/create/import",
+          "status": 200,
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "type": "Fetch"
+        }
+      ],
+      "/create/extract": [
+        {
+          "url": "http://localhost/create/extract",
+          "status": 200,
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "type": "Fetch"
+        }
+      ],
+      "/create/structure": [
+        {
+          "url": "http://localhost/create/structure",
+          "status": 200,
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "type": "Fetch"
+        }
+      ],
+      "/create/publish": [
+        {
+          "url": "http://localhost/create/publish",
+          "status": 200,
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "type": "Fetch"
+        }
+      ],
+      "/a/nonexistent-e2e-test-slug": [
+        {
+          "url": "http://localhost/a/nonexistent-e2e-test-slug",
+          "status": 200,
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "type": "Fetch"
+        }
+      ],
+      "/c/nonexistent-creator-e2e": [
+        {
+          "url": "http://localhost/c/nonexistent-creator-e2e",
+          "status": 200,
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "type": "Fetch"
+        }
+      ],
+      "/creators/me/profile": [
+        {
+          "url": "http://localhost/creators/me/profile",
+          "status": 200,
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/api/v1/creators/me/profile",
+          "status": 401,
+          "type": "Fetch"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "type": "Fetch"
+        }
+      ],
+      "/creators/not-a-uuid/profile": [
+        {
+          "url": "http://localhost/creators/not-a-uuid/profile",
+          "status": 200,
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "type": "Fetch"
+        },
+        {
+          "url": "http://localhost/api/v1/creators/not-a-uuid/profile",
+          "status": 404,
+          "type": "Fetch"
+        }
+      ],
+      "/creators/00000000-0000-4000-8000-000000000000/profile": [
+        {
+          "url": "http://localhost/creators/00000000-0000-4000-8000-000000000000/profile",
+          "status": 200,
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "type": "Fetch"
+        },
+        {
+          "url": "http://localhost/api/v1/creators/00000000-0000-4000-8000-000000000000/profile",
+          "status": 404,
+          "type": "Fetch"
+        }
+      ],
+      "/login?failureId=fake-check": [
+        {
+          "url": "http://localhost/login?failureId=fake-check",
+          "status": 200,
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "type": "Fetch"
+        }
+      ],
+      "/definitely-not-a-real-route": [
+        {
+          "url": "http://localhost/definitely-not-a-real-route",
+          "status": 200,
+          "type": "Document"
+        },
+        {
+          "url": "http://localhost/api/v1/me",
+          "status": 401,
+          "type": "Fetch"
+        }
+      ]
+    }
+  }
+}

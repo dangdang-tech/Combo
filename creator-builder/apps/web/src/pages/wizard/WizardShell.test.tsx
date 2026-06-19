@@ -101,14 +101,47 @@ describe('WizardShell（F-09 向导壳）', () => {
     expect(bar.querySelector('[data-step="select"]')?.getAttribute('data-status')).toBe('todo');
   });
 
-  it('select 步：前两步 done（可回看）、第3段 current；底栏摘要「第 3 步」', () => {
-    renderWizard('/create/select');
+  it('select 步（有草稿续传）：前两步 done（可回看）、第3段 current；底栏摘要「第 3 步」', () => {
+    // BUG-009：步骤条 done 须基于 draft 实际进度。带 ?draftId= 即合法续传（草稿锚点托底），前序才标 done。
+    //   续传单条 GET 命中草稿（currentStep=select），prior 两步确实做过。
+    mock.restore();
+    mock = installFetchMock({
+      status: 200,
+      json: { data: draftView({ id: 'd1', currentStep: 'select' }) },
+    });
+    renderWizard('/create/select?draftId=d1');
     expect(screen.getByTestId('step')).toHaveTextContent('select');
     const bar = screen.getByRole('list', { name: '上传五步进度' });
     expect(bar.querySelector('[data-step="import"]')?.getAttribute('data-status')).toBe('done');
     expect(bar.querySelector('[data-step="extract"]')?.getAttribute('data-status')).toBe('done');
     expect(bar.querySelector('[data-step="select"]')).toHaveAttribute('aria-current', 'step');
     expect(screen.getByText('第 3 步，共 5 步')).toBeInTheDocument();
+  });
+
+  it('BUG-009：无锚点中后段深链 → 不伪造前序 done（前序 todo，反映真实未开始）', () => {
+    // 直接深链到 /create/select 但无 draftId / snapshot / extract / version 等任一锚点：
+    //   用户没做过前序、也无草稿数据 → 步骤条绝不把 import/extract 标成已完成。
+    renderWizard('/create/select');
+    expect(screen.getByTestId('step')).toHaveTextContent('select');
+    const bar = screen.getByRole('list', { name: '上传五步进度' });
+    // 无锚点 → 前序 todo（真实「未开始」），不是伪造的 done。
+    expect(bar.querySelector('[data-step="import"]')?.getAttribute('data-status')).toBe('todo');
+    expect(bar.querySelector('[data-step="extract"]')?.getAttribute('data-status')).toBe('todo');
+    // 当前 URL 步仍是 current（用户正看这一步）；其后仍 todo。
+    expect(bar.querySelector('[data-step="select"]')).toHaveAttribute('aria-current', 'step');
+    expect(bar.querySelector('[data-step="structure"]')?.getAttribute('data-status')).toBe('todo');
+    // 前序未做 → 不可点回看（不是 button，没有伪造的「点击回看」退路）。
+    expect(bar.querySelector('[data-step="import"]')?.querySelector('button')).toBeNull();
+    expect(screen.queryByRole('button', { name: /第 1 步.*点击回看/ })).toBeNull();
+  });
+
+  it('BUG-009：无锚点深链带 snapshotId 锚点 → 视为合法续传，前序据进度标 done', () => {
+    // 锚点不限 draftId：snapshotId（STEP① 产物）等任一落点引用即「确有进度」，前序合法标 done。
+    renderWizard('/create/select?snapshotId=snap1');
+    const bar = screen.getByRole('list', { name: '上传五步进度' });
+    expect(bar.querySelector('[data-step="import"]')?.getAttribute('data-status')).toBe('done');
+    expect(bar.querySelector('[data-step="extract"]')?.getAttribute('data-status')).toBe('done');
+    expect(bar.querySelector('[data-step="select"]')).toHaveAttribute('aria-current', 'step');
   });
 
   it('点已完成步 → 路由跳该步回看（贯穿-16），保留 ?draftId', async () => {
@@ -159,7 +192,13 @@ describe('WizardShell（F-09 向导壳）', () => {
   });
 
   it('外壳头条/步骤条/底栏五步常驻（D14：换步不改本壳结构）', async () => {
-    renderWizard('/create/select');
+    // 带 ?draftId= 续传：前序确有进度（done 可回看），才能点「第 1 步」回看（BUG-009 后 done 须有锚点托底）。
+    mock.restore();
+    mock = installFetchMock({
+      status: 200,
+      json: { data: draftView({ id: 'd1', currentStep: 'select' }) },
+    });
+    renderWizard('/create/select?draftId=d1');
     // select 步具备三件套。
     expect(screen.getByRole('heading', { name: '上传能力' })).toBeInTheDocument();
     expect(screen.getByRole('list', { name: '上传五步进度' })).toBeInTheDocument();

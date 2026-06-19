@@ -1,0 +1,558 @@
+[
+  {
+    "route": "/",
+    "started": "2026-06-18T23:33:27.275Z",
+    "screenshot": null,
+    "screenshotNote": "in-app browser screenshot skipped after Page.captureScreenshot timeout; Chrome CDP screenshots saved separately",
+    "finalUrl": "http://localhost/",
+    "title": "创作者中心",
+    "snapshotHead": "- alert:\n  - generic: Agora\n  - paragraph: 请先登录后进入创作者中心。\n  - button \"去登录\"",
+    "dom": {
+      "bodyText": "Agora 请先登录后进入创作者中心。 去登录",
+      "containsBareSpinnerText": false,
+      "controls": [
+        {
+          "aria": null,
+          "href": null,
+          "role": null,
+          "tag": "button",
+          "testid": null,
+          "text": "去登录"
+        }
+      ],
+      "headings": [],
+      "statusLike": [],
+      "textLength": 23,
+      "title": "创作者中心",
+      "visibleErrorCodeLike": false
+    },
+    "logsTail": []
+  },
+  {
+    "route": "/creator",
+    "started": "2026-06-18T23:33:28.170Z",
+    "screenshot": null,
+    "screenshotNote": "in-app browser screenshot skipped after Page.captureScreenshot timeout; Chrome CDP screenshots saved separately",
+    "finalUrl": "http://localhost/creator",
+    "title": "创作者中心",
+    "snapshotHead": "- alert:\n  - generic: Agora\n  - paragraph: 请先登录后进入创作者中心。\n  - button \"去登录\"",
+    "dom": {
+      "bodyText": "Agora 请先登录后进入创作者中心。 去登录",
+      "containsBareSpinnerText": false,
+      "controls": [
+        {
+          "aria": null,
+          "href": null,
+          "role": null,
+          "tag": "button",
+          "testid": null,
+          "text": "去登录"
+        }
+      ],
+      "headings": [],
+      "statusLike": [],
+      "textLength": 23,
+      "title": "创作者中心",
+      "visibleErrorCodeLike": false
+    },
+    "logsTail": []
+  },
+  {
+    "route": "/profile",
+    "started": "2026-06-18T23:33:29.032Z",
+    "screenshot": null,
+    "screenshotNote": "in-app browser screenshot skipped after Page.captureScreenshot timeout; Chrome CDP screenshots saved separately",
+    "finalUrl": "http://localhost/profile",
+    "title": "创作者中心",
+    "snapshotHead": "- alert:\n  - generic: Agora\n  - paragraph: 请先登录后进入创作者中心。\n  - button \"去登录\"",
+    "dom": {
+      "bodyText": "Agora 请先登录后进入创作者中心。 去登录",
+      "containsBareSpinnerText": false,
+      "controls": [
+        {
+          "aria": null,
+          "href": null,
+          "role": null,
+          "tag": "button",
+          "testid": null,
+          "text": "去登录"
+        }
+      ],
+      "headings": [],
+      "statusLike": [],
+      "textLength": 23,
+      "title": "创作者中心",
+      "visibleErrorCodeLike": false
+    },
+    "logsTail": []
+  },
+  {
+    "route": "/capabilities",
+    "started": "2026-06-18T23:33:29.900Z",
+    "screenshot": null,
+    "screenshotNote": "in-app browser screenshot skipped after Page.captureScreenshot timeout; Chrome CDP screenshots saved separately",
+    "finalUrl": "http://localhost/capabilities",
+    "title": "创作者中心",
+    "snapshotHead": "- alert:\n  - generic: Agora\n  - paragraph: 请先登录后进入创作者中心。\n  - button \"去登录\"",
+    "dom": {
+      "bodyText": "Agora 请先登录后进入创作者中心。 去登录",
+      "containsBareSpinnerText": false,
+      "controls": [
+        {
+          "aria": null,
+          "href": null,
+          "role": null,
+          "tag": "button",
+          "testid": null,
+          "text": "去登录"
+        }
+      ],
+      "headings": [],
+      "statusLike": [],
+      "textLength": 23,
+      "title": "创作者中心",
+      "visibleErrorCodeLike": false
+    },
+    "logsTail": []
+  },
+  {
+    "route": "/create/import",
+    "started": "2026-06-18T23:33:34.953Z",
+    "screenshot": null,
+    "screenshotNote": "in-app browser screenshot skipped after Page.captureScreenshot timeout; Chrome CDP screenshots saved separately",
+    "finalUrl": "http://localhost/create/import",
+    "title": "创作者中心",
+    "snapshotHead": "- alert:\n  - generic: Agora\n  - paragraph: 请先登录后进入创作者中心。\n  - button \"去登录\"",
+    "dom": {
+      "bodyText": "Agora 请先登录后进入创作者中心。 去登录",
+      "containsBareSpinnerText": false,
+      "controls": [
+        {
+          "aria": null,
+          "href": null,
+          "role": null,
+          "tag": "button",
+          "testid": null,
+          "text": "去登录"
+        }
+      ],
+      "headings": [],
+      "statusLike": [],
+      "textLength": 23,
+      "title": "创作者中心",
+      "visibleErrorCodeLike": false
+    },
+    "logsTail": []
+  },
+  {
+    "route": "/create/select",
+    "started": "2026-06-18T23:33:35.845Z",
+    "screenshot": null,
+    "screenshotNote": "in-app browser screenshot skipped after Page.captureScreenshot timeout; Chrome CDP screenshots saved separately",
+    "finalUrl": "http://localhost/create/select",
+    "title": "创作者中心",
+    "snapshotHead": "- alert:\n  - generic: Agora\n  - paragraph: 请先登录后进入创作者中心。\n  - button \"去登录\"",
+    "dom": {
+      "bodyText": "Agora 请先登录后进入创作者中心。 去登录",
+      "containsBareSpinnerText": false,
+      "controls": [
+        {
+          "aria": null,
+          "href": null,
+          "role": null,
+          "tag": "button",
+          "testid": null,
+          "text": "去登录"
+        }
+      ],
+      "headings": [],
+      "statusLike": [],
+      "textLength": 23,
+      "title": "创作者中心",
+      "visibleErrorCodeLike": false
+    },
+    "logsTail": []
+  },
+  {
+    "route": "/create/extract",
+    "started": "2026-06-18T23:33:36.695Z",
+    "screenshot": null,
+    "screenshotNote": "in-app browser screenshot skipped after Page.captureScreenshot timeout; Chrome CDP screenshots saved separately",
+    "finalUrl": "http://localhost/create/extract",
+    "title": "创作者中心",
+    "snapshotHead": "- alert:\n  - generic: Agora\n  - paragraph: 请先登录后进入创作者中心。\n  - button \"去登录\"",
+    "dom": {
+      "bodyText": "Agora 请先登录后进入创作者中心。 去登录",
+      "containsBareSpinnerText": false,
+      "controls": [
+        {
+          "aria": null,
+          "href": null,
+          "role": null,
+          "tag": "button",
+          "testid": null,
+          "text": "去登录"
+        }
+      ],
+      "headings": [],
+      "statusLike": [],
+      "textLength": 23,
+      "title": "创作者中心",
+      "visibleErrorCodeLike": false
+    },
+    "logsTail": []
+  },
+  {
+    "route": "/create/structure",
+    "started": "2026-06-18T23:33:37.547Z",
+    "screenshot": null,
+    "screenshotNote": "in-app browser screenshot skipped after Page.captureScreenshot timeout; Chrome CDP screenshots saved separately",
+    "finalUrl": "http://localhost/create/structure",
+    "title": "创作者中心",
+    "snapshotHead": "- alert:\n  - generic: Agora\n  - paragraph: 请先登录后进入创作者中心。\n  - button \"去登录\"",
+    "dom": {
+      "bodyText": "Agora 请先登录后进入创作者中心。 去登录",
+      "containsBareSpinnerText": false,
+      "controls": [
+        {
+          "aria": null,
+          "href": null,
+          "role": null,
+          "tag": "button",
+          "testid": null,
+          "text": "去登录"
+        }
+      ],
+      "headings": [],
+      "statusLike": [],
+      "textLength": 23,
+      "title": "创作者中心",
+      "visibleErrorCodeLike": false
+    },
+    "logsTail": []
+  },
+  {
+    "route": "/create/publish",
+    "started": "2026-06-18T23:33:43.954Z",
+    "screenshot": null,
+    "screenshotNote": "in-app browser screenshot skipped after Page.captureScreenshot timeout; Chrome CDP screenshots saved separately",
+    "finalUrl": "http://localhost/create/publish",
+    "title": "创作者中心",
+    "snapshotHead": "- alert:\n  - generic: Agora\n  - paragraph: 请先登录后进入创作者中心。\n  - button \"去登录\"",
+    "dom": {
+      "bodyText": "Agora 请先登录后进入创作者中心。 去登录",
+      "containsBareSpinnerText": false,
+      "controls": [
+        {
+          "aria": null,
+          "href": null,
+          "role": null,
+          "tag": "button",
+          "testid": null,
+          "text": "去登录"
+        }
+      ],
+      "headings": [],
+      "statusLike": [],
+      "textLength": 23,
+      "title": "创作者中心",
+      "visibleErrorCodeLike": false
+    },
+    "logsTail": []
+  },
+  {
+    "route": "/a/nonexistent-e2e-test-slug",
+    "started": "2026-06-18T23:33:44.831Z",
+    "screenshot": null,
+    "screenshotNote": "in-app browser screenshot skipped after Page.captureScreenshot timeout; Chrome CDP screenshots saved separately",
+    "finalUrl": "http://localhost/a/nonexistent-e2e-test-slug",
+    "title": "创作者中心",
+    "snapshotHead": "- banner:\n  - link \"Agora 首页\":\n    - /url: /\n    - generic: A\n    - generic: Agora\n- main:\n  - region \"公开能力页即将上线\":\n    - heading \"公开能力页即将上线\" [level=2]\n    - paragraph: 能力的对外只读页正在筹备中，将随市集消费侧一起开放。敬请期待。",
+    "dom": {
+      "bodyText": "A Agora 公开能力页即将上线 能力的对外只读页正在筹备中，将随市集消费侧一起开放。敬请期待。",
+      "containsBareSpinnerText": false,
+      "controls": [
+        {
+          "aria": "Agora 首页",
+          "href": "/",
+          "role": null,
+          "tag": "a",
+          "testid": null,
+          "text": "A Agora"
+        }
+      ],
+      "headings": [
+        {
+          "aria": null,
+          "href": null,
+          "role": null,
+          "tag": "h2",
+          "testid": null,
+          "text": "公开能力页即将上线"
+        }
+      ],
+      "statusLike": [],
+      "textLength": 49,
+      "title": "创作者中心",
+      "visibleErrorCodeLike": false
+    },
+    "logsTail": []
+  },
+  {
+    "route": "/c/nonexistent-creator-e2e",
+    "started": "2026-06-18T23:33:45.683Z",
+    "screenshot": null,
+    "screenshotNote": "in-app browser screenshot skipped after Page.captureScreenshot timeout; Chrome CDP screenshots saved separately",
+    "finalUrl": "http://localhost/c/nonexistent-creator-e2e",
+    "title": "创作者中心",
+    "snapshotHead": "- banner:\n  - link \"Agora 首页\":\n    - /url: /\n    - generic: A\n    - generic: Agora\n- main:\n  - region \"公开创作者主页即将上线\":\n    - heading \"公开创作者主页即将上线\" [level=2]\n    - paragraph: 创作者的对外只读主页正在筹备中，将随市集消费侧一起开放。敬请期待。",
+    "dom": {
+      "bodyText": "A Agora 公开创作者主页即将上线 创作者的对外只读主页正在筹备中，将随市集消费侧一起开放。敬请期待。",
+      "containsBareSpinnerText": false,
+      "controls": [
+        {
+          "aria": "Agora 首页",
+          "href": "/",
+          "role": null,
+          "tag": "a",
+          "testid": null,
+          "text": "A Agora"
+        }
+      ],
+      "headings": [
+        {
+          "aria": null,
+          "href": null,
+          "role": null,
+          "tag": "h2",
+          "testid": null,
+          "text": "公开创作者主页即将上线"
+        }
+      ],
+      "statusLike": [],
+      "textLength": 53,
+      "title": "创作者中心",
+      "visibleErrorCodeLike": false
+    },
+    "logsTail": []
+  },
+  {
+    "route": "/creators/me/profile",
+    "started": "2026-06-18T23:33:46.530Z",
+    "screenshot": null,
+    "screenshotNote": "in-app browser screenshot skipped after Page.captureScreenshot timeout; Chrome CDP screenshots saved separately",
+    "finalUrl": "http://localhost/creators/me/profile",
+    "title": "创作者中心",
+    "snapshotHead": "- banner:\n  - link \"Agora 首页\":\n    - /url: /\n    - generic: A\n    - generic: Agora\n- main:\n  - alert:\n    - paragraph: 登录后才能查看“我的个人主页”，请先登录。\n    - button \"去登录\"\n    - paragraph:\n      - text: 反馈代码：\n      - code: 6505a996-e88d-4809-9980-4101198c46e9",
+    "dom": {
+      "bodyText": "A Agora 登录后才能查看“我的个人主页”，请先登录。 去登录 反馈代码：6505a996-e88d-4809-9980-4101198c46e9",
+      "containsBareSpinnerText": false,
+      "controls": [
+        {
+          "aria": "Agora 首页",
+          "href": "/",
+          "role": null,
+          "tag": "a",
+          "testid": null,
+          "text": "A Agora"
+        },
+        {
+          "aria": null,
+          "href": null,
+          "role": null,
+          "tag": "button",
+          "testid": null,
+          "text": "去登录"
+        }
+      ],
+      "headings": [],
+      "statusLike": [],
+      "textLength": 75,
+      "title": "创作者中心",
+      "visibleErrorCodeLike": false
+    },
+    "logsTail": []
+  },
+  {
+    "route": "/creators/not-a-uuid/profile",
+    "started": "2026-06-18T23:33:57.624Z",
+    "screenshot": null,
+    "screenshotNote": "in-app browser screenshot skipped after Page.captureScreenshot timeout; Chrome CDP screenshots saved separately",
+    "finalUrl": "http://localhost/creators/not-a-uuid/profile",
+    "title": "创作者中心",
+    "snapshotHead": "- banner:\n  - link \"Agora 首页\":\n    - /url: /\n    - generic: A\n    - generic: Agora\n- main:\n  - alert:\n    - paragraph: 没找到这个创作者，可能链接失效了。\n    - button \"去修改\"\n    - paragraph:\n      - text: 反馈代码：\n      - code: c6810ce3-9ef5-41cb-8cc4-4c569535e8de",
+    "dom": {
+      "bodyText": "A Agora 没找到这个创作者，可能链接失效了。 去修改 反馈代码：c6810ce3-9ef5-41cb-8cc4-4c569535e8de",
+      "containsBareSpinnerText": false,
+      "controls": [
+        {
+          "aria": "Agora 首页",
+          "href": "/",
+          "role": null,
+          "tag": "a",
+          "testid": null,
+          "text": "A Agora"
+        },
+        {
+          "aria": null,
+          "href": null,
+          "role": null,
+          "tag": "button",
+          "testid": null,
+          "text": "去修改"
+        }
+      ],
+      "headings": [],
+      "statusLike": [],
+      "textLength": 71,
+      "title": "创作者中心",
+      "visibleErrorCodeLike": false
+    },
+    "logsTail": []
+  },
+  {
+    "route": "/creators/00000000-0000-4000-8000-000000000000/profile",
+    "started": "2026-06-18T23:33:58.504Z",
+    "screenshot": null,
+    "screenshotNote": "in-app browser screenshot skipped after Page.captureScreenshot timeout; Chrome CDP screenshots saved separately",
+    "finalUrl": "http://localhost/creators/00000000-0000-4000-8000-000000000000/profile",
+    "title": "创作者中心",
+    "snapshotHead": "- banner:\n  - link \"Agora 首页\":\n    - /url: /\n    - generic: A\n    - generic: Agora\n- main:\n  - alert:\n    - paragraph: 没找到这个创作者，可能链接失效了。\n    - button \"去修改\"\n    - paragraph:\n      - text: 反馈代码：\n      - code: c733c095-261e-4f45-979f-054342224c7f",
+    "dom": {
+      "bodyText": "A Agora 没找到这个创作者，可能链接失效了。 去修改 反馈代码：c733c095-261e-4f45-979f-054342224c7f",
+      "containsBareSpinnerText": false,
+      "controls": [
+        {
+          "aria": "Agora 首页",
+          "href": "/",
+          "role": null,
+          "tag": "a",
+          "testid": null,
+          "text": "A Agora"
+        },
+        {
+          "aria": null,
+          "href": null,
+          "role": null,
+          "tag": "button",
+          "testid": null,
+          "text": "去修改"
+        }
+      ],
+      "headings": [],
+      "statusLike": [],
+      "textLength": 71,
+      "title": "创作者中心",
+      "visibleErrorCodeLike": false
+    },
+    "logsTail": []
+  },
+  {
+    "route": "/login?failureId=fake-check",
+    "started": "2026-06-18T23:33:59.357Z",
+    "screenshot": null,
+    "screenshotNote": "in-app browser screenshot skipped after Page.captureScreenshot timeout; Chrome CDP screenshots saved separately",
+    "finalUrl": "http://localhost/login?failureId=fake-check",
+    "title": "创作者中心",
+    "snapshotHead": "- banner:\n  - link \"Agora 首页\":\n    - /url: /\n    - generic: A\n    - generic: Agora\n- main:\n  - region \"登录没能完成\":\n    - heading \"登录没能完成\" [level=2]\n    - paragraph: 这次登录没能完成，请重新登录。如果多次失败，可凭下方反馈代码联系我们。\n    - link \"去登录\":\n      - /url: /api/v1/auth/login\n    - link \"回到首页\":\n      - /url: /\n    - paragraph: 反馈代码：fake-check",
+    "dom": {
+      "bodyText": "A Agora 登录没能完成 这次登录没能完成，请重新登录。如果多次失败，可凭下方反馈代码联系我们。 去登录 回到首页 反馈代码：fake-check",
+      "containsBareSpinnerText": false,
+      "controls": [
+        {
+          "aria": "Agora 首页",
+          "href": "/",
+          "role": null,
+          "tag": "a",
+          "testid": null,
+          "text": "A Agora"
+        },
+        {
+          "aria": null,
+          "href": "/api/v1/auth/login",
+          "role": null,
+          "tag": "a",
+          "testid": null,
+          "text": "去登录"
+        },
+        {
+          "aria": null,
+          "href": "/",
+          "role": null,
+          "tag": "a",
+          "testid": null,
+          "text": "回到首页"
+        }
+      ],
+      "headings": [
+        {
+          "aria": null,
+          "href": null,
+          "role": null,
+          "tag": "h2",
+          "testid": null,
+          "text": "登录没能完成"
+        }
+      ],
+      "statusLike": [],
+      "textLength": 75,
+      "title": "创作者中心",
+      "visibleErrorCodeLike": false
+    },
+    "logsTail": []
+  },
+  {
+    "route": "/definitely-not-a-real-route",
+    "started": "2026-06-18T23:34:00.211Z",
+    "screenshot": null,
+    "screenshotNote": "in-app browser screenshot skipped after Page.captureScreenshot timeout; Chrome CDP screenshots saved separately",
+    "finalUrl": "http://localhost/definitely-not-a-real-route",
+    "title": "创作者中心",
+    "snapshotHead": "- banner:\n  - link \"Agora 首页\":\n    - /url: /\n    - generic: A\n    - generic: Agora\n- main:\n  - region \"页面不存在或已失效\":\n    - heading \"页面不存在或已失效\" [level=2]\n    - paragraph: 你访问的链接可能已变更或不再可用。\n    - link \"回到首页\":\n      - /url: /\n    - link \"去登录\":\n      - /url: /api/v1/auth/login",
+    "dom": {
+      "bodyText": "A Agora 页面不存在或已失效 你访问的链接可能已变更或不再可用。 回到首页 去登录",
+      "containsBareSpinnerText": false,
+      "controls": [
+        {
+          "aria": "Agora 首页",
+          "href": "/",
+          "role": null,
+          "tag": "a",
+          "testid": null,
+          "text": "A Agora"
+        },
+        {
+          "aria": null,
+          "href": "/",
+          "role": null,
+          "tag": "a",
+          "testid": null,
+          "text": "回到首页"
+        },
+        {
+          "aria": null,
+          "href": "/api/v1/auth/login",
+          "role": null,
+          "tag": "a",
+          "testid": null,
+          "text": "去登录"
+        }
+      ],
+      "headings": [
+        {
+          "aria": null,
+          "href": null,
+          "role": null,
+          "tag": "h2",
+          "testid": null,
+          "text": "页面不存在或已失效"
+        }
+      ],
+      "statusLike": [],
+      "textLength": 44,
+      "title": "创作者中心",
+      "visibleErrorCodeLike": false
+    },
+    "logsTail": []
+  }
+]

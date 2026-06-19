@@ -20,6 +20,8 @@ export function Shell(): ReactElement {
   const { collapsed, toggle: toggleCollapse } = useCollapse();
   const account = useAccount();
   const crumbs = breadcrumbFor(location.pathname);
+  // 顶栏居中字标的页名（Figma：AGORA · CREATOR · 工作台）。/creator 只有根 crumb，特判为「工作台」。
+  const pageTitle = crumbs.length > 1 ? crumbs[crumbs.length - 1].label : '工作台';
 
   return (
     <div className="cb-shell" data-view-mode={mode} data-collapsed={collapsed ? 'true' : 'false'}>
@@ -81,40 +83,20 @@ export function Shell(): ReactElement {
       {/* 主区：顶栏面包屑 + 视角开关 + 右上头像 + 内容 Outlet。 */}
       <div className="cb-shell__main">
         <header className="cb-shell__topbar">
-          <nav className="cb-shell__breadcrumb" aria-label="面包屑">
-            {crumbs.map((c, i) => {
-              const isLast = i === crumbs.length - 1;
-              return (
-                <span key={c.path} className="cb-shell__crumb">
-                  {i > 0 && (
-                    <span className="cb-shell__crumb-sep" aria-hidden="true">
-                      {' / '}
-                    </span>
-                  )}
-                  {isLast ? (
-                    <span aria-current="page">{c.label}</span>
-                  ) : (
-                    <Link to={c.path}>{c.label}</Link>
-                  )}
-                </span>
-              );
-            })}
-          </nav>
-
-          <div className="cb-shell__topbar-right">
-            {/* 双视角开关占位（D14）：本期只切前端视角态，不动鉴权/路由。 */}
-            <button
-              type="button"
-              className="cb-shell__viewtoggle"
-              onClick={toggleView}
-              aria-pressed={mode === 'consumer'}
-              title="切换创作者 / 消费者视角（占位）"
-            >
-              {mode === 'creator' ? '创作者视角' : '消费者视角'}
-            </button>
-            {/* 顶栏右上角账号头像（§2.2 常驻）。 */}
-            <AccountAvatar account={account} className="cb-shell__topbar-avatar" />
-          </div>
+          {/* 居中字标（Figma 工作台/个人主页顶栏：AGORA · CREATOR · 当前页）。账号头像在侧栏底部常驻。 */}
+          <p className="cb-shell__eyebrow" aria-label={`当前页面：${pageTitle}`}>
+            {`AGORA · CREATOR · ${pageTitle}`}
+          </p>
+          {/* 双视角开关占位（D14）：本期只切前端视角态，不动鉴权/路由。 */}
+          <button
+            type="button"
+            className="cb-shell__viewtoggle"
+            onClick={toggleView}
+            aria-pressed={mode === 'consumer'}
+            title="切换创作者 / 消费者视角（占位）"
+          >
+            {mode === 'creator' ? '创作者视角' : '消费者视角'}
+          </button>
         </header>
 
         <main className="cb-shell__content">

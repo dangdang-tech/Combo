@@ -1,0 +1,37 @@
+{
+  "route": "/creators/not-a-uuid/profile",
+  "started": "2026-06-18T23:33:57.624Z",
+  "screenshot": null,
+  "screenshotNote": "in-app browser screenshot skipped after Page.captureScreenshot timeout; Chrome CDP screenshots saved separately",
+  "finalUrl": "http://localhost/creators/not-a-uuid/profile",
+  "title": "创作者中心",
+  "snapshotHead": "- banner:\n  - link \"Agora 首页\":\n    - /url: /\n    - generic: A\n    - generic: Agora\n- main:\n  - alert:\n    - paragraph: 没找到这个创作者，可能链接失效了。\n    - button \"去修改\"\n    - paragraph:\n      - text: 反馈代码：\n      - code: c6810ce3-9ef5-41cb-8cc4-4c569535e8de",
+  "dom": {
+    "bodyText": "A Agora 没找到这个创作者，可能链接失效了。 去修改 反馈代码：c6810ce3-9ef5-41cb-8cc4-4c569535e8de",
+    "containsBareSpinnerText": false,
+    "controls": [
+      {
+        "aria": "Agora 首页",
+        "href": "/",
+        "role": null,
+        "tag": "a",
+        "testid": null,
+        "text": "A Agora"
+      },
+      {
+        "aria": null,
+        "href": null,
+        "role": null,
+        "tag": "button",
+        "testid": null,
+        "text": "去修改"
+      }
+    ],
+    "headings": [],
+    "statusLike": [],
+    "textLength": 71,
+    "title": "创作者中心",
+    "visibleErrorCodeLike": false
+  },
+  "logsTail": []
+}

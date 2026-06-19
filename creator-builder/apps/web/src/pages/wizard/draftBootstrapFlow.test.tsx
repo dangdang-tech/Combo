@@ -254,7 +254,11 @@ describe('草稿 bootstrap 端到端贯穿（P0-2）', () => {
     const draftCall = mock.calls.find((c) => c.url.endsWith('/drafts') && c.method === 'POST');
     expect(draftCall?.headers['X-Idempotency-Scope']).toBe('draft.create');
 
-    // ② 草稿就绪 → 点开始导入 → 铸码带 draftId → 轮询拿 jobId → SSE 加载态。
+    // ② 草稿就绪 → 展开高级入口（BUG-013：浏览器导入是主路径，本机直读折叠）→ 点开始导入 →
+    //    铸码带 draftId → 轮询拿 jobId → SSE 加载态。
+    await userEvent.click(
+      screen.getByRole('button', { name: '试试其它导入方式（命令行 / CURL）' }),
+    );
     await userEvent.click(screen.getByRole('button', { name: '开始导入 →' }));
     await waitFor(() => {
       const pairCall = mock.calls.find(

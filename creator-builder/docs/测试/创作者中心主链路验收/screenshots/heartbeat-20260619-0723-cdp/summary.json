@@ -1,0 +1,415 @@
+{
+  "routes": [
+    {
+      "route": "/",
+      "finalUrl": "http://localhost/",
+      "text": "Agora 请先登录后进入创作者中心。 去登录",
+      "isPrivate": true,
+      "privateGateOk": true,
+      "visibleErrorCodeLike": false,
+      "visibleFeedbackCode": false,
+      "bareSpinner": false,
+      "me401": 1,
+      "apiStatuses": [
+        {
+          "status": 401,
+          "url": "/api/v1/me"
+        }
+      ],
+      "consoleErrorCount": 1,
+      "consoleWarningCount": 0,
+      "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0723-cdp/01-root.png",
+      "error": null
+    },
+    {
+      "route": "/creator",
+      "finalUrl": "http://localhost/creator",
+      "text": "Agora 请先登录后进入创作者中心。 去登录",
+      "isPrivate": true,
+      "privateGateOk": true,
+      "visibleErrorCodeLike": false,
+      "visibleFeedbackCode": false,
+      "bareSpinner": false,
+      "me401": 1,
+      "apiStatuses": [
+        {
+          "status": 401,
+          "url": "/api/v1/me"
+        }
+      ],
+      "consoleErrorCount": 1,
+      "consoleWarningCount": 0,
+      "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0723-cdp/02-creator.png",
+      "error": null
+    },
+    {
+      "route": "/profile",
+      "finalUrl": "http://localhost/profile",
+      "text": "Agora 请先登录后进入创作者中心。 去登录",
+      "isPrivate": true,
+      "privateGateOk": true,
+      "visibleErrorCodeLike": false,
+      "visibleFeedbackCode": false,
+      "bareSpinner": false,
+      "me401": 1,
+      "apiStatuses": [
+        {
+          "status": 401,
+          "url": "/api/v1/me"
+        }
+      ],
+      "consoleErrorCount": 1,
+      "consoleWarningCount": 0,
+      "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0723-cdp/03-profile.png",
+      "error": null
+    },
+    {
+      "route": "/capabilities",
+      "finalUrl": "http://localhost/capabilities",
+      "text": "Agora 请先登录后进入创作者中心。 去登录",
+      "isPrivate": true,
+      "privateGateOk": true,
+      "visibleErrorCodeLike": false,
+      "visibleFeedbackCode": false,
+      "bareSpinner": false,
+      "me401": 1,
+      "apiStatuses": [
+        {
+          "status": 401,
+          "url": "/api/v1/me"
+        }
+      ],
+      "consoleErrorCount": 1,
+      "consoleWarningCount": 0,
+      "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0723-cdp/04-capabilities.png",
+      "error": null
+    },
+    {
+      "route": "/create/import",
+      "finalUrl": "http://localhost/create/import",
+      "text": "Agora 请先登录后进入创作者中心。 去登录",
+      "isPrivate": true,
+      "privateGateOk": true,
+      "visibleErrorCodeLike": false,
+      "visibleFeedbackCode": false,
+      "bareSpinner": false,
+      "me401": 1,
+      "apiStatuses": [
+        {
+          "status": 401,
+          "url": "/api/v1/me"
+        }
+      ],
+      "consoleErrorCount": 1,
+      "consoleWarningCount": 0,
+      "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0723-cdp/05-create-import.png",
+      "error": null
+    },
+    {
+      "route": "/create/select",
+      "finalUrl": "http://localhost/create/select",
+      "text": "Agora 请先登录后进入创作者中心。 去登录",
+      "isPrivate": true,
+      "privateGateOk": true,
+      "visibleErrorCodeLike": false,
+      "visibleFeedbackCode": false,
+      "bareSpinner": false,
+      "me401": 1,
+      "apiStatuses": [
+        {
+          "status": 401,
+          "url": "/api/v1/me"
+        }
+      ],
+      "consoleErrorCount": 1,
+      "consoleWarningCount": 0,
+      "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0723-cdp/06-create-select.png",
+      "error": null
+    },
+    {
+      "route": "/create/extract",
+      "finalUrl": "http://localhost/create/extract",
+      "text": "Agora 请先登录后进入创作者中心。 去登录",
+      "isPrivate": true,
+      "privateGateOk": true,
+      "visibleErrorCodeLike": false,
+      "visibleFeedbackCode": false,
+      "bareSpinner": false,
+      "me401": 1,
+      "apiStatuses": [
+        {
+          "status": 401,
+          "url": "/api/v1/me"
+        }
+      ],
+      "consoleErrorCount": 1,
+      "consoleWarningCount": 0,
+      "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0723-cdp/07-create-extract.png",
+      "error": null
+    },
+    {
+      "route": "/create/structure",
+      "finalUrl": "http://localhost/create/structure",
+      "text": "Agora 请先登录后进入创作者中心。 去登录",
+      "isPrivate": true,
+      "privateGateOk": true,
+      "visibleErrorCodeLike": false,
+      "visibleFeedbackCode": false,
+      "bareSpinner": false,
+      "me401": 1,
+      "apiStatuses": [
+        {
+          "status": 401,
+          "url": "/api/v1/me"
+        }
+      ],
+      "consoleErrorCount": 1,
+      "consoleWarningCount": 0,
+      "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0723-cdp/08-create-structure.png",
+      "error": null
+    },
+    {
+      "route": "/create/publish",
+      "finalUrl": "http://localhost/create/publish",
+      "text": "Agora 请先登录后进入创作者中心。 去登录",
+      "isPrivate": true,
+      "privateGateOk": true,
+      "visibleErrorCodeLike": false,
+      "visibleFeedbackCode": false,
+      "bareSpinner": false,
+      "me401": 1,
+      "apiStatuses": [
+        {
+          "status": 401,
+          "url": "/api/v1/me"
+        }
+      ],
+      "consoleErrorCount": 1,
+      "consoleWarningCount": 0,
+      "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0723-cdp/09-create-publish.png",
+      "error": null
+    },
+    {
+      "route": "/a/nonexistent-e2e-test-slug",
+      "finalUrl": "http://localhost/a/nonexistent-e2e-test-slug",
+      "text": "A Agora 公开能力页即将上线 能力的对外只读页正在筹备中，将随市集消费侧一起开放。敬请期待。",
+      "isPrivate": false,
+      "privateGateOk": true,
+      "visibleErrorCodeLike": false,
+      "visibleFeedbackCode": false,
+      "bareSpinner": false,
+      "me401": 1,
+      "apiStatuses": [
+        {
+          "status": 401,
+          "url": "/api/v1/me"
+        }
+      ],
+      "consoleErrorCount": 1,
+      "consoleWarningCount": 0,
+      "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0723-cdp/10-a-nonexistent-e2e-test-slug.png",
+      "error": null
+    },
+    {
+      "route": "/c/nonexistent-creator-e2e",
+      "finalUrl": "http://localhost/c/nonexistent-creator-e2e",
+      "text": "A Agora 公开创作者主页即将上线 创作者的对外只读主页正在筹备中，将随市集消费侧一起开放。敬请期待。",
+      "isPrivate": false,
+      "privateGateOk": true,
+      "visibleErrorCodeLike": false,
+      "visibleFeedbackCode": false,
+      "bareSpinner": false,
+      "me401": 1,
+      "apiStatuses": [
+        {
+          "status": 401,
+          "url": "/api/v1/me"
+        }
+      ],
+      "consoleErrorCount": 1,
+      "consoleWarningCount": 0,
+      "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0723-cdp/11-c-nonexistent-creator-e2e.png",
+      "error": null
+    },
+    {
+      "route": "/creators/me/profile",
+      "finalUrl": "http://localhost/creators/me/profile",
+      "text": "A Agora 登录后才能查看“我的个人主页”，请先登录。 去登录 反馈代码：6d975ebc-8a5f-4d32-b315-34dc2fe3a91b",
+      "isPrivate": false,
+      "privateGateOk": true,
+      "visibleErrorCodeLike": false,
+      "visibleFeedbackCode": true,
+      "bareSpinner": false,
+      "me401": 1,
+      "apiStatuses": [
+        {
+          "status": 401,
+          "url": "/api/v1/creators/me/profile"
+        },
+        {
+          "status": 401,
+          "url": "/api/v1/me"
+        }
+      ],
+      "consoleErrorCount": 2,
+      "consoleWarningCount": 0,
+      "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0723-cdp/12-creators-me-profile.png",
+      "error": null
+    },
+    {
+      "route": "/creators/not-a-uuid/profile",
+      "finalUrl": "http://localhost/creators/not-a-uuid/profile",
+      "text": "A Agora 没找到这个创作者，可能链接失效了。 去修改 反馈代码：30062b91-472d-44cc-a0b4-743db5c01683",
+      "isPrivate": false,
+      "privateGateOk": true,
+      "visibleErrorCodeLike": false,
+      "visibleFeedbackCode": true,
+      "bareSpinner": false,
+      "me401": 1,
+      "apiStatuses": [
+        {
+          "status": 404,
+          "url": "/api/v1/creators/not-a-uuid/profile"
+        },
+        {
+          "status": 401,
+          "url": "/api/v1/me"
+        }
+      ],
+      "consoleErrorCount": 2,
+      "consoleWarningCount": 0,
+      "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0723-cdp/13-creators-not-a-uuid-profile.png",
+      "error": null
+    },
+    {
+      "route": "/creators/00000000-0000-4000-8000-000000000000/profile",
+      "finalUrl": "http://localhost/creators/00000000-0000-4000-8000-000000000000/profile",
+      "text": "A Agora 没找到这个创作者，可能链接失效了。 去修改 反馈代码：5ef1e195-eaaa-4251-bd00-1c451ddd2a7b",
+      "isPrivate": false,
+      "privateGateOk": true,
+      "visibleErrorCodeLike": false,
+      "visibleFeedbackCode": true,
+      "bareSpinner": false,
+      "me401": 1,
+      "apiStatuses": [
+        {
+          "status": 404,
+          "url": "/api/v1/creators/00000000-0000-4000-8000-000000000000/profile"
+        },
+        {
+          "status": 401,
+          "url": "/api/v1/me"
+        }
+      ],
+      "consoleErrorCount": 2,
+      "consoleWarningCount": 0,
+      "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0723-cdp/14-creators-00000000-0000-4000-8000-000000000000-profile.png",
+      "error": null
+    },
+    {
+      "route": "/login?failureId=fake-check",
+      "finalUrl": "http://localhost/login?failureId=fake-check",
+      "text": "A Agora 登录没能完成 这次登录没能完成，请重新登录。如果多次失败，可凭下方反馈代码联系我们。 去登录 回到首页 反馈代码：fake-check",
+      "isPrivate": false,
+      "privateGateOk": true,
+      "visibleErrorCodeLike": false,
+      "visibleFeedbackCode": true,
+      "bareSpinner": false,
+      "me401": 1,
+      "apiStatuses": [
+        {
+          "status": 401,
+          "url": "/api/v1/me"
+        }
+      ],
+      "consoleErrorCount": 1,
+      "consoleWarningCount": 0,
+      "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0723-cdp/15-login-failureId-fake-check.png",
+      "error": null
+    },
+    {
+      "route": "/definitely-not-a-real-route",
+      "finalUrl": "http://localhost/definitely-not-a-real-route",
+      "text": "A Agora 页面不存在或已失效 你访问的链接可能已变更或不再可用。 回到首页 去登录",
+      "isPrivate": false,
+      "privateGateOk": true,
+      "visibleErrorCodeLike": false,
+      "visibleFeedbackCode": false,
+      "bareSpinner": false,
+      "me401": 1,
+      "apiStatuses": [
+        {
+          "status": 401,
+          "url": "/api/v1/me"
+        }
+      ],
+      "consoleErrorCount": 1,
+      "consoleWarningCount": 0,
+      "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0723-cdp/16-definitely-not-a-real-route.png",
+      "error": null
+    }
+  ],
+  "verdict": {
+    "noShellLeakOnTestedRoutes": true,
+    "noVisibleErrorCodes": true,
+    "noSpinnerOnly": true,
+    "privateRoutesGateUnauth": true,
+    "publicMe401Noise": true,
+    "anyMe401": true,
+    "invalidProfile500": false,
+    "invalidProfile400or404": true,
+    "validMissingProfile404": true,
+    "createDraftPostUnauth": false,
+    "selectionPatchUnauth": false,
+    "publishPostUnauth": false,
+    "trialRuntimePostUnauth": false,
+    "apiWrites": [],
+    "me401Count": 16,
+    "publicMe401Count": 6,
+    "consoleErrorCount": 19,
+    "consoleWarningCount": 0,
+    "loginClick": {
+      "beforeUrl": "http://localhost/create/import",
+      "buttonCount": 1,
+      "afterUrl": "https://andkzt.logto.app/sign-in?app_id=vbu4vp7h0nczrddmzcpq1",
+      "error": null,
+      "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0723-cdp/login-click-after.png"
+    }
+  },
+  "loginClick": {
+    "route": "/create/import",
+    "beforeUrl": "http://localhost/create/import",
+    "beforeText": "Agora 请先登录后进入创作者中心。 去登录",
+    "buttonCount": 1,
+    "afterUrl": "https://andkzt.logto.app/sign-in?app_id=vbu4vp7h0nczrddmzcpq1",
+    "afterTitle": "登录你的账号",
+    "afterText": "登录你的账号 +86 邮箱 密码 登录 还没有账号？ 注册 Powered by 你处于开发模式",
+    "screenshot": "/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder/docs/测试/创作者中心主链路验收/screenshots/heartbeat-20260619-0723-cdp/login-click-after.png",
+    "consoleEntries": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+        "location": {
+          "url": "http://localhost/api/v1/me",
+          "line": 0,
+          "column": 0,
+          "lineNumber": 0,
+          "columnNumber": 0
+        }
+      }
+    ],
+    "responses": [
+      {
+        "status": 401,
+        "url": "http://localhost/api/v1/me",
+        "requestMethod": "GET"
+      },
+      {
+        "status": 302,
+        "url": "http://localhost/api/v1/auth/login?returnTo=%2Fcreate%2Fimport",
+        "requestMethod": "GET"
+      }
+    ],
+    "error": null
+  }
+}

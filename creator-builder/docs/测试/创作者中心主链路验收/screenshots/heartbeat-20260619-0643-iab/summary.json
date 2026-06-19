@@ -1,0 +1,368 @@
+{
+  "generatedAt": "2026-06-18T22:47:24.780Z",
+  "routes": [
+    {
+      "route": "/",
+      "hasLoginGate": true,
+      "hasNotFoundCopy": false,
+      "hasSpinnerOnly": false,
+      "interactive": [
+        {
+          "href": "",
+          "role": "",
+          "tag": "button",
+          "text": "去登录"
+        }
+      ],
+      "shellLeaks": [],
+      "textLength": 23,
+      "textSample": "Agora 请先登录后进入创作者中心。 去登录",
+      "title": "创作者中心",
+      "url": "http://localhost/",
+      "visibleErrorCodes": []
+    },
+    {
+      "route": "/creator",
+      "hasLoginGate": true,
+      "hasNotFoundCopy": false,
+      "hasSpinnerOnly": false,
+      "interactive": [
+        {
+          "href": "",
+          "role": "",
+          "tag": "button",
+          "text": "去登录"
+        }
+      ],
+      "shellLeaks": [],
+      "textLength": 23,
+      "textSample": "Agora 请先登录后进入创作者中心。 去登录",
+      "title": "创作者中心",
+      "url": "http://localhost/creator",
+      "visibleErrorCodes": []
+    },
+    {
+      "route": "/profile",
+      "hasLoginGate": true,
+      "hasNotFoundCopy": false,
+      "hasSpinnerOnly": false,
+      "interactive": [
+        {
+          "href": "",
+          "role": "",
+          "tag": "button",
+          "text": "去登录"
+        }
+      ],
+      "shellLeaks": [],
+      "textLength": 23,
+      "textSample": "Agora 请先登录后进入创作者中心。 去登录",
+      "title": "创作者中心",
+      "url": "http://localhost/profile",
+      "visibleErrorCodes": []
+    },
+    {
+      "route": "/capabilities",
+      "hasLoginGate": true,
+      "hasNotFoundCopy": false,
+      "hasSpinnerOnly": false,
+      "interactive": [
+        {
+          "href": "",
+          "role": "",
+          "tag": "button",
+          "text": "去登录"
+        }
+      ],
+      "shellLeaks": [],
+      "textLength": 23,
+      "textSample": "Agora 请先登录后进入创作者中心。 去登录",
+      "title": "创作者中心",
+      "url": "http://localhost/capabilities",
+      "visibleErrorCodes": []
+    },
+    {
+      "route": "/create/import",
+      "hasLoginGate": true,
+      "hasNotFoundCopy": false,
+      "hasSpinnerOnly": false,
+      "interactive": [
+        {
+          "href": "",
+          "role": "",
+          "tag": "button",
+          "text": "去登录"
+        }
+      ],
+      "shellLeaks": [],
+      "textLength": 23,
+      "textSample": "Agora 请先登录后进入创作者中心。 去登录",
+      "title": "创作者中心",
+      "url": "http://localhost/create/import",
+      "visibleErrorCodes": []
+    },
+    {
+      "route": "/create/select",
+      "hasLoginGate": true,
+      "hasNotFoundCopy": false,
+      "hasSpinnerOnly": false,
+      "interactive": [
+        {
+          "href": "",
+          "role": "",
+          "tag": "button",
+          "text": "去登录"
+        }
+      ],
+      "shellLeaks": [],
+      "textLength": 23,
+      "textSample": "Agora 请先登录后进入创作者中心。 去登录",
+      "title": "创作者中心",
+      "url": "http://localhost/create/select",
+      "visibleErrorCodes": []
+    },
+    {
+      "route": "/create/extract",
+      "hasLoginGate": true,
+      "hasNotFoundCopy": false,
+      "hasSpinnerOnly": false,
+      "interactive": [
+        {
+          "href": "",
+          "role": "",
+          "tag": "button",
+          "text": "去登录"
+        }
+      ],
+      "shellLeaks": [],
+      "textLength": 23,
+      "textSample": "Agora 请先登录后进入创作者中心。 去登录",
+      "title": "创作者中心",
+      "url": "http://localhost/create/extract",
+      "visibleErrorCodes": []
+    },
+    {
+      "route": "/create/structure",
+      "hasLoginGate": true,
+      "hasNotFoundCopy": false,
+      "hasSpinnerOnly": false,
+      "interactive": [
+        {
+          "href": "",
+          "role": "",
+          "tag": "button",
+          "text": "去登录"
+        }
+      ],
+      "shellLeaks": [],
+      "textLength": 23,
+      "textSample": "Agora 请先登录后进入创作者中心。 去登录",
+      "title": "创作者中心",
+      "url": "http://localhost/create/structure",
+      "visibleErrorCodes": []
+    },
+    {
+      "route": "/create/publish",
+      "hasLoginGate": true,
+      "hasNotFoundCopy": false,
+      "hasSpinnerOnly": false,
+      "interactive": [
+        {
+          "href": "",
+          "role": "",
+          "tag": "button",
+          "text": "去登录"
+        }
+      ],
+      "shellLeaks": [],
+      "textLength": 23,
+      "textSample": "Agora 请先登录后进入创作者中心。 去登录",
+      "title": "创作者中心",
+      "url": "http://localhost/create/publish",
+      "visibleErrorCodes": []
+    },
+    {
+      "route": "/a/nonexistent-e2e-test-slug",
+      "hasLoginGate": false,
+      "hasNotFoundCopy": false,
+      "hasSpinnerOnly": false,
+      "interactive": [
+        {
+          "href": "/",
+          "role": "",
+          "tag": "a",
+          "text": "A Agora"
+        }
+      ],
+      "shellLeaks": [],
+      "textLength": 49,
+      "textSample": "A Agora 公开能力页即将上线 能力的对外只读页正在筹备中，将随市集消费侧一起开放。敬请期待。",
+      "title": "创作者中心",
+      "url": "http://localhost/a/nonexistent-e2e-test-slug",
+      "visibleErrorCodes": []
+    },
+    {
+      "route": "/c/nonexistent-creator-e2e",
+      "hasLoginGate": false,
+      "hasNotFoundCopy": false,
+      "hasSpinnerOnly": false,
+      "interactive": [
+        {
+          "href": "/",
+          "role": "",
+          "tag": "a",
+          "text": "A Agora"
+        }
+      ],
+      "shellLeaks": [],
+      "textLength": 53,
+      "textSample": "A Agora 公开创作者主页即将上线 创作者的对外只读主页正在筹备中，将随市集消费侧一起开放。敬请期待。",
+      "title": "创作者中心",
+      "url": "http://localhost/c/nonexistent-creator-e2e",
+      "visibleErrorCodes": []
+    },
+    {
+      "route": "/creators/me/profile",
+      "hasLoginGate": true,
+      "hasNotFoundCopy": false,
+      "hasSpinnerOnly": false,
+      "interactive": [
+        {
+          "href": "/",
+          "role": "",
+          "tag": "a",
+          "text": "A Agora"
+        },
+        {
+          "href": "",
+          "role": "",
+          "tag": "button",
+          "text": "去登录"
+        }
+      ],
+      "shellLeaks": [],
+      "textLength": 75,
+      "textSample": "A Agora 登录后才能查看“我的个人主页”，请先登录。 去登录 反馈代码：af47ae99-ea86-4c17-a989-3d5455bb4be7",
+      "title": "创作者中心",
+      "url": "http://localhost/creators/me/profile",
+      "visibleErrorCodes": []
+    },
+    {
+      "route": "/creators/not-a-uuid/profile",
+      "hasLoginGate": false,
+      "hasNotFoundCopy": true,
+      "hasSpinnerOnly": false,
+      "interactive": [
+        {
+          "href": "/",
+          "role": "",
+          "tag": "a",
+          "text": "A Agora"
+        },
+        {
+          "href": "",
+          "role": "",
+          "tag": "button",
+          "text": "去修改"
+        }
+      ],
+      "shellLeaks": [],
+      "textLength": 71,
+      "textSample": "A Agora 没找到这个创作者，可能链接失效了。 去修改 反馈代码：9bacd44d-fcfe-4571-bc09-ec40b0c79e7a",
+      "title": "创作者中心",
+      "url": "http://localhost/creators/not-a-uuid/profile",
+      "visibleErrorCodes": []
+    },
+    {
+      "route": "/creators/00000000-0000-4000-8000-000000000000/profile",
+      "hasLoginGate": false,
+      "hasNotFoundCopy": true,
+      "hasSpinnerOnly": false,
+      "interactive": [
+        {
+          "href": "/",
+          "role": "",
+          "tag": "a",
+          "text": "A Agora"
+        },
+        {
+          "href": "",
+          "role": "",
+          "tag": "button",
+          "text": "去修改"
+        }
+      ],
+      "shellLeaks": [],
+      "textLength": 71,
+      "textSample": "A Agora 没找到这个创作者，可能链接失效了。 去修改 反馈代码：2afe3645-c6e0-465a-93ef-d24f9e7420ed",
+      "title": "创作者中心",
+      "url": "http://localhost/creators/00000000-0000-4000-8000-000000000000/profile",
+      "visibleErrorCodes": []
+    },
+    {
+      "route": "/login?failureId=fake-check",
+      "hasLoginGate": true,
+      "hasNotFoundCopy": false,
+      "hasSpinnerOnly": false,
+      "interactive": [
+        {
+          "href": "/",
+          "role": "",
+          "tag": "a",
+          "text": "A Agora"
+        },
+        {
+          "href": "/api/v1/auth/login",
+          "role": "",
+          "tag": "a",
+          "text": "去登录"
+        },
+        {
+          "href": "/",
+          "role": "",
+          "tag": "a",
+          "text": "回到首页"
+        }
+      ],
+      "shellLeaks": [],
+      "textLength": 75,
+      "textSample": "A Agora 登录没能完成 这次登录没能完成，请重新登录。如果多次失败，可凭下方反馈代码联系我们。 去登录 回到首页 反馈代码：fake-check",
+      "title": "创作者中心",
+      "url": "http://localhost/login?failureId=fake-check",
+      "visibleErrorCodes": []
+    },
+    {
+      "route": "/definitely-not-a-real-route",
+      "hasLoginGate": true,
+      "hasNotFoundCopy": false,
+      "hasSpinnerOnly": false,
+      "interactive": [
+        {
+          "href": "/",
+          "role": "",
+          "tag": "a",
+          "text": "A Agora"
+        },
+        {
+          "href": "/",
+          "role": "",
+          "tag": "a",
+          "text": "回到首页"
+        },
+        {
+          "href": "/api/v1/auth/login",
+          "role": "",
+          "tag": "a",
+          "text": "去登录"
+        }
+      ],
+      "shellLeaks": [],
+      "textLength": 44,
+      "textSample": "A Agora 页面不存在或已失效 你访问的链接可能已变更或不再可用。 回到首页 去登录",
+      "title": "创作者中心",
+      "url": "http://localhost/definitely-not-a-real-route",
+      "visibleErrorCodes": []
+    }
+  ],
+  "logs": []
+}
