@@ -57,6 +57,20 @@ function SubsetPreset() {
   );
 }
 
+/** 子集预置探针（跨页边界）：把 selection 设为 subset(c1, c21)——c21 落在后端默认 20 分页之外，
+ *  用于验证 STEP③ 取候选必须 limit=100 全量加载、子集 id 不被截断丢弃（BUG-020）。 */
+function SubsetPresetAcrossPage() {
+  const { setSelection } = useWizard();
+  return (
+    <button
+      type="button"
+      onClick={() => setSelection({ mode: 'subset', candidateIds: ['c1', 'c21'] })}
+    >
+      预置子集c1c21
+    </button>
+  );
+}
+
 function renderPage(initialPath: string, draftId = 'd1', extractJobId?: string) {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
@@ -101,6 +115,9 @@ describe('SelectStepPage', () => {
     // 取候选用提取域端点（只读 ready）。
     expect(mock.calls.some((c) => c.url.includes('/extract-jobs/ej1/candidates'))).toBe(true);
     expect(mock.calls[0]!.url).toContain('status=ready');
+    // 守门（BUG-020）：必须显式带 limit=MAX_PAGE_LIMIT（100），取齐全量 ready 候选；
+    //   回退到后端默认 20 分页会让 STEP② 子集落 20 名外时被截断丢弃 → 此断言会红。
+    expect(mock.calls[0]!.url).toContain('limit=100');
   });
 
   it('无 extractJobId → 空态引导（不空打后端）', async () => {
@@ -284,6 +301,61 @@ describe('SelectStepPage', () => {
       expect(patch?.body).toEqual({ selection: { mode: 'subset', candidateIds: ['c1', 'c2'] } });
     });
     // 子集照样进发布步建批（不漏进结构化）。
+    await waitFor(() =>
+      expect(screen.getByTestId('path')).toHaveTextContent('/create/publish?draftId=d1'),
+    );
+  });
+
+  it('候选 >20 且子集含第 21 项 → limit=100 全量取候选，子集承接不被分页截断（BUG-020）', async () => {
+    // 21 个 ready 候选（c1..c21）；STEP② 子集勾了 c1+c21（c21 落在后端默认 20 分页之外）。
+    //   关键：取候选必须 limit=100 把 c21 也加载进来，SelectStep 的「过滤仍在候选内的子集 id」才不会丢 c21，
+    //   否则子集收缩 → 「全部发布这 N 项」退化成「发布全部 ready」。
+    const many = Array.from({ length: 21 }, (_, i) =>
+      candidate({ id: `c${i + 1}`, name: `能力${i + 1}` }),
+    );
+    mock = installFetchMock([
+      {
+        status: 200,
+        json: {
+          data: many,
+          meta: { page: { hasMore: false, nextCursor: null, limit: 100, order: 'asc' } },
+        },
+      },
+      { status: 200, json: { data: {} } },
+    ]);
+    render(
+      <MemoryRouter initialEntries={['/create/select']}>
+        <WizardProvider initialStep="select" initialDraftId="d1" initialExtractJobId="ej1">
+          <Routes>
+            <Route
+              path="/create/select"
+              element={
+                <>
+                  <PathProbe />
+                  <SubsetPresetAcrossPage />
+                  <SelectStepPage />
+                  <FooterProbe />
+                </>
+              }
+            />
+            <Route path="/create/structure" element={<PathProbe />} />
+            <Route path="/create/publish" element={<PathProbe />} />
+          </Routes>
+        </WizardProvider>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByText('能力21')).toBeInTheDocument());
+    // 守门：取候选带 limit=100（回退默认 20 会让 c21 不在候选集 → 子集被截断 → 此用例及文案断言全红）。
+    expect(mock.calls[0]!.url).toContain('limit=100');
+    // 预置 STEP② 子集（c1, c21）。
+    await userEvent.click(screen.getByRole('button', { name: '预置子集c1c21' }));
+    // 子集 2 项 < 全 21 项 → 真子集文案「这 2 项」（c21 未被丢弃才会是 2 项；被截断会变「全部 21 项」）。
+    await userEvent.click(screen.getByRole('button', { name: '下一步：全部发布这 2 项 →' }));
+    // PATCH 持久化的正是 STEP② 的精确子集（含落在 20 名外的 c21）。
+    await waitFor(() => {
+      const patch = mock.calls.find((c) => c.method === 'PATCH');
+      expect(patch?.body).toEqual({ selection: { mode: 'subset', candidateIds: ['c1', 'c21'] } });
+    });
     await waitFor(() =>
       expect(screen.getByTestId('path')).toHaveTextContent('/create/publish?draftId=d1'),
     );

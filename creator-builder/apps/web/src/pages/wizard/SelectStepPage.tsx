@@ -11,7 +11,12 @@
 //   两条都先 persist selection（已生成不丢、续传精确），再 navigate；持久化失败落 ErrorState、不前进。
 import { useEffect, useState, type ReactElement } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { isSubsetSelection, type CandidateView, type SelectionDraft } from '@cb/shared';
+import {
+  isSubsetSelection,
+  MAX_PAGE_LIMIT,
+  type CandidateView,
+  type SelectionDraft,
+} from '@cb/shared';
 import { ApiError } from '../../api/index.js';
 import { ErrorState, LoadingState } from '../../components/index.js';
 import { useWizard } from './WizardContext.js';
@@ -53,7 +58,15 @@ export function SelectStepPage(): ReactElement {
     setState({ kind: 'loading' });
     void (async () => {
       try {
-        const res = await fetchSelectCandidates(effectiveExtractJobId, {}, { signal: ctrl.signal });
+        // 取齐本次萃取的全部 ready 候选（limit=MAX_PAGE_LIMIT，不走后端默认 20 分页，BUG-020）：
+        //   STEP③ 单选列表 / 「全部发布」承接 STEP② 的子集口径，必须基于完整 ready 候选集——否则候选 >20 时
+        //   只取前 20，SelectStep 的子集过滤（filter id∈当前候选）会把落在 20 名外的子集 id 静默丢弃，
+        //   导致「全部发布这 N 项」退化成「发布全部 ready」、单选 id 在 20 名外时也不会被预选。
+        const res = await fetchSelectCandidates(
+          effectiveExtractJobId,
+          { limit: MAX_PAGE_LIMIT },
+          { signal: ctrl.signal },
+        );
         if (active) setState({ kind: 'ready', candidates: res.candidates });
       } catch (e) {
         if (!active) return;
