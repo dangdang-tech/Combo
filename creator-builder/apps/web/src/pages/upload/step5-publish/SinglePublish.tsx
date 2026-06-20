@@ -49,6 +49,8 @@ export interface SinglePublishProps {
   onDone: () => void;
   /** 「编辑后重发」：按被拒版派生新 draft 回结构化向导（fromVersionId，P1-5 闭环入口）。 */
   onEditResubmit: (rejectedVersionId: string) => void;
+  /** 单条发布进入终态（发布成功，reviewStatus=alpha_pending/published）时上抛，供父层切底栏+步骤条终态（BUG-022）。 */
+  onPublished?: (reviewStatus: PublishResult['reviewStatus']) => void;
 }
 
 export function SinglePublish({
@@ -57,6 +59,7 @@ export function SinglePublish({
   registerPublish,
   onDone,
   onEditResubmit,
+  onPublished,
 }: SinglePublishProps): ReactElement {
   const [preview, setPreview] = useState<PreviewState>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
@@ -181,6 +184,14 @@ export function SinglePublish({
       enabled: canPublish,
     });
   }, [registerPublish, publishing, canPublish]);
+
+  // 发布成功上抛终态（BUG-022）：result 出现即通知父层切底栏「回工作台」+ 步骤条标已完成。
+  //   onPublished 经 ref 读，避免父层每渲染换引用把它放进 effect 依赖触发误抛；依赖仅 [result]，发布成功仅触发一次。
+  const onPublishedRef = useRef(onPublished);
+  onPublishedRef.current = onPublished;
+  useEffect(() => {
+    if (result) onPublishedRef.current?.(result.reviewStatus);
+  }, [result]);
 
   // —— 已发布：显「Alpha·审核中」（发布-15）——
   if (result) {

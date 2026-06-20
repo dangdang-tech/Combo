@@ -61,6 +61,12 @@ export interface WizardState {
    * 各步在 effect 内 setSummaryPrefix（离开/卸载时清回 undefined），WizardShell 透传给 WizardFooter。
    */
   summaryPrefix: string | undefined;
+  /**
+   * 末步（STEP⑤）单条发布是否已进入终态（发布成功，reviewStatus=alpha_pending/published，BUG-022）。
+   * PublishStepPage 发布成功后 setPublishCompleted(true)（卸载/换批量模式清回 false）；WizardShell 据它把
+   * STEP⑤ 步骤条从「进行中」标「已完成」，与页面主体「已提交，Alpha 人工评审中」+ 底栏「回工作台」终态一致。
+   */
+  publishCompleted: boolean;
 }
 
 export interface WizardActions {
@@ -94,6 +100,8 @@ export interface WizardActions {
   setPrimaryAction: (action: PrimaryAction | null) => void;
   /** 设/清底栏摘要前缀（各步 effect 内注入，如 STEP① 完成态「原始数据仅你可见 · 」5.1.3；卸载置 undefined）。 */
   setSummaryPrefix: (prefix: string | undefined) => void;
+  /** 标/清末步发布终态（STEP⑤ 单发布成功后置 true，使步骤条标已完成；卸载/换批量模式清回 false，BUG-022）。 */
+  setPublishCompleted: (completed: boolean) => void;
 }
 
 export interface WizardContextValue extends WizardState, WizardActions {
@@ -114,7 +122,8 @@ type Action =
   | { type: 'setBatchId'; batchId: string | undefined }
   | { type: 'hydrateFromDraft'; draft: DraftView }
   | { type: 'setPrimaryAction'; action: PrimaryAction | null }
-  | { type: 'setSummaryPrefix'; prefix: string | undefined };
+  | { type: 'setSummaryPrefix'; prefix: string | undefined }
+  | { type: 'setPublishCompleted'; completed: boolean };
 
 interface InternalState extends WizardState {
   primaryAction: PrimaryAction | null;
@@ -183,6 +192,10 @@ function reducer(state: InternalState, action: Action): InternalState {
       return state.summaryPrefix === action.prefix
         ? state
         : { ...state, summaryPrefix: action.prefix };
+    case 'setPublishCompleted':
+      return state.publishCompleted === action.completed
+        ? state
+        : { ...state, publishCompleted: action.completed };
     default:
       return state;
   }
@@ -229,6 +242,7 @@ export function WizardProvider({
     capabilityId: initialCapabilityId,
     batchId: initialBatchId,
     summaryPrefix: undefined,
+    publishCompleted: false,
     primaryAction: null,
   });
 
@@ -284,6 +298,10 @@ export function WizardProvider({
     (prefix: string | undefined) => dispatch({ type: 'setSummaryPrefix', prefix }),
     [],
   );
+  const setPublishCompleted = useCallback(
+    (completed: boolean) => dispatch({ type: 'setPublishCompleted', completed }),
+    [],
+  );
 
   const value = useMemo<WizardContextValue>(
     () => ({
@@ -301,6 +319,7 @@ export function WizardProvider({
       hydrateFromDraft,
       setPrimaryAction,
       setSummaryPrefix,
+      setPublishCompleted,
     }),
     [
       state,
@@ -317,6 +336,7 @@ export function WizardProvider({
       hydrateFromDraft,
       setPrimaryAction,
       setSummaryPrefix,
+      setPublishCompleted,
     ],
   );
 

@@ -29,6 +29,7 @@ export function PublishStepPage(): ReactElement {
     batchId: ctxBatchId,
     setBatchId,
     setPrimaryAction,
+    setPublishCompleted,
   } = useWizard();
 
   // version 来源优先级（续传不缺版本，F-14）：URL ?version=（STEP④ 进入带入）→ 草稿续传回填的 ctxVersionId
@@ -80,9 +81,11 @@ export function PublishStepPage(): ReactElement {
     (a: { onPublish: () => void; busy: boolean; enabled: boolean }) => setPubAction(a),
     [],
   );
+  // 单条发布是否已进入终态（发布成功，BUG-022）：底栏主按钮切「回工作台」、步骤条 STEP⑤ 标已完成。
+  const [published, setPublished] = useState(false);
 
   useEffect(() => {
-    if (mode === 'single' && urlVersionId) {
+    if (mode === 'single' && urlVersionId && !published) {
       setPrimaryAction({
         label: pubAction.busy ? '发布中…' : '发布到市集',
         enabled: pubAction.enabled,
@@ -90,11 +93,21 @@ export function PublishStepPage(): ReactElement {
         onNext: () => pubAction.onPublish(),
       });
     } else {
-      // 批量 / 无 single：底栏给「回工作台」（末步无「下一步」）。
+      // 批量 / 无 single / 单条已发布成功（终态）：底栏给「回工作台」（不再保留禁用的「发布到市集」，BUG-022）。
       setPrimaryAction({ label: '回工作台', enabled: true, onNext: goDashboard });
     }
     return () => setPrimaryAction(null);
-  }, [mode, urlVersionId, pubAction, setPrimaryAction, goDashboard]);
+  }, [mode, urlVersionId, published, pubAction, setPrimaryAction, goDashboard]);
+
+  // 单条发布成功 → 标步骤条 STEP⑤ 终态「已完成」（与底栏「回工作台」+ 页面主体「Alpha 人工评审中」一致，BUG-022）。
+  //   仅 single 终态标；卸载/换批量模式时清回 false，不影响未发布态与批量态步骤条。
+  useEffect(() => {
+    if (published && mode === 'single') {
+      setPublishCompleted(true);
+      return () => setPublishCompleted(false);
+    }
+    return undefined;
+  }, [published, mode, setPublishCompleted]);
 
   // 左侧能力切换项（single 一项；批量列出整批候选，子集即子集 N 项）。
   const switcherItems = useMemo(() => {
@@ -152,6 +165,7 @@ export function PublishStepPage(): ReactElement {
                 registerPublish={registerPublish}
                 onDone={goDashboard}
                 onEditResubmit={goEditResubmit}
+                onPublished={() => setPublished(true)}
               />
             ) : (
               <ErrorState

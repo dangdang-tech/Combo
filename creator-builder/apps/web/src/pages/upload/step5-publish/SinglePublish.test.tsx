@@ -221,6 +221,37 @@ describe('SinglePublish（P1-6 不发半成品封面）', () => {
     expect(body.cover).toEqual({ source: 'glyph' });
   });
 
+  it('BUG-022：发布成功 → onPublished(reviewStatus) 被调一次（供父层切底栏「回工作台」+ 步骤条终态）', async () => {
+    mock = installFetchMock([
+      { json: { data: publication({ reviewStatus: 'alpha_pending' }) } }, // fetchPublication
+      { json: { data: card() } }, // previewMarketCard
+      { json: { data: publishResult() } }, // publishVersion
+    ]);
+    let publishAction: (() => void) | undefined;
+    const registerPublish = (a: { onPublish: () => void; enabled: boolean }): void => {
+      if (a.enabled) publishAction = a.onPublish;
+    };
+    const onPublished = vi.fn();
+    render(
+      <SinglePublish
+        versionId={VERSION_ID}
+        capabilityId={CAP_ID}
+        registerPublish={registerPublish}
+        onDone={noop}
+        onEditResubmit={noop}
+        onPublished={onPublished}
+      />,
+    );
+    await screen.findByLabelText('市集卡预览');
+    await waitFor(() => expect(publishAction).toBeTypeOf('function'));
+    publishAction?.();
+    // 发布成功主体进入「Alpha·审核中」终态。
+    expect(await screen.findByText('已提交，Alpha 人工评审中')).toBeInTheDocument();
+    // 终态上抛恰一次、带真实 reviewStatus（父层据此切底栏「回工作台」+ 步骤条 STEP⑤ 标已完成）。
+    await waitFor(() => expect(onPublished).toHaveBeenCalledTimes(1));
+    expect(onPublished).toHaveBeenCalledWith('alpha_pending');
+  });
+
   it('无 capabilityId（不可读发布态）→ 直接进发布表单，不读发布态', async () => {
     mock = installFetchMock({ json: { data: card() } }); // 只会被 previewMarketCard 调
     render(

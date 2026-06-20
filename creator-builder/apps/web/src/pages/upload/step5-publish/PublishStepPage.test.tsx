@@ -7,11 +7,13 @@ import { useEffect } from 'react';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
-import type { MarketCard, PublishBatchView } from '@cb/shared';
+import type { MarketCard, PublishBatchView, PublicationView, PublishResult } from '@cb/shared';
 import { WizardProvider, useWizard } from '../../wizard/index.js';
+import { WizardFooter } from '../../wizard/WizardFooter.js';
 import { PublishStepPage } from './PublishStepPage.js';
 import { __setFetchEventSourceForTests } from '../../../api/useSSE.js';
 import { MockFetchEventSource } from '../../../test/mockFetchEventSource.js';
+import { installFetchMock, type FetchMock } from '../../../test/mockFetch.js';
 
 function card(name: string, versionId: string): MarketCard {
   return {
@@ -126,6 +128,100 @@ afterEach(() => {
   restoreFetch?.();
   restoreFetch = undefined;
   vi.restoreAllMocks();
+});
+
+describe('PublishStepPage（BUG-022 单条发布成功切终态：底栏「回工作台」）', () => {
+  const SV = 'cv-1';
+  const SC = 'cap-1';
+
+  function singlePublication(): PublicationView {
+    return {
+      capabilityId: SC,
+      currentVersionId: SV,
+      slug: 'demo',
+      shareToken: 'tok',
+      visibility: 'public',
+      reviewStatus: 'alpha_pending',
+      publishedAt: '2026-06-17T00:00:00.000Z',
+    };
+  }
+  function singleCard(): MarketCard {
+    return { ...card('演示能力', SV), capabilityId: SC };
+  }
+  function singlePublishResult(): PublishResult {
+    return {
+      versionId: SV,
+      capabilityId: SC,
+      slug: 'demo',
+      shareToken: 'tok',
+      reviewStatus: 'alpha_pending',
+      visibility: 'public',
+      publishedVersionId: SV,
+      marketUrl: 'https://m/demo',
+      card: singleCard(),
+    };
+  }
+
+  /** 预置 single 选择（逐个选一项）。 */
+  function SeedSingle() {
+    const { setSelection } = useWizard();
+    useEffect(() => {
+      setSelection({ mode: 'single', candidateId: 'cand-1' });
+    }, [setSelection]);
+    return null;
+  }
+  /** 底栏探针：读 primaryAction 渲染底栏主按钮（PublishStepPage 自身不渲染底栏，在 WizardShell 内）。 */
+  function FooterProbe() {
+    const { currentStep, primaryAction } = useWizard();
+    return <WizardFooter currentStep={currentStep} primaryAction={primaryAction} />;
+  }
+
+  let smock: FetchMock | undefined;
+  afterEach(() => {
+    smock?.restore();
+    smock = undefined;
+  });
+
+  it('单发布成功 → 底栏从「发布到市集」切「回工作台」，不再保留禁用的发布按钮', async () => {
+    smock = installFetchMock([
+      { status: 200, json: { data: singlePublication() } }, // fetchPublication（进页读发布态）
+      { status: 200, json: { data: singleCard() } }, // previewMarketCard
+      { status: 200, json: { data: singlePublishResult() } }, // publishVersion
+    ]);
+    render(
+      <MemoryRouter initialEntries={[`/create/publish?version=${SV}&capability=${SC}`]}>
+        <WizardProvider initialStep="publish" initialDraftId="d1">
+          <SeedSingle />
+          <Routes>
+            <Route
+              path="/create/publish"
+              element={
+                <>
+                  <PublishStepPage />
+                  <FooterProbe />
+                </>
+              }
+            />
+            <Route path="/creator" element={<div>dashboard</div>} />
+          </Routes>
+        </WizardProvider>
+      </MemoryRouter>,
+    );
+    // 发布前：底栏主按钮 = 「发布到市集」，预览就绪后可点。
+    const pubBtn = await screen.findByRole('button', { name: '发布到市集' });
+    await waitFor(() => expect(pubBtn).toBeEnabled());
+    await userEvent.click(pubBtn);
+    // 发布成功：主体进入「Alpha·审核中」终态。
+    expect(await screen.findByText('已提交，Alpha 人工评审中')).toBeInTheDocument();
+    // 底栏切「回工作台」（主体也有一个回工作台，故 ≥1）；关键：禁用的「发布到市集」按钮消失。
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: '回工作台' }).length).toBeGreaterThanOrEqual(1),
+    );
+    expect(screen.queryByRole('button', { name: '发布到市集' })).not.toBeInTheDocument();
+    // 点底栏「回工作台」回工作台（末步终态退出）。
+    await userEvent.click(screen.getAllByRole('button', { name: '回工作台' })[0]!);
+    expect(await screen.findByText('dashboard')).toBeInTheDocument();
+  });
 });
 
 describe('PublishStepPage（发布-09 批量左侧切换换中间市集卡）', () => {

@@ -46,6 +46,7 @@ export function WizardShell(): ReactElement {
     versionId,
     capabilityId,
     batchId,
+    publishCompleted,
   } = wizard;
 
   // 路由变化 → 同步当前步到上下文（步骤条/底栏/各步据它算）。
@@ -73,7 +74,14 @@ export function WizardShell(): ReactElement {
     capabilityId,
     batchId,
   });
-  const nodes = buildStepNodes(routeStep, stepErrors, progressStep);
+  // 末步发布终态（BUG-022）：STEP⑤ 单发布成功后 publishCompleted=true → 把 'publish' 作终态覆写传入，
+  //   使步骤条 STEP⑤ 从「进行中」标「已完成」，与页面主体终态 + 底栏「回工作台」一致；未完成则不覆写（仍进行中）。
+  const nodes = buildStepNodes(
+    routeStep,
+    stepErrors,
+    progressStep,
+    publishCompleted ? 'publish' : undefined,
+  );
 
   // 点已完成 / 异常步 → 回看 / 重试（贯穿-16）：跳该步路由（保留 ?draftId 续传上下文）。
   const handleNavigate = (step: (typeof nodes)[number]['step']): void => {

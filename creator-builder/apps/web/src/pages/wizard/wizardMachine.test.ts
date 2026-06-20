@@ -132,6 +132,23 @@ describe('buildStepNodes（步骤条五态 + 续传）', () => {
     expect(byStep.structure!.status).toBe('todo');
     expect(byStep.publish!.status).toBe('current');
   });
+
+  it('BUG-022：completedStep 终态覆写 → 该步即便正被 URL 落点(current)也标 done 且可回看', () => {
+    // 末步发布成功：currentStep=publish（URL 落点），completedStep=publish → publish 从 current 变 done。
+    const nodes = buildStepNodes('publish', {}, 'publish', 'publish');
+    const byStep = Object.fromEntries(nodes.map((n) => [n.step, n]));
+    expect(byStep.publish!.status).toBe('done'); // 终态覆写：不再「进行中」
+    expect(byStep.publish!.navigable).toBe(true); // done 即可回看
+    expect(nodes.filter((n) => n.status === 'current')).toHaveLength(0); // 无「进行中」步
+    expect(nodes.filter((n) => n.status === 'done')).toHaveLength(5); // 五步全完成
+  });
+
+  it('BUG-022：不传 completedStep（向后兼容）→ 末步仍「进行中」，三参行为不变', () => {
+    const nodes = buildStepNodes('publish', {}, 'publish');
+    const byStep = Object.fromEntries(nodes.map((n) => [n.step, n]));
+    expect(byStep.publish!.status).toBe('current'); // 未覆写：仍进行中
+    expect(nodes.filter((n) => n.status === 'done')).toHaveLength(4);
+  });
 });
 
 describe('progressFrontier（真实产物锚点 → 进度前沿，BUG-009）', () => {

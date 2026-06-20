@@ -115,11 +115,14 @@ export type StepErrors = Partial<Record<DraftStep, boolean>>;
  *
  * @param progressStep 实际进度前沿步；缺省退回 currentStep（纯函数单测口径不变：有进度即按 URL 推 done）。
  *   WizardShell 据 draft 锚点判定：有 draft/锚点 → 传 URL 落点（合法续传/前进）；无任何锚点 → 传首步（不伪造前序 done）。
+ * @param completedStep 终态覆写（BUG-022）：该步即便正被 URL 落点（current），也强制标 done——用于「末步
+ *   STEP⑤ 单条发布成功」后，步骤条不再显「进行中」。缺省 undefined（不覆写，行为与原三参一致，向后兼容）。
  */
 export function buildStepNodes(
   currentStep: DraftStep,
   errors: StepErrors = {},
   progressStep: DraftStep = currentStep,
+  completedStep?: DraftStep,
 ): StepNodeView[] {
   const curIdx = stepIndex(currentStep);
   // done 前沿 = URL 落点与实际进度二者取小：URL 再深，没真实进度托底也不标前序 done（BUG-009）。
@@ -128,6 +131,8 @@ export function buildStepNodes(
     const idx = stepIndex(step);
     let status: StepStatus;
     if (errors[step]) status = 'error';
+    // 终态覆写（BUG-022）：某步已完成（如末步发布成功）即便正被 URL 落点，也标 done、不再「进行中」。
+    else if (step === completedStep) status = 'done';
     else if (idx === curIdx) status = 'current';
     else if (idx < doneFrontier) status = 'done';
     else status = 'todo';
