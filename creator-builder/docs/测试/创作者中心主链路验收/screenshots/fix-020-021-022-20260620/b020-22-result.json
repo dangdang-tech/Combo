@@ -1,0 +1,17 @@
+{
+  "step2CandidateCount": 24,
+  "step2Analyzed": "已分析 24 段原始数据，识别出 24 个能力项",
+  "step3OptionCount": 24,
+  "step3SelectCandidateReqs": [
+    "http://localhost/api/v1/extract-jobs/019ee2c0-9a92-772d-91bb-8ec3d3627cbc/candidates?limit=100&order=asc&status=ready"
+  ],
+  "step3HasLimit100": true,
+  "step3AllHint": "把识别出的 24 个能力一次性自动整理、批量发布，跳过逐个展开。",
+  "footerBeforePublish": "发布到市集",
+  "stepbarPublishBefore": "current",
+  "publishBody": "已提交，Alpha 人工评审中 | 回工作台 | 回工作台",
+  "footerAfterPublish": "回工作台",
+  "stepbarPublishAfter": "done",
+  "stepbarPublishMark": "✓",
+  "draftId": "019ee2c0-5bd4-7302-87a8-0919119edaa7"
+}

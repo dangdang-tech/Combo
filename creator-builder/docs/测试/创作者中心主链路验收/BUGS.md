@@ -2538,3 +2538,192 @@ docker compose --env-file .env -f infra/docker-compose.yml build web && up -d we
 
 - 极大目录（>25 万文件）仍可能超 32m；本期未给 part 数上限/分批 presign（未来可批量签发或客户端打包）。属可接受边界，已 log 说明。
 - 真实 `.codex` 整目录登录态完整跑通待测试员复跑确认（本地验的是体上限闸门，非整链）。
+
+## 持续验收记录（2026-06-20 00:20 Asia/Shanghai，Chrome Computer Use：STEP1 `.codex` 文件夹导入专项复测）
+
+本轮目标：只验证用户反馈的「选择文件夹 → 选择 `.codex` 目录 → 上传」问题；不修改业务代码。为避免上传真实 `~/.codex` 中的个人历史，本轮使用安全构造的 `.codex/sessions/.../*.jsonl` fixture。
+
+读取/环境：
+
+- 工作根：`/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder`
+- 契约重点：`docs/contracts/20-step1-import.md` 的 B-20 浏览器直传路径（`presign → PUT part → import/jobs → job SSE`）。
+- 运行栈：`GET http://localhost/ready` 返回 `ready=true`，db / redis / minio / logto 均 ok。
+- 浏览器：Chrome 插件 / Computer Use，登录态可用，页面账号 `f645ddpk87wi · 创作者`。
+- 证据目录：`docs/测试/创作者中心主链路验收/screenshots/post-fix-retest-20260620-codex-folder/`
+
+实测结果：
+
+| 场景 | 结果 | 证据 |
+| --- | --- | --- |
+| 安全单会话 `.codex` 文件夹（1 个 `sessions/2026/06/20/*.jsonl`） | 通过。真实点击「选择文件夹」并选择 `.codex` 目录后，网络出现 `POST /api/v1/import/uploads/presign 200` → MinIO PUT → `POST /api/v1/import/jobs 202` → `GET /api/v1/jobs/{jobId}/events 200`；页面进入「已导入全部对话历史（Codex）」完成态，统计 1 段 / 4 条消息 / 1 项目。 | `09-after-valid-codex-folder-select.png`、`10-after-valid-codex-folder-wait.png`、`network-after-valid-codex-folder.json` |
+| 安全多文件 `.codex` 文件夹（25 个 Codex JSONL 会话） | 通过。真实点击「选择文件夹」选择 `/tmp/cb-codex-many/.codex` 后，网络出现 1 次 presign、25 个 PUT、1 次 `import/jobs`、1 条 job SSE；页面完成态显示「已导入全部对话历史（Codex）」、25 段 / 100 条消息 / 25 项目，下一步按钮可用。 | `11-before-multifile-codex-folder.png`、`12-after-multifile-codex-folder-select.png`、`13-after-multifile-codex-folder-wait.png`、`network-after-multifile-codex-folder.json` |
+
+回归结论：
+
+- `BUG-013` 的浏览器内导入主路径在本轮专项下通过：不是只能靠命令行/助手脚本，普通用户路径「选择文件夹导入 `.codex`」可完成 B-20 全链路。
+- `BUG-019` 的整目录 presign 413 修复通过本轮登录态 E2E 补证：至少 25 文件 `.codex` 目录不再被 nginx / Fastify 体上限挡住，并能完整导入。
+- 本轮没有新增产品 bug。CDP 对 MinIO PUT 记录里可见 `status: 200` 后伴随 `net::ERR_ABORTED`，但 UI 完成态、`import/jobs 202` 和 job SSE 均成功；按结果不记为缺陷，保留原始 network JSON 供后续需要时复核。
+
+剩余风险：
+
+- 未上传真实用户 `~/.codex` 全目录，原因是其中可能包含个人会话历史和敏感信息。若后续需要验证“真实超大目录”（上千/上万文件）边界，应由用户明确授权后再跑，或继续使用生成的大规模脱敏 fixture。
+
+## 持续验收记录（2026-06-20 00:55 Asia/Shanghai，Chrome Computer Use：`.codex` 导入后 Step2-5 完整复测）
+
+本轮目标：回答用户追问「后续步骤测试了吗」，接着 00:20 那条已经导入成功的 `.codex` 多文件草稿继续跑 Step2 → Step5。只做真实浏览器验证、截图、网络记录和轻量定位；未修改业务代码。
+
+读取/环境：
+
+- 工作根：`/Users/danielxing/repos/agora-mvp-creator-builder/creator-builder`
+- 契约重点：`docs/contracts/30-step2-extract.md`、`docs/contracts/40-step3-4-structure.md`、`docs/contracts/50-step5-publish.md`。
+- 浏览器：Chrome 插件 / Computer Use，复用真实登录态账号 `f645ddpk87wi · 创作者`；中途 Step2 首次触发时会话返回 401，随后通过真实 `/api/v1/auth/login?returnTo=...` 自动续上，未重新输入密码。
+- 草稿：`draftId=019ee0af-67bc-7ad8-8031-9ee998981e29`，上游 snapshot `019ee0af-745a-7f46-b5ca-ca58db5f94af`，输入为安全构造的 25 个 Codex JSONL 会话 fixture。
+- 证据目录：`docs/测试/创作者中心主链路验收/screenshots/post-fix-retest-20260620-codex-folder/`
+
+实测覆盖：
+
+| 步骤 | 结果 | 关键网络 / 交互 | 证据 |
+| --- | --- | --- | --- |
+| Step1 → Step2 | 有一次会话过期阻断，随后自动登录续回同一 URL；续回后 Step2 正常开始。 | 首次 `POST /api/v1/snapshots/.../extract` 返回 401，页面显示「登录态失效了，请重新登录。反馈代码：...」且无明显登录 CTA；导航 `/api/v1/auth/login?returnTo=...` 后 `/api/v1/me 200`，重新触发 `extract 202`。 | `15-after-click-step2.png`、`network-15-after-click-step2.json`、`16-after-auth-login-redirect.png`、`network-16-after-auth-login-redirect.json` |
+| Step2 提取 | 功能通过，但候选质量有明显问题。 | `POST /api/v1/snapshots/.../extract 202`，`GET /api/v1/jobs/019ee0bf-57e3-7ea7-aec9-0881ad612bf3/events 200`；约 40 秒后显示「已分析 25 段原始数据，识别出 25 个能力项」。 | `17-step2-progress-20s.png`、`18-step2-progress-40s.png` |
+| Step2 勾选 → Step3 | 功能能进入，但选择状态未被正确承接。 | Step2 只勾选 1 项后底部按钮显示「下一步：批量处理已选 1 项」；进入 Step3 后页面又显示 20 个可选能力和「全部发布（不逐个选）把识别出的 20 个能力一次性...」。 | `19-step2-after-select-one.png`、`20-after-step2-next-to-step3.png`、`network-20-after-step2-next-to-step3.json` |
+| Step3 → Step4 | 通过。 | 点击默认选中的能力后，`PATCH /api/v1/drafts/.../selection 200`，`POST /api/v1/capabilities 201`，`GET /api/v1/versions/.../manifest 200`，`POST /api/v1/versions/.../structure` 发起。 | `21-after-step3-next-to-step4.png`、`network-21-after-step3-next-to-step4.json` |
+| Step4 结构化 | 通过。 | `POST /api/v1/versions/7f275646-7c83-4004-ad53-5dd6e4b449b8/structure 202`，`GET /api/v1/versions/.../structure/events 200`；5 秒约 4/7，20 秒约 5/7，约 45 秒软字段完成、底部「下一步：发布到市集」可点。 | `22-step4-progress-5s.png`、`23-step4-progress-20s.png`、`24-step4-progress-45s.png` |
+| Step5 发布 | 通过，但成功态 UI 有问题。 | `POST /api/v1/versions/7f275646-7c83-4004-ad53-5dd6e4b449b8/market-card/preview 200`；点击「发布到市集」后 `POST /api/v1/versions/.../publish 200`，页面显示「已提交，Alpha 人工评审中」。 | `25-after-step4-next-to-step5.png`、`26-after-click-publish.png`、`network-25-after-step4-next-to-step5.json`、`network-26-after-click-publish.json` |
+
+结论：
+
+- Step1 到 Step5 这条 `.codex` 多文件导入后的主功能链路可以跑完：导入、提取、选择、结构化、发布均有真实浏览器点击和网络证据。
+- `BUG-013` 在本轮 `.codex` fixture 下继续通过：浏览器内导入路径可用，不再只能靠命令行/助手脚本。
+- 仍有新的产品/UI 问题：见 `BUG-020`、`BUG-021`、`BUG-022`。此外，Step2 首次 401 后缺少登录 CTA，和既有鉴权边界问题同类，本轮先作为观察记录，不另拆新号。
+- 本轮没有重新拉 Figma MCP 做逐像素比对；这里只补用户追问的 Step2-5 功能闭环与明显 UI/交互问题。UI 高保真仍沿用 `BUG-012`/`BUG-016` 作为长期 P0/P1 回归项。
+
+## BUG-020：Step2 勾选子集后进入 Step3，子集选择未被承接
+
+**严重级别**：P1（影响批量/单项选择语义，可能导致误发布范围）
+
+**状态**：已修待回归（commit 95c6141；登录态 E2E 实测 Step3 取候选 limit=100、24 候选全载、「全部发布 24 个」）
+
+修复摘要：
+- 真根因（修正初判）：Step2 写 selection、Step3 读 selection 都是对的，断裂点在 `apps/web/src/pages/wizard/SelectStepPage.tsx` 取候选未传 `limit` → 后端默认 `DEFAULT_PAGE_LIMIT=20` 截断。当 ready 候选 >20 时，`SelectStep` 的「只保留仍在当前候选集内的子集 id」过滤（`SelectStep.tsx:99-102`）把落在 20 名外的子集 id 静默丢弃 → `batchTargetIds` 退回 allReadyIds、`isProperSubset=false` →「全部发布这 N 项」退化成「发布全部 ready」；单选 id 在 20 名外时也不在列表、不预选。Step2 自身用 `limit:50`，两步口径不一致正是承接断裂处。
+- 改法：SelectStepPage 取候选显式 `{ limit: MAX_PAGE_LIMIT }`（=100，与后端同源、`parsePage` 接受 ≤100），取齐全量 ready 候选，子集承接不再被分页截断。对齐契约 40 §1.1「subset N<total 合法」「按 selection 预置」的输入完整性前提。
+- 测试：新增守门断言（取候选 URL 含 `limit=100`）+「候选 >20 且子集含第 21 项」回归用例（改前红、改后绿）；@cb/web 606 测 + tsc 全绿。
+
+自测证据（登录态真实浏览器，2026-06-20）：
+- 命令：`node /tmp/cb-shot/verify-bug020-022.js`（dist24 fixture：24 个领域互不相同的会话）。
+- network：`GET /api/v1/extract-jobs/{id}/candidates?limit=100&order=asc&status=ready`（`step3HasLimit100=true`）。
+- DOM：Step3 单选列表 `.cb-select__option` = **24 项**（旧版默认 20 会截断）；「全部发布」文案=「把识别出的 **24 个**能力…」。
+- 截图：`screenshots/fix-020-021-022-20260620/b020-02-select-step3.png`、`b020-22-result.json`。
+
+剩余风险：>100 ready 候选仍会被 MAX_PAGE_LIMIT 截断（极端；且 BUG-021 聚类修复已大幅降低候选数）；如需支持超大候选集需引入「全部发布」走 total 而非已载列表的服务端语义。
+
+—— 以下为原始记录 ——
+
+**初判状态**：Open
+
+**表现**：
+
+- Step2 提取完成后，我只勾选了 1 个候选，底部按钮准确显示「下一步：批量处理已选 1 项 →」。
+- 点击进入 Step3 后，页面没有只承接这 1 项，而是重新显示 20 个候选，并展示「全部发布（不逐个选）把识别出的 20 个能力一次性自动整理、批量发布」。
+- 这会让用户以为上一步已筛过范围，但下一步仍可能基于默认分页的 20 个候选做全部发布。
+
+**期望**：
+
+- `40-step3-4-structure.md §1.1` 和 `SelectStepPage.test.tsx` 的「STEP② 子集 N/total 进来」口径要求：Step3 应承接 Step2 子集选择；若上一步只选 1 项，应进入单项/子集 1 项语义，不应恢复为 20 个候选的全部发布入口。
+
+**证据**：
+
+- `19-step2-after-select-one.png`
+- `20-after-step2-next-to-step3.png`
+- `network-20-after-step2-next-to-step3.json`
+
+**初步定位**：
+
+- 前端 Step2 的 `selectedIds` 只驱动按钮文案，进入 Step3 时没有把该子集写入或注入 `WizardContext.selection`。
+- Step3 进入后按 `GET /api/v1/extract-jobs/{jobId}/candidates?status=ready&limit=20...` 重新取默认分页候选，因此只显示 20 项，丢失 Step2 的已选 1 项范围。
+
+## BUG-021：Step2 对高度相似 `.codex` 会话未聚类，25 段生成 25 个近重复候选
+
+**严重级别**：P2（候选质量/可用性问题；不阻断主链路，但会显著影响用户选择效率）
+
+**状态**：已修待回归（commit d2e166e；登录态 E2E 实测 25 相似段→1 候选 segment_count=25、24 distinct→24 候选不过度合并）
+
+修复摘要：
+- 根因：`apps/api/src/extract/cluster.ts` 的 `clusterSegments` 旧版先按 `segmentClusterKey`（项目/标题首词）硬分桶、再仅桶内 Jaccard 合并。25 个主题相似但来自不同 cwd（project 各异）、标题近重复的会话 → 25 桶 → 跨桶相似段永不比较 → 25 候选、每个 segment_count=1，违反契约 30 §2.1「worker 携 snapshot_id 只在该快照段集内聚类」（范围是同一快照、不是同一项目）。
+- 改法：移除分桶，改全局贪心合并——每段并入首个达标已有簇，合并信号三选一：a) 同一非空 project；b) **标题词袋 Jaccard ≥ 0.5 且双方标题词数 ≥ 3**（近重复标题是现场核心症状，标题指示性强、不被长正文稀释，最小词数守门避开「工作流」这类泛标题误触）；c) 全词袋（标题+正文）Jaccard ≥ 0.5。稳定排序/slug 唯一化/逐个浮现 asc 序/segment_count 血缘/状态机/SSE/fence 全未动。
+- 测试：extract 全套 87 测、api 全套 1058 测全绿，含新增正反两条（25 相似段聚成 ≤3 簇且最大簇 ≥20 不丢段；内容不相交两组不被误合）。
+
+自测证据（登录态真实浏览器 + DB，2026-06-20）：
+- 命令：`node /tmp/cb-shot/verify-bug021.js`（sim25 fixture：25 个正文各异但主题/标题高度相似的会话，过 content_hash 去重为 25 段）。
+- UI：Step2 完成态「已分析 **25** 段原始数据，识别出 **1** 个能力项」（旧版会是 25 个）。
+- DB：`capability_candidates` 该 extract job = **1 候选**、`segment_count=25`、`candidate_evidence`=**25 行**（血缘 25 段↔下钻 25 条不漂）。
+- 反向（dist24，24 领域互不相同）：识别出 **24 个**候选——聚类不过度合并，distinct 工作流保持独立。
+- 截图：`screenshots/fix-020-021-022-20260620/b021-02-extract-result.png`、`b021-result.json`、`b020-01-extract.png`。
+
+剩余风险：真实长会话若标题差异大、正文 Jaccard <0.5、project 又各异，仍可能偏多候选（标题信号是主要兜底）；如线上反馈过粗/过细，仅调阈值常量即可（不动结构）。同 project 下两类不同工作流可能被并簇、segment_count 偏大，但 scopeCoherence 低会触发 `splitSuggested`（契约提取-12「建议拆分」兜底）。
+
+—— 以下为原始记录 ——
+
+**初判状态**：Open
+
+**表现**：
+
+- 输入 fixture 为 25 个主题高度相似的 Codex 会话，均围绕「把访谈、运营和增长经验整理成可发布工作流」。
+- Step2 完成态显示「已分析 25 段原始数据，识别出 25 个能力项」。
+- 列表中大量标题/描述几乎重复，例如「创作者经验工作流沉淀」「创作者经验沉淀工作流」反复出现，每项都显示 1 段、置信中。
+
+**期望**：
+
+- `30-step2-extract.md` 对 Step2 的描述是「聚类相似工作流」「按相似工作流形成候选能力」。高度相似的会话应被合并为更少、更稳定的候选，并通过 `segmentCount` / 频次表达支撑段数，而不是一段生成一个候选。
+
+**证据**：
+
+- `17-step2-progress-20s.png`
+- `18-step2-progress-40s.png`
+
+**初步定位**：
+
+- 可疑在提取 worker 的聚类/去重策略：当前更像逐 segment 直接生成 candidate，缺少按 `snapshot_id` 内相似 intent/name/slug 的合并。
+- 也可能与 `GET /extract-jobs/{jobId}/candidates` 默认分页只返回前 20 项叠加，进一步放大 Step3 选择混乱。
+
+## BUG-022：Step5 发布成功后仍显示进行中状态和禁用的“发布到市集”底部按钮
+
+**严重级别**：P2（发布成功态 UI 不清晰；功能已成功，但用户容易误判仍未完成）
+
+**状态**：已修待回归（commit 794cdd5；登录态 E2E 实测发布后 footer「回工作台」+ 步骤条 STEP⑤ ✓ done）
+
+修复摘要：
+- 根因：发布成功只活在 `SinglePublish` 内部（result 一置位即渲染「已提交，Alpha 人工评审中」），未上抛给底栏与步骤条。底栏 `primaryAction` 仍按 `mode==='single'` 注册「发布到市集」、`enabled` 因 `canPublish` 转 false 变灰禁用；步骤条 `buildStepNodes` 把 URL 落点步恒标 current，故 STEP⑤ 一直「进行中」。
+- 改法（终态信号贯穿向导）：SinglePublish 新增 `onPublished` 回调（result 出现时上抛 reviewStatus，经 ref 仅触发一次）；PublishStepPage 接它置 `published` 态 → 底栏切「回工作台」（不再保留禁用发布按钮）+ `setPublishCompleted(true)`（卸载/换批量清回）；WizardContext 加 `publishCompleted` 单一真源；`buildStepNodes` 加可选第 4 参 `completedStep`（该步即便正被 URL 落点也强制标 done，置于 error 之后、current 之前），WizardShell 传 `publishCompleted?'publish':undefined`。三参/二参调用向后兼容。对齐契约 50 决策④/§2.1「发布同步事务成功即明确成功态」。
+- 测试：web 全套 606 测 + tsc 全绿，含新增四条（buildStepNodes 终态覆写正反、SinglePublish onPublished 上抛一次、PublishStepPage 单发布后底栏切「回工作台」且发布按钮消失）。
+
+自测证据（登录态真实浏览器，2026-06-20）：
+- 命令：`node /tmp/cb-shot/verify-bug020-022.js`（dist24 → 选单项 → 结构化 → 单发布）。
+- 发布前：footer=「发布到市集」、`.cb-stepbar__seg[data-step=publish]` data-status=`current`。
+- 发布后：footer=**「回工作台」**、步骤条 publish data-status=**`done`**、mark=**`✓`**、主体「已提交，Alpha 人工评审中」；点「回工作台」落 `/creator`。
+- 截图：`screenshots/fix-020-021-022-20260620/b022-04-publish-before.png`、`b022-05-publish-terminal.png`、`b020-22-result.json`。
+
+剩余风险：批量「全部发布」完成后步骤条终态本轮未动（`mode!=='single'` 不标，与本 bug 范围一致）；如测试员另报批量终态再单独处理。
+
+—— 以下为原始记录 ——
+
+**初判状态**：Open
+
+**表现**：
+
+- 点击 Step5「发布到市集」后，`POST /api/v1/versions/.../publish` 返回 200。
+- 页面主体显示「已提交，Alpha 人工评审中」和「回工作台」，说明发布事务成功。
+- 但步骤条仍显示 `STEP⑤ 发布（进行中）`，底部向导区域仍保留一个禁用的「发布到市集」按钮。
+
+**期望**：
+
+- 发布成功态应明确进入完成/已提交状态，底部主按钮应切换为「回工作台」或隐藏重复的发布按钮，避免用户误以为发布仍在处理中或按钮卡死。
+
+**证据**：
+
+- `26-after-click-publish.png`
+- `network-26-after-click-publish.json`
+
+**初步定位**：
+
+- 可疑在 `apps/web/src/pages/upload/step5-publish/PublishStepPage.tsx` / Wizard footer 注册逻辑：发布成功后页面主体状态更新了，但 `WizardContext.primaryAction` 或 step completion 状态没有同步更新为终态。
