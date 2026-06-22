@@ -1,4 +1,0 @@
-{"timestamp":"2026-06-18T10:00:00Z","source":"codex","project":"creator-builder-qa-browser-import","role":"user","content":"我想做一个给独立创作者用的能力体，输入一段会议记录，输出可执行的增长实验清单。"}
-{"timestamp":"2026-06-18T10:01:00Z","source":"codex","project":"creator-builder-qa-browser-import","role":"assistant","content":"可以把能力体定义为 Growth Experiment Planner，核心输入是会议纪要、当前目标、约束条件，输出按 ICE 优先级排序的实验列表。"}
-{"timestamp":"2026-06-18T10:02:00Z","source":"codex","project":"creator-builder-qa-browser-import","role":"user","content":"希望每个实验包含假设、执行步骤、需要的数据、预计耗时和风险。"}
-{"timestamp":"2026-06-18T10:03:00Z","source":"codex","project":"creator-builder-qa-browser-import","role":"assistant","content":"能力体可以分为四个模块：上下文摘要、增长机会提取、实验设计、优先级排序。验证标准是用户能在 3 分钟内拿到 5 条可执行实验。"}

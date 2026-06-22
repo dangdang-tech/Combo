@@ -3,3 +3,6 @@ node_modules/
 apps-db.json
 *.log
 .DS_Store
+
+# GStack 浏览审计 / QA 报告与截图(工具产物,不入库)
+.gstack/
