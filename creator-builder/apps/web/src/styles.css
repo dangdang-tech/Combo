@@ -1747,13 +1747,20 @@ body {
   align-items: center;
 }
 
-/* 段间 1px seam 连接线（除第一段外，段前画线连接前一圆点）。 */
-.cb-stepbar__seg + .cb-stepbar__seg::before {
+/* 末段（发布）不撑开：贴最右端收尾（Figma 末个圆点在右缘，其后无连线）。 */
+.cb-stepbar__seg:last-child {
+  flex: 0 0 auto;
+}
+
+/* 段内连接线改画在「圆点+文字之后」（::after），向右填满本段剩余直抵下一段圆点。
+   原 ::before 方案把线画在「下一段之前」，而第一段无 ::before、又 flex:1 撑开 → 第一段尾部留出一截空白，
+   线看起来从圆点断开（用户实测断线）。改 ::after 后线从本段文字连续延伸到下一圆点，不再断。 */
+.cb-stepbar__seg:not(:last-child)::after {
   content: '';
   flex: 1;
   height: 1px;
   background: var(--cb-border);
-  margin: 0 10px;
+  margin: 0 12px;
 }
 
 .cb-stepbar__btn {
