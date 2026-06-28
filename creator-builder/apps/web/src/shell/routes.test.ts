@@ -52,9 +52,9 @@ describe('breadcrumbFor 分层（外壳首页-06）', () => {
     expect(c.map((x) => x.label)).toEqual(['Creator Builder', '上传能力']);
   });
 
-  it('五步子页 → Creator Builder / 上传能力 / STEP② 提取', () => {
+  it('五步子页 → Creator Builder / 上传能力 / 提取', () => {
     const c = breadcrumbFor('/create/extract');
-    expect(c.map((x) => x.label)).toEqual(['Creator Builder', '上传能力', 'STEP② 提取']);
+    expect(c.map((x) => x.label)).toEqual(['Creator Builder', '上传能力', '提取']);
   });
 
   it('数据分析 → Creator Builder / 数据分析', () => {

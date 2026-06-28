@@ -13,6 +13,7 @@ import { useViewMode } from './viewMode.js';
 import { useCollapse } from './useCollapse.js';
 import { useAccount, avatarInitial, type ShellAccount } from './account.js';
 import { IconChevrons } from './icons.js';
+import { TopbarActionSlot } from './topbarSlot.js';
 
 export function Shell(): ReactElement {
   const location = useLocation();
@@ -28,7 +29,12 @@ export function Shell(): ReactElement {
   const wizardSection = crumbs[1]?.label ?? '上传能力';
 
   return (
-    <div className="cb-shell" data-view-mode={mode} data-collapsed={collapsed ? 'true' : 'false'}>
+    <div
+      className="cb-shell"
+      data-view-mode={mode}
+      data-collapsed={collapsed ? 'true' : 'false'}
+      data-wizard={isWizard ? 'true' : 'false'}
+    >
       {/* 左侧栏：恒定结构（D14）。收起时整体收窄为纯图标态。 */}
       <aside className="cb-shell__sidebar" aria-label="侧边导航">
         <div className="cb-shell__brand">
@@ -108,8 +114,12 @@ export function Shell(): ReactElement {
           )}
 
           {isWizard ? (
-            /* 向导顶栏右上：真实账号头像（Figma STEP 顶栏右上）。 */
-            <AccountAvatar account={account} className="cb-shell__topbar-avatar" />
+            /* 向导顶栏右上：「保存草稿」+ 真实账号头像同处一条栏（Figma STEP 顶栏右侧）。
+               保存草稿由更深的 WizardShell 经插槽上抬注册，此处只渲染（无注册时为空）。 */
+            <div className="cb-shell__topbar-right">
+              <TopbarActionSlot />
+              <AccountAvatar account={account} className="cb-shell__topbar-avatar" />
+            </div>
           ) : (
             /* 双视角开关占位（D14）：本期只切前端视角态，不动鉴权/路由。 */
             <button

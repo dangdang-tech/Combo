@@ -10,6 +10,7 @@ import type { DraftView } from '@cb/shared';
 import { WizardLayout } from './WizardLayout.js';
 import { SelectStep } from './SelectStep.js';
 import { useWizard } from './WizardContext.js';
+import { TopbarSlotProvider, TopbarActionSlot } from '../../shell/topbarSlot.js';
 import { installFetchMock, type FetchMock } from '../../test/mockFetch.js';
 
 function draftView(over: Partial<DraftView> = {}): DraftView {
@@ -42,29 +43,34 @@ function renderWizard(initialPath: string) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
   });
+  // TopbarSlotProvider + TopbarActionSlot 复刻生产装配（ProtectedLayout 提供插槽、Shell 顶栏渲染「保存草稿」）：
+  // 「保存草稿」已上抬到 4A Shell 顶栏，单测用同一插槽口径让按钮可见可点。
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[initialPath]}>
-        <Routes>
-          <Route path="/creator" element={<div>工作台首页</div>} />
-          <Route path="/create" element={<WizardLayout />}>
-            <Route index element={<Navigate to="/create/import" replace />} />
-            <Route path="import" element={<StepProbe />} />
-            <Route path="extract" element={<StepProbe />} />
-            <Route
-              path="select"
-              element={
-                <>
-                  <StepProbe />
-                  <SelectStep candidates={[]} />
-                </>
-              }
-            />
-            <Route path="structure" element={<StepProbe />} />
-            <Route path="publish" element={<StepProbe />} />
-          </Route>
-        </Routes>
-      </MemoryRouter>
+      <TopbarSlotProvider>
+        <MemoryRouter initialEntries={[initialPath]}>
+          <TopbarActionSlot />
+          <Routes>
+            <Route path="/creator" element={<div>工作台首页</div>} />
+            <Route path="/create" element={<WizardLayout />}>
+              <Route index element={<Navigate to="/create/import" replace />} />
+              <Route path="import" element={<StepProbe />} />
+              <Route path="extract" element={<StepProbe />} />
+              <Route
+                path="select"
+                element={
+                  <>
+                    <StepProbe />
+                    <SelectStep candidates={[]} />
+                  </>
+                }
+              />
+              <Route path="structure" element={<StepProbe />} />
+              <Route path="publish" element={<StepProbe />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </TopbarSlotProvider>
     </QueryClientProvider>,
   );
 }

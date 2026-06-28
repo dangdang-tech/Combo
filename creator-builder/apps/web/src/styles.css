@@ -309,14 +309,16 @@ body {
 
 .cb-shell__crumb-page {
   font-family: var(--cb-font-serif);
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
   color: var(--cb-accent);
 }
 
+/* 「Creator Builder」产品域：Figma STEP 顶栏为深色 15px 加粗（非灰副），与砖红页名同处一行。 */
 .cb-shell__crumb-root {
-  font-size: 14px;
-  color: var(--cb-muted);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--cb-fg);
 }
 
 /* 顶栏居中字标（Figma：AGORA · CREATOR · 当前页，等宽大写小字）。 */
@@ -376,13 +378,58 @@ body {
 }
 
 .cb-shell__topbar-avatar {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
+}
+
+/* 顶栏「保存草稿」（Figma STEP 顶栏右侧，与头像同处一条栏）：安静文字钮，13px 加粗灰，hover 转砖红。
+   不抢面包屑/头像视觉权重，去掉了此前下方那条独立空头条带。 */
+.cb-shell__topbar-save {
+  border: none;
+  background: transparent;
+  color: var(--cb-muted);
+  font-family: var(--cb-font-sans);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 4px 6px;
+  border-radius: var(--cb-radius-control);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.cb-shell__topbar-save:hover:not(:disabled) {
+  color: var(--cb-accent);
+}
+
+.cb-shell__topbar-save:disabled {
+  color: var(--cb-muted);
+  opacity: 0.6;
+  cursor: default;
 }
 
 .cb-shell__content {
   padding: 24px;
   flex: 1;
+}
+
+/* ---- 向导态（五步上传）外壳还原（Figma step1–4 主区为一张描边圆角卡片） ----
+   主区（顶栏 + 内容）整体成卡：1px 描边 + 8px 圆角，浮在页面底上（四周留白让卡片读出来）。
+   顶栏在卡内为 64px 一条栏：左面包屑、右「保存草稿 + 头像」。内容区 840px 居中、上下留白对齐设计。 */
+.cb-shell[data-wizard='true'] .cb-shell__main {
+  margin: 16px;
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-card);
+  background: var(--cb-bg);
+  overflow: hidden;
+}
+
+.cb-shell[data-wizard='true'] .cb-shell__topbar {
+  height: 64px;
+  padding: 0 32px;
+}
+
+.cb-shell[data-wizard='true'] .cb-shell__content {
+  padding: 36px 32px 44px;
 }
 
 /* ---- 窄屏响应式：自动收窄为图标态宽度的栅格（结构不变，D14） ---- */
@@ -1661,35 +1708,16 @@ body {
    五步上传向导（F-09 WizardShell / F-12 STEP③ / F-15 续传）
    渲染在 4A Shell 主区（外壳恒定 D14）；本壳结构五步不变。
    ============================================================ */
+/* 内容列：Figma 五步内容统一 840px 居中（步骤条 / 标题 / 主体 / 底栏同列对齐）。
+   「保存草稿」已上抬到 4A Shell 顶栏，向导自身不再有独立头条带。 */
 .cb-wizard {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
+  width: 100%;
+  max-width: 840px;
+  margin: 0 auto;
   min-height: 100%;
-}
-
-/* 向导头条（含「保存草稿」；不动 4A Shell 顶栏 = 守 D14） */
-.cb-wizard__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-/* 仅「保存草稿」时右对齐（页名已上移到 4A Shell 顶栏面包屑，BUG-016）。 */
-.cb-wizard__head--actions-only {
-  justify-content: flex-end;
-}
-
-.cb-wizard__title {
-  font-family: var(--cb-font-serif);
-  font-size: 20px;
-  font-weight: 600;
-  margin: 0;
-  color: var(--cb-fg);
-}
-
-.cb-wizard__save {
-  white-space: nowrap;
 }
 
 .cb-wizard__resume-hint {

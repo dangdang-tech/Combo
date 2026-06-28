@@ -9,9 +9,10 @@
 //
 // 当前步由路由派生（stepForPath）；五步换内容不改本壳结构（外壳首页-07：任一步壳不变）。
 // 续传（F-15）：URL ?draftId= 深链 → findDraftById 恢复 draftId + selection（工作台草稿条点击则直接带 DraftView）。
-import { useEffect, type ReactElement } from 'react';
+import { useCallback, useEffect, type ReactElement } from 'react';
 import { Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ErrorState } from '../../components/index.js';
+import { useTopbarActionSetter } from '../../shell/topbarSlot.js';
 import {
   stepForPath,
   buildStepNodes,
@@ -31,6 +32,10 @@ export function WizardShell(): ReactElement {
   const [searchParams] = useSearchParams();
   const wizard = useWizard();
   const save = useSaveDraft();
+  // 稳定的存草稿函数（useSaveDraft 内 useCallback）：单独取出供 handleSaveDraft 依赖，避免每渲染换引用导致注册抖动。
+  const runSave = save.save;
+  const saving = save.saving;
+  const setTopbarAction = useTopbarActionSetter();
 
   // 当前步：路由派生（非五步子路由兜底首步，与 App 路由 index→import 重定向一致）。
   const routeStep = stepForPath(location.pathname) ?? WIZARD_STEPS[0]!;
@@ -89,26 +94,27 @@ export function WizardShell(): ReactElement {
     navigate(`${pathForStep(step)}${qs}`);
   };
 
-  const handleSaveDraft = async (): Promise<void> => {
-    const ok = await save.save();
+  const handleSaveDraft = useCallback(async (): Promise<void> => {
+    const ok = await runSave();
     // 保存成功：退出回工作台（§5.0「每步可存草稿退出」）。失败：留在原步、就地显 ErrorState。
     if (ok) navigate('/creator');
-  };
+  }, [runSave, navigate]);
+
+  // 把「保存草稿」上抬进 4A Shell 顶栏（Figma：与面包屑/头像同处一条栏）。仅 saving 变化时重注册（label/disabled 随动），
+  // 卸载（离开向导）即清空。无插槽 Provider 时 setTopbarAction 为 no-op（独立单测不崩）。
+  useEffect(() => {
+    setTopbarAction({
+      label: saving ? '保存中…' : '保存草稿',
+      onClick: () => void handleSaveDraft(),
+      disabled: saving,
+    });
+    return () => setTopbarAction(null);
+  }, [saving, handleSaveDraft, setTopbarAction]);
 
   return (
     <div className="cb-wizard" data-step={routeStep}>
-      {/* 1. 向导自有头条：仅「保存草稿」（页名「上传能力」已在 4A Shell 顶栏面包屑展示，content 不再重复，BUG-016）。
-          保存失败就地落 ErrorState（永不裸错），不阻塞继续编辑；不动 4A Shell 顶栏 = 守 D14。 */}
-      <header className="cb-wizard__head cb-wizard__head--actions-only">
-        <button
-          type="button"
-          className="cb-btn cb-wizard__save"
-          onClick={() => void handleSaveDraft()}
-          disabled={save.saving}
-        >
-          {save.saving ? '保存中…' : '保存草稿'}
-        </button>
-      </header>
+      {/* 「保存草稿」已上抬到 4A Shell 顶栏（与面包屑/头像同处一条栏，对齐 Figma STEP 顶栏）；
+          此处不再有独立头条带，避免顶栏下方多出一条空行（还原度问题修复）。 */}
 
       {/* 保存草稿失败：就地人话错误 + 重试退路（永不裸错；不阻塞继续编辑）。 */}
       {save.error && (

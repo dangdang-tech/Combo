@@ -47,13 +47,14 @@ export const CREATOR_NAV: NavItem[] = [
   { path: '/profile', label: '个人主页', group: 'mine', icon: IconProfile },
 ];
 
-/** 上传五步子路由（映射 DraftStep；select 为纯前端步，脊柱 §8.2）。不进侧栏。 */
+/** 上传五步子路由（映射 DraftStep；select 为纯前端步，脊柱 §8.2）。不进侧栏。
+    标签取 Figma 步骤条口径的纯动作名（导入/提取/选择/结构化/发布；序号由步骤条圆点表达，不在文字里重复「STEP①」）。 */
 export const CREATE_STEPS: { step: DraftStep; path: string; label: string }[] = [
-  { step: 'import', path: '/create/import', label: 'STEP① 导入' },
-  { step: 'extract', path: '/create/extract', label: 'STEP② 提取' },
-  { step: 'select', path: '/create/select', label: 'STEP③ 选择' },
-  { step: 'structure', path: '/create/structure', label: 'STEP④ 结构化' },
-  { step: 'publish', path: '/create/publish', label: 'STEP⑤ 发布' },
+  { step: 'import', path: '/create/import', label: '导入' },
+  { step: 'extract', path: '/create/extract', label: '提取' },
+  { step: 'select', path: '/create/select', label: '选择' },
+  { step: 'structure', path: '/create/structure', label: '结构化' },
+  { step: 'publish', path: '/create/publish', label: '发布' },
 ];
 
 /** 面包屑根（开工总纲 §2.2：如「上传能力 / Creator Builder」恒以产品域为根）。 */
@@ -66,7 +67,7 @@ export interface Crumb {
 
 /**
  * 面包屑：把当前 pathname 拆成可点段（产品域根 → 区段 → 子步）。
- * 例：/create/extract → 「Creator Builder / 上传能力 / STEP② 提取」（外壳首页-06）。
+ * 例：/create/extract → 「Creator Builder / 上传能力 / 提取」（外壳首页-06）。
  * 末段为当前页（不可点），其余可点回跳。
  */
 export function breadcrumbFor(pathname: string): Crumb[] {
