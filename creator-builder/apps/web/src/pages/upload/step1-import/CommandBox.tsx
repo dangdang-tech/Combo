@@ -61,9 +61,9 @@ export function CommandBox({
         助手会扫描本机的对话历史并安全上传；完成后这一页会自动接上，你不用回到终端。
       </p>
 
-      {/* 一行可复制命令（带专属配对码）。 */}
+      {/* 一行可复制命令（带专属配对码）。展示与复制同为真命令 pair.command（不再用占位 curlOneLiner）。 */}
       <div className="cb-cmdbox__command">
-        <code className="cb-cmdbox__command-text">{pair.curlOneLiner}</code>
+        <code className="cb-cmdbox__command-text">{pair.command}</code>
         <button
           type="button"
           className="cb-btn cb-cmdbox__copy"

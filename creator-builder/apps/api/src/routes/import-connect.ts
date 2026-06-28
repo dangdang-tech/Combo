@@ -1,6 +1,6 @@
 // B-21 · 本机助手直传路由 handler（20-step1-import §3）。
 //   1) POST /import/connect/pair       铸一次性配对码（网页侧 creator；requireRole+requireIdempotency 已守）。
-//   2) GET  /import/connect/script      下发注入 BASE+code 的助手脚本（配对码 query 鉴权；非 JSON，可执行 JS）。
+//   2) GET  /import/connect/script      下发注入 BASE+code 的助手脚本（配对码 query 鉴权；非 JSON，可执行 sh+curl 脚本）。
 //   3) POST /import/connect/upload      助手凭码全量直传原文 + 最后一片自动建 import Job（PairAuth 已守）。
 //   4) GET  /import/connect/pair/:pairId 网页轮询配对/上传状态（requireAuth + owner 校验）。
 // 隐私口径（文首硬约束）：助手把原文【全量上传】到云端，去敏在云端 worker；文案绝不出现「数据不出本机/仅传精简」。
@@ -97,7 +97,7 @@ export function connectPairHandler(): RouteHandlerMethod {
 
 /**
  * GET /import/connect/script?code=XXXXXX（20 §3.2）。配对码 query 鉴权（无登录态）。
- *   - 码 active → 200 text/javascript：注入 BASE + pairId + pairingCode + 上传端点的助手脚本。
+ *   - 码 active → 200 text/x-shellscript：注入 BASE + pairId + pairingCode 的 sh+curl 助手脚本（经 `| sh` 跑）。
  *   - 码无效/过期 → 仍返回【可读 stderr 文案脚本】（不裸 JSON 错误码，硬规则②）；HTTP 404。
  *   pairId 由 code 反查注入（供上传定位行，Codex#3-r2）。
  */
@@ -110,7 +110,7 @@ export function connectScriptHandler(): RouteHandlerMethod {
       // 脚本通道不裸 JSON 错误码：返回一段打印人话 stderr 的可执行脚本片段（硬规则②）。
       reply
         .code(404)
-        .header('content-type', 'text/javascript; charset=utf-8')
+        .header('content-type', 'text/x-shellscript; charset=utf-8')
         .send(renderExpiredScript());
       return reply;
     };
@@ -140,7 +140,7 @@ export function connectScriptHandler(): RouteHandlerMethod {
 
     reply
       .code(200)
-      .header('content-type', 'text/javascript; charset=utf-8')
+      .header('content-type', 'text/x-shellscript; charset=utf-8')
       .send(renderConnectScript({ base, pairId, pairingCode: code }));
     return reply;
   };

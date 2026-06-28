@@ -1,7 +1,7 @@
-// STEP① 浏览器内导入主卡（BUG-013）——选文件/目录 + 拖拽区，普通用户主路径（标推荐）。
+// STEP① 浏览器内导入卡（B-20 直传）——选文件/目录 + 拖拽区。
 //
-// 主路径（B-20 直传）：用户直接在浏览器选文件/目录或拖拽 → 交给 useBrowserImport 编排上传 → 建 Job。
-//   命令行（本机助手）/ CURL 降级为高级入口（ImportEmptyState 次卡）。
+// 路径定位（命令行优先方案）：命令行/本机直读是主入口（ImportEmptyState 主卡）；本卡降为「不想开终端时」的折叠兜底。
+//   走 B-20 直传：用户在浏览器选文件/目录或拖拽 → 交给 useBrowserImport 编排上传 → 建 Job。
 // 永不裸转圈：选完进上传中态（BrowserUploadProgress 进度条）；本卡只负责「选/拖」入口，不直接转圈。
 // 文案口径（导入-04/05/29）：「完整上传到云端、云端解析去敏」，绝不出现「数据不出本机/仅上传精简/本机解析」。
 import { useCallback, useRef, useState, type DragEvent, type ReactElement } from 'react';
@@ -61,7 +61,6 @@ export function BrowserImportCard({ onFiles, disabled = false }: BrowserImportCa
 
   return (
     <article className="cb-bimport" aria-label="从浏览器导入">
-      <span className="cb-bimport__badge">推荐 · 最省事</span>
       <h3 className="cb-bimport__title">从浏览器导入</h3>
       <p className="cb-bimport__desc">
         直接选中或拖入你的对话历史文件/文件夹，浏览器会把原文完整上传到云端，由云端解析、去敏后用于后续步骤。

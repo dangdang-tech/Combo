@@ -105,10 +105,7 @@ describe('ImportStepPage', () => {
     ]);
     // 已有 draftId（续传/已 bootstrap）：不再建草稿，直接测铸码→配对。
     renderPage('/create/import', 'd1');
-    // 高级入口（本机直读）默认折叠，先展开再点「开始导入」（BUG-013：浏览器导入是主路径）。
-    await userEvent.click(
-      screen.getByRole('button', { name: '试试其它导入方式（命令行 / CURL）' }),
-    );
+    // 命令行优先：「开始导入」是主卡入口，直接点（无需展开）。
     await userEvent.click(screen.getByRole('button', { name: '开始导入 →' }));
     await waitFor(() =>
       expect(screen.getByText('在你电脑的终端里运行这行命令')).toBeInTheDocument(),
@@ -234,8 +231,10 @@ describe('ImportStepPage', () => {
     act(() => conn().open());
     act(() => conn().emit('progress', { percent: 10, phrase: '10%' }, { id: '1-0' }));
     await userEvent.click(screen.getByRole('button', { name: '取消导入' }));
-    // 回空态：浏览器导入主卡（主路径）再次可见（BUG-013）。
-    await waitFor(() => expect(screen.getByText('从浏览器导入')).toBeInTheDocument());
+    // 回空态：命令行导入主卡（主路径）再次可见。
+    await waitFor(() =>
+      expect(screen.getByText('命令行导入（本机直读）')).toBeInTheDocument(),
+    );
     const cancelCall = mock.calls.find((c) => c.url.includes('/cancel'));
     expect(cancelCall?.headers['X-Idempotency-Scope']).toBe('job.cancel');
   });
@@ -326,10 +325,7 @@ describe('ImportStepPage 草稿 bootstrap（P0-2，续传基线）', () => {
     const draftCall = mock.calls.find((c) => c.url.endsWith('/drafts') && c.method === 'POST');
     expect(draftCall).toBeTruthy();
     expect(draftCall?.headers['X-Idempotency-Scope']).toBe('draft.create');
-    // 草稿就绪后展开高级入口 → 点开始导入 → 铸码带 draftId。
-    await userEvent.click(
-      screen.getByRole('button', { name: '试试其它导入方式（命令行 / CURL）' }),
-    );
+    // 草稿就绪后点开始导入（命令行优先：主卡入口，无需展开）→ 铸码带 draftId。
     await userEvent.click(screen.getByRole('button', { name: '开始导入 →' }));
     await waitFor(() => {
       const pairCall = mock.calls.find(

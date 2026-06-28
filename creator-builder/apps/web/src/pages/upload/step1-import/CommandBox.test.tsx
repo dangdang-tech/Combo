@@ -9,7 +9,7 @@ function pair(over: Partial<PairResult> = {}): PairResult {
   return {
     pairId: 'p1',
     pairingCode: '123456',
-    command: 'curl -fsSL https://x/import/connect/script?code=123456 | node -',
+    command: 'curl -fsSL https://x/import/connect/script?code=123456 | sh',
     curlOneLiner: 'curl -fsSL agora.app/import | sh',
     expiresAt: '2026-06-17T01:00:00Z',
     ...over,
@@ -24,7 +24,7 @@ function status(
 }
 
 describe('CommandBox', () => {
-  it('展示一行可复制命令（验收口径串）+ 「复制命令」按钮', () => {
+  it('展示真命令（pair.command，展示=复制）+ 「复制命令」按钮', () => {
     render(
       <CommandBox
         pair={pair()}
@@ -33,7 +33,9 @@ describe('CommandBox', () => {
         onRegenerate={() => undefined}
       />,
     );
-    expect(screen.getByText('curl -fsSL agora.app/import | sh')).toBeInTheDocument();
+    expect(
+      screen.getByText('curl -fsSL https://x/import/connect/script?code=123456 | sh'),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '复制命令' })).toBeInTheDocument();
   });
 

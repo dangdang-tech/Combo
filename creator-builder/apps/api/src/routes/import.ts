@@ -47,7 +47,7 @@ export const IMPORT_ENDPOINTS: EndpointDecl[] = [
     preHandlers: [requireRole('creator'), requireIdempotency(IdempotencyScope.IMPORT_CONNECT_PAIR)],
     handler: connectPairHandler(),
   },
-  // 助手脚本下发（配对码 query 鉴权、无登录态；text/javascript 可执行脚本，码无效返人话 stderr 脚本）。
+  // 助手脚本下发（配对码 query 鉴权、无登录态；text/x-shellscript 可执行 sh+curl 脚本，码无效返人话 stderr 脚本）。
   { method: 'GET', url: '/import/connect/script', handler: connectScriptHandler() },
   // 助手直传：独立 PairAuth + Idempotency（按 pairId 幂等）；最后一片自动建 import Job。
   {

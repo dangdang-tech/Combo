@@ -431,9 +431,9 @@ describe('B-21 纯逻辑', () => {
     }
   });
 
-  it('buildConnectCommand 注入 BASE+code、去尾斜杠、走 node -', () => {
+  it('buildConnectCommand 注入 BASE+code、去尾斜杠、走 sh', () => {
     expect(buildConnectCommand('https://agora.app/', '123456')).toBe(
-      'curl -fsSL https://agora.app/api/v1/import/connect/script?code=123456 | node -',
+      'curl -fsSL https://agora.app/api/v1/import/connect/script?code=123456 | sh',
     );
   });
 
@@ -441,23 +441,40 @@ describe('B-21 纯逻辑', () => {
     expect(CURL_ONE_LINER).toBe('curl -fsSL agora.app/import | sh');
   });
 
-  it('助手脚本口径合规：含「全量上传原文 / 云端去敏」、绝不含禁词（导入-04/05/29）', () => {
+  it('助手脚本口径合规：sh+curl、注入 pairId/code、query 协议、per-part 幂等键、完整上传，绝不含禁词（导入-04/05/29）', () => {
     const script = renderConnectScript({
       base: 'https://agora.app',
       pairId: 'pair-1',
       pairingCode: '654321',
     });
-    // 注入正确。
-    expect(script).toContain('pair-1');
-    expect(script).toContain('654321');
+    // 执行器为 sh（命令行优先方案·第一步）。
+    expect(script).toContain('#!/bin/sh');
+    // 注入正确（单引号安全注入）。
+    expect(script).toContain("'pair-1'");
+    expect(script).toContain("'654321'");
     expect(script).toContain('/api/v1/import/connect/upload');
     expect(script).toContain('Bearer');
-    // pairId 走 query（Codex P0-1）+ per-part 幂等键含 partIndex+content-hash（Codex P1-5）+ 分片。
-    expect(script).toContain("searchParams.set('pairId'");
-    expect(script).toContain("searchParams.set('partIndex'");
-    expect(script).toContain("searchParams.set('contentSha256'");
-    expect(script).toContain("'pair-' + PAIR_ID + '-' + partIndex + '-' + hash"); // per-part Idempotency-Key
-    expect(script).toContain('splitParts'); // 多分片切分
+    // 用 curl multipart 直传（一个文件一个分块）；变量一律 ${VAR} 大括号包裹（避免 set -u 下中文标点并进变量名）。
+    expect(script).toContain('curl');
+    expect(script).toContain('-F "file=@${f}"');
+    // 跟随 80→443 跳转并在同源重定向重发鉴权（BASE 万一是 http 也能传，用户实测修复）。
+    expect(script).toContain('--location-trusted');
+    // 裸变量紧跟中文标点会在 macOS bash 崩；必须大括号包裹，绝不出现 $http）。
+    expect(script).not.toContain('$http）');
+    // 并发上传池（用户实测 7370 文件串行太慢）：默认路数可 AGORA_JOBS 覆盖。
+    expect(script).toContain('AGORA_JOBS');
+    expect(script).toContain('upload_one');
+    expect(script).toContain('wait');
+    // pairId/partIndex/totalParts/contentSha256 走 query（Codex P0-1）。
+    expect(script).toContain('pairId=${PAIR_ID}');
+    expect(script).toContain('partIndex=${idx}');
+    expect(script).toContain('contentSha256=${sha}');
+    // per-part 幂等键含 partIndex + 内容 hash（Codex P1-5）。
+    expect(script).toContain('pair-${PAIR_ID}-${idx}-${sha}');
+    // 一个 .jsonl 文件 = 一个分块（扫两个子目录）。
+    expect(script).toContain('.claude/projects');
+    expect(script).toContain('.codex/sessions');
+    expect(script).toContain("-name '*.jsonl'");
     // 正向口径（完整上传 + 云端去敏）。
     expect(script).toContain('完整上传');
     // 负向禁词（导入-05/29 P0）。
@@ -474,8 +491,9 @@ describe('B-21 纯逻辑', () => {
 
   it('过期脚本片段：人话 stderr、非零退出、不裸 JSON 错误码', () => {
     const s = renderExpiredScript();
+    expect(s).toContain('#!/bin/sh');
     expect(s).toContain('配对码已失效');
-    expect(s).toContain('process.exit(1)');
+    expect(s).toContain('exit 1');
     expect(s).not.toContain('"error"');
     expect(s).not.toContain('NOT_FOUND');
   });
@@ -810,7 +828,7 @@ describe('connectPairHandler', () => {
     expect(data.pairId).toMatch(/^pair-/);
     expect(data.pairingCode).toMatch(/^\d{6}$/);
     expect(data.command).toContain('https://agora.app/api/v1/import/connect/script?code=');
-    expect(data.command).toContain('| node -');
+    expect(data.command).toContain('| sh');
     expect(data.curlOneLiner).toBe('curl -fsSL agora.app/import | sh');
     expect(data.expiresAt).toBeTruthy();
   });
@@ -825,14 +843,14 @@ describe('connectPairHandler', () => {
 });
 
 describe('connectScriptHandler', () => {
-  it('active 码 → 200 text/javascript，注入反查到的 pairId + code', async () => {
+  it('active 码 → 200 text/x-shellscript，注入反查到的 pairId + code', async () => {
     const db = new FakePairDb();
     const p = db.seedPairing({ pairing_code_hash: hashPairingCode('424242') });
     const req = baseReq(db, { query: { code: '424242' } });
     const { reply, sent } = makeReply();
     await connectScriptHandler().call(undefined as never, req as never, reply as never);
     expect(sent.code).toBe(200);
-    expect(sent.headers['content-type']).toContain('text/javascript');
+    expect(sent.headers['content-type']).toContain('text/x-shellscript');
     expect(String(sent.body)).toContain(p.id);
     expect(String(sent.body)).toContain('424242');
   });
@@ -843,7 +861,7 @@ describe('connectScriptHandler', () => {
     const { reply, sent } = makeReply();
     await connectScriptHandler().call(undefined as never, req as never, reply as never);
     expect(sent.code).toBe(404);
-    expect(sent.headers['content-type']).toContain('text/javascript');
+    expect(sent.headers['content-type']).toContain('text/x-shellscript');
     expect(String(sent.body)).toContain('配对码已失效');
     expect(String(sent.body)).not.toContain('"error"');
   });
