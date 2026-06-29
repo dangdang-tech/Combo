@@ -51,6 +51,12 @@ import {
 import { emitInTx, eventIdFor } from '../../events/outbox.js';
 import { withTransaction, type Tx, type TxPool } from '../../events/db-tx.js';
 
+/** 去掉 NUL(0x00)：Postgres text/jsonb 不接受 0x00（落库 22021）；偶有会话混入二进制/图片垃圾数据带 0x00。
+ *   0x00 不是合法文本内容，去掉无损。先 includes 快筛避免对绝大多数干净文本跑正则。 */
+function stripNul(s: string): string {
+  return s.includes('\u0000') ? s.replace(/\u0000/g, '') : s;
+}
+
 /** 抛出带分类 code 的业务错误（runner.normalizeToErrorBody 据 code 归一人话信封，绝不裸露原始报错）。 */
 function codedError(code: (typeof ErrorCode)[keyof typeof ErrorCode], message: string): Error {
   const e = new Error(message) as Error & { code: string };
@@ -287,6 +293,11 @@ export function createImportHandler(deps: ImportHandlerDeps): JobHandler {
           } else {
             rawFiles = [await objectStore.getObjectText('agora-raw', key)];
           }
+          // 在最早的文本入口剥掉 NUL(0x00)：Postgres text/jsonb 存不了 0x00（落库报 22021
+          //   「invalid byte sequence for encoding UTF8: 0x00」→ 整 job 失败 → 网页「服务开小差了」）。
+          //   某些会话（含二进制/图片等垃圾数据）会混进 0x00；它不是合法文本内容，去掉无损。
+          //   在此处剥，让下游 parse/hash/去敏/落库都拿到干净文本（content_hash 也据干净文本算，与落库一致）。
+          rawFiles = rawFiles.map(stripNul);
         } catch {
           // S3 拉取失败 / gz 解压失败：依赖不可用（人话「系统正在恢复」，可重试，绝不裸 ECONNRESET）。
           await ctx.reportSubtask('fetch_index', 'failed');

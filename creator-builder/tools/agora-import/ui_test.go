@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestComma(t *testing.T) {
@@ -38,9 +39,18 @@ func TestTTYUploadBar(t *testing.T) {
 	r.success()
 
 	out := buf.String()
-	for _, want := range []string{"\r", "▕", "█", "░", "▏", "100%", "84 / 84", "\x1b[K", "8 路并发", "✓ 上传完成"} {
+	for _, want := range []string{"\r", "▕", "█", "░", "▏", "100%", "84 / 84", "\x1b[K", "8 路并发", "✓ 上传完成", "用时", "0:00"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("tty 上传输出缺少 %q\n全文：%q", want, out)
+		}
+	}
+}
+
+func TestFmtClock(t *testing.T) {
+	cases := map[int]string{0: "0:00", 7: "0:07", 59: "0:59", 60: "1:00", 83: "1:23", 605: "10:05"}
+	for sec, want := range cases {
+		if got := fmtClock(time.Duration(sec) * time.Second); got != want {
+			t.Fatalf("fmtClock(%ds) = %q, want %q", sec, got, want)
 		}
 	}
 }
