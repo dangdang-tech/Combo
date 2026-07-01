@@ -11,7 +11,10 @@
 import { describe, it, expect } from 'vitest';
 import { createHash } from 'node:crypto';
 import type { Manifest } from '@cb/shared';
-import { CapabilityPublishedPayloadSchema, canonicalManifest as sharedCanonicalManifest } from '@cb/shared';
+import {
+  CapabilityPublishedPayloadSchema,
+  canonicalManifest as sharedCanonicalManifest,
+} from '@cb/shared';
 import { asTxPool } from '../platform/events/db-tx.js';
 import {
   publishGateInTx,
@@ -20,7 +23,11 @@ import {
 } from '../modules/publish/repo.js';
 import { publishOne } from '../modules/publish/publish-one.js';
 import { PublishError } from '../modules/publish/repo.js';
-import { manifestHash, canonicalManifest, missingPublishFields } from '../modules/publish/manifest-hash.js';
+import {
+  manifestHash,
+  canonicalManifest,
+  missingPublishFields,
+} from '../modules/publish/manifest-hash.js';
 import {
   buildMarketCard,
   priceDisplay,

@@ -14,7 +14,10 @@
 //     · 反向破坏：create 与回填【非原子】且 create【无幂等】（旧实现）→ 重试重复建版（versions.size===2）——守门断言「不应重复」会红。
 import { describe, it, expect } from 'vitest';
 import { SOFT_FIELD_KEYS } from '@cb/shared';
-import { structureCandidateItem, type OnVersionCreatedInTx } from '../modules/publish/batch-structure.js';
+import {
+  structureCandidateItem,
+  type OnVersionCreatedInTx,
+} from '../modules/publish/batch-structure.js';
 import { createCapability } from '../modules/structure/create-capability.js';
 import { StructureFakeDb, StructureFakeTxPool, StreamingFakeGateway } from './structure-fakes.js';
 

@@ -45,9 +45,7 @@ function makeReqReply(opts: {
   };
   const req = {
     id: 'trace-1',
-    auth: opts.userId
-      ? { userId: opts.userId, account: opts.account ?? '测试账号' }
-      : undefined,
+    auth: opts.userId ? { userId: opts.userId, account: opts.account ?? '测试账号' } : undefined,
     params: opts.params ?? {},
     query: opts.query ?? {},
     headers: {},

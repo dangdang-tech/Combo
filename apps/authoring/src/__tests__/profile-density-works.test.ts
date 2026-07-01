@@ -8,7 +8,12 @@ import {
   densityScore,
   type DensityInputRow,
 } from '../modules/profile/density.js';
-import { filterWorkCards, isOnWall, rowToWorkCard, type WorkRow } from '../modules/profile/works.js';
+import {
+  filterWorkCards,
+  isOnWall,
+  rowToWorkCard,
+  type WorkRow,
+} from '../modules/profile/works.js';
 import { DensityRankRowSchema, WorkCardSchema } from '@cb/shared';
 
 function dRow(id: string, supporting: number, recent = 0, prior = 0): DensityInputRow {

@@ -39,7 +39,8 @@ export function ImportEmptyState({
           <span className="cb-bimport__badge">推荐 · 最省事</span>
           <h3 className="cb-import-empty__card-title">命令行导入（本机直读）</h3>
           <p className="cb-import-empty__card-desc">
-            一行命令，自动扫描这台机器上全部 ~/.claude、~/.codex 并完整上传到云端，跑完这一页自动接上。无需手动选文件夹，不会漏。
+            一行命令，自动扫描这台机器上全部 ~/.claude、~/.codex
+            并完整上传到云端，跑完这一页自动接上。无需手动选文件夹，不会漏。
           </p>
           <button
             type="button"

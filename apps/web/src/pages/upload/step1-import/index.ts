@@ -2,10 +2,7 @@
 export { ImportStepPage } from './ImportStepPage.js';
 export { ImportEmptyState, type ImportEmptyStateProps } from './ImportEmptyState.js';
 export { BrowserImportCard, type BrowserImportCardProps } from './BrowserImportCard.js';
-export {
-  BrowserUploadProgress,
-  type BrowserUploadProgressProps,
-} from './BrowserUploadProgress.js';
+export { BrowserUploadProgress, type BrowserUploadProgressProps } from './BrowserUploadProgress.js';
 export {
   useBrowserImport,
   PART_SIZE_BYTES,

@@ -3,7 +3,12 @@
 // 待带 zod 校验器 / loader 实现、且被 authoring 与 runtime 同时依赖时，整体升格为
 // packages/skill-package（见飞书《Agora 创作者中心 · 后端仓库结构规范》）。
 import { z } from 'zod';
-import { InputSchemaSchema, OutputSpecSchema, BoundariesSchema, type Manifest } from './structure.js';
+import {
+  InputSchemaSchema,
+  OutputSpecSchema,
+  BoundariesSchema,
+  type Manifest,
+} from './structure.js';
 import { VersionStatusSchema, type VersionStatus } from './publish.js';
 
 // 版本状态复用 publish 域已定义的 VersionStatus（draft/published/superseded/review_rejected）。

@@ -12,7 +12,11 @@ import {
 } from '@cb/shared';
 import { createStructureHandler, type StructureSubjectRef } from '../modules/structure/job.js';
 import type { JobContext, LeasedJob } from '../platform/jobs/types.js';
-import { initialManifest, initialStructureState, setFieldState } from '../modules/structure/manifest.js';
+import {
+  initialManifest,
+  initialStructureState,
+  setFieldState,
+} from '../modules/structure/manifest.js';
 import {
   writeFieldStuckIfGenerating,
   writeManifestAndStateProtected,

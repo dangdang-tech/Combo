@@ -25,11 +25,19 @@ function claudeSession(
 }
 
 /** Codex 会话 fixture（对齐 B-18：{type, payload, timestamp}，顶层 payload 而非 message）。 */
-function codexSession(userText: string, assistantText: string, ts = '2026-06-01T12:00:00.000Z'): string {
+function codexSession(
+  userText: string,
+  assistantText: string,
+  ts = '2026-06-01T12:00:00.000Z',
+): string {
   return [
     { type: 'session_meta', timestamp: ts, payload: { cwd: '/Users/dev/repos/codex-proj' } },
     { type: 'event_msg', timestamp: ts, payload: { type: 'user_message', message: userText } },
-    { type: 'event_msg', timestamp: ts, payload: { type: 'agent_message', message: assistantText } },
+    {
+      type: 'event_msg',
+      timestamp: ts,
+      payload: { type: 'agent_message', message: assistantText },
+    },
   ]
     .map((o) => JSON.stringify(o))
     .join('\n');

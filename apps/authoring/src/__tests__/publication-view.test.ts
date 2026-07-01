@@ -5,7 +5,10 @@
 //     · readPublicationView（GET /publications/:id、评审裁决回读用）经它落 displayState，证明单一真源在数据/读模型层闭环。
 //   反向破坏：直接喂底层状态码组合，断言派生唯一且与读模型一致（杜绝各自从底层码自行拼装的漂移）。
 import { describe, it, expect } from 'vitest';
-import { derivePublicationDisplayState, readPublicationView } from '../modules/publish/publication-repo.js';
+import {
+  derivePublicationDisplayState,
+  readPublicationView,
+} from '../modules/publish/publication-repo.js';
 import { PublicationDisplayStateSchema } from '@cb/shared';
 import { PublishFakeDb, seedUser, seedCapabilityVersion, type PubRow } from './publish-fakes.js';
 

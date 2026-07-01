@@ -10,14 +10,13 @@ gap: 4px;
 width: 288px;
 height: 907px;
 
-background: #F4F0E7;
+background: #f4f0e7;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* brand-row */
 
@@ -31,13 +30,11 @@ padding: 0px 0px 8px;
 width: 256px;
 height: 40px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 0;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* Agora */
 
@@ -52,14 +49,12 @@ font-size: 28px;
 line-height: 116%;
 /* or 32px */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* collapse-btn */
 
@@ -68,15 +63,14 @@ box-sizing: border-box;
 width: 28px;
 height: 28px;
 
-background: #FBF9F4;
-border: 1px solid #E1D8CA;
+background: #fbf9f4;
+border: 1px solid #e1d8ca;
 border-radius: 6px;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* Vector */
 
@@ -86,21 +80,18 @@ height: 10px;
 left: 11.5px;
 top: 9px;
 
-border: 1.7px solid #6F6860;
-
+border: 1.7px solid #6f6860;
 
 /* Frame */
 
 width: 256px;
 height: 6px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 1;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* 创作 */
 
@@ -117,8 +108,7 @@ line-height: 120%;
 letter-spacing: 0.12em;
 text-transform: uppercase;
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
@@ -126,19 +116,16 @@ order: 2;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Frame */
 
 width: 256px;
 height: 4px;
-
 
 /* Inside auto layout */
 flex: none;
 order: 3;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* nav-工作台 */
 
@@ -160,19 +147,16 @@ order: 4;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Frame */
 
 width: 18px;
 height: 18px;
-
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
 
-
 /* Rectangle */
 
 position: absolute;
@@ -181,9 +165,8 @@ height: 6px;
 left: 1px;
 top: 1px;
 
-background: #14141A;
+background: #14141a;
 border-radius: 1.5px;
-
 
 /* Rectangle */
 
@@ -193,9 +176,8 @@ height: 6px;
 left: 11px;
 top: 1px;
 
-background: #14141A;
+background: #14141a;
 border-radius: 1.5px;
-
 
 /* Rectangle */
 
@@ -205,9 +187,8 @@ height: 6px;
 left: 1px;
 top: 11px;
 
-background: #14141A;
+background: #14141a;
 border-radius: 1.5px;
-
 
 /* Rectangle */
 
@@ -217,9 +198,8 @@ height: 6px;
 left: 11px;
 top: 11px;
 
-background: #14141A;
+background: #14141a;
 border-radius: 1.5px;
-
 
 /* 工作台 */
 
@@ -234,14 +214,12 @@ font-size: 15px;
 line-height: 170%;
 /* identical to box height, or 26px */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
-
 
 /* nav-我的能力 */
 
@@ -263,18 +241,15 @@ order: 5;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Frame */
 
 width: 18px;
 height: 18px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* Rectangle */
 
@@ -284,9 +259,8 @@ height: 2.6px;
 left: 1px;
 top: 4px;
 
-background: #14141A;
+background: #14141a;
 border-radius: 1.3px;
-
 
 /* Rectangle */
 
@@ -296,9 +270,8 @@ height: 2.6px;
 left: 1px;
 top: 8.5px;
 
-background: #14141A;
+background: #14141a;
 border-radius: 1.3px;
-
 
 /* Rectangle */
 
@@ -308,9 +281,8 @@ height: 2.6px;
 left: 1px;
 top: 13px;
 
-background: #14141A;
+background: #14141a;
 border-radius: 1.3px;
-
 
 /* 我的能力 */
 
@@ -325,14 +297,12 @@ font-size: 15px;
 line-height: 170%;
 /* identical to box height, or 26px */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
-
 
 /* nav-上传能力 */
 
@@ -346,7 +316,7 @@ gap: 10px;
 width: 256px;
 height: 40px;
 
-background: #FBF9F4;
+background: #fbf9f4;
 border-radius: 6px;
 
 /* Inside auto layout */
@@ -355,18 +325,15 @@ order: 6;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Frame */
 
 width: 18px;
 height: 18px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* Rectangle */
 
@@ -376,9 +343,8 @@ height: 8px;
 left: 8.2px;
 top: 4px;
 
-background: #A73718;
+background: #a73718;
 border-radius: 0.9px;
-
 
 /* Vector */
 
@@ -388,8 +354,7 @@ height: 3.7px;
 left: 5.4px;
 top: 3.3px;
 
-background: #A73718;
-
+background: #a73718;
 
 /* Rectangle */
 
@@ -399,9 +364,8 @@ height: 1.8px;
 left: 3px;
 top: 14px;
 
-background: #A73718;
+background: #a73718;
 border-radius: 0.9px;
-
 
 /* 上传能力 */
 
@@ -416,14 +380,12 @@ font-size: 15px;
 line-height: 170%;
 /* identical to box height, or 26px */
 
-color: #A73718;
-
+color: #a73718;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
-
 
 /* nav-数据分析 */
 
@@ -445,18 +407,15 @@ order: 7;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Frame */
 
 width: 18px;
 height: 18px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* Rectangle */
 
@@ -466,9 +425,8 @@ height: 7px;
 left: 2.5px;
 top: 9px;
 
-background: #14141A;
+background: #14141a;
 border-radius: 1px;
-
 
 /* Rectangle */
 
@@ -478,9 +436,8 @@ height: 12.5px;
 left: 7.5px;
 top: 3.5px;
 
-background: #14141A;
+background: #14141a;
 border-radius: 1px;
-
 
 /* Rectangle */
 
@@ -490,9 +447,8 @@ height: 9.5px;
 left: 12.5px;
 top: 6.5px;
 
-background: #14141A;
+background: #14141a;
 border-radius: 1px;
-
 
 /* 数据分析 */
 
@@ -507,14 +463,12 @@ font-size: 15px;
 line-height: 170%;
 /* identical to box height, or 26px */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
-
 
 /* nav-收益 */
 
@@ -536,18 +490,15 @@ order: 8;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Frame */
 
 width: 18px;
 height: 18px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* Vector */
 
@@ -557,8 +508,7 @@ height: 10px;
 left: 2px;
 top: 3.5px;
 
-border: 1.7px solid #14141A;
-
+border: 1.7px solid #14141a;
 
 /* Vector */
 
@@ -568,8 +518,7 @@ height: 4px;
 left: 12px;
 top: 3.5px;
 
-border: 1.7px solid #14141A;
-
+border: 1.7px solid #14141a;
 
 /* 收益 */
 
@@ -584,20 +533,17 @@ font-size: 15px;
 line-height: 170%;
 /* identical to box height, or 26px */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
 
-
 /* Frame */
 
 width: 256px;
 height: 8px;
-
 
 /* Inside auto layout */
 flex: none;
@@ -605,13 +551,12 @@ order: 9;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Rectangle */
 
 width: 256px;
 height: 1px;
 
-background: #E1D8CA;
+background: #e1d8ca;
 
 /* Inside auto layout */
 flex: none;
@@ -619,19 +564,16 @@ order: 10;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Frame */
 
 width: 256px;
 height: 6px;
-
 
 /* Inside auto layout */
 flex: none;
 order: 11;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* 我的 */
 
@@ -648,8 +590,7 @@ line-height: 120%;
 letter-spacing: 0.12em;
 text-transform: uppercase;
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
@@ -657,19 +598,16 @@ order: 12;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Frame */
 
 width: 256px;
 height: 4px;
-
 
 /* Inside auto layout */
 flex: none;
 order: 13;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* nav-个人主页 */
 
@@ -691,18 +629,15 @@ order: 14;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Frame */
 
 width: 18px;
 height: 18px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* Ellipse */
 
@@ -712,8 +647,7 @@ height: 6px;
 left: 6px;
 top: 1.5px;
 
-background: #14141A;
-
+background: #14141a;
 
 /* Rectangle */
 
@@ -723,9 +657,8 @@ height: 8px;
 left: 3px;
 top: 10px;
 
-background: #14141A;
+background: #14141a;
 border-radius: 6px 6px 1.5px 1.5px;
-
 
 /* 个人主页 */
 
@@ -740,27 +673,23 @@ font-size: 15px;
 line-height: 170%;
 /* identical to box height, or 26px */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
 
-
 /* spacer */
 
 width: 256px;
 height: 414px;
-
 
 /* Inside auto layout */
 flex: none;
 order: 15;
 align-self: stretch;
 flex-grow: 1;
-
 
 /* user-row */
 
@@ -774,27 +703,24 @@ gap: 10px;
 width: 256px;
 height: 56px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 16;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Frame */
 
 width: 32px;
 height: 32px;
 
-background: #A73718;
+background: #a73718;
 border-radius: 16px;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* W */
 
@@ -812,9 +738,7 @@ font-size: 13px;
 line-height: 120%;
 /* identical to box height, or 16px */
 
-color: #FFFFFF;
-
-
+color: #ffffff;
 
 /* Frame */
 
@@ -828,12 +752,10 @@ gap: 2px;
 width: 214px;
 height: 48px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
-
 
 /* Wayne */
 
@@ -848,14 +770,12 @@ font-size: 15px;
 line-height: 170%;
 /* identical to box height, or 26px */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* CGO */
 
@@ -870,14 +790,12 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -892,15 +810,14 @@ padding: 0px;
 width: 1120px;
 height: 907px;
 
-background: #F7F3EC;
-border: 1px solid #E1D8CA;
+background: #f7f3ec;
+border: 1px solid #e1d8ca;
 border-radius: 8px;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -917,15 +834,14 @@ gap: 16px;
 width: 1120px;
 height: 64px;
 
-background: #FBF9F4;
-border-bottom: 1px solid #E1D8CA;
+background: #fbf9f4;
+border-bottom: 1px solid #e1d8ca;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -939,12 +855,10 @@ gap: 10px;
 width: 236px;
 height: 32px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 上传能力 */
 
@@ -959,14 +873,12 @@ font-size: 28px;
 line-height: 116%;
 /* or 32px */
 
-color: #A73718;
-
+color: #a73718;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* / */
 
@@ -981,14 +893,12 @@ font-size: 15px;
 line-height: 170%;
 /* identical to box height, or 26px */
 
-color: #E1D8CA;
-
+color: #e1d8ca;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* Creator Builder */
 
@@ -1003,14 +913,12 @@ font-size: 13px;
 line-height: 120%;
 /* identical to box height, or 16px */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 2;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1024,14 +932,13 @@ padding: 0px;
 width: 32px;
 height: 32px;
 
-background: #A73718;
+background: #a73718;
 border-radius: 999px;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* 林 */
 
@@ -1046,14 +953,12 @@ font-size: 28px;
 line-height: 116%;
 /* or 32px */
 
-color: #FFFFFF;
-
+color: #ffffff;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1066,12 +971,10 @@ padding: 24px 140px;
 width: 1120px;
 height: 843px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1085,12 +988,10 @@ gap: 24px;
 width: 840px;
 height: 795px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1103,13 +1004,11 @@ padding: 0px;
 width: 840px;
 height: 26px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 0;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1123,12 +1022,10 @@ gap: 8px;
 width: 60px;
 height: 26px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1142,7 +1039,7 @@ padding: 0px;
 width: 26px;
 height: 26px;
 
-background: #A73718;
+background: #a73718;
 opacity: 0.55;
 border-radius: 999px;
 
@@ -1150,7 +1047,6 @@ border-radius: 999px;
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* ✓ */
 
@@ -1165,14 +1061,12 @@ font-size: 13px;
 line-height: 120%;
 /* identical to box height, or 16px */
 
-color: #FFFFFF;
-
+color: #ffffff;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 导入 */
 
@@ -1187,27 +1081,24 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
 
-
 /* c */
 
 width: 131.75px;
 height: 1px;
 
-background: #E1D8CA;
+background: #e1d8ca;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
-
 
 /* Frame */
 
@@ -1221,12 +1112,10 @@ gap: 8px;
 width: 60px;
 height: 26px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 2;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1240,7 +1129,7 @@ padding: 0px;
 width: 26px;
 height: 26px;
 
-background: #A73718;
+background: #a73718;
 opacity: 0.55;
 border-radius: 999px;
 
@@ -1248,7 +1137,6 @@ border-radius: 999px;
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* ✓ */
 
@@ -1263,14 +1151,12 @@ font-size: 13px;
 line-height: 120%;
 /* identical to box height, or 16px */
 
-color: #FFFFFF;
-
+color: #ffffff;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 提取 */
 
@@ -1285,27 +1171,24 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
 
-
 /* c */
 
 width: 131.75px;
 height: 1px;
 
-background: #E1D8CA;
+background: #e1d8ca;
 
 /* Inside auto layout */
 flex: none;
 order: 3;
 flex-grow: 1;
-
 
 /* Frame */
 
@@ -1319,12 +1202,10 @@ gap: 8px;
 width: 60px;
 height: 26px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 4;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1338,7 +1219,7 @@ padding: 0px;
 width: 26px;
 height: 26px;
 
-background: #A73718;
+background: #a73718;
 opacity: 0.55;
 border-radius: 999px;
 
@@ -1346,7 +1227,6 @@ border-radius: 999px;
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* ✓ */
 
@@ -1361,14 +1241,12 @@ font-size: 13px;
 line-height: 120%;
 /* identical to box height, or 16px */
 
-color: #FFFFFF;
-
+color: #ffffff;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 选择 */
 
@@ -1383,27 +1261,24 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
 
-
 /* c */
 
 width: 131.75px;
 height: 1px;
 
-background: #E1D8CA;
+background: #e1d8ca;
 
 /* Inside auto layout */
 flex: none;
 order: 5;
 flex-grow: 1;
-
 
 /* Frame */
 
@@ -1417,12 +1292,10 @@ gap: 8px;
 width: 73px;
 height: 26px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 6;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1436,7 +1309,7 @@ padding: 0px;
 width: 26px;
 height: 26px;
 
-background: #A73718;
+background: #a73718;
 opacity: 0.55;
 border-radius: 999px;
 
@@ -1444,7 +1317,6 @@ border-radius: 999px;
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* ✓ */
 
@@ -1459,14 +1331,12 @@ font-size: 13px;
 line-height: 120%;
 /* identical to box height, or 16px */
 
-color: #FFFFFF;
-
+color: #ffffff;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 结构化 */
 
@@ -1481,27 +1351,24 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
 
-
 /* c */
 
 width: 131.75px;
 height: 1px;
 
-background: #E1D8CA;
+background: #e1d8ca;
 
 /* Inside auto layout */
 flex: none;
 order: 7;
 flex-grow: 1;
-
 
 /* Frame */
 
@@ -1515,12 +1382,10 @@ gap: 8px;
 width: 60px;
 height: 26px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 8;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1534,14 +1399,13 @@ padding: 0px;
 width: 26px;
 height: 26px;
 
-background: #A73718;
+background: #a73718;
 border-radius: 999px;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 5 */
 
@@ -1555,14 +1419,12 @@ font-size: 12px;
 line-height: 16px;
 /* identical to box height */
 
-color: #FFFFFF;
-
+color: #ffffff;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 发布 */
 
@@ -1577,14 +1439,12 @@ font-size: 13px;
 line-height: 120%;
 /* identical to box height, or 16px */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* header */
 
@@ -1598,13 +1458,11 @@ gap: 4px;
 width: 840px;
 height: 56px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 1;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* 发布到市集 */
 
@@ -1619,15 +1477,13 @@ font-size: 28px;
 line-height: 116%;
 /* or 32px */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* 右边这张卡就是市集里看到的样子。左侧可切换能力。 */
 
@@ -1642,15 +1498,13 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* body-row */
 
@@ -1664,13 +1518,11 @@ gap: 24px;
 width: 840px;
 height: 575px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 2;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* switcher */
 
@@ -1684,12 +1536,10 @@ gap: 8px;
 width: 190px;
 height: 284px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 切换能力 ↕ */
 
@@ -1706,15 +1556,13 @@ line-height: 120%;
 letter-spacing: 0.12em;
 text-transform: uppercase;
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* cap-row-0 */
 
@@ -1731,7 +1579,7 @@ width: 190px;
 height: 72px;
 
 background: rgba(167, 55, 24, 0.1);
-border: 1px solid #A73718;
+border: 1px solid #a73718;
 border-radius: 8px;
 
 /* Inside auto layout */
@@ -1740,7 +1588,6 @@ order: 1;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Ellipse */
 
 box-sizing: border-box;
@@ -1748,14 +1595,13 @@ box-sizing: border-box;
 width: 10px;
 height: 10px;
 
-background: #A73718;
-border: 1.5px solid #A73718;
+background: #a73718;
+border: 1.5px solid #a73718;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 面向大厂PM的资格打分器 */
 
@@ -1770,14 +1616,12 @@ font-size: 15px;
 line-height: 170%;
 /* or 26px */
 
-color: #A73718;
-
+color: #a73718;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
-
 
 /* cap-row-1 */
 
@@ -1793,8 +1637,8 @@ gap: 8px;
 width: 190px;
 height: 40px;
 
-background: #FBF9F4;
-border: 1px solid #E1D8CA;
+background: #fbf9f4;
+border: 1px solid #e1d8ca;
 border-radius: 8px;
 
 /* Inside auto layout */
@@ -1803,7 +1647,6 @@ order: 2;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Ellipse */
 
 box-sizing: border-box;
@@ -1811,13 +1654,12 @@ box-sizing: border-box;
 width: 10px;
 height: 10px;
 
-border: 1.5px solid #E1D8CA;
+border: 1.5px solid #e1d8ca;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 需求炼金师 */
 
@@ -1832,14 +1674,12 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
-
 
 /* cap-row-2 */
 
@@ -1855,8 +1695,8 @@ gap: 8px;
 width: 190px;
 height: 40px;
 
-background: #FBF9F4;
-border: 1px solid #E1D8CA;
+background: #fbf9f4;
+border: 1px solid #e1d8ca;
 border-radius: 8px;
 
 /* Inside auto layout */
@@ -1865,7 +1705,6 @@ order: 3;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Ellipse */
 
 box-sizing: border-box;
@@ -1873,13 +1712,12 @@ box-sizing: border-box;
 width: 10px;
 height: 10px;
 
-border: 1.5px solid #E1D8CA;
+border: 1.5px solid #e1d8ca;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* Verifiable 核查报告 */
 
@@ -1894,14 +1732,12 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
-
 
 /* cap-row-3 */
 
@@ -1917,8 +1753,8 @@ gap: 8px;
 width: 190px;
 height: 40px;
 
-background: #FBF9F4;
-border: 1px solid #E1D8CA;
+background: #fbf9f4;
+border: 1px solid #e1d8ca;
 border-radius: 8px;
 
 /* Inside auto layout */
@@ -1927,7 +1763,6 @@ order: 4;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Ellipse */
 
 box-sizing: border-box;
@@ -1935,13 +1770,12 @@ box-sizing: border-box;
 width: 10px;
 height: 10px;
 
-border: 1.5px solid #E1D8CA;
+border: 1.5px solid #e1d8ca;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* VC 拷打模拟器 */
 
@@ -1956,14 +1790,12 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
-
 
 /* ← 切换,右侧看该能力的 App Identity */
 
@@ -1978,15 +1810,13 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 5;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* right-col */
 
@@ -2000,12 +1830,10 @@ gap: 16px;
 width: 626px;
 height: 575px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
-
 
 /* card-and-map */
 
@@ -2019,13 +1847,11 @@ gap: 16px;
 width: 626px;
 height: 575px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 0;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* market-card */
 
@@ -2040,15 +1866,14 @@ padding: 0px;
 width: 290px;
 height: 575px;
 
-background: #FBF9F4;
-border: 1px solid #E1D8CA;
+background: #fbf9f4;
+border: 1px solid #e1d8ca;
 border-radius: 8px;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* cover */
 
@@ -2064,14 +1889,13 @@ order: 0;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* 评 */
 
 position: absolute;
 width: 58px;
 height: 60px;
-left: calc(50% - 58px/2);
-top: calc(50% - 60px/2);
+left: calc(50% - 58px / 2);
+top: calc(50% - 60px / 2);
 
 /* Display Serif */
 font-family: 'Noto Serif SC';
@@ -2081,9 +1905,7 @@ font-size: 58px;
 line-height: 104%;
 /* or 60px */
 
-color: #B8893A;
-
-
+color: #b8893a;
 
 /* Rectangle */
 
@@ -2093,8 +1915,7 @@ left: 0px;
 right: 0px;
 bottom: 0px;
 
-background: #E1D8CA;
-
+background: #e1d8ca;
 
 /* coverBadge */
 
@@ -2113,23 +1934,21 @@ height: 20px;
 left: 8px;
 top: 8px;
 
-background: #FFFDF9;
-border: 1px solid #E1D8CA;
+background: #fffdf9;
+border: 1px solid #e1d8ca;
 border-radius: 999px;
-
 
 /* Ellipse */
 
 width: 6px;
 height: 6px;
 
-background: #B8893A;
+background: #b8893a;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* GLYPH */
 
@@ -2146,14 +1965,12 @@ line-height: 120%;
 letter-spacing: 0.12em;
 text-transform: uppercase;
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* statusFlag */
 
@@ -2172,23 +1989,21 @@ height: 28px;
 right: 8px;
 top: 8px;
 
-background: #FFFDF9;
-border: 1px solid #E1D8CA;
+background: #fffdf9;
+border: 1px solid #e1d8ca;
 border-radius: 999px;
-
 
 /* Ellipse */
 
 width: 6px;
 height: 6px;
 
-background: #0E6D52;
+background: #0e6d52;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 新上线 */
 
@@ -2203,14 +2018,12 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #0E6D52;
-
+color: #0e6d52;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* body */
 
@@ -2223,13 +2036,11 @@ padding: 16px 24px 24px;
 width: 290px;
 height: 417px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 1;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* metaRow */
 
@@ -2243,13 +2054,11 @@ padding: 0px;
 width: 242px;
 height: 28px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 0;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* PM · 评分卡 */
 
@@ -2264,14 +2073,12 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* outputChip */
 
@@ -2284,14 +2091,13 @@ padding: 4px 12px;
 width: 125px;
 height: 28px;
 
-background: #F4F0E7;
+background: #f4f0e7;
 border-radius: 999px;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* scorecard 评分卡 */
 
@@ -2306,26 +2112,22 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
 
-
 /* sp */
 
 width: 10px;
 height: 12px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* 面向大厂PM的资格打分器 */
 
@@ -2340,8 +2142,7 @@ font-size: 28px;
 line-height: 116%;
 /* or 32px */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
@@ -2349,18 +2150,15 @@ order: 2;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* sp */
 
 width: 10px;
 height: 4px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 3;
 flex-grow: 0;
-
 
 /* 按大厂标准给资格 A–C 档判断+缺口。 */
 
@@ -2375,8 +2173,7 @@ font-size: 15px;
 line-height: 170%;
 /* or 26px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
@@ -2384,18 +2181,15 @@ order: 4;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* sp */
 
 width: 10px;
 height: 12px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 5;
 flex-grow: 0;
-
 
 /* 输入简历与目标岗位，输出 A–C 档资格判断、逐项能力缺口与补齐建议。 */
 
@@ -2410,8 +2204,7 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
@@ -2419,25 +2212,22 @@ order: 6;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* sp */
 
 width: 10px;
 height: 16px;
-
 
 /* Inside auto layout */
 flex: none;
 order: 7;
 flex-grow: 0;
 
-
 /* Rectangle */
 
 width: 242px;
 height: 1px;
 
-background: #E1D8CA;
+background: #e1d8ca;
 
 /* Inside auto layout */
 flex: none;
@@ -2445,18 +2235,15 @@ order: 8;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* sp */
 
 width: 10px;
 height: 16px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 9;
 flex-grow: 0;
-
 
 /* author */
 
@@ -2470,13 +2257,11 @@ gap: 12px;
 width: 242px;
 height: 48px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 10;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* Ellipse */
 
@@ -2486,13 +2271,12 @@ width: 28px;
 height: 28px;
 
 background: rgba(124, 92, 255, 0.1);
-border: 1px solid #E1D8CA;
+border: 1px solid #e1d8ca;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -2506,12 +2290,10 @@ gap: 2px;
 width: 104px;
 height: 48px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* @WAYNE */
 
@@ -2526,14 +2308,12 @@ font-size: 15px;
 line-height: 170%;
 /* identical to box height, or 26px */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 探索型全栈构建者 */
 
@@ -2548,26 +2328,22 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
 
-
 /* sp */
 
 width: 10px;
 height: 12px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 11;
 flex-grow: 0;
-
 
 /* provenance */
 
@@ -2581,13 +2357,11 @@ gap: 6px;
 width: 242px;
 height: 20px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 12;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* Ellipse */
 
@@ -2596,13 +2370,12 @@ box-sizing: border-box;
 width: 10px;
 height: 10px;
 
-border: 1px solid #0E6D52;
+border: 1px solid #0e6d52;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 源自 @WAYNE 的一次真实会话 */
 
@@ -2617,26 +2390,22 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
 
-
 /* sp */
 
 width: 10px;
 height: 16px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 13;
 flex-grow: 0;
-
 
 /* footer */
 
@@ -2650,13 +2419,11 @@ padding: 0px;
 width: 242px;
 height: 36px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 14;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* 免费 */
 
@@ -2671,14 +2438,12 @@ font-size: 15px;
 line-height: 170%;
 /* identical to box height, or 26px */
 
-color: #0E6D52;
-
+color: #0e6d52;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* actionBtn */
 
@@ -2692,14 +2457,13 @@ padding: 0px 16px;
 width: 80px;
 height: 36px;
 
-background: #A73718;
+background: #a73718;
 border-radius: 6px;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* 试用 */
 
@@ -2714,14 +2478,12 @@ font-size: 13px;
 line-height: 120%;
 /* identical to box height, or 16px */
 
-color: #FFFFFF;
-
+color: #ffffff;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* field-map-panel */
 
@@ -2737,15 +2499,14 @@ gap: 6px;
 width: 320px;
 height: 575px;
 
-background: #FBF9F4;
-border: 1px solid #E1D8CA;
+background: #fbf9f4;
+border: 1px solid #e1d8ca;
 border-radius: 8px;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* 这张卡用了哪些字段 */
 
@@ -2760,15 +2521,13 @@ font-size: 15px;
 line-height: 170%;
 /* identical to box height, or 26px */
 
-color: #A73718;
-
+color: #a73718;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* 可改 · 发布前能调 */
 
@@ -2783,15 +2542,13 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #A73718;
-
+color: #a73718;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* field-row-封面 / 图标 */
 
@@ -2805,13 +2562,11 @@ gap: 6px;
 width: 288px;
 height: 26px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 2;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* 封面 / 图标 */
 
@@ -2826,14 +2581,12 @@ font-size: 15px;
 line-height: 170%;
 /* identical to box height, or 26px */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* ← */
 
@@ -2848,14 +2601,12 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* 你选 */
 
@@ -2870,14 +2621,12 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 2;
 flex-grow: 0;
-
 
 /* field-row-名称 */
 
@@ -2891,13 +2640,11 @@ gap: 6px;
 width: 288px;
 height: 26px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 3;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* 名称 */
 
@@ -2912,14 +2659,12 @@ font-size: 15px;
 line-height: 170%;
 /* identical to box height, or 26px */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* ← */
 
@@ -2934,14 +2679,12 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* identity.name（软） */
 
@@ -2956,14 +2699,12 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 2;
 flex-grow: 0;
-
 
 /* field-row-一句话 */
 
@@ -2977,13 +2718,11 @@ gap: 6px;
 width: 288px;
 height: 26px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 4;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* 一句话 */
 
@@ -2998,14 +2737,12 @@ font-size: 15px;
 line-height: 170%;
 /* identical to box height, or 26px */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* ← */
 
@@ -3020,14 +2757,12 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* tagline（软） */
 
@@ -3042,14 +2777,12 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 2;
 flex-grow: 0;
-
 
 /* field-row-定价 */
 
@@ -3063,13 +2796,11 @@ gap: 6px;
 width: 288px;
 height: 26px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 5;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* 定价 */
 
@@ -3084,14 +2815,12 @@ font-size: 15px;
 line-height: 170%;
 /* identical to box height, or 26px */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* ← */
 
@@ -3106,14 +2835,12 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* 你设 */
 
@@ -3128,14 +2855,12 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 2;
 flex-grow: 0;
-
 
 /* 自动 · 系统填 */
 
@@ -3150,15 +2875,13 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 6;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* field-row-署名 */
 
@@ -3172,13 +2895,11 @@ gap: 6px;
 width: 288px;
 height: 26px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 7;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* 署名 */
 
@@ -3193,14 +2914,12 @@ font-size: 15px;
 line-height: 170%;
 /* identical to box height, or 26px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* ← */
 
@@ -3215,14 +2934,12 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* @creator */
 
@@ -3237,14 +2954,12 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 2;
 flex-grow: 0;
-
 
 /* field-row-装机 · 评分 */
 
@@ -3258,13 +2973,11 @@ gap: 6px;
 width: 288px;
 height: 26px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 8;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* 装机 · 评分 */
 
@@ -3279,14 +2992,12 @@ font-size: 15px;
 line-height: 170%;
 /* identical to box height, or 26px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* ← */
 
@@ -3301,14 +3012,12 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* 上线后真实数据 */
 
@@ -3323,14 +3032,12 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 2;
 flex-grow: 0;
-
 
 /* field-row-试用钮 */
 
@@ -3344,13 +3051,11 @@ gap: 6px;
 width: 288px;
 height: 26px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 9;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* 试用钮 */
 
@@ -3365,14 +3070,12 @@ font-size: 15px;
 line-height: 170%;
 /* identical to box height, or 26px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* ← */
 
@@ -3387,14 +3090,12 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* 系统固定 */
 
@@ -3409,28 +3110,25 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 2;
 flex-grow: 0;
 
-
 /* Rectangle */
 
 width: 288px;
 height: 1px;
 
-background: #E1D8CA;
+background: #e1d8ca;
 
 /* Inside auto layout */
 flex: none;
 order: 10;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* 封面来源 · 3 选 1（可改） */
 
@@ -3445,15 +3143,13 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #A73718;
-
+color: #a73718;
 
 /* Inside auto layout */
 flex: none;
 order: 11;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* cover-src */
 
@@ -3467,26 +3163,23 @@ gap: 8px;
 width: 288px;
 height: 24px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 12;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Ellipse */
 
 width: 6px;
 height: 6px;
 
-background: #B8893A;
+background: #b8893a;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 字形 GLYPH · 由 output.type 推导（本例） */
 
@@ -3501,14 +3194,12 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* cover-src */
 
@@ -3522,26 +3213,23 @@ gap: 8px;
 width: 288px;
 height: 24px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 13;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Ellipse */
 
 width: 6px;
 height: 6px;
 
-background: #7C5CFF;
+background: #7c5cff;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* AI 生成图 · 创作者上传 */
 
@@ -3556,14 +3244,12 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* cover-src */
 
@@ -3577,26 +3263,23 @@ gap: 8px;
 width: 288px;
 height: 24px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 14;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Ellipse */
 
 width: 6px;
 height: 6px;
 
-background: #1F5673;
+background: #1f5673;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* HTML · code-design 渲染快照 */
 
@@ -3611,14 +3294,12 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* footer */
 
@@ -3632,13 +3313,11 @@ padding: 16px 0px 0px;
 width: 840px;
 height: 66px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 3;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* 发布后进入 Alpha 人工评审 · 上线后在工作台看调用与消耗 */
 
@@ -3653,26 +3332,22 @@ font-size: 13px;
 line-height: 155%;
 /* or 20px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
 
-
 /* footer-spacer */
 
 width: 360px;
 height: 1px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
-
 
 /* publish-btn */
 
@@ -3686,14 +3361,13 @@ padding: 12px 20px;
 width: 134px;
 height: 50px;
 
-background: #A73718;
+background: #a73718;
 border-radius: 6px;
 
 /* Inside auto layout */
 flex: none;
 order: 2;
 flex-grow: 0;
-
 
 /* 发布到市集 → */
 
@@ -3708,8 +3382,7 @@ font-size: 15px;
 line-height: 170%;
 /* identical to box height, or 26px */
 
-color: #FFFFFF;
-
+color: #ffffff;
 
 /* Inside auto layout */
 flex: none;

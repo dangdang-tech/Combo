@@ -19,7 +19,8 @@ vi.mock('jose', () => ({
   },
 }));
 
-const { verifyLogtoJwt, verifyLogtoIdToken, clearJwksCache } = await import('../platform/infra/logto.js');
+const { verifyLogtoJwt, verifyLogtoIdToken, clearJwksCache } =
+  await import('../platform/infra/logto.js');
 
 // env：配 LOGTO_JWKS_URI 让 resolveJwksUri 走配置兜底（discovery fetch 会失败/不可达，回落配置，不触网）。
 //   注：fetchDiscovery 内的 fetch 在测试环境会拒绝 → reachable=false，于是回落 env.LOGTO_JWKS_URI。

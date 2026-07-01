@@ -25,7 +25,13 @@ import {
   type NotifyExtractCompletedPayload,
   type ExtractDoneResult,
 } from '@cb/shared';
-import type { JobContext, JobHandler, JobResult, LeasedJob, Queryable } from '../../platform/jobs/types.js';
+import type {
+  JobContext,
+  JobHandler,
+  JobResult,
+  LeasedJob,
+  Queryable,
+} from '../../platform/jobs/types.js';
 import { emitInTx, eventIdFor } from '../../platform/events/outbox.js';
 import { withTransaction, type Tx, type TxPool } from '../../platform/events/db-tx.js';
 import {
@@ -39,12 +45,7 @@ import {
   CandidateLandingFencedOut,
   type CandidateRowForFinal,
 } from './repo.js';
-import {
-  clusterSegments,
-  scoreCandidates,
-  nameOne,
-  type ScoredCandidate,
-} from './cluster.js';
+import { clusterSegments, scoreCandidates, nameOne, type ScoredCandidate } from './cluster.js';
 
 /** 抛带分类 code 的整体失败错误（runner.normalizeToErrorBody 据 code 归一人话信封，绝不裸露原始报错）。 */
 function codedError(code: (typeof ErrorCode)[keyof typeof ErrorCode], message: string): Error {

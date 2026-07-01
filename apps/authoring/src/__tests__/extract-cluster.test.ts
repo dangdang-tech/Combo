@@ -113,10 +113,20 @@ describe('clusterSegments — 聚类相似工作流', () => {
 
   it('BUG-021 反向：内容不相交、project 各异的两组不被误合（防过度合并）', () => {
     const groupA = Array.from({ length: 3 }, (_, i) =>
-      mkSeg({ segmentId: `a-${i}`, project: null, title: '水果', content: '苹果 香蕉 橙子 葡萄 西瓜' }),
+      mkSeg({
+        segmentId: `a-${i}`,
+        project: null,
+        title: '水果',
+        content: '苹果 香蕉 橙子 葡萄 西瓜',
+      }),
     );
     const groupB = Array.from({ length: 3 }, (_, i) =>
-      mkSeg({ segmentId: `b-${i}`, project: null, title: '交通', content: '汽车 火车 飞机 轮船 自行' }),
+      mkSeg({
+        segmentId: `b-${i}`,
+        project: null,
+        title: '交通',
+        content: '汽车 火车 飞机 轮船 自行',
+      }),
     );
     const drafts = clusterSegments([...groupA, ...groupB]);
     // 词袋零交集 + project 均空（不触发同项目合并）→ 恰好两簇，不被全局合并误并成一簇。

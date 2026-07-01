@@ -22,7 +22,13 @@ import {
   type StructureState,
   type ErrorBody,
 } from '@cb/shared';
-import type { JobContext, JobHandler, JobResult, LeasedJob, Queryable } from '../../platform/jobs/types.js';
+import type {
+  JobContext,
+  JobHandler,
+  JobResult,
+  LeasedJob,
+  Queryable,
+} from '../../platform/jobs/types.js';
 import {
   readVersion,
   readEvidenceForCandidate,

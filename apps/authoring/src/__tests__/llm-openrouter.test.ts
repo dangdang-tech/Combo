@@ -8,8 +8,14 @@ import type { LlmCallOptions } from '@cb/shared';
 import { LLM_MAX_RETRIES } from '@cb/shared';
 import { makeLlmGateway } from '../platform/infra/llm/gateway.js';
 import { createMemoryAuditSink } from '../platform/infra/llm/audit.js';
-import { createOpenRouterClient, OPENROUTER_DEFAULT_MODEL } from '../platform/infra/llm/openrouter.js';
-import { OpenRouterApiError, normalizeOpenRouterError } from '../platform/infra/llm/openrouter-errors.js';
+import {
+  createOpenRouterClient,
+  OPENROUTER_DEFAULT_MODEL,
+} from '../platform/infra/llm/openrouter.js';
+import {
+  OpenRouterApiError,
+  normalizeOpenRouterError,
+} from '../platform/infra/llm/openrouter-errors.js';
 import { resolveLlmProvider } from '../platform/infra/llm/index.js';
 import {
   computeCostMicros,

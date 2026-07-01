@@ -9,7 +9,10 @@ import {
   listSegmentsHandler,
   listSnapshotsHandler,
 } from '../modules/import/handlers.js';
-import { insertSnapshotProtected, insertSegmentProtected } from '../modules/import/snapshot-repo.js';
+import {
+  insertSnapshotProtected,
+  insertSegmentProtected,
+} from '../modules/import/snapshot-repo.js';
 import { ImportFakeDb, type JobRowF } from './import-fakes.js';
 
 interface Sent {

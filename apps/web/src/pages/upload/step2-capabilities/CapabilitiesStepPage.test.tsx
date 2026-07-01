@@ -177,7 +177,9 @@ describe('CapabilitiesStepPage', () => {
 
     // 发布请求：每项仅 candidateId + idempotencyKey（无 visibility/cover/tiers）；批次级 scope。
     await waitFor(() => {
-      const call = mock.calls.find((c) => c.url.includes('/publish-batches') && c.method === 'POST');
+      const call = mock.calls.find(
+        (c) => c.url.includes('/publish-batches') && c.method === 'POST',
+      );
       expect(call).toBeTruthy();
       expect(call?.headers['X-Idempotency-Scope']).toBe('publish_batch.create');
       const body = call?.body as { items: Record<string, unknown>[]; draftId?: string };
@@ -222,7 +224,10 @@ describe('CapabilitiesStepPage', () => {
 
   it('提取完成但 0 候选 → 诚实空态，无发布区（永不裸转圈）', async () => {
     mock = installFetchMock([
-      { status: 202, json: { data: { jobId: 'j1', snapshotId: 's1', status: 'queued', eventsUrl: '/x' } } },
+      {
+        status: 202,
+        json: { data: { jobId: 'j1', snapshotId: 's1', status: 'queued', eventsUrl: '/x' } },
+      },
       {
         status: 200,
         json: {
@@ -240,7 +245,16 @@ describe('CapabilitiesStepPage', () => {
     act(() =>
       connAt(0).emit(
         'done',
-        { status: 'completed', result: { candidateCount: 0, readyCount: 0, failedCount: 0, analyzedSegments: 100, degraded: false } },
+        {
+          status: 'completed',
+          result: {
+            candidateCount: 0,
+            readyCount: 0,
+            failedCount: 0,
+            analyzedSegments: 100,
+            degraded: false,
+          },
+        },
         { id: '1-0' },
       ),
     );
@@ -251,7 +265,10 @@ describe('CapabilitiesStepPage', () => {
 
   it('一键发布起批失败（后端 5xx）→ 人话错误 + 重试入口（不静默、不卡住）', async () => {
     mock = installFetchMock([
-      { status: 202, json: { data: { jobId: 'j1', snapshotId: 's1', status: 'queued', eventsUrl: '/x' } } },
+      {
+        status: 202,
+        json: { data: { jobId: 'j1', snapshotId: 's1', status: 'queued', eventsUrl: '/x' } },
+      },
       {
         status: 200,
         json: {
@@ -263,7 +280,17 @@ describe('CapabilitiesStepPage', () => {
         },
       },
       // createPublishBatch → 5xx（apiPost 归一 ApiError，取 userMessage）。
-      { status: 502, json: { error: { userMessage: '发布服务开小差了', retriable: true, action: 'retry', traceId: 't1' } } },
+      {
+        status: 502,
+        json: {
+          error: {
+            userMessage: '发布服务开小差了',
+            retriable: true,
+            action: 'retry',
+            traceId: 't1',
+          },
+        },
+      },
     ]);
     renderPage();
     await waitFor(() => expect(MockFetchEventSource.connections.length).toBe(1));
@@ -276,7 +303,10 @@ describe('CapabilitiesStepPage', () => {
 
   it('部分失败（无连坐）→ 成功卡已发布、失败卡出人话错误 + 单项重试；汇总含（失败 N）', async () => {
     mock = installFetchMock([
-      { status: 202, json: { data: { jobId: 'j1', snapshotId: 's1', status: 'queued', eventsUrl: '/x' } } },
+      {
+        status: 202,
+        json: { data: { jobId: 'j1', snapshotId: 's1', status: 'queued', eventsUrl: '/x' } },
+      },
       {
         status: 200,
         json: {
@@ -291,7 +321,13 @@ describe('CapabilitiesStepPage', () => {
         status: 202,
         json: {
           data: {
-            batchId: 'b1', jobId: 'bj1', status: 'running', total: 2, processedCount: 0, publishedCount: 0, failedCount: 0,
+            batchId: 'b1',
+            jobId: 'bj1',
+            status: 'running',
+            total: 2,
+            processedCount: 0,
+            publishedCount: 0,
+            failedCount: 0,
             items: [
               { itemId: 'i1', candidateId: 'c1', state: 'structuring' },
               { itemId: 'i2', candidateId: 'c2', state: 'structuring' },
@@ -305,7 +341,13 @@ describe('CapabilitiesStepPage', () => {
         status: 200,
         json: {
           data: {
-            batchId: 'b1', jobId: 'bj1', status: 'running', total: 2, processedCount: 1, publishedCount: 1, failedCount: 0,
+            batchId: 'b1',
+            jobId: 'bj1',
+            status: 'running',
+            total: 2,
+            processedCount: 1,
+            publishedCount: 1,
+            failedCount: 0,
             items: [
               { itemId: 'i1', candidateId: 'c1', state: 'published' },
               { itemId: 'i2', candidateId: 'c2', state: 'structuring' },
@@ -322,11 +364,29 @@ describe('CapabilitiesStepPage', () => {
     await userEvent.click(screen.getByRole('button', { name: /一键发布/ }));
     await waitFor(() => expect(MockFetchEventSource.connections.length).toBe(2));
     act(() => connAt(1).open());
-    act(() => connAt(1).emit('item-appended', { item: { itemId: 'i1', candidateId: 'c1', state: 'published' } }, { id: 'b-0' }));
     act(() =>
       connAt(1).emit(
         'item-appended',
-        { item: { itemId: 'i2', candidateId: 'c2', state: 'failed', error: { userMessage: '这一项还差几个字段', retriable: false, action: 'change_input', traceId: 't2' } } },
+        { item: { itemId: 'i1', candidateId: 'c1', state: 'published' } },
+        { id: 'b-0' },
+      ),
+    );
+    act(() =>
+      connAt(1).emit(
+        'item-appended',
+        {
+          item: {
+            itemId: 'i2',
+            candidateId: 'c2',
+            state: 'failed',
+            error: {
+              userMessage: '这一项还差几个字段',
+              retriable: false,
+              action: 'change_input',
+              traceId: 't2',
+            },
+          },
+        },
         { id: 'b-1' },
       ),
     );
@@ -335,11 +395,15 @@ describe('CapabilitiesStepPage', () => {
     expect(screen.getByText('这一项还差几个字段')).toBeInTheDocument();
     const retryBtn = screen.getByRole('button', { name: '重试' });
     // 汇总含（失败 1）。
-    await waitFor(() => expect(screen.getByText(/已发布 1 \/ 2 个能力（失败 1）/)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText(/已发布 1 \/ 2 个能力（失败 1）/)).toBeInTheDocument(),
+    );
     // 点单项重试 → 打到 /publish-batches/b1/items/i2/retry。
     await userEvent.click(retryBtn);
     await waitFor(() => {
-      const call = mock.calls.find((c) => c.url.includes('/publish-batches/b1/items/i2/retry') && c.method === 'POST');
+      const call = mock.calls.find(
+        (c) => c.url.includes('/publish-batches/b1/items/i2/retry') && c.method === 'POST',
+      );
       expect(call).toBeTruthy();
       expect(call?.headers['X-Idempotency-Scope']).toBe('publish_batch.item.retry');
     });
@@ -347,7 +411,10 @@ describe('CapabilitiesStepPage', () => {
 
   it('增量帧省略可选 candidateId 时，卡片发布状态不丢（identity 保留，回归 #2）', async () => {
     mock = installFetchMock([
-      { status: 202, json: { data: { jobId: 'j1', snapshotId: 's1', status: 'queued', eventsUrl: '/x' } } },
+      {
+        status: 202,
+        json: { data: { jobId: 'j1', snapshotId: 's1', status: 'queued', eventsUrl: '/x' } },
+      },
       {
         status: 200,
         json: {
@@ -362,7 +429,13 @@ describe('CapabilitiesStepPage', () => {
         status: 202,
         json: {
           data: {
-            batchId: 'b1', jobId: 'bj1', status: 'running', total: 1, processedCount: 0, publishedCount: 0, failedCount: 0,
+            batchId: 'b1',
+            jobId: 'bj1',
+            status: 'running',
+            total: 1,
+            processedCount: 0,
+            publishedCount: 0,
+            failedCount: 0,
             items: [{ itemId: 'i1', candidateId: 'c1', state: 'structuring' }],
           },
         },
@@ -377,7 +450,13 @@ describe('CapabilitiesStepPage', () => {
     await waitFor(() => expect(MockFetchEventSource.connections.length).toBe(2));
     act(() => connAt(1).open());
     // 增量帧【不带 candidateId】（契约里 candidateId 可选）。
-    act(() => connAt(1).emit('item-appended', { item: { itemId: 'i1', state: 'published' } }, { id: 'b-0' }));
+    act(() =>
+      connAt(1).emit(
+        'item-appended',
+        { item: { itemId: 'i1', state: 'published' } },
+        { id: 'b-0' },
+      ),
+    );
     // 卡片仍映射到该项 → 已发布 + 市集链接（candidateId 由初始批响应保留）。
     await waitFor(() => expect(screen.getByText('已发布')).toBeInTheDocument());
     expect(screen.getByRole('link', { name: '市集链接' })).toHaveAttribute('href', '/a/svs');
@@ -390,7 +469,13 @@ describe('CapabilitiesStepPage', () => {
         status: 200,
         json: {
           data: {
-            batchId: 'b1', jobId: 'bj1', status: 'completed', total: 1, processedCount: 1, publishedCount: 1, failedCount: 0,
+            batchId: 'b1',
+            jobId: 'bj1',
+            status: 'completed',
+            total: 1,
+            processedCount: 1,
+            publishedCount: 1,
+            failedCount: 0,
             items: [{ itemId: 'i1', candidateId: 'c1', state: 'published' }],
           },
         },
@@ -418,6 +503,8 @@ describe('CapabilitiesStepPage', () => {
     await waitFor(() => expect(screen.getByText('已发布')).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /一键发布/ })).toBeNull();
     // 确有拉批请求（续传语义）。
-    expect(mock.calls.some((c) => c.url.includes('/publish-batches/b1') && c.method === 'GET')).toBe(true);
+    expect(
+      mock.calls.some((c) => c.url.includes('/publish-batches/b1') && c.method === 'GET'),
+    ).toBe(true);
   });
 });

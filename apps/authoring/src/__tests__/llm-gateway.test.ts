@@ -15,7 +15,11 @@ import {
 import { createMemoryAuditSink, noopAuditSink } from '../platform/infra/llm/audit.js';
 import { createTokenBucketLimiter, noopRateLimiter } from '../platform/infra/llm/limiter.js';
 import { normalizeLlmError, backoffMs } from '../platform/infra/llm/errors.js';
-import { computeCostMicros, type LlmClock, type LlmRateLimiter } from '../platform/infra/llm/types.js';
+import {
+  computeCostMicros,
+  type LlmClock,
+  type LlmRateLimiter,
+} from '../platform/infra/llm/types.js';
 
 /**
  * 快进时钟:

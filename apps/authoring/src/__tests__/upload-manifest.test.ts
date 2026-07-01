@@ -10,7 +10,10 @@ import {
   readUploadManifest,
   type UploadManifest,
 } from '../modules/import/upload-manifest-repo.js';
-import { createImportJobFromManifest, initialImportProgress } from '../modules/import/create-job.js';
+import {
+  createImportJobFromManifest,
+  initialImportProgress,
+} from '../modules/import/create-job.js';
 import { reconcileJobsOnce } from '../platform/jobs/sweeper-reconcile.js';
 import { ImportFakeDb } from './import-fakes.js';
 

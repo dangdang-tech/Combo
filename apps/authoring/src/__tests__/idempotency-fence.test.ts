@@ -3,7 +3,10 @@
 //         UPDATE 带 WHERE … AND lease_token=<旧 token> → 匹配 0 行 → 绝不覆盖新持有者的 response_ref。
 import { describe, it, expect, vi } from 'vitest';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { requireIdempotency, persistIdempotencyResponse } from '../platform/middleware/idempotency.js';
+import {
+  requireIdempotency,
+  persistIdempotencyResponse,
+} from '../platform/middleware/idempotency.js';
 import { IdempotencyScope } from '@cb/shared';
 
 interface QueryCall {

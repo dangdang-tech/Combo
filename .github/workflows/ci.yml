@@ -58,6 +58,18 @@ jobs:
         run: pnpm -F @cb/scripts openapi:dump > /tmp/openapi.json && node -e "const d=require('/tmp/openapi.json'); if(d.openapi!=='3.1.0') process.exit(1); if(!d.components||!d.components.schemas) process.exit(1); console.log('openapi 3.1 schemas:', Object.keys(d.components.schemas).length)"
 
       - name: Compose config self-check (structural, no up)
+        # 结构自检只做 YAML/引用校验、不起容器。compose 里必填变量用 ${VAR:?}（生产禁默认，安全刻意）
+        # 故此处注入一次性占位值让插值通过——绝不改 compose 的「生产禁默认」约束。
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+          S3_ACCESS_KEY: ci
+          S3_SECRET_KEY: ci
+          LOGTO_APP_ID: ci
+          LOGTO_APP_SECRET: ci
+          LOGTO_AUDIENCE: ci
+          LOGTO_REDIRECT_URI: http://ci.local/callback
         run: docker compose -f infra/docker-compose.yml config -q && echo "compose config valid"
 
       - name: ShellCheck scripts

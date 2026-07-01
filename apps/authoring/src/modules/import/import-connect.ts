@@ -197,7 +197,10 @@ export function connectBinHandler(): RouteHandlerMethod {
     }
 
     if (asset.endsWith('.sha256')) {
-      reply.code(200).header('content-type', 'text/plain; charset=utf-8').send(createReadStream(filePath));
+      reply
+        .code(200)
+        .header('content-type', 'text/plain; charset=utf-8')
+        .send(createReadStream(filePath));
       return reply;
     }
     reply

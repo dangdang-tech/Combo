@@ -30,7 +30,8 @@ vi.mock('../platform/infra/logto.js', () => ({
   verifyLogtoJwt: (...args: unknown[]) => verifyLogtoMock(...args),
 }));
 
-const { requireAuth, requireSseAuth, SESSION_COOKIE } = await import('../platform/middleware/auth.js');
+const { requireAuth, requireSseAuth, SESSION_COOKIE } =
+  await import('../platform/middleware/auth.js');
 const { devLoginHandler } = await import('../modules/account/handlers.js');
 
 const SECRET = 'dev-secret-for-tests-0123456789';

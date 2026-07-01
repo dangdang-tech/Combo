@@ -19,11 +19,7 @@ import {
   type Envelope,
 } from '@cb/shared';
 import { createImportJobFromManifest } from './create-job.js';
-import {
-  getSnapshotForOwner,
-  listSnapshotSegments,
-  listOwnerSnapshots,
-} from './snapshot-repo.js';
+import { getSnapshotForOwner, listSnapshotSegments, listOwnerSnapshots } from './snapshot-repo.js';
 import {
   evaluateManifestGate,
   persistUploadManifest,

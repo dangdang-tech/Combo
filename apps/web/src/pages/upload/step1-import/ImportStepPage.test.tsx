@@ -210,9 +210,7 @@ describe('ImportStepPage', () => {
     act(() => conn().emit('progress', { percent: 10, phrase: '10%' }, { id: '1-0' }));
     await userEvent.click(screen.getByRole('button', { name: '取消导入' }));
     // 回空态：命令行导入主卡（主路径）再次可见。
-    await waitFor(() =>
-      expect(screen.getByText('命令行导入（本机直读）')).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText('命令行导入（本机直读）')).toBeInTheDocument());
     const cancelCall = mock.calls.find((c) => c.url.includes('/cancel'));
     expect(cancelCall?.headers['X-Idempotency-Scope']).toBe('job.cancel');
   });

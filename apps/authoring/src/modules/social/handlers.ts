@@ -15,14 +15,7 @@ import {
   type LikeResult,
 } from '@cb/shared';
 import { asTxPool } from '../../platform/events/db-tx.js';
-import {
-  follow,
-  unfollow,
-  like,
-  unlike,
-  SocialTargetNotFound,
-  SocialSelfLike,
-} from './repo.js';
+import { follow, unfollow, like, unlike, SocialTargetNotFound, SocialSelfLike } from './repo.js';
 
 /** 取已鉴权 userId（requireAuth 已保证存在；缺失则 401 兜底，绝不裸露）。 */
 function requireUserId(req: FastifyRequest, reply: FastifyReply): string | null {

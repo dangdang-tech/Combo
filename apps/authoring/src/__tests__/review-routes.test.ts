@@ -6,7 +6,10 @@
 //     · 三处单一真源：裁决后 GET 读到的 review_status/reject_reason 与裁决落库一致（发布页/工作台/主页同源）。
 import { describe, it, expect } from 'vitest';
 import type { RouteHandlerMethod } from 'fastify';
-import { reviewDecisionHandler, getPublicationHandler } from '../modules/publish/review-handlers.js';
+import {
+  reviewDecisionHandler,
+  getPublicationHandler,
+} from '../modules/publish/review-handlers.js';
 import { PublishFakeDb, seedUser, seedCapabilityVersion, type PubRow } from './publish-fakes.js';
 
 interface Sent {

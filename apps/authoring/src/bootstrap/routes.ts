@@ -11,7 +11,10 @@ import { registerPublishRoutes, PUBLISH_ENDPOINTS } from '../modules/publish/ind
 import { registerDashboardRoutes, DASHBOARD_ENDPOINTS } from '../modules/dashboard/index.js';
 import { registerProfileRoutes, PROFILE_ENDPOINTS } from '../modules/profile/index.js';
 import { registerSocialRoutes, SOCIAL_ENDPOINTS } from '../modules/social/index.js';
-import { registerNotificationRoutes, NOTIFICATION_ENDPOINTS } from '../modules/notifications/index.js';
+import {
+  registerNotificationRoutes,
+  NOTIFICATION_ENDPOINTS,
+} from '../modules/notifications/index.js';
 import { registerJobRoutes, JOB_ENDPOINTS } from './jobs-routes.js';
 import type { EndpointDecl } from '../platform/http/_helpers.js';
 

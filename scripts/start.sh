@@ -27,8 +27,8 @@ command -v docker >/dev/null 2>&1 || die "需要 docker（本期无 Docker，留
 ENV_FILE="${ROOT_DIR}/.env"
 if [[ -f "${ENV_FILE}" ]]; then
   # 仅取本守卫关心的密钥行，避免 source 整文件带来副作用（注释/特殊字符）。
-  # shellcheck disable=SC1090
   set -a
+  # shellcheck disable=SC1090  # 指令须紧贴被抑制的 source 行（原先在 set -a 上方 → 落空，未抑制到本行）。
   . "${ENV_FILE}"
   set +a
 fi

@@ -8,10 +8,7 @@
 //   连不到真 PG（CI 无 docker）→ 整组 skip（不误红）；连得到 → 实跑断言。
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Pool, type PoolClient } from 'pg';
-import {
-  writeFieldStuckIfGenerating,
-  writeFieldDoneSurgical,
-} from '../modules/structure/repo.js';
+import { writeFieldStuckIfGenerating, writeFieldDoneSurgical } from '../modules/structure/repo.js';
 
 /** 连接串：优先 DATABASE_URL，否则 POSTGRES_* 拼（docker infra-postgres-1，host 端口 5432），最后 dev 默认。 */
 function resolveDbUrl(): string {

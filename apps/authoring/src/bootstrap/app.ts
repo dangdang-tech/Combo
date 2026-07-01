@@ -135,9 +135,8 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
 
   // 进程退出时关闭基础设施连接（onClose 钩子）。
   app.addHook('onClose', async () => {
-    const { closeDb, closeRedis, closeQueues, closeObjectStore } = await import(
-      '../platform/infra/index.js'
-    );
+    const { closeDb, closeRedis, closeQueues, closeObjectStore } =
+      await import('../platform/infra/index.js');
     await Promise.allSettled([closeDb(), closeRedis(), closeQueues()]);
     closeObjectStore();
   });

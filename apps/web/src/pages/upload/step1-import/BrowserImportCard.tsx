@@ -19,7 +19,10 @@ function filesFromDrop(dt: DataTransfer): File[] {
   return Array.from(dt.files ?? []);
 }
 
-export function BrowserImportCard({ onFiles, disabled = false }: BrowserImportCardProps): ReactElement {
+export function BrowserImportCard({
+  onFiles,
+  disabled = false,
+}: BrowserImportCardProps): ReactElement {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const dirInputRef = useRef<HTMLInputElement | null>(null);

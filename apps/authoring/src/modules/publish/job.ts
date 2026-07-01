@@ -25,7 +25,13 @@ import {
   type Visibility,
   type LlmGatewayPort,
 } from '@cb/shared';
-import type { JobContext, JobHandler, JobResult, LeasedJob, Queryable } from '../../platform/jobs/types.js';
+import type {
+  JobContext,
+  JobHandler,
+  JobResult,
+  LeasedJob,
+  Queryable,
+} from '../../platform/jobs/types.js';
 import type { TxPool } from '../../platform/events/db-tx.js';
 import { publishOne } from './publish-one.js';
 import { PublishError } from './repo.js';

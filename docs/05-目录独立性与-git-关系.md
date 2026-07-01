@@ -10,15 +10,15 @@
 
 仓库根就是一个独立的 pnpm monorepo（package 名 `@cb/root`）。证据如下。
 
-| 维度       | 实际情况                                                                                       |
-| ---------- | ---------------------------------------------------------------------------------------------- |
-| 包与依赖   | 仓库根自带 `package.json`、`pnpm-workspace.yaml`、`pnpm-lock.yaml`、`node_modules`，依赖全部在仓库内解析。 |
-| 工作区范围 | `pnpm-workspace.yaml` 圈定 `packages/*`、`apps/*`、`db`、`infra`、`scripts`，无任何外部引用。 |
-| TypeScript | `tsconfig.json` 的项目引用只指向 `./packages/shared`、`./apps/api`、`./apps/web`。 |
-| 源码 import | `apps/web/src` 里的相对路径最深只回到 `apps/web/src` 内部。 |
-| 容器构建   | `infra/docker-compose.yml` 的构建上下文是 `context: ..`（compose 文件在 `infra/` 下，故 `..` 指仓库根），Dockerfile 都在 `infra/` 内。 |
-| CI         | `.github/workflows/ci.yml` 位于仓库根，GitHub Actions 直接识别并运行；步骤均以仓库根为工作目录（无 `working-directory` 前缀）。 |
-| 配置       | 仓库根自带 `.env`、`.env.local.example`、`.env.compose.example`、`.nvmrc`、`eslint.config.js`、`tsconfig.base.json`。 |
+| 维度        | 实际情况                                                                                                                               |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 包与依赖    | 仓库根自带 `package.json`、`pnpm-workspace.yaml`、`pnpm-lock.yaml`、`node_modules`，依赖全部在仓库内解析。                             |
+| 工作区范围  | `pnpm-workspace.yaml` 圈定 `packages/*`、`apps/*`、`db`、`infra`、`scripts`，无任何外部引用。                                          |
+| TypeScript  | `tsconfig.json` 的项目引用只指向 `./packages/shared`、`./apps/api`、`./apps/web`。                                                     |
+| 源码 import | `apps/web/src` 里的相对路径最深只回到 `apps/web/src` 内部。                                                                            |
+| 容器构建    | `infra/docker-compose.yml` 的构建上下文是 `context: ..`（compose 文件在 `infra/` 下，故 `..` 指仓库根），Dockerfile 都在 `infra/` 内。 |
+| CI          | `.github/workflows/ci.yml` 位于仓库根，GitHub Actions 直接识别并运行；步骤均以仓库根为工作目录（无 `working-directory` 前缀）。        |
+| 配置        | 仓库根自带 `.env`、`.env.local.example`、`.env.compose.example`、`.nvmrc`、`eslint.config.js`、`tsconfig.base.json`。                  |
 
 **怎么跑**：本地子集开发与 Compose 起全栈的完整命令都在仓库根的 [`README.md`](../README.md)（「安装」「本地开发」「Compose 起全栈」三节）。所有命令都从仓库根执行。
 

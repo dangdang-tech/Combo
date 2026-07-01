@@ -6,7 +6,11 @@
 //     - lifecycle 毒丸：卡住停 cursor、不进 dead_events、不跳过。
 //     - cursor 与处理同事务（处理失败时 cursor 不前进）。
 import { describe, it, expect } from 'vitest';
-import { runOnce, type ConsumerTopicConfig, type FetchedEvent } from '../platform/events/consumer-core.js';
+import {
+  runOnce,
+  type ConsumerTopicConfig,
+  type FetchedEvent,
+} from '../platform/events/consumer-core.js';
 import type { TxPool, Tx, TxConn } from '../platform/events/db-tx.js';
 
 /** 一行 outbox（内存模型）。 */

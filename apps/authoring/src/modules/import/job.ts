@@ -31,7 +31,13 @@ import {
   type NotifyImportCompletedPayload,
 } from '@cb/shared';
 import { gunzipSync } from 'node:zlib';
-import type { JobContext, JobHandler, JobResult, LeasedJob, Queryable } from '../../platform/jobs/types.js';
+import type {
+  JobContext,
+  JobHandler,
+  JobResult,
+  LeasedJob,
+  Queryable,
+} from '../../platform/jobs/types.js';
 import {
   parseSessions,
   computeContentHash,

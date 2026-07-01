@@ -18,16 +18,8 @@ import {
   type CandidateEvidenceView,
   type ConfidenceSummary,
 } from '@cb/shared';
-import {
-  createFullExtractJob,
-  createRetryJob,
-  jobEventsUrl,
-} from './create-extract-job.js';
-import {
-  listCandidates,
-  getCandidateForOwner,
-  listCandidateEvidence,
-} from './candidates-repo.js';
+import { createFullExtractJob, createRetryJob, jobEventsUrl } from './create-extract-job.js';
+import { listCandidates, getCandidateForOwner, listCandidateEvidence } from './candidates-repo.js';
 
 function requireUserId(req: FastifyRequest, reply: FastifyReply): string | null {
   const userId = req.auth?.userId;

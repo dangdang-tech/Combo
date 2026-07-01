@@ -9,13 +9,12 @@ padding: 0px;
 width: 1408px;
 height: 667px;
 
-background: #F7F3EC;
+background: #f7f3ec;
 
 /* Inside auto layout */
 flex: none;
 order: 2;
 flex-grow: 0;
-
 
 /* Sidebar TPL · 上传能力 */
 
@@ -29,14 +28,13 @@ gap: 4px;
 width: 288px;
 height: 667px;
 
-background: #F4F0E7;
+background: #f4f0e7;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* brand-row */
 
@@ -50,13 +48,11 @@ padding: 0px 0px 8px;
 width: 256px;
 height: 36px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 0;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* Agora */
 
@@ -69,14 +65,12 @@ font-weight: 500;
 font-size: 22px;
 line-height: 32px;
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* collapse-btn */
 
@@ -85,15 +79,14 @@ box-sizing: border-box;
 width: 28px;
 height: 28px;
 
-background: #FBF9F4;
-border: 1px solid #E1D8CA;
+background: #fbf9f4;
+border: 1px solid #e1d8ca;
 border-radius: 6px;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* Vector */
 
@@ -103,21 +96,18 @@ height: 10px;
 left: 11.5px;
 top: 9px;
 
-border: 1.7px solid #6F6860;
-
+border: 1.7px solid #6f6860;
 
 /* Frame */
 
 width: 256px;
 height: 6px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 1;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* 创作 */
 
@@ -132,8 +122,7 @@ line-height: 13px;
 /* identical to box height */
 letter-spacing: 0.12em;
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
@@ -141,19 +130,16 @@ order: 2;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Frame */
 
 width: 256px;
 height: 4px;
-
 
 /* Inside auto layout */
 flex: none;
 order: 3;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* nav-工作台 */
 
@@ -175,19 +161,16 @@ order: 4;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Frame */
 
 width: 18px;
 height: 18px;
-
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
 
-
 /* Rectangle */
 
 position: absolute;
@@ -196,9 +179,8 @@ height: 6px;
 left: 1px;
 top: 1px;
 
-background: #14141A;
+background: #14141a;
 border-radius: 1.5px;
-
 
 /* Rectangle */
 
@@ -208,9 +190,8 @@ height: 6px;
 left: 11px;
 top: 1px;
 
-background: #14141A;
+background: #14141a;
 border-radius: 1.5px;
-
 
 /* Rectangle */
 
@@ -220,9 +201,8 @@ height: 6px;
 left: 1px;
 top: 11px;
 
-background: #14141A;
+background: #14141a;
 border-radius: 1.5px;
-
 
 /* Rectangle */
 
@@ -232,9 +212,8 @@ height: 6px;
 left: 11px;
 top: 11px;
 
-background: #14141A;
+background: #14141a;
 border-radius: 1.5px;
-
 
 /* 工作台 */
 
@@ -248,14 +227,12 @@ font-size: 15px;
 line-height: 18px;
 /* identical to box height */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
-
 
 /* nav-我的能力 */
 
@@ -277,18 +254,15 @@ order: 5;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Frame */
 
 width: 18px;
 height: 18px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* Rectangle */
 
@@ -298,9 +272,8 @@ height: 2.6px;
 left: 1px;
 top: 4px;
 
-background: #14141A;
+background: #14141a;
 border-radius: 1.3px;
-
 
 /* Rectangle */
 
@@ -310,9 +283,8 @@ height: 2.6px;
 left: 1px;
 top: 8.5px;
 
-background: #14141A;
+background: #14141a;
 border-radius: 1.3px;
-
 
 /* Rectangle */
 
@@ -322,9 +294,8 @@ height: 2.6px;
 left: 1px;
 top: 13px;
 
-background: #14141A;
+background: #14141a;
 border-radius: 1.3px;
-
 
 /* 我的能力 */
 
@@ -338,14 +309,12 @@ font-size: 15px;
 line-height: 18px;
 /* identical to box height */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
-
 
 /* nav-上传能力 */
 
@@ -359,7 +328,7 @@ gap: 10px;
 width: 256px;
 height: 40px;
 
-background: #FBF9F4;
+background: #fbf9f4;
 border-radius: 6px;
 
 /* Inside auto layout */
@@ -368,18 +337,15 @@ order: 6;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Frame */
 
 width: 18px;
 height: 18px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* Rectangle */
 
@@ -389,9 +355,8 @@ height: 8px;
 left: 8.2px;
 top: 4px;
 
-background: #A73718;
+background: #a73718;
 border-radius: 0.9px;
-
 
 /* Vector */
 
@@ -401,8 +366,7 @@ height: 3.7px;
 left: 5.4px;
 top: 3.3px;
 
-background: #A73718;
-
+background: #a73718;
 
 /* Rectangle */
 
@@ -412,9 +376,8 @@ height: 1.8px;
 left: 3px;
 top: 14px;
 
-background: #A73718;
+background: #a73718;
 border-radius: 0.9px;
-
 
 /* 上传能力 */
 
@@ -428,14 +391,12 @@ font-size: 15px;
 line-height: 18px;
 /* identical to box height */
 
-color: #A73718;
-
+color: #a73718;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
-
 
 /* nav-数据分析 */
 
@@ -457,18 +418,15 @@ order: 7;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Frame */
 
 width: 18px;
 height: 18px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* Rectangle */
 
@@ -478,9 +436,8 @@ height: 7px;
 left: 2.5px;
 top: 9px;
 
-background: #14141A;
+background: #14141a;
 border-radius: 1px;
-
 
 /* Rectangle */
 
@@ -490,9 +447,8 @@ height: 12.5px;
 left: 7.5px;
 top: 3.5px;
 
-background: #14141A;
+background: #14141a;
 border-radius: 1px;
-
 
 /* Rectangle */
 
@@ -502,9 +458,8 @@ height: 9.5px;
 left: 12.5px;
 top: 6.5px;
 
-background: #14141A;
+background: #14141a;
 border-radius: 1px;
-
 
 /* 数据分析 */
 
@@ -518,14 +473,12 @@ font-size: 15px;
 line-height: 18px;
 /* identical to box height */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
-
 
 /* nav-收益 */
 
@@ -547,18 +500,15 @@ order: 8;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Frame */
 
 width: 18px;
 height: 18px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* Vector */
 
@@ -568,8 +518,7 @@ height: 10px;
 left: 2px;
 top: 3.5px;
 
-border: 1.7px solid #14141A;
-
+border: 1.7px solid #14141a;
 
 /* Vector */
 
@@ -579,8 +528,7 @@ height: 4px;
 left: 12px;
 top: 3.5px;
 
-border: 1.7px solid #14141A;
-
+border: 1.7px solid #14141a;
 
 /* 收益 */
 
@@ -594,20 +542,17 @@ font-size: 15px;
 line-height: 18px;
 /* identical to box height */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
 
-
 /* Frame */
 
 width: 256px;
 height: 8px;
-
 
 /* Inside auto layout */
 flex: none;
@@ -615,13 +560,12 @@ order: 9;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Rectangle */
 
 width: 256px;
 height: 1px;
 
-background: #E1D8CA;
+background: #e1d8ca;
 
 /* Inside auto layout */
 flex: none;
@@ -629,19 +573,16 @@ order: 10;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Frame */
 
 width: 256px;
 height: 6px;
-
 
 /* Inside auto layout */
 flex: none;
 order: 11;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* 我的 */
 
@@ -656,8 +597,7 @@ line-height: 13px;
 /* identical to box height */
 letter-spacing: 0.12em;
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
@@ -665,19 +605,16 @@ order: 12;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Frame */
 
 width: 256px;
 height: 4px;
-
 
 /* Inside auto layout */
 flex: none;
 order: 13;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* nav-个人主页 */
 
@@ -699,18 +636,15 @@ order: 14;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Frame */
 
 width: 18px;
 height: 18px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* Ellipse */
 
@@ -720,8 +654,7 @@ height: 6px;
 left: 6px;
 top: 1.5px;
 
-background: #14141A;
-
+background: #14141a;
 
 /* Rectangle */
 
@@ -731,9 +664,8 @@ height: 8px;
 left: 3px;
 top: 10px;
 
-background: #14141A;
+background: #14141a;
 border-radius: 6px 6px 1.5px 1.5px;
-
 
 /* 个人主页 */
 
@@ -747,27 +679,23 @@ font-size: 15px;
 line-height: 18px;
 /* identical to box height */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
 
-
 /* spacer */
 
 width: 256px;
 height: 188px;
-
 
 /* Inside auto layout */
 flex: none;
 order: 15;
 align-self: stretch;
 flex-grow: 1;
-
 
 /* user-row */
 
@@ -781,27 +709,24 @@ gap: 10px;
 width: 256px;
 height: 44px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 16;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Frame */
 
 width: 32px;
 height: 32px;
 
-background: #A73718;
+background: #a73718;
 border-radius: 16px;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* W */
 
@@ -818,9 +743,7 @@ font-size: 13px;
 line-height: 16px;
 /* identical to box height */
 
-color: #FFFFFF;
-
-
+color: #ffffff;
 
 /* Frame */
 
@@ -834,12 +757,10 @@ gap: 2px;
 width: 214px;
 height: 36px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
-
 
 /* Wayne */
 
@@ -853,14 +774,12 @@ font-size: 15px;
 line-height: 18px;
 /* identical to box height */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* CGO */
 
@@ -874,14 +793,12 @@ font-size: 13px;
 line-height: 16px;
 /* identical to box height */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -896,15 +813,14 @@ padding: 0px;
 width: 1120px;
 height: 667px;
 
-background: #F7F3EC;
-border: 1px solid #E1D8CA;
+background: #f7f3ec;
+border: 1px solid #e1d8ca;
 border-radius: 8px;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -921,15 +837,14 @@ gap: 16px;
 width: 1120px;
 height: 64px;
 
-background: #FBF9F4;
-border-bottom: 1px solid #E1D8CA;
+background: #fbf9f4;
+border-bottom: 1px solid #e1d8ca;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -943,12 +858,10 @@ gap: 10px;
 width: 220px;
 height: 24px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 上传能力 */
 
@@ -961,14 +874,12 @@ font-weight: 600;
 font-size: 20px;
 line-height: 29px;
 
-color: #A73718;
-
+color: #a73718;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* / */
 
@@ -981,14 +892,12 @@ font-weight: 400;
 font-size: 16px;
 line-height: 19px;
 
-color: #E1D8CA;
-
+color: #e1d8ca;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* Creator Builder */
 
@@ -1002,14 +911,12 @@ font-size: 15px;
 line-height: 18px;
 /* identical to box height */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 2;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1023,14 +930,13 @@ padding: 0px;
 width: 32px;
 height: 32px;
 
-background: #A73718;
+background: #a73718;
 border-radius: 999px;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* 林 */
 
@@ -1043,14 +949,12 @@ font-weight: 500;
 font-size: 14px;
 line-height: 20px;
 
-color: #FFFFFF;
-
+color: #ffffff;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1063,13 +967,11 @@ padding: 36px 0px 44px;
 width: 1120px;
 height: 603px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 1;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1083,12 +985,10 @@ gap: 24px;
 width: 840px;
 height: 523px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1101,13 +1001,11 @@ padding: 0px;
 width: 840px;
 height: 26px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 0;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1121,12 +1019,10 @@ gap: 8px;
 width: 60px;
 height: 26px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1140,14 +1036,13 @@ padding: 0px;
 width: 26px;
 height: 26px;
 
-background: #A73718;
+background: #a73718;
 border-radius: 999px;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* ◐ */
 
@@ -1160,14 +1055,12 @@ font-weight: 700;
 font-size: 12px;
 line-height: 14px;
 
-color: #FFFFFF;
-
+color: #ffffff;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 导入 */
 
@@ -1181,27 +1074,24 @@ font-size: 13px;
 line-height: 16px;
 /* identical to box height */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
 
-
 /* c */
 
 width: 131.75px;
 height: 1px;
 
-background: #E1D8CA;
+background: #e1d8ca;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
-
 
 /* Frame */
 
@@ -1215,12 +1105,10 @@ gap: 8px;
 width: 60px;
 height: 26px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 2;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1236,15 +1124,14 @@ padding: 0px;
 width: 26px;
 height: 26px;
 
-background: #F4F0E7;
-border: 1px solid #E1D8CA;
+background: #f4f0e7;
+border: 1px solid #e1d8ca;
 border-radius: 999px;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 2 */
 
@@ -1258,14 +1145,12 @@ font-size: 12px;
 line-height: 16px;
 /* identical to box height */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 提取 */
 
@@ -1279,27 +1164,24 @@ font-size: 13px;
 line-height: 16px;
 /* identical to box height */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
 
-
 /* c */
 
 width: 131.75px;
 height: 1px;
 
-background: #E1D8CA;
+background: #e1d8ca;
 
 /* Inside auto layout */
 flex: none;
 order: 3;
 flex-grow: 1;
-
 
 /* Frame */
 
@@ -1313,12 +1195,10 @@ gap: 8px;
 width: 60px;
 height: 26px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 4;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1334,15 +1214,14 @@ padding: 0px;
 width: 26px;
 height: 26px;
 
-background: #F4F0E7;
-border: 1px solid #E1D8CA;
+background: #f4f0e7;
+border: 1px solid #e1d8ca;
 border-radius: 999px;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 3 */
 
@@ -1356,14 +1235,12 @@ font-size: 12px;
 line-height: 16px;
 /* identical to box height */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 选择 */
 
@@ -1377,27 +1254,24 @@ font-size: 13px;
 line-height: 16px;
 /* identical to box height */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
 
-
 /* c */
 
 width: 131.75px;
 height: 1px;
 
-background: #E1D8CA;
+background: #e1d8ca;
 
 /* Inside auto layout */
 flex: none;
 order: 5;
 flex-grow: 1;
-
 
 /* Frame */
 
@@ -1411,12 +1285,10 @@ gap: 8px;
 width: 73px;
 height: 26px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 6;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1432,15 +1304,14 @@ padding: 0px;
 width: 26px;
 height: 26px;
 
-background: #F4F0E7;
-border: 1px solid #E1D8CA;
+background: #f4f0e7;
+border: 1px solid #e1d8ca;
 border-radius: 999px;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 4 */
 
@@ -1454,14 +1325,12 @@ font-size: 12px;
 line-height: 16px;
 /* identical to box height */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 结构化 */
 
@@ -1475,27 +1344,24 @@ font-size: 13px;
 line-height: 16px;
 /* identical to box height */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
 
-
 /* c */
 
 width: 131.75px;
 height: 1px;
 
-background: #E1D8CA;
+background: #e1d8ca;
 
 /* Inside auto layout */
 flex: none;
 order: 7;
 flex-grow: 1;
-
 
 /* Frame */
 
@@ -1509,12 +1375,10 @@ gap: 8px;
 width: 60px;
 height: 26px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 8;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1530,15 +1394,14 @@ padding: 0px;
 width: 26px;
 height: 26px;
 
-background: #F4F0E7;
-border: 1px solid #E1D8CA;
+background: #f4f0e7;
+border: 1px solid #e1d8ca;
 border-radius: 999px;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 5 */
 
@@ -1552,14 +1415,12 @@ font-size: 12px;
 line-height: 16px;
 /* identical to box height */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 发布 */
 
@@ -1573,14 +1434,12 @@ font-size: 13px;
 line-height: 16px;
 /* identical to box height */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1594,13 +1453,11 @@ gap: 8px;
 width: 840px;
 height: 61px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 1;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1614,12 +1471,10 @@ gap: 8px;
 width: 310px;
 height: 31px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* ◐ */
 
@@ -1632,14 +1487,12 @@ font-weight: 700;
 font-size: 16px;
 line-height: 19px;
 
-color: #A73718;
-
+color: #a73718;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 正在导入你的对话历史… */
 
@@ -1652,14 +1505,12 @@ font-weight: 600;
 font-size: 26px;
 line-height: 37px;
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
-
 
 /* 一次性把 Codex / Claude 的完整记录拉进来,生成 raw data 快照。可在后台继续,完成后通知你。 */
 
@@ -1673,15 +1524,13 @@ font-size: 14px;
 line-height: 160%;
 /* or 22px */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1695,20 +1544,18 @@ gap: 8px;
 width: 840px;
 height: 32px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 2;
 align-self: stretch;
 flex-grow: 0;
 
-
 /* Frame */
 
 width: 840px;
 height: 8px;
 
-background: #F4F0E7;
+background: #f4f0e7;
 border-radius: 999px;
 
 /* Inside auto layout */
@@ -1716,7 +1563,6 @@ flex: none;
 order: 0;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1726,9 +1572,8 @@ height: 8px;
 left: 0px;
 top: 0px;
 
-background: #A73718;
+background: #a73718;
 border-radius: 999px;
-
 
 /* 68% · 已抓取 146 / 215 段会话 · 5,210 / 8,420 条消息 */
 
@@ -1742,14 +1587,12 @@ font-size: 12px;
 line-height: 16px;
 /* identical to box height */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1763,13 +1606,11 @@ gap: 10px;
 width: 840px;
 height: 120px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 3;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -1783,13 +1624,11 @@ gap: 10px;
 width: 840px;
 height: 16px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 0;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* ✓ */
 
@@ -1802,14 +1641,12 @@ font-weight: 700;
 font-size: 12px;
 line-height: 14px;
 
-color: #4A6641;
-
+color: #4a6641;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 连接 Codex / Claude 凭证 */
 
@@ -1823,14 +1660,12 @@ font-size: 13px;
 line-height: 16px;
 /* identical to box height */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
-
 
 /* Frame */
 
@@ -1844,13 +1679,11 @@ gap: 10px;
 width: 840px;
 height: 16px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 1;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* ✓ */
 
@@ -1863,14 +1696,12 @@ font-weight: 700;
 font-size: 12px;
 line-height: 14px;
 
-color: #4A6641;
-
+color: #4a6641;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 拉取会话索引(215 段) */
 
@@ -1884,14 +1715,12 @@ font-size: 13px;
 line-height: 16px;
 /* identical to box height */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
-
 
 /* Frame */
 
@@ -1905,13 +1734,11 @@ gap: 10px;
 width: 840px;
 height: 16px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 2;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* ◐ */
 
@@ -1924,14 +1751,12 @@ font-weight: 700;
 font-size: 12px;
 line-height: 14px;
 
-color: #A73718;
-
+color: #a73718;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 流式导入消息 + 去敏(进行中) */
 
@@ -1945,14 +1770,12 @@ font-size: 13px;
 line-height: 16px;
 /* identical to box height */
 
-color: #14141A;
-
+color: #14141a;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
-
 
 /* Frame */
 
@@ -1966,13 +1789,11 @@ gap: 10px;
 width: 840px;
 height: 16px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 3;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* · */
 
@@ -1985,14 +1806,12 @@ font-weight: 700;
 font-size: 12px;
 line-height: 14px;
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 切分为可萃取的 segment */
 
@@ -2006,14 +1825,12 @@ font-size: 13px;
 line-height: 16px;
 /* identical to box height */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
-
 
 /* Frame */
 
@@ -2027,13 +1844,11 @@ gap: 10px;
 width: 840px;
 height: 16px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 4;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* · */
 
@@ -2046,14 +1861,12 @@ font-weight: 700;
 font-size: 12px;
 line-height: 14px;
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* 生成 raw data 快照 */
 
@@ -2067,14 +1880,12 @@ font-size: 13px;
 line-height: 16px;
 /* identical to box height */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 1;
 flex-grow: 1;
-
 
 /* Frame */
 
@@ -2089,8 +1900,8 @@ padding: 0px;
 width: 840px;
 height: 148px;
 
-background: #FFFDF9;
-border: 1px solid #E1D8CA;
+background: #fffdf9;
+border: 1px solid #e1d8ca;
 border-radius: 8px;
 
 /* Inside auto layout */
@@ -2098,7 +1909,6 @@ flex: none;
 order: 4;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -2111,14 +1921,13 @@ padding: 10px 16px;
 width: 840px;
 height: 34px;
 
-background: #F4F0E7;
+background: #f4f0e7;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* 正在落入的会话… */
 
@@ -2131,14 +1940,12 @@ font-weight: 700;
 font-size: 12px;
 line-height: 14px;
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -2152,13 +1959,11 @@ gap: 12px;
 width: 840px;
 height: 38px;
 
-
 /* Inside auto layout */
 flex: none;
 order: 1;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* 03-20 */
 
@@ -2171,14 +1976,12 @@ font-weight: 500;
 font-size: 11px;
 line-height: 14px;
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -2193,7 +1996,6 @@ flex: none;
 order: 1;
 flex-grow: 1;
 
-
 /* 已入 */
 
 width: 20px;
@@ -2206,14 +2008,12 @@ font-size: 10px;
 line-height: 12px;
 /* identical to box height */
 
-color: #4A6641;
-
+color: #4a6641;
 
 /* Inside auto layout */
 flex: none;
 order: 2;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -2229,14 +2029,13 @@ gap: 12px;
 width: 840px;
 height: 38px;
 
-border-top: 1px solid #E1D8CA;
+border-top: 1px solid #e1d8ca;
 
 /* Inside auto layout */
 flex: none;
 order: 2;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* 05-31 */
 
@@ -2249,14 +2048,12 @@ font-weight: 500;
 font-size: 11px;
 line-height: 14px;
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -2271,7 +2068,6 @@ flex: none;
 order: 1;
 flex-grow: 1;
 
-
 /* 已入 */
 
 width: 20px;
@@ -2284,14 +2080,12 @@ font-size: 10px;
 line-height: 12px;
 /* identical to box height */
 
-color: #4A6641;
-
+color: #4a6641;
 
 /* Inside auto layout */
 flex: none;
 order: 2;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -2307,14 +2101,13 @@ gap: 12px;
 width: 840px;
 height: 38px;
 
-border-top: 1px solid #E1D8CA;
+border-top: 1px solid #e1d8ca;
 
 /* Inside auto layout */
 flex: none;
 order: 3;
 align-self: stretch;
 flex-grow: 0;
-
 
 /* 04-17 */
 
@@ -2327,14 +2120,12 @@ font-weight: 500;
 font-size: 11px;
 line-height: 14px;
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;
 order: 0;
 flex-grow: 0;
-
 
 /* Frame */
 
@@ -2349,7 +2140,6 @@ flex: none;
 order: 1;
 flex-grow: 1;
 
-
 /* 导入中… */
 
 width: 40px;
@@ -2362,14 +2152,12 @@ font-size: 10px;
 line-height: 12px;
 /* identical to box height */
 
-color: #A73718;
-
+color: #a73718;
 
 /* Inside auto layout */
 flex: none;
 order: 2;
 flex-grow: 0;
-
 
 /* 取消导入 */
 
@@ -2383,8 +2171,7 @@ font-size: 13px;
 line-height: 16px;
 /* identical to box height */
 
-color: #6F6860;
-
+color: #6f6860;
 
 /* Inside auto layout */
 flex: none;

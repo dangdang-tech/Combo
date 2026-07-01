@@ -179,7 +179,9 @@ export function CapabilitiesStepPage(): ReactElement {
         failCountRef.current = 0;
         setCandidates(res.candidates);
         // 默认全选（仅 ready 可发布；失败项不入选）。
-        setSelectedIds(new Set(res.candidates.filter((c) => c.status === 'ready').map((c) => c.id)));
+        setSelectedIds(
+          new Set(res.candidates.filter((c) => c.status === 'ready').map((c) => c.id)),
+        );
         setPhase({ kind: 'ready' });
       } catch (e) {
         setError(e instanceof ApiError ? e : fallbackError('候选加载失败，请稍后重试。'));
@@ -240,7 +242,9 @@ export function CapabilitiesStepPage(): ReactElement {
         const v = await fetchPublishBatch(batchId);
         setBatchView(v);
       } catch (e) {
-        setPublishError(e instanceof ApiError ? e : fallbackError('刷新发布进度失败，请稍后再试。'));
+        setPublishError(
+          e instanceof ApiError ? e : fallbackError('刷新发布进度失败，请稍后再试。'),
+        );
       }
     })();
   }, []);
@@ -260,7 +264,9 @@ export function CapabilitiesStepPage(): ReactElement {
           await retryBatchItem(bid, itemId, {}, newKey());
           refreshBatch(bid);
         } catch (e) {
-          setPublishError(e instanceof ApiError ? e : fallbackError('这一项重试没成功，稍后再试。'));
+          setPublishError(
+            e instanceof ApiError ? e : fallbackError('这一项重试没成功，稍后再试。'),
+          );
         }
       })();
     },
@@ -378,7 +384,9 @@ export function CapabilitiesStepPage(): ReactElement {
                 ) : (
                   <div className="cb-cap-card__meta">
                     {/* 来源 session 段数 = 信任背书（提取-13）。 */}
-                    <span className="cb-cap-card__segments">来源 {segmentText(c.segmentCount)}</span>
+                    <span className="cb-cap-card__segments">
+                      来源 {segmentText(c.segmentCount)}
+                    </span>
                     {/* 「试用」入口 → 运行态试用页（出本期范围，占位跳能力页路由）；已发布卡改由下方「市集链接」承载，
                         不重复渲染两个指向同一目的的入口。 */}
                     {item?.state !== 'published' && (
@@ -392,7 +400,9 @@ export function CapabilitiesStepPage(): ReactElement {
                 {/* 发布状态槽：批量发布起后据逐项态渲染 发布中 / 已发布(+市集链接) / 失败(+人话错误 + 单项重试)。 */}
                 {item && (
                   <div className="cb-cap-card__status" data-state={item.state}>
-                    <span className="cb-cap-card__status-label">{ITEM_STATUS_LABEL[item.state]}</span>
+                    <span className="cb-cap-card__status-label">
+                      {ITEM_STATUS_LABEL[item.state]}
+                    </span>
                     {item.state === 'published' && (
                       <Link className="cb-cap-card__market" to={`/a/${c.slug}`}>
                         市集链接

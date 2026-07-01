@@ -9,7 +9,11 @@ import { getPool } from '../platform/infra/db.js';
 import { getHotRedis } from '../platform/infra/redis.js';
 import { createRedisLock, LOCK_KEYS } from '../platform/infra/lock.js';
 import { createBullQueuePort } from '../platform/infra/queue.js';
-import { reconcileJobsOnce, pgTypeLookup, type ReEnqueue } from '../platform/jobs/sweeper-reconcile.js';
+import {
+  reconcileJobsOnce,
+  pgTypeLookup,
+  type ReEnqueue,
+} from '../platform/jobs/sweeper-reconcile.js';
 import {
   scanOutboxStall,
   redriveDeadEvents,

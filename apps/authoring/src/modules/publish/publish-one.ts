@@ -13,12 +13,7 @@ import {
 } from '@cb/shared';
 import type { Queryable } from '../../platform/jobs/types.js';
 import type { TxPool } from '../../platform/events/db-tx.js';
-import {
-  PublishError,
-  readVersionForPublish,
-  publishGateInTx,
-  publishStateError,
-} from './repo.js';
+import { PublishError, readVersionForPublish, publishGateInTx, publishStateError } from './repo.js';
 import { missingPublishFields } from './manifest-hash.js';
 import { buildMarketCard, primaryPriceMicros } from './market-card.js';
 

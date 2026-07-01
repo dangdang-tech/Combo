@@ -15,11 +15,7 @@ import {
 } from '@cb/shared';
 import { asTxPool } from '../../platform/events/db-tx.js';
 import { PublishError } from './repo.js';
-import {
-  readPublicationForReview,
-  reviewDecideInTx,
-  type ReviewOutcome,
-} from './review-repo.js';
+import { readPublicationForReview, reviewDecideInTx, type ReviewOutcome } from './review-repo.js';
 import { readPublicationView, derivePublicationDisplayState } from './publication-repo.js';
 
 function requireUserId(req: FastifyRequest, reply: FastifyReply): string | null {
