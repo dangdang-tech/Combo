@@ -15,6 +15,7 @@
 //     调用方亦可对已去敏的会话调用；本模块对内容不作隐私假设、只忠实切段并 hash。
 import { createHash } from 'node:crypto';
 import type { ImportSource } from '@cb/shared';
+import { isPlatformPromptText } from '../../platform/text/session-noise.js';
 
 // ---------------------------------------------------------------------------
 // 输出类型（解析产物 → 导入 Job 据此写 session_segments / 推 SSE 落库卡）
@@ -291,6 +292,7 @@ function parseClaudeLines(lines: string[]): SessionAccum {
 function parseCodexLines(lines: string[]): SessionAccum {
   const acc = newAccum();
   const seen = new Set<string>(); // (role|hash(text)) 去重 event_msg/response_item 双写
+  let sawRealUserTask = false;
   for (const line of lines) {
     const obj = tryParseLine(line);
     if (obj === undefined) {
@@ -326,9 +328,17 @@ function parseCodexLines(lines: string[]): SessionAccum {
     }
     if (!text) continue;
     const normRole = normalizeRole(role);
+
+    // Codex 会把环境、AGENTS、标题生成等运行时上下文也记录成 role=user。
+    // 这些不是用户真正要复用的工作流，必须在导入阶段剥掉，避免污染标题、正文和后续萃取。
+    if (normRole === 'user' && isPlatformPromptText(text)) continue;
+    if (normRole !== 'user' && normRole !== 'assistant') continue;
+    if (!sawRealUserTask && normRole !== 'user') continue;
+
     const dedupKey = `${normRole}|${computeContentHash(text)}`;
     if (seen.has(dedupKey)) continue; // 同 turn 双写去重（event_msg ↔ response_item）。
     seen.add(dedupKey);
+    if (normRole === 'user') sawRealUserTask = true;
     acc.messages.push({
       role: normRole,
       text,

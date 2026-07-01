@@ -211,6 +211,49 @@ describe('extract handler — 正常链路（B-22）', () => {
     expect((res.result as { degraded: boolean }).degraded).toBe(true);
   });
 
+  it('混合真实段与 Codex 平台噪声段：脏标题不生成候选，degraded 也不拿噪声当能力名', async () => {
+    const { db, gw, handler } = setup();
+    gw.default = { degraded: true };
+    const noiseSegments = [
+      seg({
+        id: 'noise-env',
+        snapshot_id: 'snap-1',
+        source: 'codex',
+        title: '<environment_context>',
+        content: 'user: <environment_context>\n  <cwd>/x</cwd>\n</environment_context>',
+      }),
+      seg({
+        id: 'noise-agents',
+        snapshot_id: 'snap-1',
+        source: 'codex',
+        title: '# AGENTS.md instructions for /x',
+        content: 'user: # AGENTS.md instructions for /x\n\n<INSTRUCTIONS>...</INSTRUCTIONS>',
+      }),
+    ];
+    for (const s of noiseSegments) db.segments.set(s.id, s);
+    for (let i = 0; i < 3; i++) {
+      const s = seg({
+        id: `real-prod-${i}`,
+        snapshot_id: 'snap-1',
+        source: 'codex',
+        project: null,
+        title: '生产链路排障',
+        content: '定位 worker 日志 生产链路 上传 萃取 候选 质量',
+      });
+      db.segments.set(s.id, s);
+    }
+
+    const job = runningJob(db);
+    const res = await handler.run(job, makeCtx(job).ctx);
+
+    const names = [...db.candidates.values()].map((c) => c.name ?? '');
+    expect((res.result as { candidateCount: number }).candidateCount).toBe(1);
+    expect(names).toEqual(['生产链路排障']);
+    expect(names.join('\n')).not.toContain('environment_context');
+    expect(names.join('\n')).not.toContain('AGENTS.md');
+    expect((res.result as { degraded: boolean }).degraded).toBe(true);
+  });
+
   it('同事务落 completed + 发 extract 完成通知（Codex P0-3：业务状态+job结果+outbox 同一 PG 事务）', async () => {
     const { db, tx, handler } = setup();
     seedSegments(db, 'snap-1');

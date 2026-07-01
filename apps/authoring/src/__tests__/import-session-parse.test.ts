@@ -112,6 +112,30 @@ function codexJsonl(opts?: {
   ].join('\n');
 }
 
+function codexResponseUser(text: string, ts = '2026-05-02T08:30:00.000Z'): string {
+  return JSON.stringify({
+    type: 'response_item',
+    timestamp: ts,
+    payload: {
+      type: 'message',
+      role: 'user',
+      content: [{ type: 'input_text', text }],
+    },
+  });
+}
+
+function codexResponseAssistant(text: string, ts = '2026-05-02T08:31:00.000Z'): string {
+  return JSON.stringify({
+    type: 'response_item',
+    timestamp: ts,
+    payload: {
+      type: 'message',
+      role: 'assistant',
+      content: [{ type: 'output_text', text }],
+    },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Claude 真实格式
 // ---------------------------------------------------------------------------
@@ -189,6 +213,15 @@ describe('Codex 格式解析', () => {
       }),
       JSON.stringify({
         type: 'response_item',
+        timestamp: '2026-05-01T00:00:00Z',
+        payload: {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: '请分析这段错误' }],
+        },
+      }),
+      JSON.stringify({
+        type: 'response_item',
         timestamp: '2026-05-01T00:00:01Z',
         payload: {
           type: 'message',
@@ -198,7 +231,64 @@ describe('Codex 格式解析', () => {
       }),
     ].join('\n');
     const r = parseSessions([{ source: 'codex', raw: lines }]);
+    expect(r.segments[0]!.content).toContain('user: 请分析这段错误');
     expect(r.segments[0]!.content).toContain('assistant: 答复内容');
+  });
+
+  it('过滤 Codex 平台噪声，标题和正文从第一条真实用户任务开始', () => {
+    const lines = [
+      JSON.stringify({
+        type: 'session_meta',
+        timestamp: '2026-07-01T00:00:00Z',
+        payload: { cwd: '/Users/dev/repos/agora-mvp' },
+      }),
+      codexResponseUser(
+        '<environment_context>\n  <cwd>/Users/dev/repos/agora-mvp</cwd>\n</environment_context>',
+      ),
+      codexResponseUser(
+        '# AGENTS.md instructions for /Users/dev/repos/agora-mvp\n\n<INSTRUCTIONS>...</INSTRUCTIONS>',
+      ),
+      codexResponseUser(
+        'Generate a title and a git branch name for a coding agent from the user prompt ...',
+      ),
+      JSON.stringify({
+        type: 'event_msg',
+        timestamp: '2026-07-01T00:01:00Z',
+        payload: { type: 'user_message', message: '把上传链路的生产错误定位一下' },
+      }),
+      codexResponseAssistant('我会先查失败 job 和 worker 日志。', '2026-07-01T00:02:00Z'),
+    ].join('\n');
+
+    const r = parseSessions([{ source: 'codex', raw: lines, sessionRef: 'codex-noise' }]);
+    expect(r.segments).toHaveLength(1);
+    const seg = r.segments[0]!;
+    expect(seg.title).toBe('把上传链路的生产错误定位一下');
+    expect(seg.content).toContain('user: 把上传链路的生产错误定位一下');
+    expect(seg.content).toContain('assistant: 我会先查失败 job 和 worker 日志。');
+    expect(seg.content).not.toContain('<environment_context>');
+    expect(seg.content).not.toContain('AGENTS.md instructions');
+    expect(seg.content).not.toContain('Generate a title and a git branch name');
+    expect(seg.messageCount).toBe(2);
+  });
+
+  it('只有平台噪声或 assistant-only 产物的 Codex 会话被跳过', () => {
+    const onlyNoise = [
+      JSON.stringify({
+        type: 'session_meta',
+        timestamp: '2026-07-01T00:00:00Z',
+        payload: { cwd: '/Users/dev/repos/agora-mvp' },
+      }),
+      codexResponseUser(
+        '<environment_context>\n  <cwd>/Users/dev/repos/agora-mvp</cwd>\n</environment_context>',
+      ),
+      codexResponseUser('# Files mentioned by the user:\n\n- foo.ts'),
+      codexResponseAssistant('已生成并保存到指定路径。'),
+    ].join('\n');
+
+    const r = parseSessions([{ source: 'codex', raw: onlyNoise, sessionRef: 'noise-only' }]);
+    expect(r.segments).toHaveLength(0);
+    expect(r.skipped).toHaveLength(1);
+    expect(r.skipped[0]!.reason).toBe('no_messages');
   });
 });
 

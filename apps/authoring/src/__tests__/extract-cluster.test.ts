@@ -133,6 +133,43 @@ describe('clusterSegments — 聚类相似工作流', () => {
     expect(drafts.length).toBe(2);
     expect(drafts.map((d) => d.segments.length).sort()).toEqual([3, 3]);
   });
+
+  it('过滤 Codex 平台噪声段：不把 environment/AGENTS/标题生成提示形成候选', () => {
+    const noise = [
+      mkSeg({
+        segmentId: 'n-env',
+        title: '<environment_context>',
+        content: 'user: <environment_context>\n  <cwd>/x</cwd>\n</environment_context>',
+      }),
+      mkSeg({
+        segmentId: 'n-agents',
+        title: '# AGENTS.md instructions for /x',
+        content: 'user: # AGENTS.md instructions for /x\n\n<INSTRUCTIONS>...</INSTRUCTIONS>',
+      }),
+      mkSeg({
+        segmentId: 'n-title',
+        title: 'Generate a title and a git branch name for a coding agent from the user prompt ...',
+        content:
+          'user: Generate a title and a git branch name for a coding agent from the user prompt ...',
+      }),
+    ];
+    const real = Array.from({ length: 3 }, (_, i) =>
+      mkSeg({
+        segmentId: `real-${i}`,
+        title: '生产链路排障',
+        content: '定位 worker 日志 生产链路 上传 萃取 候选 质量',
+      }),
+    );
+
+    const drafts = clusterSegments([...noise, ...real]);
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0]!.clusterLabel).toBe('生产链路排障');
+    expect(drafts[0]!.segments.map((s) => s.segmentId).sort()).toEqual([
+      'real-0',
+      'real-1',
+      'real-2',
+    ]);
+  });
 });
 
 describe('scoreCandidates — 评估 + 排序', () => {
@@ -209,6 +246,36 @@ describe('nameOne — 经 3A LLM 网关命名', () => {
     const named = await nameOne(gw, scored[0]!, { traceId: 't' });
     expect(named.degradedNaming).toBe(true);
     expect(named.name.length).toBeGreaterThan(0);
+  });
+
+  it('降级命名只使用清洗后的真实任务标签，不回退到平台噪声', async () => {
+    const gw = new FakeLlmGateway();
+    gw.default = { degraded: true };
+    const scored = scoreCandidates(
+      clusterSegments([
+        mkSeg({
+          segmentId: 'noise',
+          title: '<environment_context>',
+          content: 'user: <environment_context>\n  <cwd>/x</cwd>\n</environment_context>',
+        }),
+        mkSeg({
+          segmentId: 'real-1',
+          title: '代码审计复盘',
+          content: '审计 代码 风险 测试 覆盖 回归',
+        }),
+        mkSeg({
+          segmentId: 'real-2',
+          title: '代码审计复盘',
+          content: '审计 代码 风险 测试 覆盖 回归',
+        }),
+      ]),
+      Date.now(),
+    );
+
+    const named = await nameOne(gw, scored[0]!, { traceId: 't' });
+    expect(named.name).toBe('代码审计复盘');
+    expect(named.name).not.toContain('environment_context');
+    expect(named.degradedNaming).toBe(true);
   });
 
   it('坏 JSON → 兜底名（不抛、不裸错误）', async () => {

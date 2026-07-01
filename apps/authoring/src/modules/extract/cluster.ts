@@ -9,6 +9,12 @@
 //     本模块只产出「确定性骨架 + 可空 LLM 文案」，绝不裸抛上游错误（§10 degraded 不裸 502）。
 import type { LlmGatewayPort, CapabilityType, Confidence } from '@cb/shared';
 import { slugify } from '@cb/shared';
+import {
+  firstNonEmptyLine,
+  isBlockedCapabilityLabel,
+  isPlatformPromptText,
+  stripRolePrefix,
+} from '../../platform/text/session-noise.js';
 
 // slugify 迁入 @cb/shared/util（跨域共用：提取聚类 + 结构化建能力体）。本域 re-export 保留原导出面。
 export { slugify };
@@ -62,6 +68,13 @@ export interface NamedCandidate extends ScoredCandidate {
   name: string;
   intent: string;
   degradedNaming: boolean;
+}
+
+export class CandidateNameUnavailable extends Error {
+  constructor() {
+    super('candidate has no usable cleaned fallback name');
+    this.name = 'CandidateNameUnavailable';
+  }
 }
 
 // —— analyze：把 content/title 拆成中英文词袋（簇相似度 + 词频用；纯 ASCII/CJK 切分，无第三方分词）——
@@ -155,18 +168,19 @@ export function clusterSegments(
 ): DraftCandidate[] {
   const minSegments = opts.minSegments ?? 1;
   const mergeThreshold = opts.mergeThreshold ?? 0.5;
+  const eligibleSegments = segments.filter(isExtractableSegment);
 
   // 段词袋（content + title 合并，全相似判定用）+ 标题词袋（近重复标题判定用，不被长正文稀释）。
   const bags = new Map<string, Set<string>>();
   const titleBags = new Map<string, Set<string>>();
-  for (const s of segments) {
+  for (const s of eligibleSegments) {
     bags.set(s.segmentId, new Set(tokenize(`${s.title ?? ''} ${s.content}`)));
     titleBags.set(s.segmentId, new Set(tokenize(s.title ?? '')));
   }
 
   // 全局贪心合并成簇：每段并入首个「同 project / 近重复标题 / 全词袋相似」的已有簇，否则开新簇。
   //   按 segmentId 升序遍历 + 与簇内首段（簇代表）比较 → 同输入恒同序、同结果（提取-30 不跳变）。
-  const sorted = [...segments].sort((a, b) => (a.segmentId < b.segmentId ? -1 : 1));
+  const sorted = [...eligibleSegments].sort((a, b) => (a.segmentId < b.segmentId ? -1 : 1));
   const clusters: ExtractSegment[][] = [];
   for (const seg of sorted) {
     const segBag = bags.get(seg.segmentId)!;
@@ -199,6 +213,7 @@ export function clusterSegments(
   for (const cl of clusters) {
     if (cl.length < minSegments) continue;
     const label = clusterLabelOf(cl);
+    if (isBlockedCapabilityLabel(label)) continue;
     const seed = cl.map((s) => s.segmentId).join('|');
     drafts.push({ slug: slugify(label, seed), clusterLabel: label, segments: cl });
   }
@@ -214,10 +229,37 @@ export function clusterSegments(
   return drafts;
 }
 
-/** 簇标签：项目名优先；否则取簇内最高频标题/正文词（兜底名 + slug 种子）。 */
+/** 历史 snapshot 可能已含 Codex 平台噪声；萃取前再做一层防线，避免脏段生成候选。 */
+function isExtractableSegment(segment: ExtractSegment): boolean {
+  if (isPlatformPromptText(segment.title)) return false;
+  const firstContentLine = stripRolePrefix(firstNonEmptyLine(segment.content));
+  if (isPlatformPromptText(firstContentLine)) return false;
+  return firstContentLine.length > 0;
+}
+
+function titleLabelOf(title: string | null): string | null {
+  const label = firstNonEmptyLine(title);
+  if (!label || isBlockedCapabilityLabel(label)) return null;
+  return label.length > 40 ? `${label.slice(0, 39)}…` : label;
+}
+
+/** 簇标签：优先使用真实任务标题；否则取簇内最高频标题/正文词（兜底名 + slug 种子）。 */
 function clusterLabelOf(cluster: ExtractSegment[]): string {
-  const withProj = cluster.find((s) => s.project && s.project.trim());
-  if (withProj?.project) return withProj.project.trim();
+  const titleFreq = new Map<string, number>();
+  for (const s of cluster) {
+    const label = titleLabelOf(s.title);
+    if (label) titleFreq.set(label, (titleFreq.get(label) ?? 0) + 1);
+  }
+  let bestTitle = '';
+  let bestTitleN = 0;
+  for (const [label, n] of titleFreq) {
+    if (n > bestTitleN) {
+      bestTitle = label;
+      bestTitleN = n;
+    }
+  }
+  if (bestTitle) return bestTitle;
+
   const freq = new Map<string, number>();
   for (const s of cluster) {
     for (const t of tokenize(`${s.title ?? ''} ${s.content}`)) {
@@ -359,7 +401,8 @@ export async function nameOne(
   cand: ScoredCandidate,
   opts: { traceId: string; ownerUserId?: string },
 ): Promise<NamedCandidate> {
-  const fallbackName = cand.clusterLabel === '未命名工作流' ? '未命名能力' : cand.clusterLabel;
+  const fallbackName = fallbackNameOf(cand);
+  if (!fallbackName) throw new CandidateNameUnavailable();
   const fallbackIntent = `把「${fallbackName}」这类反复出现的工作流打包成可复用能力`;
 
   const sample = cand.segments
@@ -380,12 +423,20 @@ export async function nameOne(
     return { ...cand, name: fallbackName, intent: fallbackIntent, degradedNaming: true };
   }
   const parsed = parseNameJson(result.text);
+  const parsedName =
+    parsed?.name && !isBlockedCapabilityLabel(parsed.name) ? parsed.name.trim().slice(0, 24) : '';
   return {
     ...cand,
-    name: parsed?.name?.slice(0, 24) || fallbackName,
-    intent: parsed?.intent?.slice(0, 200) || fallbackIntent,
+    name: parsedName || fallbackName,
+    intent: parsed?.intent?.trim().slice(0, 200) || fallbackIntent,
     degradedNaming: false,
   };
+}
+
+function fallbackNameOf(cand: ScoredCandidate): string | null {
+  const label = firstNonEmptyLine(cand.clusterLabel);
+  if (!label || isBlockedCapabilityLabel(label)) return null;
+  return label.slice(0, 24);
 }
 
 /** 容错解析 LLM 命名 JSON（提取首个 {...}；坏 JSON → null，调用方兜底）。 */

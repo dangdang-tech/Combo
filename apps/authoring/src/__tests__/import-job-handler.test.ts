@@ -43,6 +43,66 @@ function codexSession(
     .join('\n');
 }
 
+function codexSessionWithPlatformNoise(
+  userText: string,
+  assistantText: string,
+  ts = '2026-06-01T12:00:00.000Z',
+): string {
+  return [
+    { type: 'session_meta', timestamp: ts, payload: { cwd: '/Users/dev/repos/codex-proj' } },
+    {
+      type: 'response_item',
+      timestamp: ts,
+      payload: {
+        type: 'message',
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: '<environment_context>\n  <cwd>/x</cwd>\n</environment_context>',
+          },
+        ],
+      },
+    },
+    {
+      type: 'response_item',
+      timestamp: ts,
+      payload: {
+        type: 'message',
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: '# AGENTS.md instructions for /x\n\n<INSTRUCTIONS>...</INSTRUCTIONS>',
+          },
+        ],
+      },
+    },
+    {
+      type: 'response_item',
+      timestamp: ts,
+      payload: {
+        type: 'message',
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: 'Generate a title and a git branch name for a coding agent from the user prompt ...',
+          },
+        ],
+      },
+    },
+    { type: 'event_msg', timestamp: ts, payload: { type: 'user_message', message: userText } },
+    {
+      type: 'event_msg',
+      timestamp: ts,
+      payload: { type: 'agent_message', message: assistantText },
+    },
+  ]
+    .map((o) => JSON.stringify(o))
+    .join('\n');
+}
+
 interface CapturedCtx {
   ctx: JobContext;
   subtasks: Array<{ key: string; status: SubtaskStatus }>;
@@ -443,6 +503,26 @@ describe('import handler — 来源按内容识别（回归：Codex 子目录 / 
     await handler.run(job, cap.ctx);
     expect(db.segments.size).toBe(1);
     expect([...db.snapshots.values()][0]!.source).toBe('codex');
+  });
+
+  it('Codex 平台噪声不落段标题/正文：标题从第一条真实用户任务派生', async () => {
+    const key = 'raw/u1/pair-xyz/part-0';
+    const { db, handler } = setup({
+      [key]: codexSessionWithPlatformNoise(
+        '定位生产链路为什么生成脏能力项',
+        '我会先查解析和萃取代码',
+      ),
+    });
+    const job = leased(db, { subjectRef: { uploadId: 'up1', source: 'mixed', rawS3Keys: [key] } });
+    const cap = makeCtx(job, db);
+    await handler.run(job, cap.ctx);
+
+    expect(db.segments.size).toBe(1);
+    const seg = [...db.segments.values()][0]!;
+    expect(seg.title).toBe('定位生产链路为什么生成脏能力项');
+    expect(seg.content).not.toContain('<environment_context>');
+    expect(seg.content).not.toContain('AGENTS.md instructions');
+    expect(seg.content).not.toContain('Generate a title and a git branch name');
   });
 
   it('Claude + Codex 同批（混合，两路径 key 均无标记）→ 各自按内容识别、两段两来源', async () => {

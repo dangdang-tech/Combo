@@ -45,7 +45,13 @@ import {
   CandidateLandingFencedOut,
   type CandidateRowForFinal,
 } from './repo.js';
-import { clusterSegments, scoreCandidates, nameOne, type ScoredCandidate } from './cluster.js';
+import {
+  clusterSegments,
+  scoreCandidates,
+  nameOne,
+  CandidateNameUnavailable,
+  type ScoredCandidate,
+} from './cluster.js';
 
 /** 抛带分类 code 的整体失败错误（runner.normalizeToErrorBody 据 code 归一人话信封，绝不裸露原始报错）。 */
 function codedError(code: (typeof ErrorCode)[keyof typeof ErrorCode], message: string): Error {
@@ -464,7 +470,8 @@ async function emitOneCandidate(
       traceId: ctx.traceId,
       ...(job.ownerUserId ? { ownerUserId: job.ownerUserId } : {}),
     });
-  } catch {
+  } catch (err) {
+    if (err instanceof CandidateNameUnavailable) return null;
     return persistFailedCandidate(db, ctx, job, snapshotId, cand, stuckAt);
   }
 
