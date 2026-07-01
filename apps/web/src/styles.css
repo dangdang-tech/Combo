@@ -3640,3 +3640,131 @@ body {
   }
 }
 
+/* ---------- 能力页（PRD 2 步之第 2 步：候选卡网格 + 一键发布，复用提取/批量发布视觉语言） ---------- */
+.cb-capabilities {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.cb-capabilities__banner {
+  font-size: 14px;
+  background: var(--cb-accent-soft);
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+.cb-capabilities__empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--cb-muted);
+}
+.cb-capabilities__grid {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+.cb-cap-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--cb-border);
+  border-radius: 10px;
+  padding: 14px;
+}
+.cb-cap-card[data-selected='true'] {
+  border-color: var(--cb-accent);
+  background: var(--cb-accent-soft);
+}
+.cb-cap-card[data-status='failed'] {
+  border-color: rgba(212, 56, 13, 0.4);
+  background: rgba(212, 56, 13, 0.04);
+}
+.cb-cap-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.cb-cap-card__checkbox {
+  margin: 0;
+}
+.cb-cap-card__name {
+  font-weight: 600;
+  font-size: 14px;
+  flex: 1;
+}
+.cb-cap-card__type {
+  font-size: 12px;
+  color: var(--cb-muted);
+  border: 1px solid var(--cb-border);
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+.cb-cap-card__intent {
+  margin: 0;
+  font-size: 13px;
+  color: var(--cb-muted);
+}
+.cb-cap-card__fail {
+  margin: 0;
+  font-size: 12px;
+  color: var(--cb-muted);
+}
+.cb-cap-card__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--cb-muted);
+}
+.cb-cap-card__trial {
+  color: var(--cb-accent);
+  text-decoration: none;
+}
+.cb-cap-card__trial:hover {
+  text-decoration: underline;
+}
+.cb-cap-card__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  border-top: 1px solid var(--cb-border);
+  padding-top: 8px;
+}
+.cb-cap-card__status-label {
+  font-weight: 600;
+}
+.cb-cap-card__status[data-state='published'] .cb-cap-card__status-label {
+  color: var(--cb-ok-olive);
+}
+.cb-cap-card__status[data-state='failed'] .cb-cap-card__status-label {
+  color: var(--cb-warn);
+}
+.cb-cap-card__status-msg {
+  color: var(--cb-muted);
+}
+.cb-cap-card__market {
+  color: var(--cb-accent);
+  text-decoration: none;
+}
+.cb-cap-card__market:hover {
+  text-decoration: underline;
+}
+.cb-capabilities__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+  border-top: 1px solid var(--cb-border);
+  padding-top: 16px;
+}
+.cb-capabilities__progress {
+  margin: 0;
+  font-size: 13px;
+  color: var(--cb-muted);
+}
+

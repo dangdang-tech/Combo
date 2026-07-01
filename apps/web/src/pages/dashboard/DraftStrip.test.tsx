@@ -32,17 +32,18 @@ describe('DraftStrip', () => {
     expect(screen.getByText(/结构化中 60%/)).toBeInTheDocument();
   });
 
-  it('点「去上传流程」CTA → onResume 带首条草稿 + currentStep 对应路由', async () => {
+  it('点「去上传流程」CTA → onResume 带首条草稿 + currentStep 对应路由（已过导入 → 能力页）', async () => {
     const onResume = vi.fn();
     render(<DraftStrip drafts={[draft()]} onResume={onResume} />);
     await userEvent.click(screen.getByRole('button', { name: /去上传流程/ }));
     expect(onResume).toHaveBeenCalledOnce();
     const [d, path] = onResume.mock.calls[0] ?? [];
     expect(d.id).toBe('draft-1');
-    expect(path).toBe('/create/structure');
+    // PRD 2 步：草稿 currentStep=structure（已过导入）→ 续断点落能力页。
+    expect(path).toBe('/create/capabilities');
   });
 
-  it('多条草稿各回各的断点（点对应胶囊不串台）', async () => {
+  it('多条草稿各回各的断点：仍在导入 → 上传页；已过导入 → 能力页', async () => {
     const onResume = vi.fn();
     render(
       <DraftStrip
@@ -56,7 +57,12 @@ describe('DraftStrip', () => {
     await userEvent.click(screen.getByRole('button', { name: /B 草稿/ }));
     const [d, path] = onResume.mock.calls[0] ?? [];
     expect(d.id).toBe('b');
-    expect(path).toBe('/create/publish');
+    expect(path).toBe('/create/capabilities');
+    // 仍在导入的草稿 → 上传页。
+    await userEvent.click(screen.getByRole('button', { name: /A 草稿/ }));
+    const [d2, path2] = onResume.mock.calls[1] ?? [];
+    expect(d2.id).toBe('a');
+    expect(path2).toBe('/create/import');
   });
 
   it('无标题草稿 → 兜底「未命名草稿」', () => {

@@ -1,10 +1,10 @@
 // F-10 STEP① 容器集成测试（mock fetch + SSE）：空态→铸码→配对；深链 ?jobId= → SSE 加载→完成；
-// 取消回空态；底栏注册「下一步：提取能力项 →」带 snapshotId；两次失败 markStepError('import')。
+// 取消回空态；导入完成【自动进入能力页】带 snapshotId + draftId（PRD 2 步：传完无需手动点下一步）；两次失败 markStepError('import')。
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
-import { WizardProvider, useWizard, WizardFooter } from '../../wizard/index.js';
+import { WizardProvider, useWizard } from '../../wizard/index.js';
 import { ImportStepPage } from './ImportStepPage.js';
 import { installFetchMock, type FetchMock } from '../../../test/mockFetch.js';
 import { __setFetchEventSourceForTests } from '../../../api/useSSE.js';
@@ -16,18 +16,6 @@ import {
 function PathProbe() {
   const loc = useLocation();
   return <span data-testid="path">{`${loc.pathname}${loc.search}`}</span>;
-}
-
-/** 底栏探针：容器自身不渲染底栏（在 WizardShell 内），测试补一个以点「下一步」主按钮 + 验摘要前缀（导入-17）。 */
-function FooterProbe() {
-  const { currentStep, primaryAction, summaryPrefix } = useWizard();
-  return (
-    <WizardFooter
-      currentStep={currentStep}
-      primaryAction={primaryAction}
-      summaryPrefix={summaryPrefix}
-    />
-  );
 }
 
 /** 步骤异常态探针（断 markStepError('import')）。 */
@@ -55,11 +43,11 @@ function renderPage(initialPath: string, draftId?: string | undefined) {
                 <StepErrorProbe />
                 <DraftIdProbe />
                 <ImportStepPage />
-                <FooterProbe />
               </>
             }
           />
-          <Route path="/create/extract" element={<PathProbe />} />
+          {/* 能力页落点探针（导入完成自动跳这里）。 */}
+          <Route path="/create/capabilities" element={<PathProbe />} />
         </Routes>
       </WizardProvider>
     </MemoryRouter>,
@@ -117,7 +105,7 @@ describe('ImportStepPage', () => {
     expect(pairCall?.headers['X-Idempotency-Scope']).toBe('import.connect.pair');
   });
 
-  it('深链 ?jobId= → SSE 加载（进度量化文案）→ done → 完成态（统计四格）', async () => {
+  it('深链 ?jobId= → SSE 加载（进度量化文案）→ done → 自动进入能力页（带 snapshotId）', async () => {
     mock = installFetchMock([
       // fetchSnapshot
       {
@@ -169,21 +157,16 @@ describe('ImportStepPage', () => {
     await waitFor(() =>
       expect(screen.getByText(/50% · 已抓取 100 \/ 200 段会话/)).toBeInTheDocument(),
     );
-    // done(成功) 带 snapshotId → 取快照进完成态
+    // done(成功) 带 snapshotId → 取快照 → 自动进入能力页（PRD：传完无需手动点下一步）。
     act(() =>
       conn().emit('done', { status: 'completed', result: { snapshotId: 'snap1' } }, { id: '2-0' }),
     );
     await waitFor(() =>
-      expect(screen.getByText('已导入全部对话历史（Claude + Codex）')).toBeInTheDocument(),
+      expect(screen.getByTestId('path')).toHaveTextContent('/create/capabilities?snapshotId=snap1'),
     );
-    // §5.1.3 副行 + 重新导入入口（导入-13）。
-    expect(screen.getByText('生成了一份原始数据，下一步从中提取能力项')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '重新导入' })).toBeInTheDocument();
-    expect(screen.getByText('215')).toBeInTheDocument();
-    expect(screen.getByText('8,420')).toBeInTheDocument();
   });
 
-  it('完成态 → 底栏「下一步：提取能力项 →」带 snapshotId 进 STEP②', async () => {
+  it('导入完成 → 自动进入能力页 /create/capabilities（带 snapshotId + draftId）', async () => {
     mock = installFetchMock([
       {
         status: 200,
@@ -212,15 +195,10 @@ describe('ImportStepPage', () => {
     act(() =>
       conn().emit('done', { status: 'completed', result: { snapshotId: 'snap1' } }, { id: '1-0' }),
     );
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: '下一步：提取能力项 →' })).toBeInTheDocument(),
-    );
-    // 导入-17：完成态底栏摘要带「原始数据仅你可见 · 」前缀（Context→Shell→Footer 全链路接通）。
-    expect(screen.getByText('原始数据仅你可见 · 第 1 步，共 5 步')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: '下一步：提取能力项 →' }));
+    // 无需点任何底栏按钮：完成即自动跳能力页，带 snapshotId + draftId 续传上下文。
     await waitFor(() =>
       expect(screen.getByTestId('path')).toHaveTextContent(
-        '/create/extract?snapshotId=snap1&draftId=d1',
+        '/create/capabilities?snapshotId=snap1&draftId=d1',
       ),
     );
   });

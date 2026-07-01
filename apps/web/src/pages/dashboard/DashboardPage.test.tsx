@@ -174,6 +174,8 @@ function renderPage(): { container: HTMLElement } {
         <Routes>
           <Route path="/creator" element={<DashboardPage />} />
           <Route path="/create/import" element={<LocationProbe />} />
+          {/* 草稿续传（已过导入的 currentStep）落能力页；编辑入口仍带 ?capability= 进结构化路由。 */}
+          <Route path="/create/capabilities" element={<LocationProbe />} />
           <Route path="/create/structure" element={<LocationProbe />} />
           <Route path="/a/:slug" element={<LocationProbe />} />
         </Routes>
@@ -351,7 +353,7 @@ describe('DashboardPage 操作入口', () => {
     expect(probe.getAttribute('data-search')).toBe('?capability=cap-1');
   });
 
-  it('草稿条「去上传流程」→ 回到 currentStep 路由（/create/structure）', async () => {
+  it('草稿条「去上传流程」→ 回到 currentStep 断点（已过导入 → 能力页 /create/capabilities）', async () => {
     restore = installRoutedFetch(ok());
     renderPage();
     await screen.findByText(/结构化中 60%/);

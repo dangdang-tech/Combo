@@ -1,12 +1,10 @@
-// STEP② 提取模块出口（F-11）。容器供路由挂载；展示件 + 数据层供测试与复用。
-export { ExtractStepPage } from './ExtractStepPage.js';
+// 提取模块出口（F-11）——PRD 2 步坍缩后，「提取过程态」并入能力页（step2-capabilities）。
+//   本模块只保留能力页复用的展示件（加载态逐个浮现卡）+ 数据层 + 候选展示口径；旧的独立提取容器/结果态已下线。
 export { ExtractLoading, type ExtractLoadingProps } from './ExtractLoading.js';
-export { ExtractResult, type ExtractResultProps } from './ExtractResult.js';
 export {
   CandidateAppearingCard,
   type CandidateAppearingCardProps,
 } from './CandidateAppearingCard.js';
-export { RetryStream, type RetryStreamProps } from './RetryStream.js';
 export {
   createExtractJob,
   fetchCandidates,

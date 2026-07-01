@@ -35,8 +35,8 @@ export interface PrimaryAction {
 }
 
 export interface WizardState {
-  /** 当前所处步（路由派生）。 */
-  currentStep: DraftStep;
+  /** 当前所处步（路由派生；2 步流程含非 DraftStep 的 'capabilities'，故为 string）。 */
+  currentStep: string;
   /** 异常步覆写（步骤条标红，§5.0）。 */
   stepErrors: StepErrors;
   /** STEP③ 选择态（纯前端即时，§1.1(a)）。 */
@@ -71,7 +71,7 @@ export interface WizardState {
 
 export interface WizardActions {
   /** 路由变化时同步当前步（外壳在路由层调，后续步骤一般不需要）。 */
-  setCurrentStep: (step: DraftStep) => void;
+  setCurrentStep: (step: string) => void;
   /** 某步落错误态（步骤条标红，§5.0；局部失败不连坐其它步）。 */
   markStepError: (step: DraftStep) => void;
   /** 清某步错误（重试成功后复位步骤条颜色）。 */
@@ -110,7 +110,7 @@ export interface WizardContextValue extends WizardState, WizardActions {
 }
 
 type Action =
-  | { type: 'setCurrentStep'; step: DraftStep }
+  | { type: 'setCurrentStep'; step: string }
   | { type: 'markStepError'; step: DraftStep }
   | { type: 'clearStepError'; step: DraftStep }
   | { type: 'setSelection'; selection: SelectionDraft | null }
@@ -204,8 +204,8 @@ function reducer(state: InternalState, action: Action): InternalState {
 const WizardCtx = createContext<WizardContextValue | null>(null);
 
 export interface WizardProviderProps {
-  /** 初始当前步（外壳由路由派生传入）。 */
-  initialStep: DraftStep;
+  /** 初始当前步（外壳由路由派生传入；2 步流程含 'capabilities'，故为 string）。 */
+  initialStep: string;
   /** 初始草稿 id（深链续传 / 新建留空）。 */
   initialDraftId?: string | undefined;
   /** 初始导入快照 id（深链续传 / 新建留空）。 */
@@ -247,7 +247,7 @@ export function WizardProvider({
   });
 
   const setCurrentStep = useCallback(
-    (step: DraftStep) => dispatch({ type: 'setCurrentStep', step }),
+    (step: string) => dispatch({ type: 'setCurrentStep', step }),
     [],
   );
   const markStepError = useCallback(

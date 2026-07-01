@@ -158,7 +158,9 @@ export function CapabilitiesPage(): ReactElement {
             rows={rows}
             meta={lastMeta}
             onTrial={trial.openTrial}
-            onEdit={(row) => navigate(`/create/structure?capability=${row.capabilityId}`)}
+            /* 2 步模型不做逐项能力编辑（PRD「不做能力编辑」）；「编辑」退化为回上传入口重新生成，
+               与工作台 goEdit 同口径（不再指向已删的 /create/structure，避免 404）。 */
+            onEdit={(row) => navigate(`/create/import?capability=${row.capabilityId}`)}
             onMore={more.openMore}
           />
 

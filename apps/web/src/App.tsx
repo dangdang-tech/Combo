@@ -23,12 +23,10 @@ import {
   LoginPage,
   NotFoundPage,
   ImportStepPage,
-  ExtractStepPage,
-  StructureStepPage,
-  PublishStepPage,
+  CapabilitiesStepPage,
 } from './pages/index.js';
-// 五步上传向导（F-09 WizardShell + F-12 STEP③ + F-15 续传）；STEP①②④⑤ 渲染其 Outlet（后续模块填）。
-import { WizardLayout, SelectStepPage } from './pages/wizard/index.js';
+// 上传向导（F-09 WizardShell + F-15 续传）；PRD 2 步（上传 / 能力页）渲染其 Outlet。
+import { WizardLayout } from './pages/wizard/index.js';
 
 /**
  * 受保护组根：把 AuthProvider 下移到这里（只包受保护子树），故只有受保护路由命中时才挂载
@@ -60,16 +58,13 @@ export function App(): ReactElement {
                 <Route path="/earnings" element={<RevenuePage />} />
                 <Route path="/profile" element={<ProfilePage />} />
 
-                {/* 上传五步：WizardShell（F-09 向导壳，外壳恒定 D14）+ 五子步（映射 DraftStep）。
-                    STEP③ 用本期实现的 SelectStepPage；STEP①②④⑤ 暂占位、后续模块填进同一 Outlet。
-                    在守卫内：未登录此子树不挂载 → 不会自动 POST /drafts（BUG-004）。 */}
+                {/* 上传向导（PRD 2 步）：WizardShell（F-09 向导壳，外壳恒定 D14）+ 两子步。
+                    上传（ImportStepPage，传完自动进入能力页）+ 能力页（CapabilitiesStepPage：提取过程态 → 候选卡 → 一键发布）。
+                    提取过程态不占独立路由，是能力页的一个阶段。在守卫内：未登录此子树不挂载 → 不会自动 POST /drafts（BUG-004）。 */}
                 <Route path="/create" element={<WizardLayout />}>
                   <Route index element={<Navigate to="/create/import" replace />} />
                   <Route path="import" element={<ImportStepPage />} />
-                  <Route path="extract" element={<ExtractStepPage />} />
-                  <Route path="select" element={<SelectStepPage />} />
-                  <Route path="structure" element={<StructureStepPage />} />
-                  <Route path="publish" element={<PublishStepPage />} />
+                  <Route path="capabilities" element={<CapabilitiesStepPage />} />
                 </Route>
               </Route>
             </Route>

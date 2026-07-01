@@ -29,15 +29,14 @@ describe('CREATOR_NAV 分组结构（外壳首页-03）', () => {
   });
 });
 
-describe('CREATE_STEPS 五步映射 DraftStep', () => {
-  it('五步顺序 import/extract/select/structure/publish', () => {
-    expect(CREATE_STEPS.map((s) => s.step)).toEqual([
-      'import',
-      'extract',
-      'select',
-      'structure',
-      'publish',
-    ]);
+describe('CREATE_STEPS 两步（PRD 结构坍缩：上传 / 能力页）', () => {
+  it('两步顺序 import/capabilities', () => {
+    expect(CREATE_STEPS.map((s) => s.step)).toEqual(['import', 'capabilities']);
+  });
+
+  it('标签 上传 / 能力，路径 /create/import 与 /create/capabilities', () => {
+    expect(CREATE_STEPS.map((s) => s.label)).toEqual(['上传', '能力']);
+    expect(CREATE_STEPS.map((s) => s.path)).toEqual(['/create/import', '/create/capabilities']);
   });
 });
 
@@ -52,9 +51,14 @@ describe('breadcrumbFor 分层（外壳首页-06）', () => {
     expect(c.map((x) => x.label)).toEqual(['Creator Builder', '上传能力']);
   });
 
-  it('五步子页 → Creator Builder / 上传能力 / 提取', () => {
-    const c = breadcrumbFor('/create/extract');
-    expect(c.map((x) => x.label)).toEqual(['Creator Builder', '上传能力', '提取']);
+  it('能力页子步 → Creator Builder / 上传能力 / 能力', () => {
+    const c = breadcrumbFor('/create/capabilities');
+    expect(c.map((x) => x.label)).toEqual(['Creator Builder', '上传能力', '能力']);
+  });
+
+  it('上传子步 → Creator Builder / 上传能力 / 上传', () => {
+    const c = breadcrumbFor('/create/import');
+    expect(c.map((x) => x.label)).toEqual(['Creator Builder', '上传能力', '上传']);
   });
 
   it('数据分析 → Creator Builder / 数据分析', () => {

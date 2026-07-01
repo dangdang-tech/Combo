@@ -43,9 +43,26 @@ export function mergeBatchState(
   totalHint: number,
 ): BatchViewState {
   const byId = new Map<string, PublishBatchItemView>();
-  for (const it of initial) byId.set(it.itemId, it);
-  for (const it of snapshotItems) byId.set(it.itemId, it);
-  for (const it of appendedItems) byId.set(it.itemId, it); // 增量最后写赢（最新状态）。
+  // 增量盖基线，但【身份字段 candidateId/versionId/capabilityId 缺省不覆盖】：后到帧只带 {itemId,state}
+  //   （契约里 candidateId 可选）时保留初始批响应里的 candidateId，避免卡片状态槽因 candidateId 丢失而消失。
+  const upsert = (it: PublishBatchItemView): void => {
+    const prev = byId.get(it.itemId);
+    byId.set(
+      it.itemId,
+      prev
+        ? {
+            ...prev,
+            ...it,
+            candidateId: it.candidateId ?? prev.candidateId,
+            versionId: it.versionId ?? prev.versionId,
+            capabilityId: it.capabilityId ?? prev.capabilityId,
+          }
+        : it,
+    );
+  };
+  for (const it of initial) upsert(it);
+  for (const it of snapshotItems) upsert(it);
+  for (const it of appendedItems) upsert(it); // 增量最后写赢（最新状态，身份字段缺省保留）。
 
   const items = [...byId.values()];
   const publishedCount = items.filter((i) => i.state === 'published').length;

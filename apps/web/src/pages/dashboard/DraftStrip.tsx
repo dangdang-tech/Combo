@@ -6,7 +6,6 @@
 // 空态（外壳首页-23）：无 active 草稿 → 整条不渲染。
 import type { ReactElement } from 'react';
 import type { DraftView, DraftStep } from '@cb/shared';
-import { CREATE_STEPS } from '../../shell/routes.js';
 
 export interface DraftStripProps {
   drafts: DraftView[];
@@ -14,11 +13,13 @@ export interface DraftStripProps {
   onResume: (draft: DraftView, path: string) => void;
 }
 
-/** currentStep → 五步路由（CREATE_STEPS 单源；缺映射兜底进第一步）。 */
+/**
+ * currentStep → 上传路由（PRD 2 步：上传 / 能力页）。
+ * 后端 DraftView.currentStep 仍是原脊柱枚举（import/extract/select/structure/publish）；前端已坍缩为 2 步：
+ *   still-import → /create/import；已过导入（extract 及之后）→ 能力页续断点（提取过程态 / 候选卡 / 发布都在此页）。
+ */
 function pathForStep(step: DraftStep): string {
-  return (
-    CREATE_STEPS.find((s) => s.step === step)?.path ?? CREATE_STEPS[0]?.path ?? '/create/import'
-  );
+  return step === 'import' ? '/create/import' : '/create/capabilities';
 }
 
 function DraftChip({

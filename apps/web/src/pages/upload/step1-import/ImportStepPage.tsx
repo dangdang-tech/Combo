@@ -6,7 +6,7 @@
 //   2. 上传中态 BrowserUploadProgress：presign → 分批 PUT 进度条 → 拿 jobId 进加载态（断点续传/重试）。
 //   3. 配对态 CommandBox：展示一行命令 + usePairPolling 轮询 → 拿 jobId 进加载态。
 //   4. 加载态 ImportLoading：useSSE(job 流) 三层进度 + 落库卡逐条 + 取消；done.result.snapshotId → 完成。
-//   5. 完成态 ImportComplete：取快照统计 + 会话节选；底栏注册「下一步：提取能力项 →」（带 snapshotId 进 STEP②）。
+//   5. 完成态：取快照统计后【自动进入能力页】/create/capabilities（带 snapshotId + draftId；PRD：传完自动进入提取，无需手动点下一步）。
 // 续传（F-15）：URL ?jobId= / ?snapshotId= 深链直进加载态 / 完成态（工作台草稿条可带）。
 // 退路：整体失败由 useSSE error → StreamLoading 内 ErrorState（重试重连）；两次失败 markStepError('import')。
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
@@ -14,7 +14,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { PairResult, SnapshotView, SnapshotSegmentView, DonePayload } from '@cb/shared';
 import { ApiError, useSSE, type UseSSEState } from '../../../api/index.js';
 import { ErrorState, LoadingState } from '../../../components/index.js';
-import { useWizard, pathForStep, useBootstrapDraft } from '../../wizard/index.js';
+import { useWizard, useBootstrapDraft } from '../../wizard/index.js';
 import { ImportEmptyState } from './ImportEmptyState.js';
 import { BrowserUploadProgress } from './BrowserUploadProgress.js';
 import { useBrowserImport } from './useBrowserImport.js';
@@ -91,14 +91,7 @@ function ImportJobStream({
 export function ImportStepPage(): ReactElement {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const {
-    draftId,
-    setSnapshotId,
-    setPrimaryAction,
-    setSummaryPrefix,
-    markStepError,
-    clearStepError,
-  } = useWizard();
+  const { draftId, setSnapshotId, markStepError, clearStepError } = useWizard();
 
   // 深链续传：?snapshotId= 直进完成态、?jobId= 直进加载态（工作台草稿条可带）；?draftId= 续传带入。
   const urlJobId = searchParams.get('jobId') ?? undefined;
@@ -187,27 +180,15 @@ export function ImportStepPage(): ReactElement {
     if (failCountRef.current >= 2) markStepError('import');
   }, [markStepError]);
 
-  // 完成态：回填 snapshotId 到向导（STEP②/续传据它续提取、不重导；等价后端建快照同事务回填 drafts.snapshot_id），
-  // 注册底栏「下一步：提取能力项 →」（带 snapshotId 进 STEP②），并注入底栏摘要前缀
-  // 「原始数据仅你可见 · 」（§5.1.3 / 导入-17；离开完成态时清回 undefined）。
+  // 完成态：回填 snapshotId 到向导（能力页/续传据它续提取、不重导；等价后端建快照同事务回填 drafts.snapshot_id），
+  // 然后【自动进入能力页】（PRD：传完自动进入提取，无需手动点下一步），带 snapshotId + draftId 续传上下文。
   useEffect(() => {
     if (phase.kind !== 'complete') return;
     const snapshotId = phase.snapshot.id;
     setSnapshotId(snapshotId);
-    setSummaryPrefix('原始数据仅你可见 · ');
-    setPrimaryAction({
-      label: '下一步：提取能力项 →',
-      enabled: true,
-      onNext: () => {
-        const dq = draftId ? `&draftId=${encodeURIComponent(draftId)}` : '';
-        navigate(`${pathForStep('extract')}?snapshotId=${encodeURIComponent(snapshotId)}${dq}`);
-      },
-    });
-    return () => {
-      setPrimaryAction(null);
-      setSummaryPrefix(undefined);
-    };
-  }, [phase, draftId, navigate, setPrimaryAction, setSummaryPrefix]);
+    const dq = draftId ? `&draftId=${encodeURIComponent(draftId)}` : '';
+    navigate(`/create/capabilities?snapshotId=${encodeURIComponent(snapshotId)}${dq}`);
+  }, [phase, draftId, navigate, setSnapshotId]);
 
   // —— 动作 ——
   const handleStart = useCallback(async (): Promise<void> => {
@@ -272,13 +253,12 @@ export function ImportStepPage(): ReactElement {
     setAttempt((a) => a + 1); // remount 流子组件 → 整条重订阅。
   }, [clearStepError]);
 
-  // 完成态「重新导入」（导入-13/21）：清完成态主按钮 + 回空态重新发起导入流程（铸新码 → 新快照；
-  //   旧快照后端保留，导入-21）。先回 empty 让底栏主按钮 effect 卸载，再 handleStart 铸码进配对态。
+  // 完成态「重新导入」（导入-13/21）：回空态重新发起导入流程（铸新码 → 新快照；旧快照后端保留，导入-21）。
+  //   注：2 步流程下完成态会自动跳能力页，此入口一般不可达，保留以兼容深链 ?snapshotId= 恢复态。
   const handleReimport = useCallback((): void => {
-    setPrimaryAction(null);
     setPhase({ kind: 'empty' });
     void handleStart();
-  }, [setPrimaryAction, handleStart]);
+  }, [handleStart]);
 
   // —— 渲染 ——
   // 草稿 bootstrap 失败（全新进入建草稿没成）：就地人话错误 + 重试（复用同 key 回放/补建，永不裸错）。

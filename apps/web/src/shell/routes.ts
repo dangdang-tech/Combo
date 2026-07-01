@@ -3,10 +3,9 @@
 // 侧栏分两组（开工总纲 §2.1）：
 //   「创作」→ 工作台 / 我的能力 / 上传能力 / 数据分析 / 收益
 //   「我的」→ 个人主页
-// 五步上传流程映射 DraftStep（脊柱 §8.2：import/extract/select/structure/publish），
-// 子步不进侧栏（inSidebar=false），只走面包屑 / CreateLayout 步骤条。
-// 路由占位页留待 Phase 4 实现（此处只搭外壳骨架，D14：外壳恒定）。
-import type { DraftStep } from '@cb/shared';
+// 上传流程收敛为 PRD 的 2 个用户步（上传 → 能力页）+ 1 个自动过程态（提取，寄生在能力页内，不占路由）：
+//   /create/import（上传，传完自动进入能力页）、/create/capabilities（能力页：过程态提取 → 候选卡 → 一键发布）。
+//   子步不进侧栏（inSidebar=false），只走面包屑。'capabilities' 非 DraftStep（后端脊柱枚举），故这里放宽 step 类型。
 import type { ComponentType, SVGProps } from 'react';
 import {
   IconWorkbench,
@@ -47,14 +46,11 @@ export const CREATOR_NAV: NavItem[] = [
   { path: '/profile', label: '个人主页', group: 'mine', icon: IconProfile },
 ];
 
-/** 上传五步子路由（映射 DraftStep；select 为纯前端步，脊柱 §8.2）。不进侧栏。
-    标签取 Figma 步骤条口径的纯动作名（导入/提取/选择/结构化/发布；序号由步骤条圆点表达，不在文字里重复「STEP①」）。 */
-export const CREATE_STEPS: { step: DraftStep; path: string; label: string }[] = [
-  { step: 'import', path: '/create/import', label: '导入' },
-  { step: 'extract', path: '/create/extract', label: '提取' },
-  { step: 'select', path: '/create/select', label: '选择' },
-  { step: 'structure', path: '/create/structure', label: '结构化' },
-  { step: 'publish', path: '/create/publish', label: '发布' },
+/** 上传子路由（PRD 2 步：上传 → 能力页）。不进侧栏。step 放宽为 string（'capabilities' 非 DraftStep 枚举值）。
+    标签取纯动作名（上传 / 能力；提取过程态不占独立步，寄生在能力页内）。 */
+export const CREATE_STEPS: { step: string; path: string; label: string }[] = [
+  { step: 'import', path: '/create/import', label: '上传' },
+  { step: 'capabilities', path: '/create/capabilities', label: '能力' },
 ];
 
 /** 面包屑根（开工总纲 §2.2：如「上传能力 / Creator Builder」恒以产品域为根）。 */
@@ -67,8 +63,8 @@ export interface Crumb {
 
 /**
  * 面包屑：把当前 pathname 拆成可点段（产品域根 → 区段 → 子步）。
- * 例：/create/extract → 「Creator Builder / 上传能力 / 提取」（外壳首页-06）。
- * 末段为当前页（不可点），其余可点回跳。
+ * 例：/create/capabilities → 「Creator Builder / 上传能力 / 能力」（外壳首页-06）。
+ * 末段为当前页（不可点），其余可点回跳。2 步流程下最多再追加 1 个子步（import/capabilities）。
  */
 export function breadcrumbFor(pathname: string): Crumb[] {
   const crumbs: Crumb[] = [{ ...BREADCRUMB_ROOT }];
@@ -80,7 +76,7 @@ export function breadcrumbFor(pathname: string): Crumb[] {
   ).sort((a, b) => b.path.length - a.path.length)[0];
   if (section) crumbs.push({ path: section.path, label: section.label });
 
-  // 命中的五步子步（精确匹配；上传能力下的当前步）。
+  // 命中的上传子步（精确匹配；上传能力下的当前步）。
   const sub = CREATE_STEPS.find((s) => s.path === pathname);
   if (sub) crumbs.push({ path: sub.path, label: sub.label });
 

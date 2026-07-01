@@ -1,12 +1,11 @@
-// 向导模块出口（F-09 WizardShell + F-12 STEP③ + F-15 续传）。
+// 向导模块出口（F-09 WizardShell + F-15 续传）——PRD 2 步坍缩后精简。
 //
-// 给后续步骤（STEP①②④⑤）的接入面：
-//   - WizardProvider / useWizard：五步共享状态（currentStep / draftId / selection / stepErrors / primaryAction）。
-//   - 步骤状态机（wizardMachine）：buildStepNodes / nextStep / pathForStep / stepLabel 等纯函数真源。
-//   - 各步在 effect 里 setPrimaryAction 注册底栏「下一步」行为；用 markStepError/clearStepError 标步骤条异常态。
+// 给上传各步的接入面：
+//   - WizardProvider / useWizard：共享状态（currentStep / draftId / snapshotId / stepErrors / …）。
+//   - 步骤纯函数（wizardMachine）：pathForStep / stepForPath / stepLabel / WIZARD_STEPS 等路由↔步映射真源。
+//   - 存草稿 / 续传 / bootstrap hooks。
 export { WizardShell } from './WizardShell.js';
 export { WizardLayout } from './WizardLayout.js';
-export { SelectStepPage } from './SelectStepPage.js';
 export { WizardProvider, useWizard } from './WizardContext.js';
 export type {
   WizardContextValue,
@@ -14,10 +13,6 @@ export type {
   WizardActions,
   PrimaryAction,
 } from './WizardContext.js';
-
-export { StepBar, type StepBarProps } from './StepBar.js';
-export { WizardFooter, type WizardFooterProps } from './WizardFooter.js';
-export { SelectStep, type SelectStepProps } from './SelectStep.js';
 
 export { useSaveDraft, type UseSaveDraftResult, type SaveDraftState } from './useSaveDraft.js';
 export { useResumeDraft, type UseResumeDraftResult, type ResumeStatus } from './useResumeDraft.js';
@@ -36,7 +31,6 @@ export {
   draftsPath,
   draftPath,
 } from './draftApi.js';
-export { fetchSelectCandidates, candidatesPath, type SelectCandidatesResult } from './selectApi.js';
 
 export {
   WIZARD_STEPS,
@@ -45,14 +39,7 @@ export {
   pathForStep,
   stepForPath,
   stepLabel,
-  nextStep,
-  prevStep,
-  nextStepAction,
   isFirstStep,
   isLastStep,
-  buildStepNodes,
-  stepSummary,
-  type StepStatus,
-  type StepNodeView,
   type StepErrors,
 } from './wizardMachine.js';

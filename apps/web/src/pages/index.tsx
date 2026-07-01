@@ -1,8 +1,7 @@
 // 占位页集合（Phase 4 各自拆成独立文件 + 真实实现）。每页标注对接的后端契约端点。
 //
-// 五步上传向导壳 + STEP③ 已由 pages/wizard/ 实现（WizardLayout/WizardShell/SelectStepPage）：
-//   /create 路由元素改用 WizardLayout（替代旧 CreateLayout 步骤条占位），STEP③ 用 wizard 的 SelectStepPage。
-//   本文件保留 STEP①②④⑤ 占位页（后续模块填），它们渲染在 WizardShell 的 <Outlet> 内（外壳恒定 D14）。
+// 上传向导壳由 pages/wizard/ 实现（WizardLayout/WizardShell）：/create 路由元素用 WizardLayout。
+//   PRD 2 步：上传（ImportStepPage）+ 能力页（CapabilitiesStepPage），均渲染在 WizardShell 的 <Outlet> 内（外壳恒定 D14）。
 import type { ReactElement } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Placeholder } from './Placeholder.js';
@@ -20,13 +19,8 @@ export { ProfilePage } from './profile/index.js';
 export { PublicCapabilityPage } from './public/PublicCapabilityPage.js';
 export { PublicCreatorPage } from './public/PublicCreatorPage.js';
 
-// F-10 STEP① 导入 + F-11 STEP② 提取 + F-13 STEP④ 结构化 + F-14 STEP⑤ 发布真实实现（接 3B/3C/3D/3E API+SSE，在 WizardShell 内）。
-export {
-  ImportStepPage,
-  ExtractStepPage,
-  StructureStepPage,
-  PublishStepPage,
-} from './upload/index.js';
+// PRD 2 步真实实现（接 3B/3C/3D/3E API+SSE，在 WizardShell 内）：上传 + 能力页（融合提取过程态 + 批量发布）。
+export { ImportStepPage, CapabilitiesStepPage } from './upload/index.js';
 
 export function WorkbenchPage(): ReactElement {
   return (
@@ -92,5 +86,4 @@ export function LoginPage(): ReactElement {
   );
 }
 
-// STEP①②④⑤ 由 pages/upload 实现（F-10/F-11/F-13/F-14，接 3B/3C/3D/3E API+SSE，在 WizardShell 内）。
-// STEP③ 选择由 pages/wizard/SelectStepPage 实现（F-12，纯前端即时态 + 存草稿 PATCH /drafts/{id}/selection）。
+// 上传两步由 pages/upload 实现（F-10 上传 + 能力页，接 3B/3C/3D/3E API+SSE，在 WizardShell 内）。
