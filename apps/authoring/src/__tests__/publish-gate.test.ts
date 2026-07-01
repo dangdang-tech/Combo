@@ -9,8 +9,9 @@
 //     · 事务原子性：中途失败整体回滚（不留半发布态）。
 //     · 市集卡字段来源映射 + usage 占位。
 import { describe, it, expect } from 'vitest';
+import { createHash } from 'node:crypto';
 import type { Manifest } from '@cb/shared';
-import { CapabilityPublishedPayloadSchema } from '@cb/shared';
+import { CapabilityPublishedPayloadSchema, canonicalManifest as sharedCanonicalManifest } from '@cb/shared';
 import { asTxPool } from '../platform/events/db-tx.js';
 import {
   publishGateInTx,
@@ -71,6 +72,20 @@ describe('manifest hash 冻结（§1.2）', () => {
     const a = readyManifest('cap-1');
     const b = { ...a, tagline: '改了卖点' };
     expect(manifestHash(a)).not.toBe(manifestHash(b));
+  });
+});
+
+// ===========================================================================
+// M1 指纹单源一致性：authoring 写 hash 与 @cb/shared 规范化永不漂移
+// ===========================================================================
+describe('manifestHash 单源一致性（M1）', () => {
+  it('authoring 用的 canonicalManifest 就是 @cb/shared 那一份（同一引用，不是本地副本）', () => {
+    expect(canonicalManifest).toBe(sharedCanonicalManifest);
+  });
+  it('manifestHash 恒等于 sha256(@cb/shared.canonicalManifest)（authoring 写 = runtime 校 同源）', () => {
+    const m = readyManifest('cap-1');
+    const expected = createHash('sha256').update(sharedCanonicalManifest(m), 'utf8').digest('hex');
+    expect(manifestHash(m)).toBe(expected);
   });
 });
 

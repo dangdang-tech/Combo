@@ -1,30 +1,15 @@
 // 50 · 发布门 manifest 冻结/校验纯逻辑（B-27，50-step5-publish §1.2）。无 IO、无 DB、便于单测。
-//   - canonicalManifest / manifestHash：把 manifest 规范化为稳定串后 sha256（发布事务冻结 manifest_hash）。
+//   - canonicalManifest：单源在 @cb/shared（M1 收敛）。authoring 写 hash、runtime 校 hash、seed 造数据
+//     三处共用同一份规范化，永不漂移；本文件只补 sha256 的后半段（node:crypto 不可进浏览器打包，故不下沉）。
+//   - manifestHash：把 manifest 规范化为稳定串后 sha256（发布事务冻结 manifest_hash）。
 //     键序无关（递归排序 object 键），故同内容不同键序得同 hash；版本不可变寻址靠它（§1.2 决策）。
 //   - missingPublishFields：发布前必填软字段校验（name/tagline 非空 + 价格档齐 + 封面来源合法，§1.2 步1）。
 //     缺则路由层据此出 422 PUBLISH_MISSING_FIELDS（details.missingFields，发布-24）。绝不裸转圈/裸错误码。
 import { createHash } from 'node:crypto';
-import type { Manifest, CoverInput, TierInput } from '@cb/shared';
+import { canonicalManifest, type Manifest, type CoverInput, type TierInput } from '@cb/shared';
 
-/**
- * 递归把任意 JSON 值规范化（object 键升序排序）→ 稳定可比较结构。
- *   保证「同内容、不同键插入序」得同一规范结构（→ 同 hash）。数组保序（语义有序）。
- */
-function canonicalize(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalize);
-  if (value && typeof value === 'object') {
-    const obj = value as Record<string, unknown>;
-    const out: Record<string, unknown> = {};
-    for (const key of Object.keys(obj).sort()) out[key] = canonicalize(obj[key]);
-    return out;
-  }
-  return value;
-}
-
-/** manifest 规范化串（键序无关稳定串）。供 hash 与冻结血缘（§1.2）。 */
-export function canonicalManifest(manifest: Manifest): string {
-  return JSON.stringify(canonicalize(manifest));
-}
+// 重导出单源规范化，保持本模块既有调用方（repo / 测试）的 import 路径不变。
+export { canonicalManifest };
 
 /** manifest_hash = sha256(canonical(manifest))（发布事务内冻结，不可变寻址，§1.2 步2）。 */
 export function manifestHash(manifest: Manifest): string {
