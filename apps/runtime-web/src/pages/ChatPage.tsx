@@ -383,6 +383,11 @@ interface FloatingChatRect {
   height: number;
 }
 
+interface FloatingChatViewportOffset {
+  left: number;
+  top: number;
+}
+
 type FloatingChatMode = 'normal' | 'minimized' | 'maximized';
 type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 
@@ -460,6 +465,14 @@ function defaultFloatingChatRect(container: HTMLElement): FloatingChatRect {
     },
     container,
   );
+}
+
+function floatingChatViewportOffset(container: HTMLElement): FloatingChatViewportOffset {
+  const bounds = container.getBoundingClientRect();
+  return {
+    left: bounds.left,
+    top: bounds.top,
+  };
 }
 
 function desktopFloatingChatEnabled(): boolean {
@@ -544,6 +557,10 @@ function FloatingChat({
 }) {
   const [text, setText] = useState('');
   const [rect, setRect] = useState<FloatingChatRect | null>(null);
+  const [viewportOffset, setViewportOffset] = useState<FloatingChatViewportOffset>({
+    left: 0,
+    top: 0,
+  });
   const [windowMode, setWindowMode] = useState<FloatingChatMode>('normal');
   const restoreRectRef = useRef<FloatingChatRect | null>(null);
   const dragRef = useRef<{
@@ -556,9 +573,19 @@ function FloatingChat({
   } | null>(null);
   const storageKey = `${FLOATING_CHAT_STORAGE_PREFIX}:${sessionId}`;
 
+  const syncViewportOffset = useCallback((): void => {
+    const container = containerRef.current;
+    if (!container || !desktopFloatingChatEnabled()) return;
+    const next = floatingChatViewportOffset(container);
+    setViewportOffset((current) =>
+      current.left === next.left && current.top === next.top ? current : next,
+    );
+  }, [containerRef]);
+
   const restoreChat = useCallback((): void => {
     const container = containerRef.current;
     if (!container || !desktopFloatingChatEnabled()) return;
+    syncViewportOffset();
     const next = constrainFloatingChatRect(
       restoreRectRef.current ??
         readFloatingChatRect(storageKey) ??
@@ -569,11 +596,12 @@ function FloatingChat({
     writeFloatingChatRect(storageKey, next);
     setRect(next);
     setWindowMode('normal');
-  }, [containerRef, storageKey]);
+  }, [containerRef, storageKey, syncViewportOffset]);
 
   const minimizeChat = useCallback((): void => {
     const container = containerRef.current;
     if (!container || !desktopFloatingChatEnabled()) return;
+    syncViewportOffset();
     setRect((current) => {
       const base =
         windowMode === 'maximized' && restoreRectRef.current
@@ -585,11 +613,12 @@ function FloatingChat({
       return minimizedFloatingChatRect(base, container);
     });
     setWindowMode('minimized');
-  }, [containerRef, windowMode]);
+  }, [containerRef, syncViewportOffset, windowMode]);
 
   const maximizeChat = useCallback((): void => {
     const container = containerRef.current;
     if (!container || !desktopFloatingChatEnabled()) return;
+    syncViewportOffset();
     setRect((current) => {
       const base = current ?? defaultFloatingChatRect(container);
       if (windowMode === 'normal') {
@@ -598,22 +627,24 @@ function FloatingChat({
       return maximizedFloatingChatRect(container);
     });
     setWindowMode('maximized');
-  }, [containerRef, windowMode]);
+  }, [containerRef, syncViewportOffset, windowMode]);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    syncViewportOffset();
     const stored = readFloatingChatRect(storageKey);
     const next = constrainFloatingChatRect(stored ?? defaultFloatingChatRect(container), container);
     restoreRectRef.current = next;
     setWindowMode('normal');
     setRect(next);
-  }, [containerRef, storageKey]);
+  }, [containerRef, storageKey, syncViewportOffset]);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return undefined;
     const observer = new ResizeObserver(() => {
+      syncViewportOffset();
       setRect((current) => {
         const base = current ?? defaultFloatingChatRect(container);
         if (windowMode === 'maximized') return maximizedFloatingChatRect(container);
@@ -626,7 +657,17 @@ function FloatingChat({
     });
     observer.observe(container);
     return () => observer.disconnect();
-  }, [containerRef, storageKey, windowMode]);
+  }, [containerRef, storageKey, syncViewportOffset, windowMode]);
+
+  useEffect(() => {
+    const handleViewportChange = (): void => syncViewportOffset();
+    window.addEventListener('resize', handleViewportChange);
+    window.addEventListener('scroll', handleViewportChange, true);
+    return () => {
+      window.removeEventListener('resize', handleViewportChange);
+      window.removeEventListener('scroll', handleViewportChange, true);
+    };
+  }, [syncViewportOffset]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
@@ -661,6 +702,7 @@ function FloatingChat({
     if (mode === 'move' && windowMode === 'maximized') return;
     const container = containerRef.current;
     if (!container) return;
+    syncViewportOffset();
     const startRect = rect ?? defaultFloatingChatRect(container);
     dragRef.current = {
       mode,
@@ -725,8 +767,8 @@ function FloatingChat({
   };
   const chatStyle = rect
     ? ({
-        '--rt-chat-x': `${rect.x}px`,
-        '--rt-chat-y': `${rect.y}px`,
+        '--rt-chat-x': `${viewportOffset.left + rect.x}px`,
+        '--rt-chat-y': `${viewportOffset.top + rect.y}px`,
         '--rt-chat-w': `${rect.width}px`,
         '--rt-chat-h': `${rect.height}px`,
       } as CSSProperties)

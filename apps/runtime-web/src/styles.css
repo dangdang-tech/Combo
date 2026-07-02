@@ -1353,10 +1353,10 @@ body {
   font-size: 13px;
 }
 .rt-floating-chat {
-  position: absolute;
+  position: fixed;
   right: 32px;
   bottom: 20px;
-  z-index: 3;
+  z-index: 20;
   width: min(420px, calc(100% - 64px));
   height: min(360px, calc(100% - 56px));
   min-height: 300px;
@@ -1713,6 +1713,7 @@ body {
     padding: 16px 16px 45dvh;
   }
   .rt-floating-chat {
+    position: absolute;
     top: auto;
     left: 0;
     right: 0;
