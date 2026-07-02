@@ -42,8 +42,16 @@ var scanRoots = []string{
 //
 // 口径与 shell `find ROOT -type f -name '*.jsonl' -size +0c`：只收普通文件、*.jsonl、非空文件。
 // 不可达的根目录直接跳过；扫描中的读错误忽略不致命。
-func scanSessions(home string) ([]string, error) {
-	var files []string
+//
+// limit > 0 时只保留最近修改的 limit 个文件（再按路径排序输出，保证后续分片可复现）。
+// 这是本地测试采样口径；生产默认 limit=0，即全量扫描。
+func scanSessions(home string, limit int) ([]string, error) {
+	type sessionFile struct {
+		path  string
+		modNS int64
+	}
+
+	var found []sessionFile
 	for _, rel := range scanRoots {
 		root := filepath.Join(home, rel)
 		info, err := os.Stat(root)
@@ -67,12 +75,27 @@ func scanSessions(home string) ([]string, error) {
 			if statErr != nil || fi.Size() <= 0 {
 				return nil // 空文件或不可 stat：跳过。
 			}
-			files = append(files, path)
+			found = append(found, sessionFile{path: path, modNS: fi.ModTime().UnixNano()})
 			return nil
 		})
 		if walkErr != nil {
 			return nil, walkErr
 		}
+	}
+
+	if limit > 0 && len(found) > limit {
+		sort.Slice(found, func(i, j int) bool {
+			if found[i].modNS != found[j].modNS {
+				return found[i].modNS > found[j].modNS
+			}
+			return found[i].path < found[j].path
+		})
+		found = found[:limit]
+	}
+
+	files := make([]string, 0, len(found))
+	for _, f := range found {
+		files = append(files, f.path)
 	}
 	// 稳定排序：保证分片划分可复现。
 	sort.Strings(files)

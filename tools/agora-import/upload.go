@@ -17,12 +17,13 @@ import (
 
 // uploadConfig 上传所需的全部参数（来自环境变量，main 装配）。
 type uploadConfig struct {
-	Base     string // 形如 https://agora.xxx（无尾斜杠）
-	PairID   string
-	Code     string // 配对码（Authorization: Bearer）
-	Source   string // 默认 mixed
-	Jobs     int    // 并发路数（默认 8）
-	NumParts int    // 分片总数 N
+	Base         string // 形如 https://agora.xxx（无尾斜杠）
+	PairID       string
+	Code         string // 配对码（Authorization: Bearer）
+	Source       string // 默认 mixed
+	Jobs         int    // 并发路数（默认 8）
+	SessionLimit int    // 扫描会话上限；0 = 不限（测试采样用）。
+	NumParts     int    // 分片总数 N
 }
 
 // 每片上传超时 600s；失败重试 3 次，退避 1s/2s/3s（与 shell 契约对齐）。

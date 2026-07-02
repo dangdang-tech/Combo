@@ -30,8 +30,9 @@ const (
 
 // 默认值（可被环境变量覆盖）。
 const (
-	defaultSource = "mixed"
-	defaultJobs   = 8
+	defaultSource       = "mixed"
+	defaultJobs         = 8
+	defaultSessionLimit = 0
 )
 
 func main() {
@@ -73,7 +74,7 @@ func run() int {
 
 	// 1. 扫描。
 	rep.scanStart()
-	files, err := scanSessions(home)
+	files, err := scanSessions(home, cfg.SessionLimit)
 	if err != nil {
 		rep.failf("读取对话历史时出错了。请回到网页，改用浏览器上传。")
 		return exitError
@@ -144,6 +145,7 @@ func resolveHome() (string, error) {
 //	AGORA_CODE     必填，配对码
 //	AGORA_SOURCE   默认 mixed
 //	AGORA_JOBS     默认 8
+//	AGORA_SESSION_LIMIT 默认 0（不限）；测试时可设 50 等正整数
 //
 // 缺必填项 → 返回人话错误（main 打印后 exit 1）。
 func loadConfig() (uploadConfig, error) {
@@ -177,13 +179,15 @@ func loadConfig() (uploadConfig, error) {
 	if jobs < 1 {
 		jobs = defaultJobs
 	}
+	sessionLimit := parseIntEnv("AGORA_SESSION_LIMIT", defaultSessionLimit)
 
 	return uploadConfig{
-		Base:   base,
-		PairID: pairID,
-		Code:   code,
-		Source: source,
-		Jobs:   jobs,
+		Base:         base,
+		PairID:       pairID,
+		Code:         code,
+		Source:       source,
+		Jobs:         jobs,
+		SessionLimit: sessionLimit,
 	}, nil
 }
 

@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 )
 
 // gunzip 解压 gzip 字节。
@@ -314,11 +315,54 @@ func TestScanSessions(t *testing.T) {
 	}
 	mustWrite(filepath.Join(otherDir, "x.jsonl"), `{"k":3}`)
 
-	got, err := scanSessions(home)
+	got, err := scanSessions(home, 0)
 	if err != nil {
 		t.Fatalf("scanSessions: %v", err)
 	}
 	want := []string{filepath.Join(claudeDir, "s1.jsonl"), filepath.Join(codexDir, "s2.jsonl")}
+	sort.Strings(want)
+	if len(got) != len(want) {
+		t.Fatalf("scan got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("scan[%d] = %s, want %s", i, got[i], want[i])
+		}
+	}
+}
+
+// TestScanSessionsLimit 校验测试采样上限：只取最近修改的 N 个文件，输出仍按路径排序。
+func TestScanSessionsLimit(t *testing.T) {
+	home := t.TempDir()
+	claudeDir := filepath.Join(home, ".claude", "projects", "proj-a")
+	codexDir := filepath.Join(home, ".codex", "sessions", "2026", "06")
+	for _, d := range []string{claudeDir, codexDir} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeWithMtime := func(p string, body string, mt time.Time) {
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(p, mt, mt); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	base := time.Unix(1_700_000_000, 0)
+	old := filepath.Join(claudeDir, "old.jsonl")
+	newer := filepath.Join(claudeDir, "newer.jsonl")
+	newest := filepath.Join(codexDir, "newest.jsonl")
+	writeWithMtime(old, `{"k":"old"}`, base)
+	writeWithMtime(newer, `{"k":"newer"}`, base.Add(2*time.Hour))
+	writeWithMtime(newest, `{"k":"newest"}`, base.Add(3*time.Hour))
+
+	got, err := scanSessions(home, 2)
+	if err != nil {
+		t.Fatalf("scanSessions: %v", err)
+	}
+	want := []string{newer, newest}
 	sort.Strings(want)
 	if len(got) != len(want) {
 		t.Fatalf("scan got %v, want %v", got, want)
