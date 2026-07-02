@@ -6,19 +6,23 @@ import { useSessions } from '../api/runtime.js';
 export function SessionSidebar({
   activeSession,
   activeSessionId,
+  capabilitySlug,
 }: {
   activeSession?: RuntimeSessionListItem;
   activeSessionId?: string;
+  capabilitySlug?: string;
 }) {
   const navigate = useNavigate();
-  const sessions = useSessions();
+  const sessions = useSessions(capabilitySlug);
   const visibleSessions = useMemo(() => {
-    const items = sessions.data?.items ?? [];
+    const items = (sessions.data?.items ?? []).filter(
+      (item) => !capabilitySlug || item.slug === capabilitySlug,
+    );
     if (!activeSession) return items;
     const exists = items.some((item) => item.id === activeSession.id);
     if (!exists) return [activeSession, ...items];
     return items.map((item) => (item.id === activeSession.id ? activeSession : item));
-  }, [activeSession, sessions.data?.items]);
+  }, [activeSession, capabilitySlug, sessions.data?.items]);
 
   return (
     <nav className="rt-sidebar">

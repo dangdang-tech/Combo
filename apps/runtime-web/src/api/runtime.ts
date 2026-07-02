@@ -22,10 +22,11 @@ export function useCapabilities() {
   });
 }
 
-export function useSessions() {
+export function useSessions(capabilitySlug?: string) {
+  const query = capabilitySlug ? `?slug=${encodeURIComponent(capabilitySlug)}` : '';
   return useQuery({
-    queryKey: ['sessions'],
-    queryFn: () => apiGet<RuntimeSessionList>('/runtime/sessions'),
+    queryKey: capabilitySlug ? ['sessions', capabilitySlug] : ['sessions'],
+    queryFn: () => apiGet<RuntimeSessionList>(`/runtime/sessions${query}`),
   });
 }
 

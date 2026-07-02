@@ -1028,7 +1028,7 @@ body {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) 60px;
+  grid-template-rows: minmax(0, 1fr);
   background: var(--cb-bg);
 }
 .rt-genui__canvas {
@@ -1240,69 +1240,6 @@ body {
 }
 .rt-skeleton-card b {
   width: 100%;
-}
-.rt-process {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  min-height: 60px;
-  padding: 0 24px;
-  border-top: 1px solid var(--cb-border);
-  background: var(--cb-surface);
-  overflow: hidden;
-}
-.rt-process__slot {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  gap: 12px;
-}
-.rt-process__line {
-  width: 48px;
-  height: 1px;
-  background: var(--cb-border);
-}
-.rt-process__step {
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: #a39a8f;
-  font-family: var(--cb-font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 1.2px;
-}
-.rt-process__dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  border: 1px solid currentColor;
-  background: transparent;
-}
-.rt-process__label {
-  white-space: nowrap;
-}
-.rt-process__step[data-status='running'] {
-  color: var(--cb-accent);
-}
-.rt-process__step[data-status='running'] .rt-process__dot,
-.rt-process__step[data-status='locked'] .rt-process__dot {
-  background: currentColor;
-}
-.rt-process__step[data-status='completed'] {
-  color: #0b7156;
-}
-.rt-process__step[data-status='completed'] .rt-process__dot {
-  border-color: #0b7156;
-  background: #0b7156;
-}
-.rt-process__step[data-status='locked'] {
-  color: #b88735;
-}
-.rt-process__step[data-status='failed'] {
-  color: var(--cb-danger);
 }
 .rt-inspector {
   position: absolute;
@@ -1655,9 +1592,6 @@ body {
   .rt-trial__tools > button:not(.rt-toolbar-pill) {
     display: none;
   }
-  .rt-process__line {
-    width: 28px;
-  }
 }
 
 @media (max-width: 900px) {
@@ -1692,9 +1626,6 @@ body {
     width: 100%;
     justify-content: space-between;
     gap: 10px;
-  }
-  .rt-genui {
-    grid-template-rows: minmax(0, 1fr) auto;
   }
   .rt-genui__overlay {
     align-items: start;
@@ -1748,14 +1679,5 @@ body {
     top: 12px;
     right: 12px;
     width: calc(100% - 24px);
-  }
-  .rt-process {
-    justify-content: flex-start;
-    min-height: 56px;
-    padding: 0 16px;
-    overflow-x: auto;
-  }
-  .rt-process__line {
-    width: 24px;
   }
 }

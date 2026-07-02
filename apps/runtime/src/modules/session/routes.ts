@@ -212,9 +212,9 @@ export async function registerSessionRoutes(
   );
 
   // GET /runtime/sessions — 续话侧栏
-  app.get('/runtime/sessions', async (req, reply) => {
+  app.get<{ Querystring: { slug?: string } }>('/runtime/sessions', async (req, reply) => {
     const ownerId = await resolveRuntimeOwnerId(req, reply, ctx.pool, ctx.env);
-    const items = await listSessions(ctx.pool, ownerId);
+    const items = await listSessions(ctx.pool, ownerId, { slug: req.query.slug });
     return reply.send({ items });
   });
 

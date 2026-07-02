@@ -251,54 +251,6 @@ function TrialIntakeForm({
   );
 }
 
-function TrialProcessPanel({
-  process,
-  isRunning,
-  hasStarted,
-}: {
-  process: TrialProcessState | null;
-  isRunning: boolean;
-  hasStarted: boolean;
-}) {
-  const hasFailed = process?.steps.some((step) => step.status === 'failed') ?? false;
-  const steps = [
-    { key: 'intake', label: 'INTAKE', status: hasStarted ? 'completed' : 'running' },
-    {
-      key: 'draft_v1',
-      label: 'DRAFT V1',
-      status: hasFailed ? 'failed' : isRunning ? 'running' : hasStarted ? 'completed' : 'pending',
-    },
-    {
-      key: 'lock_objection',
-      label: '锁定「异议」',
-      status: hasStarted && !isRunning && !hasFailed ? 'locked' : 'pending',
-    },
-    {
-      key: 'draft_v2',
-      label: 'DRAFT V2',
-      status: hasStarted && !isRunning && !hasFailed ? 'completed' : 'pending',
-    },
-    {
-      key: 'generating',
-      label: hasStarted && !isRunning && !hasFailed ? 'GENERATING 3/3' : 'GENERATING',
-      status: hasFailed ? 'failed' : hasStarted && !isRunning ? 'running' : 'pending',
-    },
-  ];
-  return (
-    <div className="rt-process" aria-label="生成过程">
-      {steps.map((step, index) => (
-        <div key={step.key} className="rt-process__slot">
-          {index > 0 && <span className="rt-process__line" />}
-          <div className="rt-process__step" data-status={step.status}>
-            <span className="rt-process__dot" />
-            <span className="rt-process__label">{step.label}</span>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function TrialGeneratingCard({
   capability,
   process,
@@ -904,6 +856,9 @@ export function ChatPage() {
         qc.setQueryData<RuntimeSessionList>(['sessions'], (current) =>
           upsertSessionListItem(current, item),
         );
+        qc.setQueryData<RuntimeSessionList>(['sessions', data.capability.slug], (current) =>
+          upsertSessionListItem(current, item),
+        );
         void qc.invalidateQueries({ queryKey: ['sessions'] });
         navigate(`/session/${data.session.id}`, { replace: true });
       })
@@ -965,7 +920,11 @@ export function ChatPage() {
 
   return (
     <div className="rt-app rt-trial-app" data-view={mode}>
-      <SessionSidebar activeSession={activeSession} activeSessionId={sessionId} />
+      <SessionSidebar
+        activeSession={activeSession}
+        activeSessionId={sessionId}
+        capabilitySlug={capability.slug}
+      />
       <div className="rt-trial">
         <header className="rt-trial__toolbar">
           <div className="rt-trial__title-group">
@@ -1053,11 +1012,6 @@ export function ChatPage() {
               <CreatorInspector capability={capability} onClose={() => setInspectorOpen(false)} />
             )}
           </div>
-          <TrialProcessPanel
-            process={agui.trialProcess}
-            isRunning={agui.isRunning}
-            hasStarted={hasStarted}
-          />
         </main>
       </div>
     </div>

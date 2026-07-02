@@ -163,7 +163,7 @@ export async function getSessionMeta(
 export async function listSessions(
   pool: Pool,
   ownerId: string,
-  opts: { capabilityId?: string; mode?: RuntimeSessionMode } = {},
+  opts: { capabilityId?: string; mode?: RuntimeSessionMode; slug?: string } = {},
 ): Promise<RuntimeSessionListItem[]> {
   const filters: string[] = [`owner_id = $1`, `status = 'active'`];
   const params: unknown[] = [ownerId];
@@ -174,6 +174,10 @@ export async function listSessions(
   if (opts.mode) {
     params.push(opts.mode);
     filters.push(`mode = $${params.length}`);
+  }
+  if (opts.slug) {
+    params.push(opts.slug);
+    filters.push(`slug = $${params.length}`);
   }
   const res = await pool.query<{
     id: string;
