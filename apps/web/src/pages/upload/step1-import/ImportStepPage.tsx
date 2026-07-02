@@ -14,7 +14,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { PairResult, SnapshotView, SnapshotSegmentView, DonePayload } from '@cb/shared';
 import { ApiError, useSSE, type UseSSEState } from '../../../api/index.js';
 import { ErrorState, LoadingState } from '../../../components/index.js';
-import { useWizard, useBootstrapDraft } from '../../wizard/index.js';
+import { findDraftById, useWizard, useBootstrapDraft } from '../../wizard/index.js';
 import { ImportEmptyState } from './ImportEmptyState.js';
 import { BrowserUploadProgress } from './BrowserUploadProgress.js';
 import { useBrowserImport } from './useBrowserImport.js';
@@ -53,6 +53,10 @@ function snapshotIdFromDone(done: DonePayload | undefined): string | undefined {
   return undefined;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * SSE 加载子组件：订阅导入 job 流并渲染三层加载态。
  * 用 key={jobId+attempt} 挂载本组件即可整条重订阅（重试重连），URL 不变靠 remount 触发新流。
@@ -60,6 +64,7 @@ function snapshotIdFromDone(done: DonePayload | undefined): string | undefined {
 function ImportJobStream({
   jobId,
   onDone,
+  onDoneWithoutSnapshot,
   onError,
   onCancel,
   cancelling,
@@ -67,6 +72,7 @@ function ImportJobStream({
 }: {
   jobId: string;
   onDone: (snapshotId: string) => void;
+  onDoneWithoutSnapshot: () => void;
   onError: () => void;
   onCancel: () => void;
   cancelling: boolean;
@@ -74,10 +80,24 @@ function ImportJobStream({
 }): ReactElement {
   const sse: UseSSEState = useSSE(importJobEventsUrl(jobId), 'job');
   const doneSnapshotId = snapshotIdFromDone(sse.done);
+  const fallbackStartedRef = useRef(false);
 
   useEffect(() => {
     if (sse.status === 'done' && doneSnapshotId) onDone(doneSnapshotId);
   }, [sse.status, doneSnapshotId, onDone]);
+
+  useEffect(() => {
+    if (fallbackStartedRef.current) return;
+    const progress = sse.progress;
+    const completedSnapshot =
+      progress?.percent === 100 &&
+      progress.subtasks.length > 0 &&
+      progress.subtasks.every((task) => task.status === 'done');
+    const doneWithoutSnapshot = sse.status === 'done' && !doneSnapshotId;
+    if (!doneWithoutSnapshot && !completedSnapshot) return;
+    fallbackStartedRef.current = true;
+    onDoneWithoutSnapshot();
+  }, [sse.status, sse.progress, doneSnapshotId, onDoneWithoutSnapshot]);
 
   useEffect(() => {
     if (sse.status === 'error') onError();
@@ -91,12 +111,19 @@ function ImportJobStream({
 export function ImportStepPage(): ReactElement {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { draftId, setSnapshotId, markStepError, clearStepError } = useWizard();
+  const {
+    draftId,
+    snapshotId: ctxSnapshotId,
+    setSnapshotId,
+    markStepError,
+    clearStepError,
+  } = useWizard();
 
   // 深链续传：?snapshotId= 直进完成态、?jobId= 直进加载态（工作台草稿条可带）；?draftId= 续传带入。
   const urlJobId = searchParams.get('jobId') ?? undefined;
   const urlSnapshotId = searchParams.get('snapshotId') ?? undefined;
   const urlDraftId = searchParams.get('draftId') ?? undefined;
+  const activeDraftId = draftId ?? urlDraftId;
 
   // 草稿 bootstrap（P0-2，续传基线）：全新进入（无 draftId、无 snapshot/job 深链）即建真实草稿，拿 draftId
   //   贯穿 WizardContext + 续传 URL。续传 / 回看（有任一来源）不建。失败就地 ErrorState + 重试（永不裸错）。
@@ -135,7 +162,7 @@ export function ImportStepPage(): ReactElement {
   //   拿到 jobId 即进现有 loading 链路复用（jobId → SSE → 完成态）。
   const browserImport = useBrowserImport({
     onJobId: (jobId) => setPhase({ kind: 'loading', jobId }),
-    ...(draftId ? { draftId } : {}),
+    ...(activeDraftId ? { draftId: activeDraftId } : {}),
   });
 
   // 配对拿到 jobId → 进加载态。
@@ -163,10 +190,47 @@ export function ImportStepPage(): ReactElement {
     [clearStepError],
   );
 
+  const navigateToCapabilities = useCallback(
+    (snapshotId: string): void => {
+      setSnapshotId(snapshotId);
+      const dq = activeDraftId ? `&draftId=${encodeURIComponent(activeDraftId)}` : '';
+      navigate(`/create/capabilities?snapshotId=${encodeURIComponent(snapshotId)}${dq}`);
+    },
+    [activeDraftId, navigate, setSnapshotId],
+  );
+
+  const resolveCompletedSnapshotFromDraft = useCallback(async (): Promise<void> => {
+    if (!activeDraftId) {
+      setStartError(fallbackError('导入已完成，但没拿到结果地址。请刷新后重试。'));
+      return;
+    }
+    try {
+      for (let i = 0; i < 6; i += 1) {
+        const draft = await findDraftById(activeDraftId);
+        if (draft?.snapshotId) {
+          await loadComplete(draft.snapshotId);
+          return;
+        }
+        await sleep(800);
+      }
+      setStartError(fallbackError('导入结果还在收尾，请稍后刷新重试。'));
+    } catch (e) {
+      setStartError(e instanceof ApiError ? e : fallbackError('导入结果加载失败，请稍后重试。'));
+    }
+  }, [activeDraftId, loadComplete]);
+
   // 深链 ?snapshotId= → 直接取完成态。
   useEffect(() => {
     if (phase.kind === 'restoring' && urlSnapshotId) void loadComplete(urlSnapshotId);
   }, [phase.kind, urlSnapshotId, loadComplete]);
+
+  // 仅带 ?draftId= 恢复时，草稿里若已经有 snapshotId，直接进入能力页，不再展示原始 session 清单。
+  useEffect(() => {
+    if (!ctxSnapshotId) return;
+    if (urlSnapshotId || urlJobId) return;
+    if (phase.kind !== 'empty' && phase.kind !== 'restoring') return;
+    navigateToCapabilities(ctxSnapshotId);
+  }, [ctxSnapshotId, urlSnapshotId, urlJobId, phase.kind, navigateToCapabilities]);
 
   // SSE done 成功 → 取快照进完成态。
   const handleStreamDone = useCallback(
@@ -184,18 +248,15 @@ export function ImportStepPage(): ReactElement {
   // 然后【自动进入能力页】（PRD：传完自动进入提取，无需手动点下一步），带 snapshotId + draftId 续传上下文。
   useEffect(() => {
     if (phase.kind !== 'complete') return;
-    const snapshotId = phase.snapshot.id;
-    setSnapshotId(snapshotId);
-    const dq = draftId ? `&draftId=${encodeURIComponent(draftId)}` : '';
-    navigate(`/create/capabilities?snapshotId=${encodeURIComponent(snapshotId)}${dq}`);
-  }, [phase, draftId, navigate, setSnapshotId]);
+    navigateToCapabilities(phase.snapshot.id);
+  }, [phase, navigateToCapabilities]);
 
   // —— 动作 ——
   const handleStart = useCallback(async (): Promise<void> => {
     setStarting(true);
     setStartError(null);
     try {
-      const pair = await createPair(draftId ? { draftId } : {});
+      const pair = await createPair(activeDraftId ? { draftId: activeDraftId } : {});
       setCopied(false);
       setPhase({ kind: 'pairing', pair });
     } catch (e) {
@@ -203,7 +264,7 @@ export function ImportStepPage(): ReactElement {
     } finally {
       setStarting(false);
     }
-  }, [draftId]);
+  }, [activeDraftId]);
 
   // 浏览器直传：选了文件/目录或拖拽 → 进上传中态 + 启动编排（BUG-013 主路径）。
   const handleBrowserFiles = useCallback(
@@ -333,6 +394,7 @@ export function ImportStepPage(): ReactElement {
         key={`${phase.jobId}-${attempt}`}
         jobId={phase.jobId}
         onDone={handleStreamDone}
+        onDoneWithoutSnapshot={() => void resolveCompletedSnapshotFromDraft()}
         onError={handleStreamError}
         onCancel={() => void handleCancel()}
         cancelling={cancelling}

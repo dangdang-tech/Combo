@@ -107,6 +107,7 @@ describe('CapabilitiesStepPage', () => {
     await waitFor(() => {
       const call = mock.calls.find((c) => c.url.includes('/snapshots/s1/extract'));
       expect(call?.headers['X-Idempotency-Scope']).toBe('extract.create');
+      expect(call?.headers['Idempotency-Key']).toBe('extract:session-mock-v1:d1:s1');
       expect(call?.body).toEqual({ draftId: 'd1' });
     });
     // 萃取 SSE（connection[0]）：open → done → 拉候选进 ready。
@@ -116,16 +117,56 @@ describe('CapabilitiesStepPage', () => {
 
     await waitFor(() => expect(screen.getByText('短视频脚本生成器')).toBeInTheDocument());
     expect(screen.getByText('VC 拷打模拟器')).toBeInTheDocument();
+    expect(screen.getByText('第二步 · 能力')).toBeInTheDocument();
+    expect(screen.getByText('你的能力，挑选后一键发布')).toBeInTheDocument();
+    expect(screen.queryByText('已入')).toBeNull();
     // 信任背书：来源 session 段数。
-    expect(screen.getByText('来源 9 段')).toBeInTheDocument();
-    // 结果横幅。
-    expect(screen.getByText(/已分析 215 段原始数据/)).toBeInTheDocument();
+    expect(screen.getByText('来自 9 段 session')).toBeInTheDocument();
+    expect(screen.getByText(/已分析 215 段 session/)).toBeInTheDocument();
     // 默认全选（两张卡的复选框都勾上）。
     const boxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
     expect(boxes).toHaveLength(2);
     expect(boxes.every((b) => b.checked)).toBe(true);
     // 一键发布可点（已选 2 项）。
-    expect(screen.getByRole('button', { name: /一键发布（已选 2 项）/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /一键发布到市集 · 2 项/ })).toBeEnabled();
+
+    await userEvent.click(screen.getByRole('button', { name: '取消全选' }));
+    expect(screen.getByRole('button', { name: /一键发布到市集 · 0 项/ })).toBeDisabled();
+    expect((screen.getAllByRole('checkbox') as HTMLInputElement[]).every((b) => !b.checked)).toBe(
+      true,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: '全选' }));
+    expect(screen.getByRole('button', { name: /一键发布到市集 · 2 项/ })).toBeEnabled();
+  });
+
+  it('试用按钮是占位：点击后不跳转、不请求运行态', async () => {
+    mock = installFetchMock([
+      {
+        status: 202,
+        json: { data: { jobId: 'j1', snapshotId: 's1', status: 'queued', eventsUrl: '/x' } },
+      },
+      {
+        status: 200,
+        json: {
+          data: [candidateJson()],
+          meta: {
+            page: { hasMore: false, nextCursor: null, limit: 50, order: 'asc' },
+            confidenceSummary: { high: 1, med: 0, low: 0 },
+          },
+        },
+      },
+    ]);
+    renderPage();
+    await waitFor(() => expect(MockFetchEventSource.connections.length).toBe(1));
+    act(() => connAt(0).open());
+    act(() => connAt(0).emit('done', extractDone, { id: '1-0' }));
+    await waitFor(() => expect(screen.getByText('短视频脚本生成器')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: '试用 →' }));
+
+    expect(screen.queryByTestId('market')).toBeNull();
+    expect(mock.calls.some((c) => c.url.includes('/a/'))).toBe(false);
   });
 
   it('一键发布 → createPublishBatch(每项仅 candidateId+idempotencyKey) → 批次 SSE published → 卡片 已发布 + 市集链接', async () => {
@@ -173,7 +214,7 @@ describe('CapabilitiesStepPage', () => {
     await waitFor(() => expect(screen.getByText('短视频脚本生成器')).toBeInTheDocument());
 
     // 一键发布（默认全选两项）。
-    await userEvent.click(screen.getByRole('button', { name: /一键发布（已选 2 项）/ }));
+    await userEvent.click(screen.getByRole('button', { name: /一键发布到市集 · 2 项/ }));
 
     // 发布请求：每项仅 candidateId + idempotencyKey（无 visibility/cover/tiers）；批次级 scope。
     await waitFor(() => {

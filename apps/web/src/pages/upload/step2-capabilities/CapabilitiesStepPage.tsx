@@ -2,9 +2,9 @@
 //
 // 三态（结构坍缩：提取过程态不占独立路由，是本页的第一个阶段）：
 //   1. extracting（过程态）：带 ?snapshotId= 进入 → 若无 extractJobId 先 createExtractJob 触发 → 订阅 job SSE，
-//      复用 step2-extract 的 ExtractLoading（候选逐个浮现 + 「已浮现 X / Y 个能力项」）。job 终态 → 拉候选进 ready。
-//   2. ready：候选渲染成能力卡网格（名称 + 分类标签 + 一句话描述 + 来源 session 段数[信任背书] + 复选框[默认全选] +
-//      「试用」入口[跳运行态，出本期范围] + 发布状态槽）。底部「一键发布」（≥1 选中即可点）。
+//      复用 step2-extract 的 ExtractLoading（圆环进度 + 指标 + 已发现列表）。job 终态 → 拉候选进 ready。
+//   2. ready：候选渲染成 PRD 单列能力行（名称 + 分类标签 + 一句话描述 + 来源 session 段数[信任背书] +
+//      复选框[默认全选] + 「试用」占位按钮 + 发布状态槽）。底部「一键发布」（≥1 选中即可点）。
 //   3. publishing → done：一键发布 → createPublishBatch（每项仅 candidateId + idempotencyKey；封面/档位/可见性走后端默认
 //      glyph/free/public）→ 订阅批次 job SSE，mergeBatchState 合并逐项态 → 卡片状态槽反映 发布中 / 已发布 / 失败；
 //      完成后给已发布数 + 每个已发布能力的市集链接（/a/{slug}）。
@@ -28,7 +28,7 @@ import {
   fetchCandidates,
   jobEventsUrl,
   nameText,
-  typeText,
+  categoryText,
   segmentText,
 } from '../step2-extract/index.js';
 import {
@@ -141,9 +141,10 @@ export function CapabilitiesStepPage(): ReactElement {
     };
   }, [urlBatchId]);
 
-  // 触发幂等键（同一 snapshot 复用同 key，刷新回放首次萃取，提取-25）。
+  // 触发幂等键带萃取策略版本：同一 snapshot 切到新版 session-mock 后要重新跑，不回放旧聚类结果。
   const triggerKey = useMemo(
-    () => (snapshotId ? `extract:${draftId ?? 'nodraft'}:${snapshotId}` : undefined),
+    () =>
+      snapshotId ? `extract:session-mock-v1:${draftId ?? 'nodraft'}:${snapshotId}` : undefined,
     [snapshotId, draftId],
   );
 
@@ -206,6 +207,15 @@ export function CapabilitiesStepPage(): ReactElement {
       return next;
     });
   }, []);
+
+  const handleToggleAll = useCallback((): void => {
+    setSelectedIds((prev) => {
+      const readyIds = candidates.filter((c) => c.status === 'ready').map((c) => c.id);
+      if (readyIds.length === 0) return prev;
+      const allSelected = readyIds.every((id) => prev.has(id));
+      return allSelected ? new Set() : new Set(readyIds);
+    });
+  }, [candidates]);
 
   // —— 一键发布：每项仅 candidateId + idempotencyKey（封面/档位/可见性走后端默认）——
   const handlePublish = useCallback((): void => {
@@ -332,100 +342,129 @@ export function CapabilitiesStepPage(): ReactElement {
     );
   }
 
-  // ready 态：能力卡网格 + 一键发布。
   const analyzed = doneResult?.analyzedSegments;
   const identified = doneResult?.candidateCount ?? candidates.length;
+  const allReadySelected = readyCount > 0 && selectedCount === readyCount;
 
   return (
     <section className="cb-capabilities" aria-label="从对话历史提取出的能力">
-      <div className="cb-capabilities__banner" role="status">
-        {typeof analyzed === 'number'
-          ? `已分析 ${analyzed.toLocaleString('en-US')} 段原始数据，识别出 ${identified} 个能力项。`
-          : `识别出 ${identified} 个能力项。`}
-      </div>
+      <header className="cb-capabilities__header">
+        <p className="cb-capabilities__eyebrow">第二步 · 能力</p>
+        <h1 className="cb-capabilities__title">你的能力，挑选后一键发布</h1>
+        <p className="cb-capabilities__lead">
+          我们从 sessions 里提取了这些能力，每条都能发成一个市集
+          mini-app。点任意一项可直接打开「试用」跑一遍，确认后勾选、一键发布。
+        </p>
+      </header>
 
       {candidates.length === 0 ? (
         <p className="cb-capabilities__empty">
           没识别出可复用的能力。可以回上一步换个目录再导入，或多积累一些对话历史后再来。
         </p>
       ) : (
-        <ul className="cb-capabilities__grid" aria-label="能力卡列表">
-          {candidates.map((c) => {
-            const failed = c.status === 'failed';
-            const checked = selectedIds.has(c.id);
-            const item = itemByCandidate.get(c.id);
-            return (
-              <li
-                key={c.id}
-                className="cb-cap-card"
-                data-status={c.status}
-                data-selected={checked ? 'true' : 'false'}
+        <>
+          <div className="cb-capabilities__toolbar">
+            <span className="cb-capabilities__selected">
+              已选 <strong>{selectedCount}</strong> / {readyCount} 项
+              {typeof analyzed === 'number' && (
+                <span className="cb-capabilities__analyzed">
+                  · 已分析 {analyzed.toLocaleString('en-US')} 段 session
+                </span>
+              )}
+              <span className="cb-capabilities__analyzed"> · 识别出 {identified} 项</span>
+            </span>
+            {readyCount > 0 && (
+              <button
+                type="button"
+                className="cb-link cb-capabilities__select-all"
+                onClick={handleToggleAll}
               >
-                <div className="cb-cap-card__head">
-                  {!failed && (
-                    <input
-                      type="checkbox"
-                      className="cb-cap-card__checkbox"
-                      checked={checked}
-                      onChange={() => handleToggle(c.id)}
-                      aria-label={`选择能力「${nameText(c.name)}」`}
-                    />
-                  )}
-                  <span className="cb-cap-card__name">{nameText(c.name)}</span>
-                  <span className="cb-cap-card__type">{typeText(c.type)}</span>
-                </div>
+                {allReadySelected ? '取消全选' : '全选'}
+              </button>
+            )}
+          </div>
 
-                {c.intent && <p className="cb-cap-card__intent">{c.intent}</p>}
-
-                {failed ? (
-                  <p className="cb-cap-card__fail">
-                    {c.error?.userMessage ?? '这一项没能识别出来。'}
-                  </p>
-                ) : (
-                  <div className="cb-cap-card__meta">
-                    {/* 来源 session 段数 = 信任背书（提取-13）。 */}
-                    <span className="cb-cap-card__segments">
-                      来源 {segmentText(c.segmentCount)}
-                    </span>
-                    {/* 「试用」入口 → 运行态试用页（出本期范围，占位跳能力页路由）；已发布卡改由下方「市集链接」承载，
-                        不重复渲染两个指向同一目的的入口。 */}
-                    {item?.state !== 'published' && (
-                      <Link className="cb-cap-card__trial" to={`/a/${c.slug}`}>
-                        试用
-                      </Link>
+          <ul className="cb-capabilities__list" aria-label="能力卡列表">
+            {candidates.map((c) => {
+              const failed = c.status === 'failed';
+              const checked = selectedIds.has(c.id);
+              const item = itemByCandidate.get(c.id);
+              return (
+                <li
+                  key={c.id}
+                  className="cb-cap-card"
+                  data-status={c.status}
+                  data-selected={checked ? 'true' : 'false'}
+                >
+                  <div className="cb-cap-card__select">
+                    {!failed ? (
+                      <input
+                        type="checkbox"
+                        className="cb-cap-card__checkbox"
+                        checked={checked}
+                        onChange={() => handleToggle(c.id)}
+                        aria-label={`选择能力「${nameText(c.name)}」`}
+                      />
+                    ) : (
+                      <span className="cb-cap-card__failed-mark" aria-hidden="true">
+                        !
+                      </span>
                     )}
                   </div>
-                )}
 
-                {/* 发布状态槽：批量发布起后据逐项态渲染 发布中 / 已发布(+市集链接) / 失败(+人话错误 + 单项重试)。 */}
-                {item && (
-                  <div className="cb-cap-card__status" data-state={item.state}>
-                    <span className="cb-cap-card__status-label">
-                      {ITEM_STATUS_LABEL[item.state]}
-                    </span>
-                    {item.state === 'published' && (
-                      <Link className="cb-cap-card__market" to={`/a/${c.slug}`}>
-                        市集链接
-                      </Link>
+                  <div className="cb-cap-card__body">
+                    <div className="cb-cap-card__head">
+                      <span className="cb-cap-card__name">{nameText(c.name)}</span>
+                      <span className="cb-cap-card__type">{categoryText(c)}</span>
+                    </div>
+                    {c.intent && <p className="cb-cap-card__intent">{c.intent}</p>}
+                    <p className="cb-cap-card__segments">
+                      来自 {segmentText(c.segmentCount)} session
+                    </p>
+                    {failed && (
+                      <p className="cb-cap-card__fail">
+                        {c.error?.userMessage ?? '这一项没能识别出来。'}
+                      </p>
                     )}
-                    {item.state === 'failed' && item.error && (
-                      <span className="cb-cap-card__status-msg">{item.error.userMessage}</span>
-                    )}
-                    {item.state === 'failed' && (
-                      <button
-                        type="button"
-                        className="cb-cap-card__retry"
-                        onClick={() => handleRetryItem(item.itemId)}
-                      >
-                        重试
+                  </div>
+
+                  <div className="cb-cap-card__actions">
+                    {!failed && item?.state !== 'published' && (
+                      <button type="button" className="cb-cap-card__trial">
+                        试用 →
                       </button>
                     )}
+
+                    {item && (
+                      <div className="cb-cap-card__status" data-state={item.state}>
+                        <span className="cb-cap-card__status-label">
+                          {ITEM_STATUS_LABEL[item.state]}
+                        </span>
+                        {item.state === 'published' && (
+                          <Link className="cb-cap-card__market" to={`/a/${c.slug}`}>
+                            市集链接
+                          </Link>
+                        )}
+                        {item.state === 'failed' && item.error && (
+                          <span className="cb-cap-card__status-msg">{item.error.userMessage}</span>
+                        )}
+                        {item.state === 'failed' && (
+                          <button
+                            type="button"
+                            className="cb-cap-card__retry"
+                            onClick={() => handleRetryItem(item.itemId)}
+                          >
+                            重试
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
 
       {/* 底部动作区：一键发布 / 发布进度 / 完成汇总。 */}
@@ -455,7 +494,7 @@ export function CapabilitiesStepPage(): ReactElement {
               disabled={selectedCount === 0 || publishing}
               aria-disabled={selectedCount === 0 || publishing}
             >
-              {publishing ? '处理中…' : `一键发布（已选 ${selectedCount} 项）`}
+              {publishing ? '处理中…' : `一键发布到市集 · ${selectedCount} 项`}
             </button>
           ) : merged ? (
             <p className="cb-capabilities__progress" role="status" aria-live="polite">

@@ -12,12 +12,19 @@ export const SubtaskViewSchema = z.object({
 });
 export type SubtaskView = z.infer<typeof SubtaskViewSchema>;
 
+export const ProgressMetricsSchema = z.object({
+  analyzedSegments: z.number().int().nonnegative().optional(),
+  discoveredCandidates: z.number().int().nonnegative().optional(),
+});
+export type ProgressMetrics = z.infer<typeof ProgressMetricsSchema>;
+
 export const ProgressViewSchema = z.object({
   percent: z.number().min(0).max(100).describe('总进度 0-100，单调不倒退'),
   phrase: z.string().describe('量化文案，如「68% · 已抓取 146 / 215 段会话」'),
   done: z.number().int().optional(),
   total: z.number().int().optional(),
   unit: z.string().optional(),
+  metrics: ProgressMetricsSchema.optional().describe('领域指标扩展，供加载态展示多个计数'),
   subtasks: z.array(SubtaskViewSchema),
   items: z.array(z.unknown()).optional().describe('边生成边显示已追加项摘要'),
   slow: z.boolean().optional(),

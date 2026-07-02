@@ -134,6 +134,11 @@ function reducer(state: UseSSEState, action: Action): UseSSEState {
             ...(p.done !== undefined ? { done: p.done } : {}),
             ...(p.total !== undefined ? { total: p.total } : {}),
             ...(p.unit !== undefined ? { unit: p.unit } : {}),
+            ...(p.metrics !== undefined
+              ? { metrics: { ...(prev?.metrics ?? {}), ...p.metrics } }
+              : prev?.metrics !== undefined
+                ? { metrics: prev.metrics }
+                : {}),
             subtasks: prev?.subtasks ?? [],
             ...(prev?.items !== undefined ? { items: prev.items } : {}),
           };

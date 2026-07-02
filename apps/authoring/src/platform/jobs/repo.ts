@@ -19,6 +19,7 @@ export function normalizeProgress(p: Partial<ProgressView> | null | undefined): 
     ...(typeof src.done === 'number' ? { done: src.done } : {}),
     ...(typeof src.total === 'number' ? { total: src.total } : {}),
     ...(typeof src.unit === 'string' ? { unit: src.unit } : {}),
+    ...(src.metrics && typeof src.metrics === 'object' ? { metrics: src.metrics } : {}),
     subtasks: Array.isArray(src.subtasks) ? src.subtasks : [],
     ...(Array.isArray(src.items) ? { items: src.items } : {}),
     ...(typeof src.slow === 'boolean' ? { slow: src.slow } : {}),

@@ -1,7 +1,7 @@
 // SSE 帧协议（脊柱 §5）：永不裸转圈的核心机制。12 帧 + 三型 state_snapshot。
 import { z } from 'zod';
 import { JobStatusSchema } from './jobs.js';
-import { ProgressViewSchema } from './progress.js';
+import { ProgressMetricsSchema, ProgressViewSchema } from './progress.js';
 import { StructureStateSchema } from './structure-state.js';
 import { ErrorEnvelopeSchema } from './errors.js';
 
@@ -56,6 +56,7 @@ export const ProgressPayloadSchema = z.object({
   done: z.number().int().optional(),
   total: z.number().int().optional(),
   unit: z.string().optional(),
+  metrics: ProgressMetricsSchema.optional(),
 });
 export type ProgressPayload = z.infer<typeof ProgressPayloadSchema>;
 

@@ -52,6 +52,7 @@ export interface ProgressUpdate {
   done?: number;
   total?: number;
   unit?: string;
+  metrics?: ProgressView['metrics'];
   slow?: boolean;
 }
 

@@ -21,6 +21,7 @@ export {
   typeText,
   confidenceText,
   nameText,
+  categoryText,
   segmentText,
   frequencyPercent,
 } from './candidateDisplay.js';

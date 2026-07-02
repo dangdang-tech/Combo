@@ -49,7 +49,11 @@ import {
   clusterSegments,
   scoreCandidates,
   nameOne,
+  isEffectiveSessionForMock,
+  nameSessionCapability,
+  buildSessionMockCandidate,
   CandidateNameUnavailable,
+  type NamedCandidate,
   type ScoredCandidate,
 } from './cluster.js';
 
@@ -175,13 +179,18 @@ function buildFinalFromDb(
 }
 
 /** 收尾完整 ProgressView（100% + 五项子任务全 done + 已浮现候选 items 不丢，硬规则③）。 */
-function completedExtractProgress(items: CandidateItem[], total: number): ProgressView {
+function completedExtractProgress(
+  items: CandidateItem[],
+  total: number,
+  metrics?: ProgressView['metrics'],
+): ProgressView {
   return {
     percent: 100,
     phrase: total > 0 ? `已识别出 ${total} 个能力项` : '没有识别到可打包的能力项',
     done: total,
     total,
     unit: '能力项',
+    ...(metrics ? { metrics } : {}),
     subtasks: SUBTASKS.map((s) => ({ ...s, status: 'done' as const })),
     items,
     slow: false,
@@ -323,29 +332,30 @@ async function runExtract(
     done: 0,
     total: 0,
     unit: '能力项',
+    metrics: { analyzedSegments: segments.length, discoveredCandidates: 0 },
   });
   await ctx.reportSubtask('analyze', 'done');
 
   // —— cluster：聚类相似工作流（同一快照内，证据不跨快照）——
   await ctx.reportSubtask('cluster', 'running');
-  const drafts = clusterSegments(segments);
+  const selectedSegments = segments.filter(isEffectiveSessionForMock).slice(0, 5);
   await ctx.reportSubtask('cluster', 'done');
 
   // —— form_candidates：形成候选能力（total 在此确定并稳定，提取-08；done 单调）——
   await ctx.reportSubtask('form', 'running');
-  const total = drafts.length;
+  const total = selectedSegments.length;
   await ctx.reportProgress({
     percent: 25,
     phrase: total > 0 ? appendedPhrase(0, total) : '正在形成候选…',
     done: 0,
     total,
     unit: '能力项',
+    metrics: { analyzedSegments: segments.length, discoveredCandidates: 0 },
   });
   await ctx.reportSubtask('form', 'done');
 
   // —— score：评估频率与可打包度（确定性打分）——
   await ctx.reportSubtask('score', 'running');
-  const scored = scoreCandidates(drafts, Date.now());
   await ctx.reportSubtask('score', 'done');
 
   // —— rank：按成功率排序（scoreCandidates 已按 reusability 降序）+ 逐个浮现落库 ——
@@ -356,13 +366,18 @@ async function runExtract(
   let failedCount = 0;
   let anyDegradedNaming = false; // 任一候选命名走 LLM 降级 → done.result.degraded 诚实标（§10）。
 
-  for (let i = 0; i < scored.length; i++) {
+  for (let i = 0; i < selectedSegments.length; i++) {
     if (ctx.isCancelled()) break; // 安全点：取消即停（已浮现候选保留）。
-    const cand = scored[i]!;
+    const segment = selectedSegments[i]!;
+    const summary = await nameSessionCapability(gateway, segment, {
+      traceId: ctx.traceId,
+      ...(job.ownerUserId ? { ownerUserId: job.ownerUserId } : {}),
+    });
+    const cand = buildSessionMockCandidate(segment, summary);
 
     // 单候选成败隔离：命名（LLM）或落库异常 → 该候选标 failed（人话 error），不抛、不阻塞其余（提取-17/29）。
-    const outcome = await emitOneCandidate(
-      { db, txPool, gateway },
+    const outcome = await emitSessionMockCandidate(
+      { db, txPool },
       job,
       ctx,
       snapshotId,
@@ -380,11 +395,12 @@ async function runExtract(
 
     const done = readyCount + failedCount;
     await ctx.reportProgress({
-      percent: 25 + Math.round((70 * (i + 1)) / Math.max(1, scored.length)),
+      percent: 25 + Math.round((70 * (i + 1)) / Math.max(1, selectedSegments.length)),
       phrase: appendedPhrase(done, total),
       done,
       total,
       unit: '能力项',
+      metrics: { analyzedSegments: segments.length, discoveredCandidates: done },
     });
   }
   await ctx.reportSubtask('rank', 'done');
@@ -410,7 +426,11 @@ async function runExtract(
     analyzedSegments: segments.length,
     degraded: anyDegradedNaming,
   };
-  const finalProgress = completedExtractProgress(merged.items, finalTotal);
+  const finalMetrics: ProgressView['metrics'] = {
+    analyzedSegments: segments.length,
+    discoveredCandidates: merged.readyCount + merged.failedCount,
+  };
+  const finalProgress = completedExtractProgress(merged.items, finalTotal, finalMetrics);
 
   // —— 进度收尾帧必须在 finalize（置 completed）【之前】发（Codex r4 P1）——
   //   persistProgress 受保护写只允许 status='running'；一旦 finalize 把 job 置 completed，再 reportProgress 必 0 行
@@ -424,6 +444,7 @@ async function runExtract(
     done: finalTotal,
     total: finalTotal,
     unit: '能力项',
+    metrics: finalMetrics,
   });
 
   const finalized = await finalizeExtractJob({
@@ -440,6 +461,71 @@ async function runExtract(
     return { result };
   }
   return { result, finalized: true, finalProgress };
+}
+
+/** session-mock 单项落库：候选已经命名，只做原子插入 candidate + 其唯一 session evidence。 */
+async function emitSessionMockCandidate(
+  deps: { db: Queryable; txPool: TxPool },
+  job: LeasedJob,
+  ctx: JobContext,
+  snapshotId: string,
+  cand: NamedCandidate,
+  index: number,
+  totalCandidates: number,
+): Promise<{ item: CandidateItem; degradedNaming: boolean } | 'fenced_out' | null> {
+  const { db, txPool } = deps;
+  const stuckAt = `段 ${index + 1} / ${totalCandidates}`;
+
+  let atomic: Awaited<ReturnType<typeof insertReadyCandidateWithEvidenceInTx>>;
+  try {
+    atomic = await withTransaction(txPool, (tx) =>
+      insertReadyCandidateWithEvidenceInTx({
+        tx,
+        jobId: job.id,
+        fenceToken: job.fenceToken,
+        snapshotId,
+        candidate: {
+          slug: cand.slug,
+          name: cand.name,
+          intent: cand.intent,
+          type: cand.type,
+          confidence: cand.confidence,
+          segmentCount: cand.segmentCount,
+          frequencyRatio: cand.frequencyRatio,
+          reusability: cand.reusability,
+          scopeCoherence: cand.scopeCoherence,
+          splitSuggested: cand.splitSuggested,
+          scope: cand.scope,
+          reusabilityBreakdown: cand.reusabilityBreakdown,
+        },
+        segmentIds: cand.segments.map((s) => s.segmentId),
+      }),
+    );
+  } catch (err) {
+    if (err instanceof CandidateLandingFencedOut) return 'fenced_out';
+    return persistFailedCandidate(db, ctx, job, snapshotId, cand, stuckAt);
+  }
+
+  if (atomic.kind === 'skipped') {
+    if (ctx.isCancelled()) return 'fenced_out';
+    return null;
+  }
+
+  const item = toItem(
+    atomic.candidateId,
+    {
+      name: cand.name,
+      intent: cand.intent,
+      type: cand.type,
+      confidence: cand.confidence,
+      segmentCount: atomic.written,
+      scopeCoherence: cand.scopeCoherence,
+      splitSuggested: cand.splitSuggested,
+    },
+    { status: 'ready', isNew: true },
+  );
+  await ctx.appendItem(item);
+  return { item, degradedNaming: cand.degradedNaming };
 }
 
 /**

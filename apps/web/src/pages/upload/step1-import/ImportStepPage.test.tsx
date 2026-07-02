@@ -30,10 +30,18 @@ function DraftIdProbe() {
   return <span data-testid="ctx-draft">{draftId ?? 'none'}</span>;
 }
 
-function renderPage(initialPath: string, draftId?: string | undefined) {
+function renderPage(
+  initialPath: string,
+  draftId?: string | undefined,
+  opts: { snapshotId?: string | undefined } = {},
+) {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
-      <WizardProvider initialStep="import" initialDraftId={draftId ?? undefined}>
+      <WizardProvider
+        initialStep="import"
+        initialDraftId={draftId ?? undefined}
+        initialSnapshotId={opts.snapshotId}
+      >
         <Routes>
           <Route
             path="/create/import"
@@ -201,6 +209,69 @@ describe('ImportStepPage', () => {
         '/create/capabilities?snapshotId=snap1&draftId=d1',
       ),
     );
+  });
+
+  it('仅 ?draftId= 恢复且草稿已有 snapshotId → 直接进入能力页，不展示原始 session 清单', async () => {
+    mock = installFetchMock([]);
+    renderPage('/create/import?draftId=d1', 'd1', { snapshotId: 'snap1' });
+    await waitFor(() =>
+      expect(screen.getByTestId('path')).toHaveTextContent(
+        '/create/capabilities?snapshotId=snap1&draftId=d1',
+      ),
+    );
+    expect(screen.queryByText('已入')).toBeNull();
+  });
+
+  it('导入 done 缺 snapshotId 时，从 draft 反查 snapshotId 后进入能力页', async () => {
+    mock = installFetchMock([
+      // findDraftById(d1)
+      {
+        status: 200,
+        json: {
+          data: {
+            id: 'd1',
+            status: 'active',
+            currentStep: 'import',
+            stepProgress: { percent: 100, phrase: '导入完成' },
+            snapshotId: 'snap1',
+            createdAt: '2026-06-17T00:00:00Z',
+            updatedAt: '2026-06-17T00:00:00Z',
+          },
+        },
+      },
+      // fetchSnapshot
+      {
+        status: 200,
+        json: {
+          data: {
+            id: 'snap1',
+            ownerUserId: 'u1',
+            source: 'claude',
+            sources: ['claude'],
+            stats: { segmentCount: 1, messageCount: 1, timeSpan: null, projectCount: 0 },
+            redaction: { applied: true, totalRedactions: 0, byCategory: [], rulesetVersion: 'v1' },
+            createdAt: '2026-06-17T00:00:00Z',
+          },
+        },
+      },
+      // fetchSnapshotSegments
+      {
+        status: 200,
+        json: {
+          data: [],
+          meta: { page: { hasMore: false, nextCursor: null, limit: 30, order: 'desc' } },
+        },
+      },
+    ]);
+    renderPage('/create/import?jobId=job1&draftId=d1', 'd1');
+    act(() => conn().open());
+    act(() => conn().emit('done', { status: 'completed', result: null }, { id: '1-0' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('path')).toHaveTextContent(
+        '/create/capabilities?snapshotId=snap1&draftId=d1',
+      ),
+    );
+    expect(mock.calls.some((c) => c.url.includes('/drafts/d1') && c.method === 'GET')).toBe(true);
   });
 
   it('加载态点「取消导入」 → 调取消端点 → 回空态', async () => {

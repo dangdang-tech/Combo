@@ -318,6 +318,7 @@ function makeContext(args: MakeContextArgs): RunnerContext {
     currentProgress: (): ProgressView => ({
       ...progress,
       subtasks: progress.subtasks.map((s) => ({ ...s })),
+      ...(progress.metrics ? { metrics: { ...progress.metrics } } : {}),
       ...(Array.isArray(progress.items) ? { items: [...progress.items] } : {}),
     }),
     traceId,
@@ -333,6 +334,9 @@ function makeContext(args: MakeContextArgs): RunnerContext {
       if (update.done !== undefined) progress.done = update.done;
       if (update.total !== undefined) progress.total = update.total;
       if (update.unit !== undefined) progress.unit = update.unit;
+      if (update.metrics !== undefined) {
+        progress.metrics = { ...(progress.metrics ?? {}), ...update.metrics };
+      }
       if (update.slow !== undefined) progress.slow = update.slow;
       await persist();
       await bridge.publish(leased.id, {
@@ -343,6 +347,7 @@ function makeContext(args: MakeContextArgs): RunnerContext {
           ...(progress.done !== undefined ? { done: progress.done } : {}),
           ...(progress.total !== undefined ? { total: progress.total } : {}),
           ...(progress.unit !== undefined ? { unit: progress.unit } : {}),
+          ...(progress.metrics !== undefined ? { metrics: progress.metrics } : {}),
         },
       });
     },

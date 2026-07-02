@@ -1,4 +1,4 @@
-// F-11 STEP② 加载态组件测试：策略说明 + 子任务点亮 + 逐个浮现计数 + 已识别卡 + 未识别骨架 + 失败行重试。
+// STEP② 提取过程态：PRD 圆环进度 + 指标 + 已发现能力列表 + 失败行重试。
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -12,13 +12,7 @@ function progress(over: Partial<ProgressView> = {}): ProgressView {
     phrase: '已识别 3 / 9 能力项…',
     done: 3,
     total: 9,
-    subtasks: [
-      { key: 'analyze', label: '分析会话段落', status: 'done' },
-      { key: 'cluster', label: '聚类相似工作流', status: 'running' },
-      { key: 'form', label: '形成候选能力', status: 'pending' },
-      { key: 'score', label: '评估频率与可打包度', status: 'pending' },
-      { key: 'rank', label: '按成功率排序', status: 'pending' },
-    ],
+    metrics: { analyzedSegments: 166, discoveredCandidates: 3 },
     ...over,
   };
 }
@@ -32,15 +26,19 @@ function sseState(over: Partial<UseSSEState> = {}): UseSSEState {
 }
 
 describe('ExtractLoading', () => {
-  it('标题 + 策略说明 + 五项子任务依次点亮', () => {
+  it('显示圆环百分比、提取说明和进度指标', () => {
     render(<ExtractLoading state={sseState({ progress: progress() })} />);
-    expect(screen.getByText(/正在从你的对话历史里识别可复用的能力/)).toBeInTheDocument();
-    expect(screen.getByText(/聚到一起/)).toBeInTheDocument(); // 策略说明
-    expect(screen.getByText('分析会话段落')).toBeInTheDocument();
-    expect(screen.getByText('按成功率排序')).toBeInTheDocument();
+    expect(screen.getByText('正在提取你的能力…')).toBeInTheDocument();
+    expect(screen.getByText(/正在阅读你的 sessions/)).toBeInTheDocument();
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '33');
+    expect(screen.getByText('33%')).toBeInTheDocument();
+    expect(screen.getByText('166')).toBeInTheDocument();
+    expect(screen.getByText('已分析 session')).toBeInTheDocument();
+    expect(screen.getByText('3')).toBeInTheDocument();
+    expect(screen.getByText('已发现能力')).toBeInTheDocument();
   });
 
-  it('逐个浮现计数「已浮现 X / Y」+ 已识别卡逐张浮现 + 未识别骨架', () => {
+  it('渲染已发现能力列表和未完成占位', () => {
     const { container } = render(
       <ExtractLoading
         state={sseState({
@@ -49,10 +47,9 @@ describe('ExtractLoading', () => {
         })}
       />,
     );
-    expect(screen.getByText(/已浮现 3 \/ 9 个能力项/)).toBeInTheDocument();
+    expect(screen.getByText('已发现')).toBeInTheDocument();
     expect(screen.getByText('短视频脚本生成器')).toBeInTheDocument();
     expect(screen.getByText('VC 拷打模拟器')).toBeInTheDocument();
-    expect(screen.getByLabelText('刚识别出')).toBeInTheDocument();
     // total(9) > items(2) → 尾部补占位骨架（最多 3 张）。
     expect(container.querySelectorAll('.cb-extract-loading__skeleton').length).toBeGreaterThan(0);
   });
@@ -104,6 +101,6 @@ describe('ExtractLoading', () => {
       />,
     );
     expect(screen.getByText('这一步超时了，可重试或稍后再看。')).toBeInTheDocument();
-    expect(screen.queryByText(/已浮现/)).not.toBeInTheDocument();
+    expect(screen.queryByText('已发现')).not.toBeInTheDocument();
   });
 });

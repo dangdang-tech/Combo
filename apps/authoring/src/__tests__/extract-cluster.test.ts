@@ -7,6 +7,9 @@ import {
   clusterSegments,
   scoreCandidates,
   nameOne,
+  isEffectiveSessionForMock,
+  nameSessionCapability,
+  buildSessionMockCandidate,
   type ExtractSegment,
 } from '../modules/extract/cluster.js';
 import { SlugSchema } from '@cb/shared';
@@ -45,6 +48,78 @@ describe('tokenize / slugify', () => {
     expect(s2.startsWith('cap-')).toBe(true);
     // 同 seed 同 slug（确定性，幂等/去重友好）。
     expect(slugify('重构模块', 'seed-2')).toBe(s2);
+  });
+});
+
+describe('session-mock helpers — 前 5 个有效 session 生成能力项', () => {
+  it('过滤平台噪声和过短寒暄，保留真实任务 session', () => {
+    const cases = [
+      mkSeg({
+        segmentId: 'env',
+        title: '<environment_context>',
+        content: 'user: <environment_context>\n  <cwd>/x</cwd>\n</environment_context>',
+      }),
+      mkSeg({
+        segmentId: 'agents',
+        title: '# AGENTS.md instructions for /x',
+        content: 'user: # AGENTS.md instructions for /x',
+      }),
+      mkSeg({
+        segmentId: 'title-gen',
+        title: 'Generate a title and a git branch name for a coding agent from the user prompt ...',
+        content:
+          'user: Generate a title and a git branch name for a coding agent from the user prompt ...',
+      }),
+      mkSeg({ segmentId: 'hello', title: '你好', content: 'user: 你好', messageCount: 1 }),
+    ];
+    expect(cases.every((s) => isEffectiveSessionForMock(s) === false)).toBe(true);
+    expect(
+      isEffectiveSessionForMock(
+        mkSeg({
+          segmentId: 'docker',
+          title: '后台的 Docker Compose 镜像这些都有重新构建并拉起来吗？',
+          content: '检查 api worker web compose build up ready health logs',
+          messageCount: 30,
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it('LLM JSON 产物用于能力名，候选固定为单 session evidence 口径', async () => {
+    const gw = new FakeLlmGateway();
+    gw.default = {
+      text: '{"name":"Docker部署排障","intent":"检查服务镜像构建、启动和健康状态"}',
+      degraded: false,
+    };
+    const segment = mkSeg({
+      segmentId: 'docker',
+      title: '后台的 Docker Compose 镜像这些都有重新构建并拉起来吗？',
+      content: '检查 api worker web compose build up ready health logs',
+      messageCount: 30,
+    });
+    const summary = await nameSessionCapability(gw, segment, { traceId: 't' });
+    const candidate = buildSessionMockCandidate(segment, summary);
+    expect(summary.name).toBe('Docker部署排障');
+    expect(summary.name).not.toBe(segment.title);
+    expect(candidate.segmentCount).toBe(1);
+    expect(candidate.segments.map((s) => s.segmentId)).toEqual(['docker']);
+    expect(candidate.type).toBe('occasional');
+    expect(candidate.confidence).toBe('med');
+  });
+
+  it('LLM 降级或坏输出时使用能力口径兜底，不直接复用 session 标题', async () => {
+    const gw = new FakeLlmGateway();
+    gw.default = { degraded: true };
+    const segment = mkSeg({
+      segmentId: 'docker',
+      title: '后台的 Docker Compose 镜像这些都有重新构建并拉起来吗？',
+      content: '检查 api worker web compose build up ready health logs',
+      messageCount: 30,
+    });
+    const summary = await nameSessionCapability(gw, segment, { traceId: 't' });
+    expect(summary.degradedNaming).toBe(true);
+    expect(summary.name).toBe('Docker部署排障');
+    expect(summary.name).not.toBe(segment.title);
   });
 });
 

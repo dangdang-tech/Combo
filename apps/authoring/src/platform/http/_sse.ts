@@ -388,6 +388,7 @@ function normalizeProgress(p: Partial<ProgressView>): ProgressView {
     ...(typeof p.done === 'number' ? { done: p.done } : {}),
     ...(typeof p.total === 'number' ? { total: p.total } : {}),
     ...(typeof p.unit === 'string' ? { unit: p.unit } : {}),
+    ...(p.metrics && typeof p.metrics === 'object' ? { metrics: p.metrics } : {}),
     subtasks: Array.isArray(p.subtasks) ? p.subtasks : [],
     ...(Array.isArray(p.items) ? { items: p.items } : {}),
     ...(typeof p.slow === 'boolean' ? { slow: p.slow } : {}),

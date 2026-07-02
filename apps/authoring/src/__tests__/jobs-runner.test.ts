@@ -99,6 +99,23 @@ describe('runJob 正常路径（领租约 → 进度 → 完成）', () => {
     expect((done?.payload as { status: string }).status).toBe('completed');
   });
 
+  it('progress metrics 落库并随 progress 帧下发', async () => {
+    const { db, bridge, map } = setup([makeJob('j1')]);
+    const metrics = { analyzedSegments: 12, discoveredCandidates: 2 };
+    const h = handler('extract', async (_job, ctx) => {
+      await ctx.reportProgress({ percent: 40, phrase: '识别中', metrics });
+      return { ok: true };
+    });
+    const outcome = await runJob(db, bridge as unknown as JobEventBridge, h, 'j1', {
+      leaseOwner: 'w1',
+      traceId: 't1',
+    });
+    expect(outcome.kind).toBe('completed');
+    expect((map.get('j1')!.progress as { metrics?: unknown }).metrics).toEqual(metrics);
+    const progressFrame = bridge.published.find((p) => p.event === 'progress');
+    expect((progressFrame?.payload as { metrics?: unknown }).metrics).toEqual(metrics);
+  });
+
   it('成功落终态保留累积明细（Codex P1-new：用最新镜像，不被领取旧快照覆盖；items/subtasks/done/total 不丢）', async () => {
     const { db, bridge, map } = setup([makeJob('j1')]);
     const h = handler('import', async (_job, ctx) => {

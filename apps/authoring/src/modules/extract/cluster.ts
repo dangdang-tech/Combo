@@ -70,6 +70,13 @@ export interface NamedCandidate extends ScoredCandidate {
   degradedNaming: boolean;
 }
 
+/** 短期 session-mock 萃取：单个有效 session 产出一个能力项的命名结果。 */
+export interface SessionCapabilitySummary {
+  name: string;
+  intent: string;
+  degradedNaming: boolean;
+}
+
 export class CandidateNameUnavailable extends Error {
   constructor() {
     super('candidate has no usable cleaned fallback name');
@@ -241,6 +248,186 @@ function titleLabelOf(title: string | null): string | null {
   const label = firstNonEmptyLine(title);
   if (!label || isBlockedCapabilityLabel(label)) return null;
   return label.length > 40 ? `${label.slice(0, 39)}…` : label;
+}
+
+/** session-mock 入口前置过滤：跳过平台噪声、标题生成提示、文件清单和过短寒暄。 */
+export function isEffectiveSessionForMock(segment: ExtractSegment): boolean {
+  if (isPlatformPromptText(segment.title)) return false;
+  const title = stripRolePrefix(firstNonEmptyLine(segment.title));
+  const firstContentLine = stripRolePrefix(firstNonEmptyLine(segment.content));
+  if (isPlatformPromptText(firstContentLine)) return false;
+  if (isShortGreeting(title) || isShortGreeting(firstContentLine)) return false;
+  const text = meaningfulSessionText(segment);
+  if (!text) return false;
+  const compact = text.replace(/[\s，。！？、,.!?;；:：'"“”‘’`~～()[\]{}<>《》]/g, '');
+  return compact.length >= 8 || segment.messageCount > 2;
+}
+
+/** 单 session → 能力项命名：优先 LLM JSON，降级/坏输出走能力口径兜底，绝不直接复用 session 标题。 */
+export async function nameSessionCapability(
+  gateway: LlmGatewayPort,
+  segment: ExtractSegment,
+  opts: { traceId: string; ownerUserId?: string },
+): Promise<SessionCapabilitySummary> {
+  const fallback = fallbackSessionCapability(segment);
+  const sample = meaningfulSessionText(segment).slice(0, 1200);
+  const prompt =
+    `下面是一段用户与 coding agent 的去敏 session。请把它抽象成一个可复用能力项，而不是复述 session 标题。\n` +
+    `能力名要求：中文、像 mini-app/工作流能力，≤12字；用途描述要求：一句话，说明这个能力能帮用户完成什么。\n` +
+    `不要使用平台内部提示、文件清单、AGENTS、environment_context、标题生成提示或寒暄作为能力名。\n` +
+    `严格输出 JSON：{"name":"...","intent":"..."}，不要其它内容。\n\n` +
+    `session 标题：${firstNonEmptyLine(segment.title) || '无'}\n` +
+    `session 内容：\n${sample}`;
+
+  let result;
+  try {
+    result = await gateway.complete(prompt, {
+      taskClass: 'extract',
+      traceId: opts.traceId,
+      ...(opts.ownerUserId ? { ownerUserId: opts.ownerUserId } : {}),
+    });
+  } catch {
+    return { ...fallback, degradedNaming: true };
+  }
+
+  if (result.degraded || !result.text) {
+    return { ...fallback, degradedNaming: true };
+  }
+  const parsed = parseNameJson(result.text);
+  const parsedName = cleanCapabilityName(parsed?.name);
+  const rawTitle = cleanComparable(firstNonEmptyLine(segment.title));
+  const validName =
+    parsedName &&
+    !isBlockedCapabilityLabel(parsedName) &&
+    !isShortGreeting(parsedName) &&
+    cleanComparable(parsedName) !== rawTitle
+      ? parsedName
+      : '';
+  const intent = cleanIntent(parsed?.intent);
+  return {
+    name: validName || fallback.name,
+    intent: intent || fallback.intent,
+    degradedNaming: !validName || !intent,
+  };
+}
+
+/** session-mock 候选骨架：固定单 evidence、固定默认打分，发布链路继续复用现有 candidate 表。 */
+export function buildSessionMockCandidate(
+  segment: ExtractSegment,
+  summary: SessionCapabilitySummary,
+): NamedCandidate {
+  const language = languageOfText(`${segment.title ?? ''}\n${segment.content}`);
+  return {
+    slug: slugify(summary.name, segment.segmentId),
+    clusterLabel: summary.name,
+    segments: [segment],
+    segmentCount: 1,
+    frequencyRatio: 1,
+    reusability: 0.55,
+    scopeCoherence: 1,
+    splitSuggested: false,
+    confidence: 'med',
+    type: 'occasional',
+    reusabilityBreakdown: {
+      frequency: 1,
+      crossProject: 0,
+      recency: 0.8,
+      timeCost: round3(clamp01(segment.messageCount / 50)),
+    },
+    scope: {
+      ...(language ? { language } : {}),
+      ...(segment.project?.trim() ? { domain: segment.project.trim() } : {}),
+    },
+    name: summary.name,
+    intent: summary.intent,
+    degradedNaming: summary.degradedNaming,
+  };
+}
+
+function isShortGreeting(text: string | null | undefined): boolean {
+  const compact = cleanComparable(text);
+  return ['你好', '您好', 'hi', 'hello', 'hey', '嗨', '哈喽', '在吗'].includes(compact);
+}
+
+function meaningfulSessionText(segment: ExtractSegment): string {
+  const lines = [`title: ${segment.title ?? ''}`, ...segment.content.split(/\r?\n/)]
+    .map((line) => stripRolePrefix(line.trim()))
+    .filter((line) => line.length > 0)
+    .filter((line) => !isPlatformPromptText(line))
+    .filter((line) => !isShortGreeting(line));
+  return lines.join('\n').trim();
+}
+
+function cleanComparable(text: string | null | undefined): string {
+  return (text ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/^(user|assistant|system|tool):\s*/i, '')
+    .replace(/[\s，。！？、,.!?;；:：'"“”‘’`~～()[\]{}<>《》]/g, '');
+}
+
+function cleanCapabilityName(text: string | null | undefined): string {
+  const line = firstNonEmptyLine(text);
+  if (!line) return '';
+  return line.replace(/^["“”'‘’]+|["“”'‘’]+$/g, '').trim().slice(0, 24);
+}
+
+function cleanIntent(text: string | null | undefined): string {
+  const line = firstNonEmptyLine(text);
+  return line ? line.trim().slice(0, 200) : '';
+}
+
+function languageOfText(text: string): 'zh' | 'en' | 'mixed' | undefined {
+  const hasCjk = /[一-鿿]/.test(text);
+  const hasLatin = /[a-z]/i.test(text);
+  if (hasCjk && hasLatin) return 'mixed';
+  if (hasCjk) return 'zh';
+  if (hasLatin) return 'en';
+  return undefined;
+}
+
+function fallbackSessionCapability(segment: ExtractSegment): { name: string; intent: string } {
+  const text = `${segment.title ?? ''}\n${segment.content}`.toLowerCase();
+  if (/docker|compose|镜像|容器|后台|部署|ready|health/.test(text)) {
+    return {
+      name: 'Docker部署排障',
+      intent: '定位并处理 Docker Compose 服务构建、启动与健康检查问题',
+    };
+  }
+  if (/prd|需求|产品|用户|原型|方案|项目/.test(text)) {
+    return {
+      name: '需求方案梳理',
+      intent: '把零散想法整理成结构化需求、方案或产品说明',
+    };
+  }
+  if (/figma|react|组件|token|ui|前端|页面|样式/.test(text)) {
+    return {
+      name: '前端组件还原',
+      intent: '按设计稿或交互要求还原前端页面与组件细节',
+    };
+  }
+  if (/飞书|wiki|文档|质量|评审|审核/.test(text)) {
+    return {
+      name: '文档质量评审',
+      intent: '检查文档结构、表达质量和可交付问题并给出修改建议',
+    };
+  }
+  if (/prompt|agent|模型|ai|llm|提示词/.test(text)) {
+    return {
+      name: 'Prompt优化',
+      intent: '为任务设计稳定提示词并通过 case 迭代优化效果',
+    };
+  }
+  if (/bug|error|日志|修复|排障|测试|回归|失败/.test(text)) {
+    return {
+      name: 'Bug根因定位',
+      intent: '从报错、日志和复现线索中定位根因并给出修复方案',
+    };
+  }
+  return {
+    name: '任务流程整理',
+    intent: '把该 session 中的任务处理过程整理成可复用工作流',
+  };
 }
 
 /** 簇标签：优先使用真实任务标题；否则取簇内最高频标题/正文词（兜底名 + slug 种子）。 */

@@ -252,3 +252,14 @@ describe('readJobStatus（fence-out 区分真取消 vs 接管，Codex P1-4）', 
     expect(await readJobStatus(db, 'none')).toBeUndefined();
   });
 });
+
+describe('normalizeProgress', () => {
+  it('保留 metrics，供前端提取过程态展示多指标', () => {
+    const pv = normalizeProgress({
+      percent: 42,
+      phrase: '处理中',
+      metrics: { analyzedSegments: 12, discoveredCandidates: 3 },
+    });
+    expect(pv.metrics).toEqual({ analyzedSegments: 12, discoveredCandidates: 3 });
+  });
+});
