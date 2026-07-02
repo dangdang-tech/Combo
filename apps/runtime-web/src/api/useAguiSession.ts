@@ -2,6 +2,7 @@
 // 断开页面只关闭订阅，不打断后端执行；打断必须显式调用 interrupt。
 import { useEffect, useRef, useState } from 'react';
 import { EventType } from '@ag-ui/core';
+import { useQueryClient } from '@tanstack/react-query';
 import type {
   ArtifactRef,
   CreateRunResult,
@@ -85,6 +86,7 @@ export function useAguiSession(
   sessionId: string | undefined,
   detail: SessionDetail | undefined,
 ): AguiSession {
+  const qc = useQueryClient();
   const sourceRef = useRef<EventSource | null>(null);
   const activeRunRef = useRef<string | null>(null);
   const stateRef = useRef<ArtifactState>({});
@@ -95,6 +97,12 @@ export function useAguiSession(
   const [trialProcess, setTrialProcess] = useState<TrialProcessState | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const refreshSessionState = (): void => {
+    if (!sessionId) return;
+    void qc.invalidateQueries({ queryKey: ['session', sessionId] });
+    void qc.invalidateQueries({ queryKey: ['sessions'] });
+  };
 
   useEffect(() => {
     if (!sessionId || !detail || detail.session.id !== sessionId) return;
@@ -192,11 +200,13 @@ export function useAguiSession(
           setIsRunning(false);
           activeRunRef.current = null;
           source.close();
+          refreshSessionState();
           break;
         case EventType.RUN_FINISHED:
           setIsRunning(false);
           activeRunRef.current = null;
           source.close();
+          refreshSessionState();
           break;
         default:
           break;
@@ -211,6 +221,7 @@ export function useAguiSession(
       }
       setError('事件流连接中断，可刷新会话恢复。');
       setIsRunning(false);
+      refreshSessionState();
     };
   };
 
