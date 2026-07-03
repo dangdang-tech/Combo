@@ -171,7 +171,7 @@ function TrialIntakeForm({
     <section className="rt-intake" aria-label="本次试用输入">
       <div className="rt-intake__head">
         <h2>开始生成 · {capability.name}</h2>
-        <p>告诉我你的受众与语气，我会按这个能力生成第一版产物。</p>
+        <p>补充这次使用需要的上下文，我会按这个能力生成第一版产物。</p>
       </div>
       <div className="rt-intake__fields">
         {capability.inputs.fields.map((field) => (

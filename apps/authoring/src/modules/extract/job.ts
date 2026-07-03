@@ -19,6 +19,7 @@ import {
   SSE_ROUTES,
   buildError,
   type CandidateItem,
+  type CandidateTrialCapability,
   type ProgressView,
   type ErrorBody,
   type LlmGatewayPort,
@@ -42,9 +43,13 @@ import {
   readAllCandidatesForJob,
   applyRetrySuccessInTx,
   applyRetryFailureProtected,
+  markCandidateFailedProtected,
   CandidateLandingFencedOut,
   type CandidateRowForFinal,
 } from './repo.js';
+import {
+  prepareCandidateDraft as defaultPrepareCandidateDraft,
+} from '../structure/index.js';
 import {
   clusterSegments,
   scoreCandidates,
@@ -89,6 +94,10 @@ export interface ExtractHandlerDeps {
   txPool: TxPool;
   /** 3A LLM 网关（无 key → degraded，单测注入 mock）。 */
   gateway: LlmGatewayPort;
+  /** 候选展示前准备 draft trial；测试可注入轻量替身，生产使用 structure 域真实服务。 */
+  prepareCandidateDraft?: typeof defaultPrepareCandidateDraft;
+  /** 提取完成前预准备多少个候选；生产默认 2，测试可置 1 保持 fake DB 顺序稳定。 */
+  prepareConcurrency?: number;
 }
 
 /** 五项子任务标准序（SUBTASK_SEQUENCES.extract）。 */
@@ -107,7 +116,12 @@ function toItem(
     scopeCoherence: number | null;
     splitSuggested: boolean | null;
   },
-  opts: { status: 'ready' | 'failed'; isNew: boolean; error?: ErrorBody | null },
+  opts: {
+    status: 'ready' | 'failed';
+    isNew: boolean;
+    error?: ErrorBody | null;
+    trialCapability?: CandidateTrialCapability | null;
+  },
 ): CandidateItem {
   return {
     id,
@@ -121,12 +135,17 @@ function toItem(
     scopeCoherence: c.scopeCoherence,
     splitSuggested: c.splitSuggested,
     ...(opts.error !== undefined ? { error: opts.error } : {}),
+    ...(opts.trialCapability ? { trialCapability: opts.trialCapability } : {}),
   };
 }
 
 /** 量化进度文案（提取-07/08：「已浮现 X / Y 能力项…」）。 */
 function appendedPhrase(done: number, total: number): string {
   return `已浮现 ${done} / ${total} 能力项…`;
+}
+
+function preparedPhrase(done: number, total: number): string {
+  return `已准备 ${done} / ${total} 个试用能力…`;
 }
 
 /**
@@ -171,6 +190,7 @@ function buildFinalFromDb(
           status: r.status,
           isNew: freshIds.has(r.id),
           ...(r.error != null ? { error: r.error as CandidateItem['error'] } : {}),
+          ...(r.trialCapability ? { trialCapability: r.trialCapability } : {}),
         },
       ),
     );
@@ -290,7 +310,6 @@ async function finalizeExtractJob(args: {
  * 提取 handler 工厂（注入依赖；worker 入口装配真实 infra，单测注入 mock）。
  */
 export function createExtractHandler(deps: ExtractHandlerDeps): JobHandler {
-  const { db, txPool, gateway } = deps;
   return {
     type: 'extract',
     async run(job: LeasedJob, ctx: JobContext): Promise<JobResult> {
@@ -298,7 +317,7 @@ export function createExtractHandler(deps: ExtractHandlerDeps): JobHandler {
       if (subject.mode === 'single-candidate') {
         return runRetry(deps, job, ctx, subject);
       }
-      return runExtract({ db, txPool, gateway }, job, ctx, subject);
+      return runExtract(deps, job, ctx, subject);
     },
   };
 }
@@ -313,6 +332,7 @@ async function runExtract(
   subject: ExtractSubjectRef,
 ): Promise<JobResult> {
   const { db, txPool, gateway } = deps;
+  const prepareCandidateDraft = deps.prepareCandidateDraft ?? defaultPrepareCandidateDraft;
   const snapshotId = subject.snapshotId;
   if (!snapshotId) {
     // 无 snapshot 引用：触发期应已拦（§2.1），到此为内部不一致 → 整体失败（人话归一）。
@@ -366,8 +386,13 @@ async function runExtract(
   let failedCount = 0;
   let anyDegradedNaming = false; // 任一候选命名走 LLM 降级 → done.result.degraded 诚实标（§10）。
 
-  for (let i = 0; i < selectedSegments.length; i++) {
-    if (ctx.isCancelled()) break; // 安全点：取消即停（已浮现候选保留）。
+  let nextIndex = 0;
+  let stopped = false;
+  const workerCount = Math.max(
+    1,
+    Math.min(deps.prepareConcurrency ?? 2, selectedSegments.length || 1),
+  );
+  const runOne = async (i: number): Promise<void> => {
     const segment = selectedSegments[i]!;
     const summary = await nameSessionCapability(gateway, segment, {
       traceId: ctx.traceId,
@@ -375,9 +400,17 @@ async function runExtract(
     });
     const cand = buildSessionMockCandidate(segment, summary);
 
-    // 单候选成败隔离：命名（LLM）或落库异常 → 该候选标 failed（人话 error），不抛、不阻塞其余（提取-17/29）。
+    const currentDone = readyCount + failedCount;
+    await ctx.reportProgress({
+      percent: 25 + Math.round((60 * currentDone) / Math.max(1, selectedSegments.length)),
+      phrase: `正在准备第 ${i + 1} / ${total} 个试用能力…`,
+      done: currentDone,
+      total,
+      unit: '能力项',
+      metrics: { analyzedSegments: segments.length, discoveredCandidates: currentDone },
+    });
     const outcome = await emitSessionMockCandidate(
-      { db, txPool },
+      { db, txPool, gateway, prepareCandidateDraft },
       job,
       ctx,
       snapshotId,
@@ -385,7 +418,10 @@ async function runExtract(
       i,
       total,
     );
-    if (outcome === 'fenced_out') break; // 被接管/取消：停在安全点，已浮现保留。
+    if (outcome === 'fenced_out') {
+      stopped = true;
+      return;
+    }
     if (outcome) {
       items.push(outcome.item);
       if (outcome.item.status === 'ready') readyCount++;
@@ -395,14 +431,23 @@ async function runExtract(
 
     const done = readyCount + failedCount;
     await ctx.reportProgress({
-      percent: 25 + Math.round((70 * (i + 1)) / Math.max(1, selectedSegments.length)),
-      phrase: appendedPhrase(done, total),
+      percent: 25 + Math.round((70 * done) / Math.max(1, selectedSegments.length)),
+      phrase: preparedPhrase(done, total),
       done,
       total,
       unit: '能力项',
       metrics: { analyzedSegments: segments.length, discoveredCandidates: done },
     });
-  }
+  };
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (!stopped && !ctx.isCancelled()) {
+      const i = nextIndex;
+      nextIndex += 1;
+      if (i >= selectedSegments.length) break;
+      await runOne(i);
+    }
+  });
+  await Promise.all(workers);
   await ctx.reportSubtask('rank', 'done');
 
   // —— 终态从 DB 全量候选合并重建（Codex r3 P1：已生成不丢，硬规则③）——
@@ -465,7 +510,12 @@ async function runExtract(
 
 /** session-mock 单项落库：候选已经命名，只做原子插入 candidate + 其唯一 session evidence。 */
 async function emitSessionMockCandidate(
-  deps: { db: Queryable; txPool: TxPool },
+  deps: {
+    db: Queryable;
+    txPool: TxPool;
+    gateway: LlmGatewayPort;
+    prepareCandidateDraft: typeof defaultPrepareCandidateDraft;
+  },
   job: LeasedJob,
   ctx: JobContext,
   snapshotId: string,
@@ -511,6 +561,26 @@ async function emitSessionMockCandidate(
     return null;
   }
 
+  const prepared = await prepareInsertedCandidate(deps, job, ctx, atomic.candidateId);
+  if (prepared.kind === 'fencedOut') return 'fenced_out';
+  if (prepared.kind === 'failed') {
+    const item = toItem(
+      atomic.candidateId,
+      {
+        name: cand.name,
+        intent: cand.intent,
+        type: cand.type,
+        confidence: cand.confidence,
+        segmentCount: atomic.written,
+        scopeCoherence: cand.scopeCoherence,
+        splitSuggested: cand.splitSuggested,
+      },
+      { status: 'failed', isNew: true, error: prepared.error },
+    );
+    await ctx.appendItem(item);
+    return { item, degradedNaming: cand.degradedNaming };
+  }
+
   const item = toItem(
     atomic.candidateId,
     {
@@ -522,10 +592,57 @@ async function emitSessionMockCandidate(
       scopeCoherence: cand.scopeCoherence,
       splitSuggested: cand.splitSuggested,
     },
-    { status: 'ready', isNew: true },
+    { status: 'ready', isNew: true, trialCapability: prepared.trialCapability },
   );
   await ctx.appendItem(item);
   return { item, degradedNaming: cand.degradedNaming };
+}
+
+async function prepareInsertedCandidate(
+  deps: {
+    db: Queryable;
+    txPool: TxPool;
+    gateway: LlmGatewayPort;
+    prepareCandidateDraft: typeof defaultPrepareCandidateDraft;
+  },
+  job: LeasedJob,
+  ctx: JobContext,
+  candidateId: string,
+): Promise<
+  | { kind: 'ready'; trialCapability: CandidateTrialCapability }
+  | { kind: 'failed'; error: ErrorBody }
+  | { kind: 'fencedOut' }
+> {
+  const prepared = await deps.prepareCandidateDraft(
+    { db: deps.db, txPool: deps.txPool, gateway: deps.gateway },
+    {
+      candidateId,
+      ownerUserId: job.ownerUserId,
+      jobId: job.id,
+      fenceToken: job.fenceToken,
+      traceId: ctx.traceId,
+    },
+  );
+  if (prepared.kind === 'fencedOut') return { kind: 'fencedOut' };
+  if (prepared.kind === 'ready') {
+    return {
+      kind: 'ready',
+      trialCapability: {
+        capabilityId: prepared.capabilityId,
+        versionId: prepared.versionId,
+        slug: prepared.slug,
+      },
+    };
+  }
+
+  const marked = await markCandidateFailedProtected(deps.db, {
+    jobId: job.id,
+    fenceToken: job.fenceToken,
+    candidateId,
+    error: prepared.error,
+  });
+  if (!marked && ctx.isCancelled()) return { kind: 'fencedOut' };
+  return { kind: 'failed', error: prepared.error };
 }
 
 /**
@@ -673,6 +790,7 @@ async function runRetry(
   subject: ExtractSubjectRef,
 ): Promise<JobResult> {
   const { db, gateway, txPool } = deps;
+  const prepareCandidateDraft = deps.prepareCandidateDraft ?? defaultPrepareCandidateDraft;
   const candidateId = subject.candidateId;
   if (!candidateId) {
     throw codedError(ErrorCode.INTERNAL, 'retry subject_ref missing candidateId');
@@ -756,6 +874,31 @@ async function runRetry(
     return failRetryAndFinalize(deps, job, ctx, candidateId, subject.escalate ?? false);
   }
 
+  const prepared = await prepareRetriedCandidate(
+    { db, txPool, gateway, prepareCandidateDraft },
+    job,
+    ctx,
+    candidateId,
+  );
+  if (prepared.kind === 'fencedOut') return { result: { candidateId, status: 'fenced_out' } };
+  if (prepared.kind === 'failed') {
+    const item = toItem(
+      candidateId,
+      {
+        name: named.name,
+        intent: named.intent,
+        type: target.type,
+        confidence: target.confidence,
+        segmentCount: target.segments.length,
+        scopeCoherence: target.scopeCoherence,
+        splitSuggested: target.splitSuggested,
+      },
+      { status: 'failed', isNew: false, error: prepared.error },
+    );
+    await ctx.appendItem(item);
+    return finalizeRetry(txPool, job, ctx, { candidateId, status: 'failed' });
+  }
+
   // 重试成功回填帧（同 candidateId、status=ready；前端原地把失败行替换为正常卡，提取-19）。
   const item = toItem(
     candidateId,
@@ -768,10 +911,56 @@ async function runRetry(
       scopeCoherence: target.scopeCoherence,
       splitSuggested: target.splitSuggested,
     },
-    { status: 'ready', isNew: false, error: null },
+    { status: 'ready', isNew: false, error: null, trialCapability: prepared.trialCapability },
   );
   await ctx.appendItem(item);
   return finalizeRetry(txPool, job, ctx, { candidateId, status: 'ready' });
+}
+
+async function prepareRetriedCandidate(
+  deps: {
+    db: Queryable;
+    txPool: TxPool;
+    gateway: LlmGatewayPort;
+    prepareCandidateDraft: typeof defaultPrepareCandidateDraft;
+  },
+  job: LeasedJob,
+  ctx: JobContext,
+  candidateId: string,
+): Promise<
+  | { kind: 'ready'; trialCapability: CandidateTrialCapability }
+  | { kind: 'failed'; error: ErrorBody }
+  | { kind: 'fencedOut' }
+> {
+  const prepared = await deps.prepareCandidateDraft(
+    { db: deps.db, txPool: deps.txPool, gateway: deps.gateway },
+    {
+      candidateId,
+      ownerUserId: job.ownerUserId,
+      jobId: job.id,
+      fenceToken: job.fenceToken,
+      traceId: ctx.traceId,
+    },
+  );
+  if (prepared.kind === 'fencedOut') return { kind: 'fencedOut' };
+  if (prepared.kind === 'ready') {
+    return {
+      kind: 'ready',
+      trialCapability: {
+        capabilityId: prepared.capabilityId,
+        versionId: prepared.versionId,
+        slug: prepared.slug,
+      },
+    };
+  }
+  const marked = await applyRetryFailureProtected(deps.db, {
+    retryJobId: job.id,
+    fenceToken: job.fenceToken,
+    candidateId,
+    error: prepared.error,
+  });
+  if (!marked && ctx.isCancelled()) return { kind: 'fencedOut' };
+  return { kind: 'failed', error: prepared.error };
 }
 
 /**

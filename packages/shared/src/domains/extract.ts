@@ -36,6 +36,13 @@ export const ReusabilityBreakdownSchema = z.object({
 });
 export type ReusabilityBreakdown = z.infer<typeof ReusabilityBreakdownSchema>;
 
+export const CandidateTrialCapabilitySchema = z.object({
+  capabilityId: IdSchema,
+  versionId: IdSchema,
+  slug: z.string(),
+});
+export type CandidateTrialCapability = z.infer<typeof CandidateTrialCapabilitySchema>;
+
 // ---------- 候选全量视图（列表项 & 单体）----------
 export const CandidateViewSchema = z.object({
   id: IdSchema,
@@ -56,6 +63,7 @@ export const CandidateViewSchema = z.object({
   reusabilityBreakdown: ReusabilityBreakdownSchema.nullable().optional(),
   error: ErrorBodySchema.nullable().describe('failed 时人话错误（非堆栈）'),
   retryCount: z.number().int(),
+  trialCapability: CandidateTrialCapabilitySchema.optional(),
   createdAt: IsoDateTimeSchema,
 });
 export type CandidateView = z.infer<typeof CandidateViewSchema>;
@@ -73,6 +81,7 @@ export const CandidateItemSchema = z.object({
   scopeCoherence: z.number().nullable().optional(),
   splitSuggested: z.boolean().nullable().optional(),
   error: ErrorBodySchema.nullable().optional(),
+  trialCapability: CandidateTrialCapabilitySchema.optional(),
 });
 export type CandidateItem = z.infer<typeof CandidateItemSchema>;
 

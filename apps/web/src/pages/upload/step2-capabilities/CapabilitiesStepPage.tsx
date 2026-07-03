@@ -339,6 +339,43 @@ export function CapabilitiesStepPage(): ReactElement {
     (candidate: CandidateView): void => {
       if (trialLaunch && trialLaunch.phase !== 'error') return;
       const candidateName = nameText(candidate.name);
+      const trialCapability = candidate.trialCapability;
+      if (trialCapability) {
+        setTrialLaunch({ candidateId: candidate.id, candidateName, phase: 'opening' });
+        void (async () => {
+          try {
+            const created = await createRuntimeTrialSession({
+              capabilityId: trialCapability.capabilityId,
+              versionId: trialCapability.versionId,
+              title: `${candidateName} 试用`,
+            });
+            const returnTo = encodeURIComponent(
+              capabilitiesReturnTo({
+                pathname: location.pathname,
+                search: location.search,
+                hash: location.hash,
+                draftId,
+                snapshotId,
+                extractJobId: urlExtractJobId,
+                batchId: urlBatchId,
+              }),
+            );
+            openRuntimeTrial(`/try/session/${created.session.id}?returnTo=${returnTo}`);
+          } catch (e) {
+            setTrialLaunch((current) =>
+              current?.candidateId === candidate.id
+                ? {
+                    ...current,
+                    phase: 'error',
+                    error: errorMessage(e, '没能打开试用，请稍后重试。'),
+                  }
+                : current,
+            );
+          }
+        })();
+        return;
+      }
+
       setTrialLaunch({ candidateId: candidate.id, candidateName, phase: 'creating' });
       void (async () => {
         try {
@@ -378,7 +415,16 @@ export function CapabilitiesStepPage(): ReactElement {
         }
       })();
     },
-    [trialLaunch],
+    [
+      draftId,
+      location.hash,
+      location.pathname,
+      location.search,
+      snapshotId,
+      trialLaunch,
+      urlBatchId,
+      urlExtractJobId,
+    ],
   );
 
   // —— 批次 SSE（逐项浮现 + 完成度）——

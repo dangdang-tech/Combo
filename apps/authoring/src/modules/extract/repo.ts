@@ -328,6 +328,7 @@ export interface CandidateRowForFinal {
   scopeCoherence: number | null;
   splitSuggested: boolean | null;
   error: unknown | null;
+  trialCapability: { capabilityId: string; versionId: string; slug: string } | null;
 }
 
 /**
@@ -351,12 +352,29 @@ export async function readAllCandidatesForJob(
     scope_coherence: number | null;
     split_suggested: boolean | null;
     error: unknown | null;
+    trial_capability_id: string | null;
+    trial_version_id: string | null;
+    trial_slug: string | null;
   }>(
-    `SELECT id, status, name, intent, type, confidence,
-            segment_count, scope_coherence, split_suggested, error
-       FROM capability_candidates
-      WHERE extract_job_id = $1
-      ORDER BY created_at ASC, id ASC`,
+    `SELECT cc.id, cc.status, cc.name, cc.intent, cc.type, cc.confidence,
+            cc.segment_count, cc.scope_coherence, cc.split_suggested, cc.error,
+            tv.capability_id AS trial_capability_id,
+            tv.version_id AS trial_version_id,
+            tv.slug AS trial_slug
+       FROM capability_candidates cc
+       LEFT JOIN LATERAL (
+         SELECT v.capability_id, v.id AS version_id, c.slug
+           FROM capability_versions v
+           JOIN capabilities c ON c.id = v.capability_id
+          WHERE v.source_candidate_id = cc.id
+            AND c.creator_user_id = cc.owner_user_id
+            AND c.status = 'active'
+            AND v.status = 'draft'
+          ORDER BY v.created_at DESC
+          LIMIT 1
+       ) tv ON true
+      WHERE cc.extract_job_id = $1
+      ORDER BY cc.created_at ASC, cc.id ASC`,
     [extractJobId],
   );
   return res.rows.map((r) => ({
@@ -371,6 +389,14 @@ export async function readAllCandidatesForJob(
     scopeCoherence: r.scope_coherence,
     splitSuggested: r.split_suggested,
     error: r.error,
+    trialCapability:
+      r.trial_capability_id && r.trial_version_id && r.trial_slug
+        ? {
+            capabilityId: r.trial_capability_id,
+            versionId: r.trial_version_id,
+            slug: r.trial_slug,
+          }
+        : null,
   }));
 }
 
@@ -542,6 +568,25 @@ export async function applyRetryFailureProtected(
       WHERE c.id = $3
         AND j.id = $1 AND j.fence_token = $2 AND j.status = 'running'`,
     [args.retryJobId, args.fenceToken, args.candidateId, JSON.stringify(args.error)],
+  );
+  return (res.rowCount ?? 0) > 0;
+}
+
+/** 识别已落库但试用预准备失败 → 在同一 extract/retry job fence 下把候选标为 failed。 */
+export async function markCandidateFailedProtected(
+  db: Queryable,
+  args: { jobId: string; fenceToken: number; candidateId: string; error: unknown },
+): Promise<boolean> {
+  const res = await db.query(
+    `UPDATE capability_candidates c
+        SET status = 'failed', error = $4::jsonb, updated_at = now()
+       FROM jobs j
+      WHERE c.id = $3
+        AND c.extract_job_id = j.id
+        AND j.id = $1
+        AND j.fence_token = $2
+        AND j.status = 'running'`,
+    [args.jobId, args.fenceToken, args.candidateId, JSON.stringify(args.error)],
   );
   return (res.rowCount ?? 0) > 0;
 }

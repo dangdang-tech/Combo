@@ -43,6 +43,9 @@ interface CandidateRow {
   reusability_breakdown: unknown;
   error: unknown;
   retry_cnt: number;
+  trial_capability_id: string | null;
+  trial_version_id: string | null;
+  trial_slug: string | null;
   created_at: string;
 }
 
@@ -73,6 +76,15 @@ function rowToCandidateView(r: CandidateRow): CandidateView {
     reusabilityBreakdown: (r.reusability_breakdown as ReusabilityBreakdown | null) ?? null,
     error: (r.error as ErrorBody | null) ?? null,
     retryCount: r.retry_cnt,
+    ...(r.trial_capability_id && r.trial_version_id && r.trial_slug
+      ? {
+          trialCapability: {
+            capabilityId: r.trial_capability_id,
+            versionId: r.trial_version_id,
+            slug: r.trial_slug,
+          },
+        }
+      : {}),
     createdAt: r.created_at,
   };
 }
@@ -128,24 +140,39 @@ export async function listCandidates(
   const order = params.order ?? 'asc';
   const statusFilter = parseStatusFilter(params.status);
 
-  const conds = ['extract_job_id = $1'];
+  const conds = ['cc.extract_job_id = $1'];
   const args: unknown[] = [params.extractJobId];
   if (statusFilter) {
     args.push(statusFilter);
-    conds.push(`status = ANY($${args.length}::text[])`);
+    conds.push(`cc.status = ANY($${args.length}::text[])`);
   }
   if (params.cursor) {
     args.push(params.cursor);
-    conds.push(order === 'desc' ? `id < $${args.length}` : `id > $${args.length}`);
+    conds.push(order === 'desc' ? `cc.id < $${args.length}` : `cc.id > $${args.length}`);
   }
   args.push(limit + 1);
   const res = await db.query<CandidateRow>(
-    `SELECT id, extract_job_id, snapshot_id, owner_user_id, status, name, intent, slug,
-            type, confidence, segment_count, frequency_ratio, reusability, scope_coherence,
-            split_suggested, scope, reusability_breakdown, error, retry_cnt, created_at
-       FROM capability_candidates
+    `SELECT cc.id, cc.extract_job_id, cc.snapshot_id, cc.owner_user_id, cc.status,
+            cc.name, cc.intent, cc.slug, cc.type, cc.confidence, cc.segment_count,
+            cc.frequency_ratio, cc.reusability, cc.scope_coherence, cc.split_suggested,
+            cc.scope, cc.reusability_breakdown, cc.error, cc.retry_cnt, cc.created_at,
+            tv.capability_id AS trial_capability_id,
+            tv.version_id AS trial_version_id,
+            tv.slug AS trial_slug
+       FROM capability_candidates cc
+       LEFT JOIN LATERAL (
+         SELECT v.capability_id, v.id AS version_id, c.slug
+           FROM capability_versions v
+           JOIN capabilities c ON c.id = v.capability_id
+          WHERE v.source_candidate_id = cc.id
+            AND c.creator_user_id = cc.owner_user_id
+            AND c.status = 'active'
+            AND v.status = 'draft'
+          ORDER BY v.created_at DESC
+          LIMIT 1
+       ) tv ON true
       WHERE ${conds.join(' AND ')}
-      ORDER BY id ${order === 'desc' ? 'DESC' : 'ASC'}
+      ORDER BY cc.id ${order === 'desc' ? 'DESC' : 'ASC'}
       LIMIT $${args.length}`,
     args,
   );
@@ -186,11 +213,26 @@ export async function getCandidateForOwner(
   ownerUserId: string,
 ): Promise<CandidateView | null> {
   const res = await db.query<CandidateRow>(
-    `SELECT id, extract_job_id, snapshot_id, owner_user_id, status, name, intent, slug,
-            type, confidence, segment_count, frequency_ratio, reusability, scope_coherence,
-            split_suggested, scope, reusability_breakdown, error, retry_cnt, created_at
-       FROM capability_candidates
-      WHERE id = $1 AND owner_user_id = $2`,
+    `SELECT cc.id, cc.extract_job_id, cc.snapshot_id, cc.owner_user_id, cc.status,
+            cc.name, cc.intent, cc.slug, cc.type, cc.confidence, cc.segment_count,
+            cc.frequency_ratio, cc.reusability, cc.scope_coherence, cc.split_suggested,
+            cc.scope, cc.reusability_breakdown, cc.error, cc.retry_cnt, cc.created_at,
+            tv.capability_id AS trial_capability_id,
+            tv.version_id AS trial_version_id,
+            tv.slug AS trial_slug
+       FROM capability_candidates cc
+       LEFT JOIN LATERAL (
+         SELECT v.capability_id, v.id AS version_id, c.slug
+           FROM capability_versions v
+           JOIN capabilities c ON c.id = v.capability_id
+          WHERE v.source_candidate_id = cc.id
+            AND c.creator_user_id = cc.owner_user_id
+            AND c.status = 'active'
+            AND v.status = 'draft'
+          ORDER BY v.created_at DESC
+          LIMIT 1
+       ) tv ON true
+      WHERE cc.id = $1 AND cc.owner_user_id = $2`,
     [candidateId, ownerUserId],
   );
   const row = res.rows[0];
