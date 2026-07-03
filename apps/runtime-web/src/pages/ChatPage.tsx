@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react';
@@ -717,6 +718,13 @@ function FloatingChat({
     onSend(trimmed);
     setText('');
   };
+  const handleInputKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.nativeEvent.isComposing || event.key !== 'Enter' || event.shiftKey || event.altKey) {
+      return;
+    }
+    event.preventDefault();
+    submit();
+  };
   const chatStyle = rect
     ? ({
         '--rt-chat-x': `${viewportOffset.left + rect.x}px`,
@@ -799,12 +807,15 @@ function FloatingChat({
               disabled={isRunning}
               rows={1}
               placeholder="回复，或 /命令..."
+              aria-keyshortcuts="Enter"
               onChange={(event) => setText(event.target.value)}
+              onKeyDown={handleInputKeyDown}
             />
             <button
               type="button"
               className="rt-chat-send"
               aria-label="发送"
+              title="发送 (Enter)"
               disabled={isRunning || !text.trim()}
               onClick={submit}
             >
