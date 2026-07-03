@@ -1,7 +1,13 @@
 import { useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import type { RuntimeSessionListItem } from '@cb/shared';
 import { useSessions } from '../api/runtime.js';
+import {
+  appendRuntimeReturnTo,
+  runtimeBackLabel,
+  runtimeBackTarget,
+  safeRuntimeReturnTo,
+} from '../navigation/runtimeReturn.js';
 
 function modeLabel(mode: RuntimeSessionListItem['mode']): string {
   return mode === 'consume' ? '正式' : '试用';
@@ -18,12 +24,14 @@ export function SessionSidebar({
   activeSession,
   activeSessionId,
   capabilitySlug,
+  returnTo,
 }: {
   activeSession?: RuntimeSessionListItem;
   activeSessionId?: string;
   capabilitySlug?: string;
+  returnTo?: string | null;
 }) {
-  const navigate = useNavigate();
+  const safeReturnTo = safeRuntimeReturnTo(returnTo);
   const sessions = useSessions(capabilitySlug);
   const visibleSessions = useMemo(() => {
     const items = (sessions.data?.items ?? []).filter(
@@ -41,14 +49,23 @@ export function SessionSidebar({
     <nav className="rt-sidebar">
       <div className="rt-sidebar__head">
         <div className="rt-sidebar__brand">Agora</div>
-        <button type="button" className="rt-sidebar__inbox" onClick={() => navigate('/market')}>
-          ← Inbox 返回收件箱
+        <button
+          type="button"
+          className="rt-sidebar__inbox"
+          onClick={() => window.location.assign(runtimeBackTarget(safeReturnTo))}
+        >
+          {runtimeBackLabel(safeReturnTo)}
         </button>
       </div>
       <div className="rt-sidebar__label">正在运行</div>
       <div className="rt-sidebar__list">
         {visibleSessions.map((s) => (
-          <SessionListLink key={s.id} session={s} active={s.id === activeSessionId} />
+          <SessionListLink
+            key={s.id}
+            session={s}
+            active={s.id === activeSessionId}
+            returnTo={safeReturnTo}
+          />
         ))}
         {sessions.data && visibleSessions.length === 0 && (
           <div className="rt-sidebar__empty">还没有会话</div>
@@ -65,16 +82,21 @@ export function SessionSidebar({
 function SessionListLink({
   session,
   active,
+  returnTo,
 }: {
   session: RuntimeSessionListItem;
   active: boolean;
+  returnTo: string | null;
 }) {
   const title = session.capabilityName || session.title;
   const secondary = session.title && session.title !== title ? session.title : '';
   const avatar = title.trim().slice(0, 1).toUpperCase() || 'A';
 
   return (
-    <Link to={`/session/${session.id}`} className={`rt-sidebar__item${active ? ' is-active' : ''}`}>
+    <Link
+      to={appendRuntimeReturnTo(`/session/${session.id}`, returnTo)}
+      className={`rt-sidebar__item${active ? ' is-active' : ''}`}
+    >
       <span className="rt-sidebar__avatar">{avatar}</span>
       <span className="rt-sidebar__item-copy">
         <span className="rt-sidebar__item-title">{title}</span>
