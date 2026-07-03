@@ -257,11 +257,7 @@ describe('ImportStepPage', () => {
     );
     act(() => conn().open());
     act(() =>
-      conn().emit(
-        'progress',
-        { percent: 36, phrase: '36% · 已拉取 8 / 20 个分片' },
-        { id: '1-0' },
-      ),
+      conn().emit('progress', { percent: 36, phrase: '36% · 已拉取 8 / 20 个分片' }, { id: '1-0' }),
     );
     await waitFor(() =>
       expect(screen.getByText(/36% · 已拉取 8 \/ 20 个分片/)).toBeInTheDocument(),

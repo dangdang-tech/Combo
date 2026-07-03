@@ -404,7 +404,10 @@ describe('导入 job 恢复 handler（issue #5）', () => {
     expect(ctx.sent.code).toBe(200);
     const data = (
       ctx.sent.body as {
-        data: { job: { id: string; status: string; progress: { percent: number } }; eventsUrl: string };
+        data: {
+          job: { id: string; status: string; progress: { percent: number } };
+          eventsUrl: string;
+        };
       }
     ).data;
     expect(data.job.id).toBe('job1');
