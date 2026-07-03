@@ -490,7 +490,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
 function FloatingChat({
   containerRef,
   sessionId,
-  capabilityName,
+  title,
   messages,
   isRunning,
   error,
@@ -500,7 +500,7 @@ function FloatingChat({
 }: {
   containerRef: RefObject<HTMLDivElement>;
   sessionId: string;
-  capabilityName: string;
+  title: string;
   messages: RuntimeMessage[];
   isRunning: boolean;
   error: string | null;
@@ -743,7 +743,9 @@ function FloatingChat({
         className="rt-floating-chat__head"
         onPointerDown={(event) => startDrag('move', event)}
       >
-        <span className="rt-floating-chat__title">与 {capabilityName} 对话</span>
+        <span className="rt-floating-chat__title" title={title}>
+          {title}
+        </span>
         <div className="rt-floating-chat__window-controls">
           <button
             type="button"
@@ -786,21 +788,6 @@ function FloatingChat({
         <>
           <ChatThread messages={messages} streamingText={null} onOpenArtifact={onOpenArtifact} />
           {error && <div className="rt-error rt-error--inline">{error}</div>}
-          <div className="rt-floating-chat__chips">
-            <button type="button" disabled={isRunning} onClick={() => onSend('再狠一点，减少套话。')}>
-              再狠一点
-            </button>
-            <button
-              type="button"
-              disabled={isRunning}
-              onClick={() => onSend('引用出处，并说明改动依据。')}
-            >
-              引用出处
-            </button>
-            <button type="button" disabled={isRunning} onClick={() => onSend('直接生成下一版。')}>
-              直接生成 V3
-            </button>
-          </div>
           <div className="rt-floating-chat__input">
             <textarea
               value={text}
@@ -1010,7 +997,7 @@ export function ChatPage() {
               <FloatingChat
                 containerRef={canvasRef}
                 sessionId={sessionId ?? detail.session.id}
-                capabilityName={capability.name}
+                title={activeArtifact?.title ?? detail.session.title ?? capability.name}
                 messages={uiMessages}
                 isRunning={agui.isRunning}
                 error={agui.error}

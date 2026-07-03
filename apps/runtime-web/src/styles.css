@@ -1443,28 +1443,6 @@ body {
   padding: 6px 8px;
   font-size: 12px;
 }
-.rt-floating-chat__chips {
-  flex: 0 0 auto;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 0 14px 10px;
-}
-.rt-floating-chat__chips button {
-  min-height: 30px;
-  border: 1px solid #c89448;
-  border-radius: 7px;
-  background: var(--cb-surface);
-  color: #9a6119;
-  padding: 0 10px;
-  font-family: var(--cb-font-sans);
-  font-size: 13px;
-  cursor: pointer;
-}
-.rt-floating-chat__chips button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
 .rt-floating-chat__input {
   flex: 0 0 auto;
   display: grid;
