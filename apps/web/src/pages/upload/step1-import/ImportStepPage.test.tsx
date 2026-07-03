@@ -82,6 +82,12 @@ afterEach(() => {
 
 describe('ImportStepPage', () => {
   it('空态 → 点「开始导入」铸码 → 进配对态展示命令框', async () => {
+    const command = "curl -fsSL 'http://localhost/api/v1/import/connect/script?code=123456' | sh";
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
     mock = installFetchMock([
       // createPair
       {
@@ -90,7 +96,7 @@ describe('ImportStepPage', () => {
           data: {
             pairId: 'p1',
             pairingCode: '123456',
-            command: 'cmd',
+            command,
             curlOneLiner: 'curl -fsSL agora.app/import | sh',
             expiresAt: '2026-06-17T01:00:00Z',
           },
@@ -106,6 +112,9 @@ describe('ImportStepPage', () => {
     await waitFor(() =>
       expect(screen.getByText('在你电脑的终端里运行这行命令')).toBeInTheDocument(),
     );
+    expect(screen.getByText(command)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '复制命令' }));
+    expect(writeText).toHaveBeenCalledWith(command);
     // 铸码用写命令 scope。
     const pairCall = mock.calls.find(
       (c) => c.url.includes('/import/connect/pair') && c.method === 'POST',
@@ -220,6 +229,110 @@ describe('ImportStepPage', () => {
       ),
     );
     expect(screen.queryByText('已入')).toBeNull();
+  });
+
+  it('仅 ?draftId= 且后端返回 running import job → 进入 loading 并续订 SSE', async () => {
+    mock = installFetchMock({
+      status: 200,
+      json: {
+        data: {
+          job: {
+            id: 'job-active',
+            type: 'import',
+            status: 'running',
+            progress: { percent: 35, phrase: '35% · 已拉取 7 / 20 个分片', subtasks: [] },
+            attemptNo: 1,
+            createdAt: '2026-06-17T00:00:00Z',
+          },
+          eventsUrl: '/api/v1/jobs/job-active/events',
+          draftId: 'd1',
+        },
+      },
+    });
+    renderPage('/create/import?draftId=d1', 'd1');
+    await waitFor(() => expect(MockFetchEventSource.last).toBeTruthy());
+    expect(mock.calls.some((c) => c.url.includes('/import/jobs/active?draftId=d1'))).toBe(true);
+    expect(screen.getByTestId('path')).toHaveTextContent(
+      '/create/import?draftId=d1&jobId=job-active',
+    );
+    act(() => conn().open());
+    act(() =>
+      conn().emit('progress', { percent: 36, phrase: '36% · 已拉取 8 / 20 个分片' }, { id: '1-0' }),
+    );
+    await waitFor(() =>
+      expect(screen.getByText(/36% · 已拉取 8 \/ 20 个分片/)).toBeInTheDocument(),
+    );
+  });
+
+  it('仅 ?draftId= 且后端返回 completed + snapshotId → 直接进入能力页', async () => {
+    mock = installFetchMock([
+      // fetchActiveImportJobByDraft
+      {
+        status: 200,
+        json: {
+          data: {
+            job: {
+              id: 'job-done',
+              type: 'import',
+              status: 'completed',
+              progress: { percent: 100, phrase: '完成', subtasks: [] },
+              result: { snapshotId: 'snap1' },
+              attemptNo: 1,
+              createdAt: '2026-06-17T00:00:00Z',
+              finishedAt: '2026-06-17T00:01:00Z',
+            },
+            eventsUrl: '/api/v1/jobs/job-done/events',
+            draftId: 'd1',
+            snapshotId: 'snap1',
+          },
+        },
+      },
+      // fetchSnapshot
+      {
+        status: 200,
+        json: {
+          data: {
+            id: 'snap1',
+            ownerUserId: 'u1',
+            source: 'claude',
+            sources: ['claude'],
+            stats: { segmentCount: 1, messageCount: 1, timeSpan: null, projectCount: 0 },
+            redaction: { applied: true, totalRedactions: 0, byCategory: [], rulesetVersion: 'v1' },
+            createdAt: '2026-06-17T00:00:00Z',
+          },
+        },
+      },
+      // fetchSnapshotSegments
+      {
+        status: 200,
+        json: {
+          data: [],
+          meta: { page: { hasMore: false, nextCursor: null, limit: 30, order: 'desc' } },
+        },
+      },
+    ]);
+    renderPage('/create/import?draftId=d1', 'd1');
+    await waitFor(() =>
+      expect(screen.getByTestId('path')).toHaveTextContent(
+        '/create/capabilities?snapshotId=snap1&draftId=d1',
+      ),
+    );
+  });
+
+  it('?jobId= 深链优先于 draft active 查询', async () => {
+    mock = installFetchMock({ status: 204 });
+    renderPage('/create/import?draftId=d1&jobId=job1', 'd1');
+    act(() => conn().open());
+    act(() => conn().emit('progress', { percent: 10, phrase: '10%' }, { id: '1-0' }));
+    await waitFor(() => expect(screen.getByText(/10%/)).toBeInTheDocument());
+    expect(mock.calls.some((c) => c.url.includes('/import/jobs/active'))).toBe(false);
+  });
+
+  it('仅 ?draftId= 且后端无可恢复 import job → 回空态，不显示恢复错误', async () => {
+    mock = installFetchMock({ status: 200, json: { data: null } });
+    renderPage('/create/import?draftId=d1', 'd1');
+    await waitFor(() => expect(screen.getByText('命令行导入（本机直读）')).toBeInTheDocument());
+    expect(screen.queryByText('导入状态恢复失败，请稍后重试。')).toBeNull();
   });
 
   it('导入 done 缺 snapshotId 时，从 draft 反查 snapshotId 后进入能力页', async () => {
