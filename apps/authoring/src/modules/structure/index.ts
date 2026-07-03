@@ -13,3 +13,9 @@ export {
 export { readEvidenceForCandidate, writeManifestAndStateProtected } from './repo.js';
 export { applySoftField, manifestToStructureState, isArrayField } from './manifest.js';
 export { generateFieldWithRetry, type GenContext } from './generate.js';
+export {
+  prepareCandidateDraft,
+  type CandidateDraftPreparationDeps,
+  type CandidateDraftPreparationOutcome,
+  type OnVersionPreparedInTx,
+} from './candidate-draft-prep.js';

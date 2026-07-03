@@ -20,6 +20,7 @@ import {
   readCandidateForCreate,
   readCapabilityForNewVersion,
   readVersion,
+  readDraftVersionForCandidate,
   createCapabilityWithVersionInTx,
   insertNewVersionInTx,
   backfillDraftInTx,
@@ -155,6 +156,52 @@ async function createFromCandidate(
   const cand = await readCandidateForCreate(db, sourceCandidateId, ctx.userId);
   if (!cand) {
     throw new CreateCapabilityError(ErrorCode.NOT_FOUND, 'candidate not found / not owner');
+  }
+
+  const existing = await readDraftVersionForCandidate(db, {
+    candidateId: sourceCandidateId,
+    ownerUserId: ctx.userId,
+  });
+  if (existing) {
+    try {
+      if (draftId || opts?.onCreatedInTx) {
+        await withTransaction(txPool, async (tx) => {
+          if (draftId) {
+            const ok = await backfillDraftInTx(tx, {
+              draftId,
+              versionId: existing.id,
+              capabilityId: existing.capabilityId,
+              ownerUserId: ctx.userId,
+              selection: { mode: 'single', candidateId: sourceCandidateId },
+            });
+            if (!ok) {
+              throw new CreateCapabilityError(
+                ErrorCode.NOT_FOUND,
+                'draft not found / not owner / inactive',
+              );
+            }
+          }
+          if (opts?.onCreatedInTx) {
+            const ok = await opts.onCreatedInTx(tx, {
+              versionId: existing.id,
+              capabilityId: existing.capabilityId,
+            });
+            if (!ok) throw new BackfillFencedError();
+          }
+        });
+      }
+    } catch (err) {
+      if (err instanceof BackfillFencedError) throw new CreateCapabilityFencedError();
+      throw err;
+    }
+    return {
+      capabilityId: existing.capabilityId,
+      versionId: existing.id,
+      slug: existing.slug,
+      version: existing.version,
+      manifest: existing.manifest,
+      structureState: existing.structureState as CreateCapabilityResult['structureState'],
+    };
   }
 
   const capabilityId = randomUUID();

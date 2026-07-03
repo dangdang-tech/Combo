@@ -550,6 +550,53 @@ export async function readVersion(db: Queryable, versionId: string): Promise<Ver
   };
 }
 
+/** 按候选血缘读取本人现有 draft version（试用预准备 / 批量发布复用，避免同 candidate 重复建版）。 */
+export async function readDraftVersionForCandidate(
+  db: Queryable,
+  args: { candidateId: string; ownerUserId: string },
+): Promise<VersionRow | null> {
+  const res = await db.query<{
+    id: string;
+    capability_id: string;
+    slug: string;
+    version: string;
+    status: string;
+    manifest: Manifest;
+    structure_state: Partial<StructureState>;
+    source_candidate_id: string | null;
+    creator_user_id: string;
+    updated_at: string;
+  }>(
+    `SELECT v.id, v.capability_id, c.slug, v.version, v.status,
+            v.manifest, v.structure_state, v.source_candidate_id,
+            c.creator_user_id, v.updated_at
+       FROM capability_versions v
+       JOIN capabilities c ON c.id = v.capability_id
+      WHERE v.source_candidate_id = $1
+        AND c.creator_user_id = $2
+        AND c.status = 'active'
+        AND v.status = 'draft'
+      ORDER BY v.created_at DESC
+      LIMIT 1`,
+    [args.candidateId, args.ownerUserId],
+  );
+  const r = res.rows[0];
+  if (!r) return null;
+  return {
+    id: r.id,
+    capabilityId: r.capability_id,
+    slug: r.slug,
+    version: r.version,
+    status: r.status,
+    manifest: r.manifest,
+    structureState: r.structure_state ?? {},
+    sourceCandidateId: r.source_candidate_id,
+    creatorUserId: r.creator_user_id,
+    updatedAt:
+      typeof r.updated_at === 'string' ? r.updated_at : new Date(r.updated_at).toISOString(),
+  };
+}
+
 // ===========================================================================
 // B-24 建能力体 draft 版本（三分支，单 PG 事务，§4.A）
 // ===========================================================================
@@ -631,9 +678,21 @@ export async function readCandidateForCreate(
   db: Queryable,
   candidateId: string,
   ownerUserId: string,
-): Promise<{ id: string; name: string | null; slug: string; status: string } | null> {
-  const res = await db.query<{ id: string; name: string | null; slug: string; status: string }>(
-    `SELECT id, name, slug, status
+): Promise<{
+  id: string;
+  name: string | null;
+  intent: string | null;
+  slug: string;
+  status: string;
+} | null> {
+  const res = await db.query<{
+    id: string;
+    name: string | null;
+    intent: string | null;
+    slug: string;
+    status: string;
+  }>(
+    `SELECT id, name, intent, slug, status
        FROM capability_candidates
       WHERE id = $1 AND owner_user_id = $2`,
     [candidateId, ownerUserId],
