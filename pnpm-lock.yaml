@@ -239,6 +239,9 @@ importers:
       vite:
         specifier: ^6.0.7
         version: 6.4.3(@types/node@22.19.21)(yaml@2.9.0)
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.21)(jsdom@25.0.1)
 
   apps/web:
     dependencies:

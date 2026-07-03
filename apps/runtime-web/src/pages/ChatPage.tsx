@@ -26,6 +26,13 @@ import { useAguiSession } from '../api/useAguiSession.js';
 import { ArtifactRenderer } from '../components/ArtifactRenderer.js';
 import { ChatThread } from '../components/ChatThread.js';
 import { SessionSidebar } from '../components/SessionSidebar.js';
+import {
+  CREATOR_CAPABILITIES_PATH,
+  appendRuntimeReturnTo,
+  readRuntimeReturnTo,
+  rememberRuntimeReturnTo,
+  safeRuntimeReturnTo,
+} from '../navigation/runtimeReturn.js';
 
 type PreviewMode = 'creator' | 'consumer';
 
@@ -56,10 +63,6 @@ function upsertSessionListItem(
 ): RuntimeSessionList {
   const items = current?.items ?? [];
   return { items: [item, ...items.filter((existing) => existing.id !== item.id)] };
-}
-
-function safeReturnTo(value: string | null): string {
-  return value && value.startsWith('/') && !value.startsWith('//') ? value : '/create/capabilities';
 }
 
 function fieldValue(values: Record<string, string>, field: InputField): string {
@@ -897,10 +900,15 @@ export function ChatPage() {
   const isTrialSession = sessionMode === 'trial';
   const isDraftTrial = isTrialSession && capability?.status === 'draft';
   const effectiveMode: PreviewMode = isTrialSession ? mode : 'consumer';
-  const publishReturnTo = safeReturnTo(searchParams.get('returnTo'));
+  const queryReturnTo = safeRuntimeReturnTo(searchParams.get('returnTo'));
+  const publishReturnTo = queryReturnTo ?? readRuntimeReturnTo(sessionId);
+
+  useEffect(() => {
+    rememberRuntimeReturnTo(sessionId, queryReturnTo);
+  }, [queryReturnTo, sessionId]);
 
   const backToPublish = useCallback(() => {
-    window.location.assign(publishReturnTo);
+    window.location.assign(publishReturnTo ?? CREATOR_CAPABILITIES_PATH);
   }, [publishReturnTo]);
 
   const enterProduction = useCallback(async () => {
@@ -917,7 +925,8 @@ export function ChatPage() {
         upsertSessionListItem(current, item),
       );
       void qc.invalidateQueries({ queryKey: ['sessions'] });
-      navigate(`/session/${created.session.id}`);
+      rememberRuntimeReturnTo(created.session.id, publishReturnTo);
+      navigate(appendRuntimeReturnTo(`/session/${created.session.id}`, publishReturnTo));
     } catch {
       setProductionError('无法进入正式使用，请稍后重试。');
     } finally {
@@ -970,6 +979,7 @@ export function ChatPage() {
         activeSession={activeSession}
         activeSessionId={sessionId}
         capabilitySlug={capability.slug}
+        returnTo={publishReturnTo}
       />
       <div className="rt-trial">
         <header className="rt-trial__toolbar">
