@@ -73,6 +73,18 @@ export async function readProfileBase(
   return res.rows[0] ?? null;
 }
 
+/** 公开 /c/:slug 入口：先用 creator_profiles.slug 定位 user_id，再复用同一套主聚合。 */
+export async function readProfileOwnerIdBySlug(
+  db: Queryable,
+  slug: string,
+): Promise<string | null> {
+  const res = await db.query<{ user_id: string }>(
+    `SELECT user_id FROM creator_profiles WHERE slug = $1`,
+    [slug],
+  );
+  return res.rows[0]?.user_id ?? null;
+}
+
 /**
  * 当前查看者是否已关注该创作者（§2.1 viewerIsFollowing）。
  *   viewerId 为空（匿名）→ null（不影响只读展示，§2.1）；登录态查 follows 去重键存在性。
@@ -115,6 +127,8 @@ interface PublishedCapRow {
   current_version_id: string;
   slug: string;
   name: string;
+  source_snapshot_id: string | null;
+  source_candidate_slug: string | null;
   review_status: string;
   cover_url: string | null;
   tags: string[];
@@ -135,10 +149,10 @@ interface PublishedCapRow {
  *   即天然展示回退版（主页-24，复用 3E 单源、本域不重做回退）。
  *   段级血缘对账（§4.4）：supporting_segments 经 candidate_evidence × session_segments 同 snapshot 血缘，
  *   只读已 fence 落库的证据（脊柱 §6.2），不读半成品。
- *   owner 隔离（Codex r1#1，P0）：LATERAL 必须把候选 cc 限定在
- *     ① 本能力体来源候选（cc.slug = c.slug，外层正确绑定，不再用全局 slug IN 子查询）；
- *     ② 本创作者自有快照（JOIN raw_snapshots rs ON rs.id = cc.snapshot_id AND rs.owner_user_id = $1）。
- *   否则同 slug 跨创作者会把别人的段数计入本公开主页（数据越权泄露）。
+ *   owner 隔离（Codex r1#1，P0）：LATERAL 必须把候选限定在当前展示版 cv.source_candidate_id，
+ *   并确认候选所属 snapshot 是本创作者自有（JOIN raw_snapshots rs ON rs.id = cc.snapshot_id AND rs.owner_user_id = $1）。
+ *   不能用能力体公开 slug 反查候选 slug：能力 slug 是 createCapability 后生成的公开 URL slug，
+ *   真实数据里常与候选 slug 不同（例如 cap-* vs md/goal），否则密度榜会把有证据的能力读成 0 段。
  */
 export async function readPublishedCaps(
   db: Queryable,
@@ -150,6 +164,8 @@ export async function readPublishedCaps(
             p.current_version_id,
             c.slug,
             (cv.manifest->>'name')        AS name,
+            src_cc.snapshot_id::text      AS source_snapshot_id,
+            src_cc.slug                   AS source_candidate_slug,
             p.review_status,
             (cv.manifest->>'cover_url')   AS cover_url,
             c.tags                        AS tags,
@@ -161,6 +177,8 @@ export async function readPublishedCaps(
        JOIN publications p ON p.capability_id = c.id
        JOIN capability_versions cv
          ON cv.capability_id = c.id AND cv.id = p.current_version_id
+       LEFT JOIN capability_candidates src_cc
+         ON src_cc.id = cv.source_candidate_id
        LEFT JOIN LATERAL (
          SELECT COUNT(DISTINCT ce.segment_id)                                   AS supporting_segments,
                 COUNT(DISTINCT ce.segment_id) FILTER (WHERE ss.happened_at >= $2) AS recent_segments,
@@ -170,8 +188,8 @@ export async function readPublishedCaps(
            JOIN raw_snapshots     rs ON rs.id = cc.snapshot_id AND rs.owner_user_id = $1
            JOIN candidate_evidence ce ON ce.candidate_id = cc.id
            JOIN session_segments  ss ON ss.id = ce.segment_id
-          -- 本能力体来源候选（外层正确绑定 cc.slug = c.slug，不再用全局 slug IN 子查询归集）。
-          WHERE cc.slug = c.slug
+          -- 当前展示版来源候选（source_candidate_id 是结构化血缘真源；不可用公开 slug 反查候选 slug）。
+          WHERE cc.id = cv.source_candidate_id
        ) seg ON true
       WHERE c.creator_user_id = $1
         AND p.review_status IN ('alpha_pending', 'published')
@@ -179,7 +197,32 @@ export async function readPublishedCaps(
     [creatorId, halfWindowStart],
   );
   // 防御：即便 SQL 漏过，应用层再过一道上墙过滤（被拒下架不上墙，主页-23）。
-  return res.rows.filter((r) => isOnWall(r.review_status));
+  return dedupePublishedCaps(res.rows.filter((r) => isOnWall(r.review_status)));
+}
+
+function normalizePublishedCapName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function publishedCapDedupeKey(row: PublishedCapRow): string {
+  if (row.source_snapshot_id && row.source_candidate_slug) {
+    return ['source', row.source_snapshot_id, row.source_candidate_slug].join(':');
+  }
+  const normalizedName = normalizePublishedCapName(row.name ?? '');
+  if (normalizedName) return ['name', normalizedName].join(':');
+  return ['capability', row.capability_id].join(':');
+}
+
+function dedupePublishedCaps(rows: PublishedCapRow[]): PublishedCapRow[] {
+  const seen = new Set<string>();
+  const deduped: PublishedCapRow[] = [];
+  for (const row of rows) {
+    const key = publishedCapDedupeKey(row);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(row);
+  }
+  return deduped;
 }
 
 /** PublishedCapRow → 密度榜输入（真实段数 + 趋势分窗）。 */
@@ -288,8 +331,8 @@ export async function readHeatmapTimestamps(
   db: Queryable,
   creatorId: string,
   windowStart: string,
-): Promise<(string | null)[]> {
-  const res = await db.query<{ happened_at: string | null }>(
+): Promise<(string | Date | null)[]> {
+  const res = await db.query<{ happened_at: string | Date | null }>(
     `SELECT ss.happened_at
        FROM session_segments ss
        JOIN raw_snapshots rs ON rs.id = ss.snapshot_id
@@ -301,17 +344,19 @@ export async function readHeatmapTimestamps(
 }
 
 /**
- * 读 session 共现命中（§2.5 网络）：同 snapshot 命中的能力集合（按 slug 归集到能力体）。
- *   owner 隔离（Codex r1#1，P0）：候选 cc 必须挂在本创作者自有快照
+ * 读 session 共现命中（§2.5 网络）：同 snapshot 命中的能力集合（按当前版本 source_candidate_id 归集到能力体）。
+ *   owner 隔离（Codex r1#1，P0）：来源候选 cc 必须挂在本创作者自有快照
  *     （JOIN raw_snapshots rs ON rs.id = cc.snapshot_id AND rs.owner_user_id = $1），
- *   否则同 slug 跨创作者会把别人 snapshot 的共现命中计入本公开主页网络（数据越权泄露）。
+ *   否则跨创作者证据会计入本公开主页网络（数据越权泄露）。
  */
 export async function readSnapshotHits(db: Queryable, creatorId: string): Promise<SnapshotHit[]> {
   const res = await db.query<{ snapshot_id: string; capability_id: string }>(
     `SELECT DISTINCT cc.snapshot_id AS snapshot_id, c.id AS capability_id
        FROM capabilities c
        JOIN publications p ON p.capability_id = c.id AND p.review_status IN ('alpha_pending','published')
-       JOIN capability_candidates cc ON cc.slug = c.slug
+       JOIN capability_versions cv
+         ON cv.capability_id = c.id AND cv.id = p.current_version_id
+       JOIN capability_candidates cc ON cc.id = cv.source_candidate_id
        JOIN raw_snapshots rs ON rs.id = cc.snapshot_id AND rs.owner_user_id = $1
       WHERE c.creator_user_id = $1`,
     [creatorId],
@@ -391,7 +436,7 @@ export async function readCreatorProfile(
     readPublishedCaps(db, creatorId, trendMid),
     base.heatmap_enabled
       ? readHeatmapTimestamps(db, creatorId, windowStart)
-      : Promise.resolve<(string | null)[]>([]),
+      : Promise.resolve<(string | Date | null)[]>([]),
     readSnapshotHits(db, creatorId),
   ]);
 

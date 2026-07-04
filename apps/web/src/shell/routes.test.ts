@@ -23,6 +23,11 @@ describe('CREATOR_NAV 分组结构（外壳首页-03）', () => {
     for (const n of CREATOR_NAV) expect(typeof n.icon).toBe('function');
   });
 
+  it('暂未开放入口置灰：工作台 / 数据分析 / 收益 / 个人主页', () => {
+    const disabledLabels = CREATOR_NAV.filter((n) => n.disabled).map((n) => n.label);
+    expect(disabledLabels).toEqual(['工作台', '数据分析', '收益', '个人主页']);
+  });
+
   it('每个分组键都在 NAV_GROUPS 中有定义（无孤儿组）', () => {
     const known = new Set(NAV_GROUPS.map((g) => g.key));
     for (const n of CREATOR_NAV) expect(known.has(n.group)).toBe(true);
@@ -41,34 +46,34 @@ describe('CREATE_STEPS 两步（PRD 结构坍缩：上传 / 能力页）', () =>
 });
 
 describe('breadcrumbFor 分层（外壳首页-06）', () => {
-  it('工作台 → 只 Creator Builder 根（自身即根，不重复）', () => {
+  it('工作台 → 只 Combo Builder 根（自身即根，不重复）', () => {
     const c = breadcrumbFor('/creator');
     expect(c.map((x) => x.label)).toEqual([BREADCRUMB_ROOT.label]);
   });
 
-  it('上传能力 → Creator Builder / 上传能力', () => {
+  it('上传能力 → Combo Builder / 上传能力', () => {
     const c = breadcrumbFor('/create');
-    expect(c.map((x) => x.label)).toEqual(['Creator Builder', '上传能力']);
+    expect(c.map((x) => x.label)).toEqual(['Combo Builder', '上传能力']);
   });
 
-  it('能力页子步 → Creator Builder / 上传能力 / 能力', () => {
+  it('能力页子步 → Combo Builder / 上传能力 / 能力', () => {
     const c = breadcrumbFor('/create/capabilities');
-    expect(c.map((x) => x.label)).toEqual(['Creator Builder', '上传能力', '能力']);
+    expect(c.map((x) => x.label)).toEqual(['Combo Builder', '上传能力', '能力']);
   });
 
-  it('上传子步 → Creator Builder / 上传能力 / 上传', () => {
+  it('上传子步 → Combo Builder / 上传能力 / 上传', () => {
     const c = breadcrumbFor('/create/import');
-    expect(c.map((x) => x.label)).toEqual(['Creator Builder', '上传能力', '上传']);
+    expect(c.map((x) => x.label)).toEqual(['Combo Builder', '上传能力', '上传']);
   });
 
-  it('数据分析 → Creator Builder / 数据分析', () => {
+  it('数据分析 → Combo Builder / 数据分析', () => {
     const c = breadcrumbFor('/analytics');
-    expect(c.map((x) => x.label)).toEqual(['Creator Builder', '数据分析']);
+    expect(c.map((x) => x.label)).toEqual(['Combo Builder', '数据分析']);
   });
 
-  it('个人主页 → Creator Builder / 个人主页', () => {
+  it('个人主页 → Combo Builder / 个人主页', () => {
     const c = breadcrumbFor('/profile');
-    expect(c.map((x) => x.label)).toEqual(['Creator Builder', '个人主页']);
+    expect(c.map((x) => x.label)).toEqual(['Combo Builder', '个人主页']);
   });
 
   it('未知路径 → 只剩根，不抛错', () => {

@@ -8,7 +8,7 @@
 // 已随 2 步坍缩下线：顶部常驻步骤条（StepBar）+ 恒定底栏主按钮（WizardFooter）。
 //   上传完成即自动进入能力页（无需手动点「下一步」）、能力页自带「一键发布」，故无需步骤条/底栏编排。
 // 当前步由路由派生（stepForPath）；换步不改本壳结构（外壳恒定 D14）。
-import { useCallback, useEffect, type ReactElement } from 'react';
+import { useCallback, useEffect, useRef, type ReactElement } from 'react';
 import { Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ErrorState } from '../../components/index.js';
 import { useTopbarActionSetter } from '../../shell/topbarSlot.js';
@@ -21,7 +21,7 @@ export function WizardShell(): ReactElement {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { setCurrentStep } = useWizard();
+  const { draftId: ctxDraftId, setCurrentStep } = useWizard();
   const save = useSaveDraft();
   // 稳定的存草稿函数（useSaveDraft 内 useCallback）：单独取出供 handleSaveDraft 依赖，避免每渲染换引用导致注册抖动。
   const runSave = save.save;
@@ -38,7 +38,12 @@ export function WizardShell(): ReactElement {
 
   // F-15 深链续传：?draftId= → 拉草稿恢复 draftId + selection（工作台点击路径直接带 DraftView，不入此）。
   const draftIdParam = searchParams.get('draftId') ?? undefined;
-  const resume = useResumeDraft(draftIdParam);
+  const initialDraftIdParamRef = useRef<string | undefined>(draftIdParam);
+  const selfBootstrappedDraftParam =
+    !initialDraftIdParamRef.current && !!draftIdParam && draftIdParam === ctxDraftId;
+  const resumeDraftId = selfBootstrappedDraftParam ? undefined : draftIdParam;
+  const resume = useResumeDraft(resumeDraftId);
+  const shouldRenderStep = !resumeDraftId || resume.status === 'done';
 
   const handleSaveDraft = useCallback(async (): Promise<void> => {
     const ok = await runSave();
@@ -81,9 +86,7 @@ export function WizardShell(): ReactElement {
       )}
 
       {/* 步骤内容区（当前步实现经 Outlet 渲染；换步不改本壳结构）。 */}
-      <div className="cb-wizard__body">
-        <Outlet />
-      </div>
+      <div className="cb-wizard__body">{shouldRenderStep ? <Outlet /> : null}</div>
     </div>
   );
 }

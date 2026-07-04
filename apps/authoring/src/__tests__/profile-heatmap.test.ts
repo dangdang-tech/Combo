@@ -17,6 +17,10 @@ describe('热力图窗口/分桶纯函数', () => {
     expect(isoDay('2026-06-15T08:00:00.000Z')).toBe('2026-06-15');
   });
 
+  it('isoDay 兼容真实 pg timestamptz 返回的 Date', () => {
+    expect(isoDay(new Date('2026-06-15T08:00:00.000Z'))).toBe('2026-06-15');
+  });
+
   it('half_year 窗口 183 天、end=今天', () => {
     const w = heatmapWindow(TODAY, 'half_year');
     expect(w.end).toBe('2026-06-15');
@@ -93,6 +97,19 @@ describe('aggregateHeatmap（从 happened_at 聚合，不依赖 usage）', () =>
     });
     expect(hm.cells).toHaveLength(1);
     expect(hm.cells[0]!.count).toBe(1);
+  });
+
+  it('兼容真实 pg 返回的 Date 对象，不把公开主页主聚合打成 500', () => {
+    const hm = aggregateHeatmap({
+      happenedAt: [
+        new Date('2026-06-15T01:00:00.000Z'),
+        new Date('2026-06-15T09:00:00.000Z'),
+      ],
+      today: TODAY,
+      range: 'half_year',
+      enabled: true,
+    });
+    expect(hm.cells).toEqual([{ date: '2026-06-15', count: 2, level: 4 }]);
   });
 
   it('关闭开关（主页-20）→ enabled:false + 空 cells', () => {

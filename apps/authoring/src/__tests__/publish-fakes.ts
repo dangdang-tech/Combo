@@ -39,6 +39,13 @@ export interface UserRow {
   id: string;
   account: string;
 }
+export interface ProfileRow {
+  user_id: string;
+  slug: string;
+  display_name: string;
+  identity_tags: string[];
+  bio: string;
+}
 export interface TierRow {
   version_id: string;
   tier_code: string;
@@ -68,6 +75,7 @@ interface Snapshot {
   versions: Map<string, VerRow>;
   tiers: TierRow[];
   publications: Map<string, PubRow>;
+  profiles: Map<string, ProfileRow>;
   outbox: OutboxRow[];
 }
 
@@ -90,6 +98,7 @@ export class PublishFakeDb implements Queryable {
   capabilities = new Map<string, CapRow>();
   versions = new Map<string, VerRow>();
   users = new Map<string, UserRow>();
+  profiles = new Map<string, ProfileRow>();
   tiers: TierRow[] = [];
   publications = new Map<string, PubRow>();
   outbox: OutboxRow[] = [];
@@ -105,6 +114,7 @@ export class PublishFakeDb implements Queryable {
       versions: new Map([...this.versions].map(([k, v]) => [k, { ...v }])),
       tiers: this.tiers.map((t) => ({ ...t })),
       publications: new Map([...this.publications].map(([k, v]) => [k, { ...v }])),
+      profiles: new Map([...this.profiles].map(([k, v]) => [k, { ...v, identity_tags: [...v.identity_tags] }])),
       outbox: this.outbox.map((o) => ({ ...o })),
     };
   }
@@ -114,6 +124,7 @@ export class PublishFakeDb implements Queryable {
     this.versions = this.snapshot.versions;
     this.tiers = this.snapshot.tiers;
     this.publications = this.snapshot.publications;
+    this.profiles = this.snapshot.profiles;
     this.outbox = this.snapshot.outbox;
     this.snapshot = null;
   }
@@ -287,6 +298,21 @@ export class PublishFakeDb implements Queryable {
       const cap = this.capabilities.get(params[0] as string);
       if (!cap) return ok<R>([], 0);
       cap.current_version_id = params[1] as string;
+      return ok<R>([], 1);
+    }
+
+    // —— 公开主页基行：发布成功同事务 ensure creator_profiles ——
+    if (sql.includes('INSERT INTO creator_profiles') && sql.includes('ON CONFLICT (user_id)')) {
+      maybeThrow();
+      const userId = params[0] as string;
+      if (this.profiles.has(userId)) return ok<R>([], 0);
+      this.profiles.set(userId, {
+        user_id: userId,
+        slug: params[1] as string,
+        display_name: params[2] as string,
+        identity_tags: [...(params[3] as string[])],
+        bio: '',
+      });
       return ok<R>([], 1);
     }
 

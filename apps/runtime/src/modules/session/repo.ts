@@ -145,7 +145,12 @@ export async function getSessionRow(
   ownerId: string,
 ): Promise<SessionRow | null> {
   const res = await pool.query<SessionDbRow>(
-    `SELECT * FROM rt_chat_sessions WHERE id = $1 AND owner_id = $2 LIMIT 1`,
+    `SELECT *
+       FROM rt_chat_sessions
+      WHERE id = $1
+        AND owner_id = $2
+        AND status = 'active'
+      LIMIT 1`,
     [id, ownerId],
   );
   const row = res.rows[0];

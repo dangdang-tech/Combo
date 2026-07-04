@@ -1,5 +1,5 @@
 import { useState, type KeyboardEvent } from 'react';
-import type { InputField, PublicCapabilityView } from '@cb/shared';
+import type { PublicCapabilityView, PublicInputField } from '@cb/shared';
 
 export interface InputComposerProps {
   capability: PublicCapabilityView;
@@ -99,7 +99,7 @@ export function InputComposer({
 }
 
 function collectInputs(
-  fields: InputField[],
+  fields: PublicInputField[],
   values: Record<string, string>,
 ): Record<string, string> | undefined {
   const out: Record<string, string> = {};
@@ -115,7 +115,7 @@ function FieldControl({
   value,
   onChange,
 }: {
-  field: InputField;
+  field: PublicInputField;
   value: string;
   onChange: (v: string) => void;
 }) {

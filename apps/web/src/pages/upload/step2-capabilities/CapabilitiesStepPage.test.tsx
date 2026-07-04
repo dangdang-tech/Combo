@@ -3,7 +3,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { WizardProvider } from '../../wizard/index.js';
 import { CapabilitiesStepPage } from './CapabilitiesStepPage.js';
 import { __setOpenRuntimeTrialForTests } from './trialApi.js';
@@ -17,15 +17,23 @@ import {
 function renderPage(
   initialPath = '/create/capabilities?snapshotId=s1',
   draftId = 'd1',
-  opts: { snapshotId?: string } = {},
+  opts: { snapshotId?: string; extractJobId?: string; batchId?: string } = {},
 ) {
+  function LocationProbe() {
+    const location = useLocation();
+    return <span data-testid="path">{`${location.pathname}${location.search}`}</span>;
+  }
+
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
       <WizardProvider
         initialStep="capabilities"
         initialDraftId={draftId}
         initialSnapshotId={opts.snapshotId}
+        initialExtractJobId={opts.extractJobId}
+        initialBatchId={opts.batchId}
       >
+        <LocationProbe />
         <Routes>
           <Route path="/create/capabilities" element={<CapabilitiesStepPage />} />
           <Route path="/a/:slug" element={<span data-testid="market">market</span>} />
@@ -64,6 +72,19 @@ function candidateJson(over: Record<string, unknown> = {}) {
     createdAt: '2026-06-10T00:00:00Z',
     ...over,
   };
+}
+
+function expectCapabilitiesReturnTo(
+  trialUrl: string,
+  expected: { snapshotId: string; draftId: string; extractJobId: string },
+) {
+  const returnTo = new URLSearchParams(trialUrl.split('?')[1]).get('returnTo');
+  expect(returnTo).toBeTruthy();
+  const url = new URL(returnTo!, 'http://combo.local');
+  expect(url.pathname).toBe('/create/capabilities');
+  expect(url.searchParams.get('snapshotId')).toBe(expected.snapshotId);
+  expect(url.searchParams.get('draftId')).toBe(expected.draftId);
+  expect(url.searchParams.get('extractJobId')).toBe(expected.extractJobId);
 }
 
 const extractDone = {
@@ -120,9 +141,14 @@ describe('CapabilitiesStepPage', () => {
     await waitFor(() => {
       const call = mock.calls.find((c) => c.url.includes('/snapshots/s1/extract'));
       expect(call?.headers['X-Idempotency-Scope']).toBe('extract.create');
-      expect(call?.headers['Idempotency-Key']).toBe('extract:session-mock-v1:d1:s1');
+      expect(call?.headers['Idempotency-Key']).toBe('extract:full-cluster-v2:d1:s1');
       expect(call?.body).toEqual({ draftId: 'd1' });
     });
+    await waitFor(() =>
+      expect(screen.getByTestId('path')).toHaveTextContent(
+        '/create/capabilities?snapshotId=s1&extractJobId=j1',
+      ),
+    );
     // 萃取 SSE（connection[0]）：open → done → 拉候选进 ready。
     await waitFor(() => expect(MockFetchEventSource.connections.length).toBe(1));
     act(() => connAt(0).open());
@@ -151,6 +177,33 @@ describe('CapabilitiesStepPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: '全选' }));
     expect(screen.getByRole('button', { name: /一键发布到市集 · 2 项/ })).toBeEnabled();
+  });
+
+  it('草稿恢复出 extractJobId → 直接续接候选，不重新 POST 萃取旧幂等任务', async () => {
+    mock = installFetchMock({
+      status: 200,
+      json: {
+        data: [candidateJson({ id: 'c-resumed', extractJobId: 'j-resumed' })],
+        meta: {
+          page: { hasMore: false, nextCursor: null, limit: 50, order: 'asc' },
+          confidenceSummary: { high: 1, med: 0, low: 0 },
+        },
+      },
+    });
+    renderPage('/create/capabilities?snapshotId=s1&draftId=d1', 'd1', {
+      snapshotId: 's1',
+      extractJobId: 'j-resumed',
+    });
+
+    await waitFor(() => expect(MockFetchEventSource.connections.length).toBe(1));
+    expect(MockFetchEventSource.connections[0]?.url).toContain('/jobs/j-resumed/events');
+    expect(mock.calls.some((c) => c.url.includes('/snapshots/s1/extract'))).toBe(false);
+
+    act(() => connAt(0).open());
+    act(() => connAt(0).emit('done', extractDone, { id: '1-0' }));
+
+    await waitFor(() => expect(screen.getByText('短视频脚本生成器')).toBeInTheDocument());
+    expect(mock.calls[0]?.url).toContain('/extract-jobs/j-resumed/candidates');
   });
 
   it('试用按钮 → 使用预准备 trialCapability 直接开 runtime trial session 并跳转', async () => {
@@ -210,9 +263,11 @@ describe('CapabilitiesStepPage', () => {
     await waitFor(() => expect(openTrial).toHaveBeenCalledOnce());
     const trialUrl = openTrial.mock.calls[0]![0] as string;
     expect(trialUrl).toContain('/try/session/rt1');
-    expect(new URLSearchParams(trialUrl.split('?')[1]).get('returnTo')).toBe(
-      '/create/capabilities?snapshotId=s1&draftId=d1',
-    );
+    expectCapabilitiesReturnTo(trialUrl, {
+      snapshotId: 's1',
+      draftId: 'd1',
+      extractJobId: 'j1',
+    });
   });
 
   it('试用回跳地址补齐向导上下文里的 snapshotId/draftId，避免回到裸能力页丢数据', async () => {
@@ -260,9 +315,11 @@ describe('CapabilitiesStepPage', () => {
 
     await waitFor(() => expect(openTrial).toHaveBeenCalledOnce());
     const trialUrl = openTrial.mock.calls[0]![0] as string;
-    expect(new URLSearchParams(trialUrl.split('?')[1]).get('returnTo')).toBe(
-      '/create/capabilities?snapshotId=s1&draftId=d1',
-    );
+    expectCapabilitiesReturnTo(trialUrl, {
+      snapshotId: 's1',
+      draftId: 'd1',
+      extractJobId: 'j1',
+    });
   });
 
   it('试用建版失败 → 卡片内显示错误且不跳转', async () => {

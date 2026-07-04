@@ -49,6 +49,17 @@ function boundariesBlock(view: SkillPackageRuntimeView): string {
   return `风险级别：${riskLevel}\n红线（越过即拒答并简要说明原因）：\n${lines}`;
 }
 
+function runtimeTruthBlock(now = new Date()): string {
+  const today = now.toISOString().slice(0, 10);
+  return [
+    '# 真实性与证据边界',
+    `当前运行日期：${today}。如果产物需要 generatedAt / 生成日期，只能使用这个日期，不要凭记忆或上下文猜日期。`,
+    '只依据用户本次消息、会话中已给出的材料、以及能力包公开描述作答。',
+    '如果用户提供的是“摘录 / 片段 / summary / 部分代码”，禁止把片段外事实写成确定结论；必须标成“证据不足 / 需查看完整材料后确认”。',
+    '输出应区分：已由材料直接证明的问题、材料暗示但需补证的风险、以及建议补测项。',
+  ].join('\n');
+}
+
 /** 产物协议：约束模型「成品进 artifact、正文只放说明」，并按 output.type 选 kind。 */
 function artifactProtocol(view: SkillPackageRuntimeView): string {
   const kind = recommendedKind(view);
@@ -64,7 +75,7 @@ function artifactProtocol(view: SkillPackageRuntimeView): string {
     '    （含 <!doctype html>、<html>、内联 <style>/<script>）；可用公共 CDN，禁止外链需要鉴权的私有资源。',
     '  - markdown：富文本文档（报告/文章/说明）。',
     '  - code：单文件代码产物（用 language 标注语言，如 ts/python/sql）。',
-    '  - structured：结构化数据产物（评分卡/清单/字段表），content 用 JSON 字符串。',
+    '  - structured：结构化数据产物（评分卡/清单/字段表），content 用 JSON 字符串；若有 meta.generatedAt，必须使用平台注入的当前运行日期；若材料是摘录，meta 或正文中必须标注证据范围。',
     `- 本能力 output.type=${view.output.type} → 优先用 kind=${kind}。`,
     '- 产出后用一两句话说明你做了什么、可以怎么用，并主动邀请用户继续迭代；不要在正文重复 artifact 全文。',
   ].join('\n');
@@ -91,6 +102,8 @@ export function composeSystemPrompt(view: SkillPackageRuntimeView): string {
     '',
     '# 边界',
     boundariesBlock(view),
+    '',
+    runtimeTruthBlock(),
     '',
     artifactProtocol(view),
   ].join('\n');

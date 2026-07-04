@@ -9,6 +9,22 @@
 import type { ReactElement } from 'react';
 import type { PairResult, PairStatusView } from '@cb/shared';
 
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\"'\"'")}'`;
+}
+
+/**
+ * 后端当前返回的命令形如 `curl -fsSL http://.../script?code=123 | sh`。
+ * zsh 默认开启 nomatch，未加引号的 `?code=` 会被当成文件 glob，导致 curl 尚未执行就失败。
+ * 这里保持命令语义不变，只把 URL 参数段做 shell-safe 引号处理；复制与展示共用同一结果。
+ */
+export function shellSafePairCommand(command: string): string {
+  return command.replace(
+    /(curl(?:\s+-[A-Za-z]+)*\s+)(https?:\/\/[^\s'"]*\?[^\s'"]*)(?=\s|$)/u,
+    (_match, prefix: string, url: string) => `${prefix}${shellQuote(url)}`,
+  );
+}
+
 export interface CommandBoxProps {
   /** 铸码结果（command 一行命令 + curlOneLiner 验收口径串 + expiresAt）。 */
   pair: PairResult;
@@ -53,6 +69,7 @@ export function CommandBox({
 }: CommandBoxProps): ReactElement {
   const phase = status?.phase ?? 'waiting';
   const expired = phase === 'expired';
+  const command = shellSafePairCommand(pair.command);
 
   return (
     <section className="cb-cmdbox" aria-label="连接本机并运行命令">
@@ -63,7 +80,7 @@ export function CommandBox({
 
       {/* 一行可复制命令（带专属配对码）。展示与复制同为真命令 pair.command（不再用占位 curlOneLiner）。 */}
       <div className="cb-cmdbox__command">
-        <code className="cb-cmdbox__command-text">{pair.command}</code>
+        <code className="cb-cmdbox__command-text">{command}</code>
         <button
           type="button"
           className="cb-btn cb-cmdbox__copy"

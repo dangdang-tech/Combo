@@ -74,6 +74,8 @@ const TRIAL_PHASE_LABEL: Record<TrialLaunchPhase, string> = {
   error: '重试试用 →',
 };
 
+const EXTRACT_IDEMPOTENCY_VERSION = 'full-cluster-v2';
+
 function fallbackError(userMessage: string): ApiError {
   return new ApiError({ error: { userMessage, retriable: true, action: 'retry', traceId: '' } });
 }
@@ -144,19 +146,27 @@ function ExtractJobStream({
 }
 
 export function CapabilitiesStepPage(): ReactElement {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
-  const { draftId: ctxDraftId, snapshotId: ctxSnapshotId } = useWizard();
+  const {
+    draftId: ctxDraftId,
+    snapshotId: ctxSnapshotId,
+    extractJobId: ctxExtractJobId,
+    batchId: ctxBatchId,
+    setExtractJobId,
+  } = useWizard();
 
   // 来源优先级：URL ?snapshotId= / ?extractJobId=（上传自动带入或深链）→ 向导上下文回填。
   const snapshotId = searchParams.get('snapshotId') ?? ctxSnapshotId ?? undefined;
   const urlExtractJobId = searchParams.get('extractJobId') ?? undefined;
   const urlBatchId = searchParams.get('batchId') ?? undefined;
+  const extractJobId = urlExtractJobId ?? ctxExtractJobId ?? undefined;
+  const batchId = urlBatchId ?? ctxBatchId ?? undefined;
   const draftId = ctxDraftId ?? searchParams.get('draftId') ?? undefined;
 
   // 有 extractJobId → 直接连该流；否则触发新萃取。
   const [phase, setPhase] = useState<Phase>(
-    urlExtractJobId ? { kind: 'extracting', jobId: urlExtractJobId } : { kind: 'triggering' },
+    extractJobId ? { kind: 'extracting', jobId: extractJobId } : { kind: 'triggering' },
   );
   const [candidates, setCandidates] = useState<CandidateView[]>([]);
   const [doneResult, setDoneResult] = useState<ExtractDoneResult | undefined>();
@@ -177,12 +187,12 @@ export function CapabilitiesStepPage(): ReactElement {
   //   绝不重新触发一次发布（否则同候选被重复建版重复发布 → 市集重复上架，回归 BUG）。批 SSE 订阅其 jobId 恢复逐项态。
   const resumedBatchRef = useRef(false);
   useEffect(() => {
-    if (!urlBatchId || resumedBatchRef.current) return;
+    if (!batchId || resumedBatchRef.current) return;
     resumedBatchRef.current = true;
     let active = true;
     void (async () => {
       try {
-        const view = await fetchPublishBatch(urlBatchId);
+        const view = await fetchPublishBatch(batchId);
         if (active) setBatchView(view);
       } catch {
         // 拉批失败不致命：退回普通 ready 态（用户可重新发布，幂等键仍防重）。
@@ -191,12 +201,19 @@ export function CapabilitiesStepPage(): ReactElement {
     return () => {
       active = false;
     };
-  }, [urlBatchId]);
+  }, [batchId]);
 
-  // 触发幂等键带萃取策略版本：同一 snapshot 切到新版 session-mock 后要重新跑，不回放旧聚类结果。
+  useEffect(() => {
+    if (!extractJobId || phase.kind !== 'triggering') return;
+    setPhase({ kind: 'extracting', jobId: extractJobId });
+  }, [extractJobId, phase.kind]);
+
+  // 触发幂等键带萃取策略版本：同一 snapshot 切到新版真实聚类策略后要重新跑，不回放旧结果。
   const triggerKey = useMemo(
     () =>
-      snapshotId ? `extract:session-mock-v1:${draftId ?? 'nodraft'}:${snapshotId}` : undefined,
+      snapshotId
+        ? `extract:${EXTRACT_IDEMPOTENCY_VERSION}:${draftId ?? 'nodraft'}:${snapshotId}`
+        : undefined,
     [snapshotId, draftId],
   );
 
@@ -212,6 +229,15 @@ export function CapabilitiesStepPage(): ReactElement {
       try {
         const accepted = await createExtractJob(snapshotId, triggerKey, draftId ? { draftId } : {});
         if (!active) return;
+        setExtractJobId(accepted.jobId);
+        setSearchParams(
+          (current) => {
+            const next = new URLSearchParams(current);
+            if (!next.has('extractJobId')) next.set('extractJobId', accepted.jobId);
+            return next;
+          },
+          { replace: true },
+        );
         setPhase({ kind: 'extracting', jobId: accepted.jobId });
       } catch (e) {
         if (!active) return;
@@ -221,7 +247,7 @@ export function CapabilitiesStepPage(): ReactElement {
     return () => {
       active = false;
     };
-  }, [phase.kind, snapshotId, triggerKey, draftId, attempt]);
+  }, [phase.kind, snapshotId, triggerKey, draftId, attempt, setExtractJobId, setSearchParams]);
 
   // SSE done → 拉全量候选 → 默认全选（ready 项）→ ready 态。
   const handleJobDone = useCallback((doneJobId: string, done: DonePayload | undefined): void => {
@@ -356,8 +382,8 @@ export function CapabilitiesStepPage(): ReactElement {
                 hash: location.hash,
                 draftId,
                 snapshotId,
-                extractJobId: urlExtractJobId,
-                batchId: urlBatchId,
+                extractJobId,
+                batchId,
               }),
             );
             openRuntimeTrial(`/try/session/${created.session.id}?returnTo=${returnTo}`);
@@ -422,8 +448,8 @@ export function CapabilitiesStepPage(): ReactElement {
       location.search,
       snapshotId,
       trialLaunch,
-      urlBatchId,
-      urlExtractJobId,
+      batchId,
+      extractJobId,
     ],
   );
 
@@ -488,8 +514,8 @@ export function CapabilitiesStepPage(): ReactElement {
             hash: location.hash,
             draftId,
             snapshotId,
-            extractJobId: urlExtractJobId,
-            batchId: urlBatchId,
+            extractJobId,
+            batchId,
           }),
         );
         openRuntimeTrial(`/try/session/${created.session.id}?returnTo=${returnTo}`);
@@ -515,8 +541,8 @@ export function CapabilitiesStepPage(): ReactElement {
     trialSse.done,
     trialSse.error,
     trialSse.status,
-    urlBatchId,
-    urlExtractJobId,
+    batchId,
+    extractJobId,
   ]);
 
   const merged = useMemo(() => {

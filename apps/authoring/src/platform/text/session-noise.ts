@@ -4,11 +4,16 @@
 const PLATFORM_PROMPT_PREFIXES = [
   '<environment_context>',
   '# AGENTS.md instructions',
+  '# Instructions',
   '# Files mentioned by the user:',
   '<local-command-caveat>',
   'Generate a title and a git branch name for a coding agent from the user prompt',
   'You are editing a Markdown artifact for a local AI doc editor.',
+  'You are building in a Figma file via',
+  'Reply with OK only',
 ];
+
+const BLOCKED_CAPABILITY_LABELS = new Set(['任务怎么样了']);
 
 export function firstNonEmptyLine(text: string | null | undefined): string {
   if (!text) return '';
@@ -35,5 +40,5 @@ export function isPlatformPromptText(text: string | null | undefined): boolean {
 export function isBlockedCapabilityLabel(text: string | null | undefined): boolean {
   const first = firstNonEmptyLine(text);
   if (!first) return true;
-  return isPlatformPromptText(first);
+  return isPlatformPromptText(first) || BLOCKED_CAPABILITY_LABELS.has(first);
 }

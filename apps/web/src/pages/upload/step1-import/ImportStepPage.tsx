@@ -18,7 +18,7 @@ import { findDraftById, useWizard, useBootstrapDraft } from '../../wizard/index.
 import { ImportEmptyState } from './ImportEmptyState.js';
 import { BrowserUploadProgress } from './BrowserUploadProgress.js';
 import { useBrowserImport } from './useBrowserImport.js';
-import { CommandBox } from './CommandBox.js';
+import { CommandBox, shellSafePairCommand } from './CommandBox.js';
 import { ImportLoading } from './ImportLoading.js';
 import { ImportComplete } from './ImportComplete.js';
 import { usePairPolling } from './usePairPolling.js';
@@ -289,7 +289,9 @@ export function ImportStepPage(): ReactElement {
 
   const handleCopy = useCallback((): void => {
     if (phase.kind !== 'pairing') return;
-    void navigator.clipboard?.writeText(phase.pair.command).catch(() => undefined);
+    void navigator.clipboard
+      ?.writeText(shellSafePairCommand(phase.pair.command))
+      .catch(() => undefined);
     setCopied(true);
   }, [phase]);
 

@@ -6,6 +6,8 @@ import {
   slugify,
   clusterSegments,
   scoreCandidates,
+  selectPublishableCandidates,
+  assessCandidatePublishQuality,
   nameOne,
   isEffectiveSessionForMock,
   nameSessionCapability,
@@ -227,6 +229,27 @@ describe('clusterSegments — 聚类相似工作流', () => {
         content:
           'user: Generate a title and a git branch name for a coding agent from the user prompt ...',
       }),
+      mkSeg({
+        segmentId: 'n-instructions',
+        title: '# Instructions (read first)',
+        content: 'system: # Instructions (read first)',
+      }),
+      mkSeg({
+        segmentId: 'n-ok',
+        title: 'Reply with OK only.',
+        content: 'system: Reply with OK only.',
+      }),
+      mkSeg({
+        segmentId: 'n-figma',
+        title: 'You are building in a Figma file via the plugin',
+        content: 'system: You are building in a Figma file via the plugin',
+      }),
+      mkSeg({
+        segmentId: 'n-status',
+        title: '任务怎么样了',
+        content: 'user: 任务怎么样了',
+        messageCount: 3,
+      }),
     ];
     const real = Array.from({ length: 3 }, (_, i) =>
       mkSeg({
@@ -294,6 +317,181 @@ describe('scoreCandidates — 评估 + 排序', () => {
       expect(v).toBeGreaterThanOrEqual(0);
       expect(v).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+describe('selectPublishableCandidates — 发布准备质量门槛', () => {
+  it('阻断单段候选和极低内聚大簇，只让可复用且范围清晰的候选进入 trial 准备', () => {
+    const publishable = scoreCandidates(
+      clusterSegments([
+        mkSeg({
+          segmentId: 'good-1',
+          project: 'good',
+          title: '设计评审',
+          content: '设计 评审 视觉 层级 间距 修复',
+          messageCount: 20,
+        }),
+        mkSeg({
+          segmentId: 'good-2',
+          project: 'good',
+          title: '设计评审',
+          content: '设计 评审 视觉 层级 间距 修复',
+          messageCount: 20,
+        }),
+      ]),
+      Date.parse('2026-06-15T00:00:00Z'),
+    )[0]!;
+    const single = scoreCandidates(
+      clusterSegments([
+        mkSeg({
+          segmentId: 'single',
+          project: 'one-off',
+          title: '单次查询',
+          content: '只执行一次 查询 当前 IP',
+          messageCount: 20,
+        }),
+      ]),
+      Date.parse('2026-06-15T00:00:00Z'),
+    )[0]!;
+    const lowCoherence = {
+      ...publishable,
+      slug: 'low-coherence',
+      segmentCount: 20,
+      frequencyRatio: 1,
+      reusability: 0.9,
+      scopeCoherence: 0.05,
+      splitSuggested: true,
+    };
+
+    const selected = selectPublishableCandidates([lowCoherence, single, publishable]);
+    expect(selected.map((c) => c.slug)).toEqual([publishable.slug]);
+  });
+
+  it('最多保留前 12 个候选，避免真实长 session 逐个准备几十个 trial capability', () => {
+    const base = scoreCandidates(
+      clusterSegments([
+        mkSeg({
+          segmentId: 'base-1',
+          project: 'base',
+          title: '文档评审',
+          content: '文档 评审 结构 表达 修改 交付',
+          messageCount: 20,
+        }),
+        mkSeg({
+          segmentId: 'base-2',
+          project: 'base',
+          title: '文档评审',
+          content: '文档 评审 结构 表达 修改 交付',
+          messageCount: 20,
+        }),
+      ]),
+      Date.parse('2026-06-15T00:00:00Z'),
+    )[0]!;
+    const many = Array.from({ length: 15 }, (_, i) => ({
+      ...base,
+      slug: `publishable-${String(i).padStart(2, '0')}`,
+      reusability: 0.9 - i * 0.01,
+    }));
+
+    expect(selectPublishableCandidates(many)).toHaveLength(12);
+  });
+
+  it('阻断少证据的一次性查询，但保留绑定 creator context 且有外部价值的候选', () => {
+    const founderReview = scoreCandidates(
+      clusterSegments([
+        mkSeg({
+          segmentId: 'goal-1',
+          project: 'YC 学习报告',
+          title: '融资故事审查',
+          content: '飞书 文档 融资 故事 审查 拷打 问题 漏洞 交付 修改建议',
+          messageCount: 24,
+        }),
+        mkSeg({
+          segmentId: 'goal-2',
+          project: 'YC 学习报告',
+          title: '融资故事审查',
+          content: 'YC 视频 笔记 融资 叙事 分析 报告 评审 创业者 交付',
+          messageCount: 24,
+        }),
+      ]),
+      Date.parse('2026-07-05T00:00:00Z'),
+    )[0]!;
+    const oneOffFeeQuery = scoreCandidates(
+      clusterSegments([
+        mkSeg({
+          segmentId: 'fa-1',
+          project: 'fa',
+          title: '中国 FA一般给多少百分比作为服务费',
+          content: '中国 FA 一般 给多少 百分比 服务费比例 查询',
+          messageCount: 10,
+        }),
+        mkSeg({
+          segmentId: 'fa-2',
+          project: 'fa',
+          title: '中国 FA一般给多少百分比作为服务费',
+          content: '中国 FA 一般 给多少 百分比 服务费比例 查询',
+          messageCount: 10,
+        }),
+      ]),
+      Date.parse('2026-07-05T00:00:00Z'),
+    )[0]!;
+
+    const founderQuality = assessCandidatePublishQuality(founderReview);
+    const feeQuality = assessCandidatePublishQuality(oneOffFeeQuery);
+    expect(founderQuality.creatorContext).toBeGreaterThanOrEqual(0.25);
+    expect(founderQuality.externalValue).toBeGreaterThanOrEqual(0.25);
+    expect(feeQuality.oneOffPenalty).toBeGreaterThan(0);
+
+    expect(selectPublishableCandidates([oneOffFeeQuery, founderReview])).toEqual([
+      founderReview,
+    ]);
+  });
+
+  it('保留高证据的长期维护类 creator 工作流，避免真实长 snapshot 候选归零', () => {
+    const base = scoreCandidates(
+      clusterSegments([
+        mkSeg({
+          segmentId: 'maint-1',
+          project: 'awesome-weread',
+          title: 'Automation: Awesome WeRead maintenance',
+          content: 'automation maintenance docs check repair workflow release',
+          messageCount: 12,
+        }),
+        mkSeg({
+          segmentId: 'maint-2',
+          project: 'awesome-weread',
+          title: 'Automation: Awesome WeRead maintenance',
+          content: 'automation maintenance docs check repair workflow release',
+          messageCount: 12,
+        }),
+      ]),
+      Date.parse('2026-07-05T00:00:00Z'),
+    )[0]!;
+    const evidenceBacked = {
+      ...base,
+      slug: 'automation-awesome-weread-maintenance',
+      clusterLabel: 'Automation: Awesome WeRead maintenance',
+      segmentCount: 87,
+      reusability: 0.205,
+      scopeCoherence: 0.63,
+      splitSuggested: false,
+    };
+    const weak = {
+      ...base,
+      slug: 'status-dump',
+      clusterLabel: 'status dump',
+      segmentCount: 87,
+      reusability: 0.205,
+      scopeCoherence: 0.63,
+      splitSuggested: false,
+      segments: base.segments.map((s) => ({
+        ...s,
+        title: 'status dump',
+        project: 'scratchpad',
+      })),
+    };
+
+    expect(selectPublishableCandidates([weak, evidenceBacked])).toEqual([evidenceBacked]);
   });
 });
 

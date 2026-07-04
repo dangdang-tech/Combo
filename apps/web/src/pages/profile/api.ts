@@ -44,6 +44,18 @@ export async function fetchProfile(
   return { data: res.data, meta: res.meta };
 }
 
+/** 公开创作者主页 by slug：/c/:slug 使用，返回同一张公开名片结构。 */
+export async function fetchProfileBySlug(
+  slug: string,
+  opts: RequestOptions = {},
+): Promise<EnvelopeResult<CreatorProfile>> {
+  const res = await apiGetEnvelope<CreatorProfile>(
+    `/creators/by-slug/${encodeURIComponent(slug)}/profile`,
+    opts,
+  );
+  return { data: res.data, meta: res.meta };
+}
+
 export interface DensityParams {
   cursor?: string | undefined;
   limit?: number | undefined;

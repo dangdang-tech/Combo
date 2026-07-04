@@ -87,12 +87,38 @@ export async function getPublishedCapability(
     `SELECT v.capability_id, c.slug, v.version, v.status, v.manifest, v.manifest_hash
        FROM capabilities c
        JOIN capability_versions v ON v.id = c.current_version_id
+       LEFT JOIN capability_candidates cc ON cc.id = v.source_candidate_id
+       LEFT JOIN marketplace_listings ml
+         ON ml.capability_id = c.id
+        AND ml.version_id = v.id
       WHERE (c.slug = $1 OR c.id::text = $1)
+        AND c.status = 'active'
         AND v.status = 'published'
         -- 仅公开能力可被试用端直读：unlisted（私享，仅 share_token 可达，且不进市集 list）必须排除，
         --   否则任何知道/猜到 slug 的人都能加载它、开会话拿到它的私有 instructions（访问控制漏洞）。
         --   share_token 试用是后续能力；本期 unlisted 不可试用，与 list.ts 排除 unlisted 保持一致。
         AND COALESCE(v.visibility, 'public') = 'public'
+        -- 与市集列表保持同一去重口径：同一创作者、同一真实 snapshot、同一候选主题 slug 只允许最新代表被公开直达。
+        -- 旧重复能力行留库供审计，但不能通过猜/收藏旧 slug 绕过 list 去重继续开会话。
+        AND NOT EXISTS (
+          SELECT 1
+            FROM capabilities c2
+            JOIN capability_versions v2 ON v2.id = c2.current_version_id
+            JOIN capability_candidates cc2 ON cc2.id = v2.source_candidate_id
+            LEFT JOIN marketplace_listings ml2
+              ON ml2.capability_id = c2.id
+             AND ml2.version_id = v2.id
+           WHERE c2.id <> c.id
+             AND c2.creator_user_id = c.creator_user_id
+             AND c2.status = 'active'
+             AND v2.status = 'published'
+             AND COALESCE(v2.visibility, 'public') = 'public'
+             AND cc.snapshot_id IS NOT NULL
+             AND cc.slug IS NOT NULL
+             AND cc2.snapshot_id = cc.snapshot_id
+             AND cc2.slug = cc.slug
+             AND COALESCE(ml2.updated_at, v2.updated_at) > COALESCE(ml.updated_at, v.updated_at)
+        )
       LIMIT 1`,
     [slugOrId],
   );

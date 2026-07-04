@@ -232,8 +232,8 @@ function seedSegments(db: ExtractFakeDb, snapshotId: string): void {
       id: `seg-a-${i}`,
       snapshot_id: snapshotId,
       project: 'alpha',
-      title: '重构模块',
-      content: 'refactor module dependency 重构 依赖 分析',
+      title: '代码依赖审查',
+      content: '代码 依赖 重构 审查 分析 修复 交付 回归',
     });
     db.segments.set(s.id, s);
   }
@@ -242,8 +242,8 @@ function seedSegments(db: ExtractFakeDb, snapshotId: string): void {
       id: `seg-b-${i}`,
       snapshot_id: snapshotId,
       project: 'beta',
-      title: '写测试',
-      content: 'write unit test 写 单元 测试 覆盖',
+      title: '测试覆盖评审',
+      content: '代码 单元 测试 覆盖 评审 验证 交付',
     });
     db.segments.set(s.id, s);
   }

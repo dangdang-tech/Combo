@@ -1,44 +1,47 @@
-/* 创作者中心设计系统（Figma XwOk3OdwHGSt6gviqS2Doy 还原，BUG-012）。
-   暖米中性面 + 砖红强调 + 衬线标题 / 等宽 label。 */
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;600&family=Noto+Sans+SC:wght@400;500;700&family=Geist+Mono:wght@400;500;700&display=swap');
+/* Combo 设计系统（Figma XwOk3OdwHGSt6gviqS2Doy / node 2409:24）。
+   白色内容底 + 浅灰侧栏 + Combo 墨色/砖红品牌 + 衬线标题 / 等宽 label。 */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,900&family=Noto+Serif+SC:wght@500;600&family=Noto+Sans+SC:wght@400;500;700&family=Geist+Mono:wght@400;500;700&display=swap');
 :root {
   /* 尺寸 */
   --cb-sidebar-w: 288px;
   --cb-sidebar-w-collapsed: 64px;
   /* 主内容最大宽（Figma 内容画布约 1120px；上一版 840 过窄，致工作流右侧大片空白，BUG-016）。 */
   --cb-content-max: 1200px;
-  /* 暖米中性面：bone(页面) → rail(侧栏) → paper(卡片) → raised(抬升面) */
-  --cb-bg: #f7f3ec;
-  --cb-rail: #f4f0e7;
-  --cb-surface: #fbf9f4;
-  --cb-surface-raised: #fffdf9;
+  /* 页面底 / 侧栏 / surface */
+  --cb-bg: #ffffff;
+  --cb-rail: #f7f7f7;
+  --cb-surface: #ffffff;
+  --cb-surface-raised: #ffffff;
   /* 文字 / 边框 / 骨架 */
-  --cb-fg: #14141a;
-  --cb-muted: #6f6860;
-  --cb-border: #e1d8ca;
-  --cb-skeleton: rgba(115, 110, 102, 0.28);
-  --cb-grid: rgba(225, 216, 202, 0.6);
-  /* 砖红强调 */
+  --cb-fg: #1c1b19;
+  --cb-muted: #66706c;
+  --cb-border: #dbe0db;
+  --cb-skeleton: #eef2ef;
+  --cb-grid: rgba(219, 224, 219, 0.72);
+  /* Combo 砖红强调 */
   --cb-accent: #a73718;
-  --cb-accent-strong: #a73818;
+  --cb-accent-strong: #8f2f14;
+  --cb-accent-pressed: #6f210e;
   --cb-accent-soft: rgba(167, 55, 24, 0.1);
+  --cb-focus-ring: #77a590;
   /* 语义色 */
-  --cb-badge-ok: #0e6d52;
-  --cb-ok-olive: #4a6641;
-  --cb-warn: #b8893a;
+  --cb-badge-ok: #47714f;
+  --cb-ok-olive: #47714f;
+  --cb-warn: #8a6414;
   --cb-danger: #b3261e;
   /* 圆角 / 阴影 */
   --cb-radius-card: 8px;
   --cb-radius-control: 6px;
   --cb-radius-pill: 999px;
   --cb-shadow-card: none;
-  /* 字体三族：衬线标题 / 无衬线正文 / 等宽 label */
+  /* 字体四族：品牌字标 / 衬线标题 / 无衬线正文 / 等宽 label */
+  --cb-font-brand: 'Fraunces', 'Noto Serif SC', serif;
   --cb-font-serif: 'Noto Serif SC', 'Songti SC', 'STSong', serif;
   --cb-font-sans:
     'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --cb-font-mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', 'Roboto Mono', monospace;
   /* 热力图砖红五阶 */
-  --cb-heat-0: #f4f0e7;
+  --cb-heat-0: #eef2ef;
   --cb-heat-1: #eac4ba;
   --cb-heat-2: #d1826b;
   --cb-heat-3: #b75130;
@@ -54,6 +57,43 @@ body {
   font-family: var(--cb-font-sans);
   color: var(--cb-fg);
   background: var(--cb-bg);
+}
+
+.cb-brand-wordmark {
+  display: inline-flex;
+  align-items: baseline;
+  font-family: var(--cb-font-brand);
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 0.9;
+  color: var(--cb-fg);
+}
+
+.cb-brand-wordmark__accent,
+.cb-brand-wordmark__dot {
+  color: var(--cb-accent);
+}
+
+.cb-brand-mark {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--cb-fg);
+  color: var(--cb-surface-raised);
+  font-family: var(--cb-font-brand);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.cb-brand-mark__dot {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--cb-accent);
 }
 
 /* ---------- Shell ---------- */
@@ -98,25 +138,17 @@ body {
 }
 
 .cb-shell__brand-mark {
-  /* 展开态隐去徽标，仅留衬线「Agora」字（Figma 展开壳 1153:65 无 A 方块）；收起态再现身做品牌锚。 */
+  /* 展开态隐去图标，仅留 Combo 字标；收起态再现身做品牌锚。 */
   display: none;
-  align-items: center;
-  justify-content: center;
   width: 28px;
   height: 28px;
   flex: 0 0 auto;
   border-radius: 8px;
-  background: var(--cb-accent);
-  color: #fff;
-  font-weight: 700;
   font-size: 16px;
 }
 
 .cb-shell__brand-word {
-  font-family: var(--cb-font-serif);
-  font-weight: 500;
-  font-size: 22px;
-  letter-spacing: 0.2px;
+  font-size: 28px;
   white-space: nowrap;
 }
 
@@ -176,7 +208,7 @@ body {
   padding: 8px 12px;
   margin: 2px 0;
   border-radius: 6px;
-  /* Figma 未选中导航文字为深色 #14141a 15px（此前用 muted 灰，整条导航偏淡，BUG-016）。 */
+  /* Figma 未选中导航文字为 text/primary 15px（此前用 muted 灰，整条导航偏淡，BUG-016）。 */
   color: var(--cb-fg);
   font-size: 15px;
   text-decoration: none;
@@ -186,6 +218,17 @@ body {
 .cb-shell__navlink:hover {
   background: var(--cb-surface);
   color: var(--cb-fg);
+}
+
+.cb-shell__navlink--disabled {
+  color: color-mix(in srgb, var(--cb-muted) 62%, var(--cb-surface) 38%);
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.cb-shell__navlink--disabled:hover {
+  background: transparent;
+  color: color-mix(in srgb, var(--cb-muted) 62%, var(--cb-surface) 38%);
 }
 
 .cb-shell__navicon {
@@ -278,6 +321,7 @@ body {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  background: var(--cb-bg);
 }
 
 .cb-shell__topbar {
@@ -287,7 +331,7 @@ body {
   gap: 16px;
   height: 52px;
   padding: 0 24px;
-  border-bottom: 1px solid var(--cb-border);
+  border: 0;
   background: var(--cb-surface);
   position: relative;
 }
@@ -297,7 +341,7 @@ body {
   flex: 0 0 auto;
 }
 
-/* 向导页顶栏左侧面包屑（Figma STEP 顶栏：「上传能力 / Creator Builder」，页名砖红大字 + 产品域灰副）。 */
+/* 向导页顶栏左侧面包屑（Figma STEP 顶栏：「上传能力 / Combo Builder」，页名砖红大字 + 产品域灰副）。 */
 .cb-shell__crumbs {
   display: flex;
   align-items: baseline;
@@ -315,14 +359,14 @@ body {
   color: var(--cb-accent);
 }
 
-/* 「Creator Builder」产品域：Figma STEP 顶栏为深色 15px 加粗（非灰副），与砖红页名同处一行。 */
+/* 「Combo Builder」产品域：Figma STEP 顶栏为深色 15px 加粗（非灰副），与砖红页名同处一行。 */
 .cb-shell__crumb-root {
   font-size: 15px;
   font-weight: 700;
   color: var(--cb-fg);
 }
 
-/* 顶栏居中字标（Figma：AGORA · CREATOR · 当前页，等宽大写小字）。 */
+/* 顶栏居中字标（Figma：COMBO · CREATOR · 当前页，等宽大写小字）。 */
 .cb-shell__eyebrow {
   position: absolute;
   left: 50%;
@@ -393,17 +437,13 @@ body {
 .cb-shell__content {
   padding: 24px;
   flex: 1;
+  background: var(--cb-bg);
 }
 
-/* ---- 向导态（五步上传）外壳还原（Figma step1–4 主区为一张描边圆角卡片） ----
-   主区（顶栏 + 内容）整体成卡：1px 描边 + 8px 圆角，浮在页面底上（四周留白让卡片读出来）。
-   顶栏在卡内为 64px 一条栏：左面包屑、右「保存草稿 + 头像」。内容区 840px 居中、上下留白对齐设计。 */
+/* ---- 向导态（五步上传） ----
+   顶栏与右侧纯白内容区同底，不再额外包一层描边卡片。 */
 .cb-shell[data-wizard='true'] .cb-shell__main {
-  margin: 16px;
-  border: 1px solid var(--cb-border);
-  border-radius: var(--cb-radius-card);
   background: var(--cb-bg);
-  overflow: hidden;
 }
 
 .cb-shell[data-wizard='true'] .cb-shell__topbar {
@@ -1297,7 +1337,7 @@ body {
   overflow: hidden;
 }
 
-/* 封面横幅：暖米渐变 + 底部砖红细线（头像压在线上）。 */
+/* 封面横幅：冷纸渐变 + 底部砖红细线（头像压在线上）。 */
 .cb-profile-hero__cover {
   height: 116px;
   background: linear-gradient(160deg, var(--cb-raised) 0%, var(--cb-rail) 100%);
@@ -2146,32 +2186,71 @@ body {
 .cb-auth-gate {
   min-height: 100vh;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
   padding: 24px;
+  background:
+    linear-gradient(to right, var(--cb-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--cb-grid) 1px, transparent 1px), var(--cb-bg);
+  background-size: 48px 48px;
+}
+.cb-auth-gate__panel {
+  width: min(100%, 380px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 34px 40px 30px;
   text-align: center;
+  background: var(--cb-surface);
+  border: 1px solid var(--cb-border);
+  border-radius: 8px;
 }
 .cb-auth-gate__brand {
+  display: inline-flex;
+  align-items: center;
+  color: var(--cb-fg);
+  margin-bottom: 2px;
+}
+.cb-auth-gate__brand-word {
+  font-size: 34px;
+  line-height: 0.86;
+}
+.cb-auth-gate__eyebrow {
+  margin: -2px 0 0;
+  font-family: var(--cb-font-mono);
+  font-size: 10px;
   font-weight: 700;
-  font-size: 22px;
-  letter-spacing: 0.2px;
-  color: var(--cb-accent);
+  letter-spacing: 0.08em;
+  color: var(--cb-muted);
 }
 .cb-auth-gate__msg {
-  margin: 0;
-  font-size: 15px;
+  margin: 2px 0 0;
+  font-size: 14px;
+  line-height: 1.7;
   color: var(--cb-fg);
+}
+.cb-auth-gate__actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 2px;
 }
 .cb-auth-gate__action {
   border: none;
   background: var(--cb-accent);
   color: #fff;
   border-radius: 6px;
-  padding: 8px 24px;
+  min-width: 72px;
+  height: 36px;
+  padding: 0 22px;
   font-size: 14px;
+  font-weight: 700;
+  font-family: var(--cb-font-sans);
   cursor: pointer;
+}
+.cb-auth-gate__action:hover {
+  background: var(--cb-accent-strong);
 }
 
 /* ======== 对外裸壳 PublicLayout（无创作者外壳/侧栏/账号） ======== */
@@ -2196,21 +2275,13 @@ body {
 }
 .cb-public-shell__brand-mark {
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  background: var(--cb-accent);
-  color: #fff;
-  font-weight: 700;
   font-size: 16px;
 }
 .cb-public-shell__brand-word {
-  font-family: var(--cb-font-serif);
-  font-weight: 700;
-  font-size: 17px;
-  letter-spacing: 0.2px;
+  font-size: 24px;
 }
 .cb-public-shell__content {
   flex: 1;
@@ -2262,7 +2333,129 @@ body {
   font-size: 12px;
 }
 
-/* 草稿条单 bar（Figma：暖米横 bar，label + 胶囊行 + 单 CTA，BUG-012 结构精修）。 */
+.cb-public-capability {
+  max-width: 1040px;
+  margin: 0 auto;
+}
+.cb-public-capability__hero {
+  padding: 32px 0 28px;
+  border-bottom: 1px solid var(--cb-border);
+}
+.cb-public-capability__eyebrow {
+  margin: 0 0 12px;
+  font-family: var(--cb-font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--cb-accent);
+}
+.cb-public-capability__title {
+  max-width: 760px;
+  margin: 0;
+  font-size: 40px;
+  line-height: 1.12;
+  font-weight: 760;
+  color: var(--cb-fg);
+}
+.cb-public-capability__tagline {
+  max-width: 760px;
+  margin: 14px 0 0;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--cb-fg);
+}
+.cb-public-capability__description {
+  max-width: 760px;
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--cb-muted);
+}
+.cb-public-capability__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+.cb-public-capability__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  padding: 22px 0 40px;
+}
+.cb-public-capability__panel {
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-card);
+  background: var(--cb-surface);
+  padding: 18px;
+}
+.cb-public-capability__panel--wide {
+  grid-column: 1 / -1;
+}
+.cb-public-capability__section-title {
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 760;
+}
+.cb-public-capability__field-list,
+.cb-public-capability__prompt-list,
+.cb-public-capability__boundary-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cb-public-capability__field {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--cb-border);
+}
+.cb-public-capability__field:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.cb-public-capability__field span {
+  min-width: 0;
+  font-weight: 650;
+  line-height: 1.45;
+}
+.cb-public-capability__field small {
+  flex-shrink: 0;
+  color: var(--cb-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.cb-public-capability__prompt,
+.cb-public-capability__boundary-list li {
+  padding: 11px 12px;
+  border-radius: 6px;
+  background: var(--cb-rail);
+  color: var(--cb-fg);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.cb-public-capability__boundary-list li {
+  color: var(--cb-muted);
+}
+
+@media (max-width: 760px) {
+  .cb-public-shell__content {
+    padding: 18px;
+  }
+  .cb-public-capability__title {
+    font-size: 30px;
+  }
+  .cb-public-capability__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 草稿条单 bar（Figma：冷纸横 bar，label + 胶囊行 + 单 CTA，BUG-012 结构精修）。 */
 .cb-draft-strip {
   display: flex;
   align-items: center;
@@ -2338,7 +2531,7 @@ body {
    两列布局（左切换器 ~190px + 右内容 flex-1，gap20）；paper 卡 rounded8 p16；
    字段行 label ~120px + value-box（surface-raised + seam 边 + rounded6）；
    软/硬 / 高低置信徽章；market-card；cover-picker 彩点；batch 进度条。
-   卡片无投影（box-shadow:none，靠 seam 描边分层）。复用暖米 token，绝不写死颜色。
+   卡片无投影（box-shadow:none，靠 seam 描边分层）。复用冷纸底 token，绝不写死颜色。
    ============================================================ */
 
 /* ---------- 能力页（PRD 2 步之第 2 步：单列能力行 + 一键发布） ---------- */

@@ -19,6 +19,7 @@ import {
 } from '@cb/shared';
 import {
   readCreatorProfile,
+  readProfileOwnerIdBySlug,
   readDensityPage,
   readHeatmap,
   readNetwork,
@@ -194,6 +195,43 @@ export function getCreatorProfileHandler(): RouteHandlerMethod {
     const isSelf = rawId === SELF_CREATOR_ALIAS || (viewerId !== null && creatorId === viewerId);
     if (!result && isSelf && req.auth) {
       result = buildSelfFallbackProfile({ userId: req.auth.userId, account: req.auth.account });
+    }
+    if (!result) return reply404(req, reply);
+
+    const placeholders: Record<string, string> = {};
+    for (const key of result.usagePlaceholderKeys) placeholders[key] = PROFILE_USAGE_PLACEHOLDER;
+
+    const body: Envelope<CreatorProfile> = {
+      data: result.profile,
+      meta: { traceId: req.id, placeholders },
+    };
+    reply.code(200).send(body);
+    return reply;
+  };
+}
+
+// ===========================================================================
+// §2.0b · GET /creators/by-slug/:slug/profile — 公开创作者主页 by slug
+// ===========================================================================
+
+export function getCreatorProfileBySlugHandler(): RouteHandlerMethod {
+  return async function (req: FastifyRequest, reply: FastifyReply) {
+    const { slug } = req.params as { slug: string };
+    const viewerId = req.auth?.userId ?? null;
+
+    let creatorId;
+    try {
+      creatorId = await readProfileOwnerIdBySlug(req.server.infra.db, slug);
+    } catch {
+      return reply500Aggregate(req, reply);
+    }
+    if (!creatorId) return reply404(req, reply);
+
+    let result;
+    try {
+      result = await readCreatorProfile(req.server.infra.db, creatorId, viewerId);
+    } catch {
+      return reply500Aggregate(req, reply);
     }
     if (!result) return reply404(req, reply);
 

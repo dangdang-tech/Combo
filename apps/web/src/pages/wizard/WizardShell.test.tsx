@@ -1,7 +1,7 @@
 // WizardShell 集成单测（F-09 / F-15；PRD 2 步坍缩后）：
 //   顶栏「保存草稿」/ 续传 ?draftId= 恢复 selection / 保存退出回工作台 / 无 draftId 存草稿人话退路 / 换步壳结构不变。
 //   步骤条（StepBar）+ 恒定底栏（WizardFooter）已随 2 步坍缩下线，不再断言。
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
@@ -90,6 +90,17 @@ describe('WizardShell（F-09 向导壳，2 步）', () => {
     await waitFor(() => expect(screen.getByTestId('selection')).toHaveTextContent('all'));
     // 落点步 = capabilities（URL 决定）。
     expect(screen.getByTestId('step')).toHaveTextContent('capabilities');
+  });
+
+  it('F-15 续传未完成前不挂载 Outlet，避免子页面首帧触发写请求', () => {
+    mock.restore();
+    globalThis.fetch = vi.fn(() => new Promise<Response>(() => {})) as unknown as typeof fetch;
+
+    renderWizard('/create/capabilities?draftId=d1');
+
+    expect(screen.getByRole('button', { name: '保存草稿' })).toBeInTheDocument();
+    expect(screen.getByText('正在恢复你的草稿…')).toBeInTheDocument();
+    expect(screen.queryByTestId('step')).toBeNull();
   });
 
   it('「保存草稿」有 draftId（草稿已落库）→ 退出回工作台（§5.0 每步可存草稿退出）', async () => {

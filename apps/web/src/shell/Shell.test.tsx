@@ -1,5 +1,5 @@
 // 导航外壳 Shell 测试（F-04，D14：外壳恒定）。覆盖 QA 外壳首页-02/03/04/05/06/07/28/36：
-//   三段式结构齐全、分组导航、收起/展开纯图标态、收起态可点可识别、面包屑分层、
+//   侧栏/主内容结构、分组导航、收起/展开纯图标态、收起态可点可识别、向导面包屑分层、
 //   五步流程外壳不重建、当前页高亮、收起偏好刷新不丢。
 //   无运行后端：纯前端外壳，路由用 MemoryRouter 驱动，子页用轻量占位。
 import type { ReactElement } from 'react';
@@ -40,21 +40,21 @@ function renderShell(initialPath = '/creator', account?: ShellAccount): void {
   );
 }
 
-describe('Shell 三段式结构 + 常驻元素（外壳首页-02）', () => {
+describe('Shell 侧栏 + 主内容常驻元素（外壳首页-02）', () => {
   beforeEach(() => globalThis.localStorage.clear());
 
-  it('侧栏 + 顶栏 + 主内容区三者同时存在', () => {
+  it('普通页只有侧栏 + 主内容区，不渲染顶部横栏', () => {
     renderShell();
     expect(screen.getByRole('complementary', { name: '侧边导航' })).toBeInTheDocument();
-    expect(screen.getByRole('banner')).toBeInTheDocument();
-    expect(screen.getByText(/AGORA · CREATOR/)).toBeInTheDocument();
+    expect(screen.queryByRole('banner')).toBeNull();
+    expect(screen.queryByText(/COMBO · CREATOR/)).toBeNull();
     expect(screen.getByRole('main')).toBeInTheDocument();
     expect(screen.getByTestId('page')).toHaveTextContent('工作台页');
   });
 
-  it('侧栏顶部有 Agora 品牌字标 + 收起/展开开关', () => {
+  it('侧栏顶部有 Combo 品牌字标 + 收起/展开开关', () => {
     renderShell();
-    expect(screen.getByText('Agora')).toBeInTheDocument();
+    expect(screen.getByLabelText('Combo 创作者中心 首页')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '收起侧栏' })).toBeInTheDocument();
   });
 
@@ -65,12 +65,6 @@ describe('Shell 三段式结构 + 常驻元素（外壳首页-02）', () => {
     expect(within(aside).getByText('CGO')).toBeInTheDocument();
     // 兜底首字母头像（avatarUrl=null）。
     expect(within(aside).getByRole('img', { name: 'Wayne · CGO' })).toHaveTextContent('W');
-  });
-
-  it('顶栏居中字标 AGORA · CREATOR · 当前页（Figma 顶栏）', () => {
-    renderShell();
-    const topbar = screen.getByRole('banner');
-    expect(within(topbar).getByText('AGORA · CREATOR · 工作台')).toBeInTheDocument();
   });
 });
 
@@ -87,8 +81,21 @@ describe('侧栏导航分两组且菜单项齐全（外壳首页-03）', () => {
     renderShell();
     const nav = screen.getByRole('navigation', { name: '主导航' });
     for (const label of ['工作台', '我的能力', '上传能力', '数据分析', '收益', '个人主页']) {
-      expect(within(nav).getByRole('link', { name: label })).toBeInTheDocument();
+      expect(within(nav).getByText(label)).toBeInTheDocument();
     }
+  });
+
+  it('暂未开放项置灰且不可点击（工作台/数据分析/收益/个人主页）', () => {
+    renderShell('/capabilities');
+    const nav = screen.getByRole('navigation', { name: '主导航' });
+    for (const label of ['工作台', '数据分析', '收益', '个人主页']) {
+      const item = within(nav).getByText(label).closest('.cb-shell__navlink');
+      expect(item).toHaveClass('cb-shell__navlink--disabled');
+      expect(item).toHaveAttribute('aria-disabled', 'true');
+    }
+    expect(within(nav).queryByRole('link', { name: '数据分析' })).toBeNull();
+    expect(within(nav).queryByRole('link', { name: '收益' })).toBeNull();
+    expect(within(nav).queryByRole('link', { name: '个人主页' })).toBeNull();
   });
 });
 
@@ -161,25 +168,23 @@ describe('收起 / 展开纯图标态（外壳首页-04/05/36）', () => {
   });
 });
 
-describe('顶栏居中字标页名（Figma 顶栏：AGORA · CREATOR · 当前页）', () => {
+describe('上传向导顶栏（Figma STEP 顶栏）', () => {
   beforeEach(() => globalThis.localStorage.clear());
 
-  it('工作台 → AGORA · CREATOR · 工作台', () => {
+  it('工作台 → 不渲染顶部横栏', () => {
     renderShell('/creator');
-    expect(
-      within(screen.getByRole('banner')).getByText('AGORA · CREATOR · 工作台'),
-    ).toBeInTheDocument();
+    expect(screen.queryByRole('banner')).toBeNull();
   });
 
-  it('五步页 extract → 顶栏改用面包屑「上传能力 / Creator Builder」，不显居中字标（Figma STEP 顶栏）', () => {
+  it('五步页 extract → 顶栏使用面包屑「上传能力 / Combo Builder」', () => {
     renderShell('/create/extract');
     const topbar = screen.getByRole('banner');
     expect(within(topbar).getByText('上传能力')).toBeInTheDocument();
-    expect(within(topbar).getByText('Creator Builder')).toBeInTheDocument();
-    // 向导页不再展示工作台式居中字标。
-    expect(within(topbar).queryByText(/AGORA · CREATOR/)).not.toBeInTheDocument();
+    expect(within(topbar).getByText('Combo Builder')).toBeInTheDocument();
+    expect(within(topbar).queryByText(/COMBO · CREATOR/)).not.toBeInTheDocument();
     // 顶栏右上常驻真实账号头像（Figma STEP 顶栏右上）。
     expect(within(topbar).getByRole('img', { name: 'Wayne · CGO' })).toBeInTheDocument();
+    expect(topbar).not.toHaveTextContent('向导顶栏右上');
   });
 });
 
@@ -190,7 +195,13 @@ describe('当前页高亮（外壳首页-28）', () => {
     const user = userEvent.setup();
     renderShell('/creator');
     const nav = screen.getByRole('navigation', { name: '主导航' });
-    expect(within(nav).getByRole('link', { name: '工作台' })).toHaveClass(
+    expect(within(nav).getByText('工作台').closest('.cb-shell__navlink')).toHaveClass(
+      'cb-shell__navlink--disabled',
+    );
+    expect(within(nav).getAllByRole('link')).toHaveLength(2);
+
+    await user.click(within(nav).getByRole('link', { name: '我的能力' }));
+    expect(within(nav).getByRole('link', { name: '我的能力' })).toHaveClass(
       'cb-shell__navlink--active',
     );
     const actives0 = within(nav)
@@ -198,11 +209,11 @@ describe('当前页高亮（外壳首页-28）', () => {
       .filter((el) => el.classList.contains('cb-shell__navlink--active'));
     expect(actives0).toHaveLength(1);
 
-    await user.click(within(nav).getByRole('link', { name: '数据分析' }));
-    expect(within(nav).getByRole('link', { name: '数据分析' })).toHaveClass(
+    await user.click(within(nav).getByRole('link', { name: '上传能力' }));
+    expect(within(nav).getByRole('link', { name: '上传能力' })).toHaveClass(
       'cb-shell__navlink--active',
     );
-    expect(within(nav).getByRole('link', { name: '工作台' })).not.toHaveClass(
+    expect(within(nav).getByRole('link', { name: '我的能力' })).not.toHaveClass(
       'cb-shell__navlink--active',
     );
   });
@@ -216,17 +227,17 @@ describe('五步流程外壳不重建（外壳首页-07，批注 D14）', () => 
     renderShell('/create/import');
 
     const asideBefore = screen.getByRole('complementary', { name: '侧边导航' });
-    const brandBefore = screen.getByText('Agora');
+    const brandBefore = screen.getByLabelText('Combo 创作者中心 首页');
     const accountAvatarBefore = within(asideBefore).getByRole('img', { name: 'Wayne · CGO' });
     expect(screen.getByTestId('page')).toHaveTextContent('上传 import');
 
     // 离开再回，验证外壳不随内容重建。
-    await user.click(screen.getByRole('link', { name: '收益' }));
+    await user.click(screen.getByRole('link', { name: '我的能力' }));
     await user.click(screen.getByRole('link', { name: '上传能力' }));
 
     // 同一外壳 DOM 节点（toBe 引用相等 → 没有被卸载重建）。
     expect(screen.getByRole('complementary', { name: '侧边导航' })).toBe(asideBefore);
-    expect(screen.getByText('Agora')).toBe(brandBefore);
+    expect(screen.getByLabelText('Combo 创作者中心 首页')).toBe(brandBefore);
     expect(
       within(screen.getByRole('complementary', { name: '侧边导航' })).getByRole('img', {
         name: 'Wayne · CGO',
@@ -235,18 +246,13 @@ describe('五步流程外壳不重建（外壳首页-07，批注 D14）', () => 
   });
 });
 
-describe('双视角开关占位（D14，本期只切前端态）', () => {
+describe('普通页顶部横栏移除', () => {
   beforeEach(() => globalThis.localStorage.clear());
 
-  it('默认创作者视角，点击切到消费者视角', async () => {
-    const user = userEvent.setup();
+  it('不再显示创作者/消费者视角开关', () => {
     renderShell();
-    const toggle = screen.getByRole('button', { name: '创作者视角' });
-    expect(toggle).toHaveTextContent('创作者视角');
-    expect(toggle).toHaveAttribute('aria-pressed', 'false');
-    await user.click(toggle);
-    expect(toggle).toHaveTextContent('消费者视角');
-    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('button', { name: '创作者视角' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '消费者视角' })).toBeNull();
   });
 });
 

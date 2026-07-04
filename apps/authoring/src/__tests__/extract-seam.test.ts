@@ -159,11 +159,11 @@ describe('B-23 retry 整链：受理 + worker 收尾 → retryCount 只 +1（Cod
       const s: SegmentRowF = {
         id: `seg-${i}`,
         snapshot_id: snapshotId,
-        title: '重构模块',
+        title: '代码依赖审查',
         source: 'claude',
         project: 'alpha',
         happened_at: null,
-        content: 'refactor module dependency 重构 依赖 分析',
+        content: '代码 依赖 重构 审查 分析 修复 交付 回归',
         message_count: 4,
       };
       workerDb.segments.set(s.id, s);

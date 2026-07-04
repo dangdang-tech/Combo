@@ -53,12 +53,10 @@ import {
 import {
   clusterSegments,
   scoreCandidates,
+  selectPublishableCandidates,
   nameOne,
   isEffectiveSessionForMock,
-  nameSessionCapability,
-  buildSessionMockCandidate,
   CandidateNameUnavailable,
-  type NamedCandidate,
   type ScoredCandidate,
 } from './cluster.js';
 
@@ -137,11 +135,6 @@ function toItem(
     ...(opts.error !== undefined ? { error: opts.error } : {}),
     ...(opts.trialCapability ? { trialCapability: opts.trialCapability } : {}),
   };
-}
-
-/** 量化进度文案（提取-07/08：「已浮现 X / Y 能力项…」）。 */
-function appendedPhrase(done: number, total: number): string {
-  return `已浮现 ${done} / ${total} 能力项…`;
 }
 
 function preparedPhrase(done: number, total: number): string {
@@ -358,15 +351,21 @@ async function runExtract(
 
   // —— cluster：聚类相似工作流（同一快照内，证据不跨快照）——
   await ctx.reportSubtask('cluster', 'running');
-  const selectedSegments = segments.filter(isEffectiveSessionForMock).slice(0, 5);
+  const effectiveSegments = segments.filter(isEffectiveSessionForMock);
+  const drafts = clusterSegments(effectiveSegments);
   await ctx.reportSubtask('cluster', 'done');
 
   // —— form_candidates：形成候选能力（total 在此确定并稳定，提取-08；done 单调）——
   await ctx.reportSubtask('form', 'running');
-  const total = selectedSegments.length;
+  const allScoredCandidates = scoreCandidates(drafts, Date.now());
+  const scoredCandidates = selectPublishableCandidates(allScoredCandidates);
+  const total = scoredCandidates.length;
   await ctx.reportProgress({
     percent: 25,
-    phrase: total > 0 ? appendedPhrase(0, total) : '正在形成候选…',
+    phrase:
+      total > 0
+        ? `已筛选出 ${total} / ${allScoredCandidates.length} 个可发布候选，已浮现 0 / ${total} 能力项…`
+        : `没有发现达到发布门槛的能力候选（原始候选 ${allScoredCandidates.length} 个）`,
     done: 0,
     total,
     unit: '能力项',
@@ -390,26 +389,21 @@ async function runExtract(
   let stopped = false;
   const workerCount = Math.max(
     1,
-    Math.min(deps.prepareConcurrency ?? 2, selectedSegments.length || 1),
+    Math.min(deps.prepareConcurrency ?? 2, scoredCandidates.length || 1),
   );
   const runOne = async (i: number): Promise<void> => {
-    const segment = selectedSegments[i]!;
-    const summary = await nameSessionCapability(gateway, segment, {
-      traceId: ctx.traceId,
-      ...(job.ownerUserId ? { ownerUserId: job.ownerUserId } : {}),
-    });
-    const cand = buildSessionMockCandidate(segment, summary);
+    const cand = scoredCandidates[i]!;
 
     const currentDone = readyCount + failedCount;
     await ctx.reportProgress({
-      percent: 25 + Math.round((60 * currentDone) / Math.max(1, selectedSegments.length)),
+      percent: 25 + Math.round((60 * currentDone) / Math.max(1, scoredCandidates.length)),
       phrase: `正在准备第 ${i + 1} / ${total} 个试用能力…`,
       done: currentDone,
       total,
       unit: '能力项',
       metrics: { analyzedSegments: segments.length, discoveredCandidates: currentDone },
     });
-    const outcome = await emitSessionMockCandidate(
+    const outcome = await _emitOneCandidate(
       { db, txPool, gateway, prepareCandidateDraft },
       job,
       ctx,
@@ -431,7 +425,7 @@ async function runExtract(
 
     const done = readyCount + failedCount;
     await ctx.reportProgress({
-      percent: 25 + Math.round((70 * done) / Math.max(1, selectedSegments.length)),
+      percent: 25 + Math.round((70 * done) / Math.max(1, scoredCandidates.length)),
       phrase: preparedPhrase(done, total),
       done,
       total,
@@ -443,7 +437,7 @@ async function runExtract(
     while (!stopped && !ctx.isCancelled()) {
       const i = nextIndex;
       nextIndex += 1;
-      if (i >= selectedSegments.length) break;
+      if (i >= scoredCandidates.length) break;
       await runOne(i);
     }
   });
@@ -508,96 +502,6 @@ async function runExtract(
   return { result, finalized: true, finalProgress };
 }
 
-/** session-mock 单项落库：候选已经命名，只做原子插入 candidate + 其唯一 session evidence。 */
-async function emitSessionMockCandidate(
-  deps: {
-    db: Queryable;
-    txPool: TxPool;
-    gateway: LlmGatewayPort;
-    prepareCandidateDraft: typeof defaultPrepareCandidateDraft;
-  },
-  job: LeasedJob,
-  ctx: JobContext,
-  snapshotId: string,
-  cand: NamedCandidate,
-  index: number,
-  totalCandidates: number,
-): Promise<{ item: CandidateItem; degradedNaming: boolean } | 'fenced_out' | null> {
-  const { db, txPool } = deps;
-  const stuckAt = `段 ${index + 1} / ${totalCandidates}`;
-
-  let atomic: Awaited<ReturnType<typeof insertReadyCandidateWithEvidenceInTx>>;
-  try {
-    atomic = await withTransaction(txPool, (tx) =>
-      insertReadyCandidateWithEvidenceInTx({
-        tx,
-        jobId: job.id,
-        fenceToken: job.fenceToken,
-        snapshotId,
-        candidate: {
-          slug: cand.slug,
-          name: cand.name,
-          intent: cand.intent,
-          type: cand.type,
-          confidence: cand.confidence,
-          segmentCount: cand.segmentCount,
-          frequencyRatio: cand.frequencyRatio,
-          reusability: cand.reusability,
-          scopeCoherence: cand.scopeCoherence,
-          splitSuggested: cand.splitSuggested,
-          scope: cand.scope,
-          reusabilityBreakdown: cand.reusabilityBreakdown,
-        },
-        segmentIds: cand.segments.map((s) => s.segmentId),
-      }),
-    );
-  } catch (err) {
-    if (err instanceof CandidateLandingFencedOut) return 'fenced_out';
-    return persistFailedCandidate(db, ctx, job, snapshotId, cand, stuckAt);
-  }
-
-  if (atomic.kind === 'skipped') {
-    if (ctx.isCancelled()) return 'fenced_out';
-    return null;
-  }
-
-  const prepared = await prepareInsertedCandidate(deps, job, ctx, atomic.candidateId);
-  if (prepared.kind === 'fencedOut') return 'fenced_out';
-  if (prepared.kind === 'failed') {
-    const item = toItem(
-      atomic.candidateId,
-      {
-        name: cand.name,
-        intent: cand.intent,
-        type: cand.type,
-        confidence: cand.confidence,
-        segmentCount: atomic.written,
-        scopeCoherence: cand.scopeCoherence,
-        splitSuggested: cand.splitSuggested,
-      },
-      { status: 'failed', isNew: true, error: prepared.error },
-    );
-    await ctx.appendItem(item);
-    return { item, degradedNaming: cand.degradedNaming };
-  }
-
-  const item = toItem(
-    atomic.candidateId,
-    {
-      name: cand.name,
-      intent: cand.intent,
-      type: cand.type,
-      confidence: cand.confidence,
-      segmentCount: atomic.written,
-      scopeCoherence: cand.scopeCoherence,
-      splitSuggested: cand.splitSuggested,
-    },
-    { status: 'ready', isNew: true, trialCapability: prepared.trialCapability },
-  );
-  await ctx.appendItem(item);
-  return { item, degradedNaming: cand.degradedNaming };
-}
-
 async function prepareInsertedCandidate(
   deps: {
     db: Queryable;
@@ -654,7 +558,12 @@ async function prepareInsertedCandidate(
  *   - 成功（事务提交）→ ready item（segmentCount == 实际写入证据数，提取-34）。
  */
 async function _emitOneCandidate(
-  deps: { db: Queryable; txPool: TxPool; gateway: LlmGatewayPort },
+  deps: {
+    db: Queryable;
+    txPool: TxPool;
+    gateway: LlmGatewayPort;
+    prepareCandidateDraft: typeof defaultPrepareCandidateDraft;
+  },
   job: LeasedJob,
   ctx: JobContext,
   snapshotId: string,
@@ -718,6 +627,26 @@ async function _emitOneCandidate(
     return null;
   }
 
+  const prepared = await prepareInsertedCandidate(deps, job, ctx, atomic.candidateId);
+  if (prepared.kind === 'fencedOut') return 'fenced_out';
+  if (prepared.kind === 'failed') {
+    const item = toItem(
+      atomic.candidateId,
+      {
+        name: named.name,
+        intent: named.intent,
+        type: cand.type,
+        confidence: cand.confidence,
+        segmentCount: atomic.written,
+        scopeCoherence: cand.scopeCoherence,
+        splitSuggested: cand.splitSuggested,
+      },
+      { status: 'failed', isNew: true, error: prepared.error },
+    );
+    await ctx.appendItem(item);
+    return { item, degradedNaming: named.degradedNaming };
+  }
+
   // ③ item-appended（'刚浮现'：isNew=true；segmentCount = 同事务实际写入证据数，与下钻一致，提取-34）。
   const item = toItem(
     atomic.candidateId,
@@ -730,7 +659,7 @@ async function _emitOneCandidate(
       scopeCoherence: cand.scopeCoherence,
       splitSuggested: cand.splitSuggested,
     },
-    { status: 'ready', isNew: true },
+    { status: 'ready', isNew: true, trialCapability: prepared.trialCapability },
   );
   await ctx.appendItem(item);
   return { item, degradedNaming: named.degradedNaming };
