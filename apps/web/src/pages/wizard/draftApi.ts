@@ -2,7 +2,7 @@
 //
 // 端点真源（脊柱 §8 / 40 §4.G / _index §2）：
 //   - POST /api/v1/drafts（写命令，scope=draft.create）：新建流程 STEP① 进入时 bootstrap 真实草稿行，
-//     拿 draftId 贯穿后续 snapshot/extract/version/capability/batch 全部回填同一 draft（断点续传基线，P0-2）。
+//     拿 draftId 贯穿后续 snapshot/extract/version/capability 全部回填同一 draft（断点续传基线，P0-2）。
 //   - GET  /api/v1/drafts/{draftId}（只读）：按 draftId 读完整 DraftView 续传 hydrate（后端已就绪，端点数 52→54）。
 //   - PATCH /api/v1/drafts/{draftId}/selection（写命令，scope=draft.selection.patch）：STEP③ 显式存草稿 /
 //     进入下一步前持久化选择；选择切换本身不调它（纯前端即时态，§1.1(a)）。

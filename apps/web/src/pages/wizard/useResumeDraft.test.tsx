@@ -22,14 +22,7 @@ function draftView(over: Partial<DraftView> = {}): DraftView {
 
 function Probe({ draftId }: { draftId: string | undefined }) {
   const resume = useResumeDraft(draftId);
-  const {
-    selection,
-    draftId: ctxDraftId,
-    snapshotId,
-    extractJobId,
-    versionId,
-    batchId,
-  } = useWizard();
+  const { selection, draftId: ctxDraftId, snapshotId, extractJobId, versionId } = useWizard();
   return (
     <div>
       <span data-testid="status">{resume.status}</span>
@@ -39,7 +32,6 @@ function Probe({ draftId }: { draftId: string | undefined }) {
       <span data-testid="snap">{snapshotId ?? 'none'}</span>
       <span data-testid="extract">{extractJobId ?? 'none'}</span>
       <span data-testid="version">{versionId ?? 'none'}</span>
-      <span data-testid="batch">{batchId ?? 'none'}</span>
       <button type="button" onClick={resume.retry}>
         重试
       </button>
@@ -77,7 +69,7 @@ describe('useResumeDraft', () => {
     expect(mock.calls[0]!.url).toBe('/api/v1/drafts/d1');
   });
 
-  it('命中草稿 → 恢复全字段引用 snapshot/extract/version/batch（Codex P0-2，各步据引用续接不重建）', async () => {
+  it('命中草稿 → 恢复全字段引用 snapshot/extract/version（Codex P0-2，各步据引用续接不重建）', async () => {
     mock = installFetchMock({
       status: 200,
       json: {
@@ -86,7 +78,6 @@ describe('useResumeDraft', () => {
           snapshotId: 'snap1',
           extractJobId: 'ej1',
           versionId: 'ver1',
-          batchId: 'bat1',
         }),
       },
     });
@@ -95,7 +86,6 @@ describe('useResumeDraft', () => {
     expect(screen.getByTestId('snap')).toHaveTextContent('snap1');
     expect(screen.getByTestId('extract')).toHaveTextContent('ej1');
     expect(screen.getByTestId('version')).toHaveTextContent('ver1');
-    expect(screen.getByTestId('batch')).toHaveTextContent('bat1');
   });
 
   it('找不到草稿（GET 404）→ error 落「可能已删除」退路（change_input，不裸崩、不徒劳翻列表）', async () => {

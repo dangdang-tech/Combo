@@ -54,8 +54,6 @@ export interface WizardState {
    * STEP⑤ 单发布据它读 publication（拒绝态闭环，P1-5）——drafts.id ≠ capabilities.id，绝不拿 draftId 冒充。
    */
   capabilityId: string | undefined;
-  /** 当前批量发布批次 id（STEP⑤「全部发布」建批回填 + 续传从 DraftView.batchId 回填，续传恢复同一批次不重建）。 */
-  batchId: string | undefined;
   /**
    * 底栏步骤摘要前缀（各步可选注入，如 STEP① 完成态「原始数据仅你可见 · 」5.1.3 / 导入-17）。
    * 各步在 effect 内 setSummaryPrefix（离开/卸载时清回 undefined），WizardShell 透传给 WizardFooter。
@@ -88,10 +86,8 @@ export interface WizardActions {
   setVersionId: (versionId: string | undefined) => void;
   /** 设/换当前能力体 id（STEP④ 建版后回填真实 capabilityId，供 STEP⑤ 单发布读 publication 拒绝态，P1-5）。 */
   setCapabilityId: (capabilityId: string | undefined) => void;
-  /** 设/换当前批次 id（STEP⑤「全部发布」建批后回填，续传恢复同一批次）。 */
-  setBatchId: (batchId: string | undefined) => void;
   /**
-   * 续传：用 DraftView 恢复 draftId + selection + snapshot/extract/version/capability/batch 全引用（F-15，
+   * 续传：用 DraftView 恢复 draftId + selection + snapshot/extract/version/capability 全引用（F-15，
    * current_step 由路由落点决定）。各步优先读这些引用而非新建任务（STEP④ 不重建版、STEP⑤ 不缺 version、
    * 拒绝态读 publication 命中真实 capabilityId）。
    */
@@ -119,7 +115,6 @@ type Action =
   | { type: 'setExtractJobId'; extractJobId: string | undefined }
   | { type: 'setVersionId'; versionId: string | undefined }
   | { type: 'setCapabilityId'; capabilityId: string | undefined }
-  | { type: 'setBatchId'; batchId: string | undefined }
   | { type: 'hydrateFromDraft'; draft: DraftView }
   | { type: 'setPrimaryAction'; action: PrimaryAction | null }
   | { type: 'setSummaryPrefix'; prefix: string | undefined }
@@ -171,10 +166,8 @@ function reducer(state: InternalState, action: Action): InternalState {
       return state.capabilityId === action.capabilityId
         ? state
         : { ...state, capabilityId: action.capabilityId };
-    case 'setBatchId':
-      return state.batchId === action.batchId ? state : { ...state, batchId: action.batchId };
     case 'hydrateFromDraft':
-      // 续传恢复 draftId + selection + snapshot/extract/version/batch 全引用（current_step 由路由落点决定，
+      // 续传恢复 draftId + selection + snapshot/extract/version 全引用（current_step 由路由落点决定，
       // 不在此覆写 currentStep）。各步据这些引用续接已生成产物，不重建任务（已生成不丢、续传精确）。
       return {
         ...state,
@@ -183,7 +176,6 @@ function reducer(state: InternalState, action: Action): InternalState {
         extractJobId: action.draft.extractJobId ?? state.extractJobId,
         versionId: action.draft.versionId ?? state.versionId,
         capabilityId: action.draft.capabilityId ?? state.capabilityId,
-        batchId: action.draft.batchId ?? state.batchId,
         selection: coerceSelection(action.draft.selection),
       };
     case 'setPrimaryAction':
@@ -216,8 +208,6 @@ export interface WizardProviderProps {
   initialVersionId?: string | undefined;
   /** 初始能力体 id（深链续传 STEP⑤ 读 publication 拒绝态 / 新建留空，P1-5）。 */
   initialCapabilityId?: string | undefined;
-  /** 初始批次 id（深链续传 STEP⑤「全部发布」/ 新建留空）。 */
-  initialBatchId?: string | undefined;
   children: ReactNode;
 }
 
@@ -228,7 +218,6 @@ export function WizardProvider({
   initialExtractJobId,
   initialVersionId,
   initialCapabilityId,
-  initialBatchId,
   children,
 }: WizardProviderProps): ReactElement {
   const [state, dispatch] = useReducer(reducer, {
@@ -240,7 +229,6 @@ export function WizardProvider({
     extractJobId: initialExtractJobId,
     versionId: initialVersionId,
     capabilityId: initialCapabilityId,
-    batchId: initialBatchId,
     summaryPrefix: undefined,
     publishCompleted: false,
     primaryAction: null,
@@ -282,10 +270,6 @@ export function WizardProvider({
     (capabilityId: string | undefined) => dispatch({ type: 'setCapabilityId', capabilityId }),
     [],
   );
-  const setBatchId = useCallback(
-    (batchId: string | undefined) => dispatch({ type: 'setBatchId', batchId }),
-    [],
-  );
   const hydrateFromDraft = useCallback(
     (draft: DraftView) => dispatch({ type: 'hydrateFromDraft', draft }),
     [],
@@ -315,7 +299,6 @@ export function WizardProvider({
       setExtractJobId,
       setVersionId,
       setCapabilityId,
-      setBatchId,
       hydrateFromDraft,
       setPrimaryAction,
       setSummaryPrefix,
@@ -332,7 +315,6 @@ export function WizardProvider({
       setExtractJobId,
       setVersionId,
       setCapabilityId,
-      setBatchId,
       hydrateFromDraft,
       setPrimaryAction,
       setSummaryPrefix,

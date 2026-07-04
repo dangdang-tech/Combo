@@ -1,11 +1,8 @@
-// STEP⑤ 发布数据层（F-14）——接 50 域端点（单发布 + 市集卡预览 + 批量 + 单项重试）。
+// STEP⑤ 发布数据层（F-14）——接 50 域端点（单发布 + 市集卡预览）。批量发布已整体下线（2026-07-04 决策）。
 //
 // 端点真源（50 §2）：
 //   - §2.1 `POST /versions/{versionId}/publish`（scope=publish.version）：单条发布门事务，同步返回 PublishResult。
 //   - §2.2 `POST /versions/{versionId}/market-card/preview`：市集卡预览（只读、不写库、无 Idempotency-Key，§4.1 豁免）。
-//   - §2.3 `POST /publish-batches`（scope=publish_batch.create；每 item 另带独立 key scope=publish_batch.item）：批量发布，202 受理，SSE 走 job 流。
-//   - §2.4 `GET /publish-batches/{batchId}`：查批次全量（SSE state_snapshot 互补，刷新/重进恢复）。
-//   - §2.5 `POST /publish-batches/{batchId}/items/{itemId}/retry`（scope=publish_batch.item.retry）：单 item 重试（无连坐）。
 //   - §2.6.2 `GET /publications/{capabilityId}`：查发布态（创作者只读，拒绝提示 + 重试/编辑入口）。
 //
 // 合规：写命令必带 Idempotency-Key（client 注入）+ scope；预览是只读 POST（apiPostReadonly，无 scope）。
@@ -15,10 +12,6 @@ import {
   type PublishVersionBody,
   type MarketCard,
   type MarketCardPreviewBody,
-  type PublishBatchView,
-  type CreatePublishBatchBody,
-  type PublishBatchItemView,
-  type RetryBatchItemBody,
   type PublicationView,
 } from '@cb/shared';
 import {
@@ -36,11 +29,6 @@ export function publishPath(versionId: string): string {
 /** §2.2 市集卡预览路径。 */
 export function previewPath(versionId: string): string {
   return `/versions/${encodeURIComponent(versionId)}/market-card/preview`;
-}
-
-/** §2.5 单项重试路径。 */
-export function retryItemPath(batchId: string, itemId: string): string {
-  return `/publish-batches/${encodeURIComponent(batchId)}/items/${encodeURIComponent(itemId)}/retry`;
 }
 
 /**
@@ -73,53 +61,6 @@ export async function previewMarketCard(
   opts: RequestOptions = {},
 ): Promise<MarketCard> {
   return apiPostReadonly<MarketCard>(previewPath(versionId), body, opts);
-}
-
-/**
- * §2.3 创建批量发布（无连坐 P0，202 受理）。批次级 scope=publish_batch.create；
- * 每 item 在 body 内带独立 idempotencyKey（scope=publish_batch.item，无连坐核心；调用层为每 item 生成）。
- * 返回 PublishBatchView（batchId/jobId/items），SSE 走 job 流（GET /jobs/{jobId}/events）。
- */
-export async function createPublishBatch(
-  body: CreatePublishBatchBody,
-  idempotencyKey?: string,
-  opts: RequestOptions = {},
-): Promise<PublishBatchView> {
-  return apiPost<PublishBatchView>('/publish-batches', body, {
-    ...opts,
-    scope: IdempotencyScope.PUBLISH_BATCH_CREATE,
-    ...(idempotencyKey ? { idempotencyKey } : {}),
-  });
-}
-
-/** §2.4 查批次全量（SSE state_snapshot 互补；刷新/重进恢复，硬规则③）。 */
-export async function fetchPublishBatch(
-  batchId: string,
-  opts: RequestOptions = {},
-): Promise<PublishBatchView> {
-  const { data } = await apiGetEnvelope<PublishBatchView>(
-    `/publish-batches/${encodeURIComponent(batchId)}`,
-    opts,
-  );
-  return data;
-}
-
-/**
- * §2.5 单 item 重试（仅 failed 项；换该 item fence、不连累其余、不重建批次，选择结构化-29）。
- * 写命令必带 scope=publish_batch.item.retry；可携新封面/价格（补齐后重试）。回该 item 回到 pending/structuring。
- */
-export async function retryBatchItem(
-  batchId: string,
-  itemId: string,
-  body: RetryBatchItemBody = {},
-  idempotencyKey?: string,
-  opts: RequestOptions = {},
-): Promise<PublishBatchItemView> {
-  return apiPost<PublishBatchItemView>(retryItemPath(batchId, itemId), body, {
-    ...opts,
-    scope: IdempotencyScope.PUBLISH_BATCH_ITEM_RETRY,
-    ...(idempotencyKey ? { idempotencyKey } : {}),
-  });
 }
 
 /**

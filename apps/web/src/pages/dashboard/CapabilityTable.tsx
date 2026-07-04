@@ -16,7 +16,7 @@ export interface CapabilityTableProps {
   onTrial: (row: DashboardCapabilityRow) => void;
   /** 「编辑」→ 草稿/编辑路由。 */
   onEdit: (row: DashboardCapabilityRow) => void;
-  /** 「更多」菜单（下架/改价/查看，外壳首页-35）；本期占位入口。 */
+  /** 「更多」菜单（下架/查看，外壳首页-35）；本期占位入口。 */
   onMore: (row: DashboardCapabilityRow) => void;
 }
 
@@ -170,14 +170,15 @@ export function CapabilityTable({
 }
 
 /**
- * 「更多」操作菜单（外壳首页-35）。本期仅入口可达：下架 / 改价 / 查看三项，
- * 其中下架·改价为本期未开放占位（点击落「本期未开放」反馈、不发任何命令），
+ * 「更多」操作菜单（外壳首页-35）。本期仅入口可达：下架 / 查看两项，
+ * 其中下架为本期未开放占位（点击落「本期未开放」反馈、不发任何命令），
  * 查看为公开页路由占位（点击触发 onView，由调用方导航到 /a/{slug} 公开页）。
+ * 「改价」已随定价功能整体移除（2026-07-04 决策）。
  *
  * 设计取舍：菜单项动作由后端能力/路由决定，本组件只负责展示与点击反馈，
  * 不前端自造业务态、不裸触发未实现命令（铁律：永不裸转圈、对外只读不下钻）。
  */
-export type MoreMenuItemKey = 'unpublish' | 'reprice' | 'view';
+export type MoreMenuItemKey = 'unpublish' | 'view';
 
 /** 单条菜单项：本期未开放（占位）或可路由（查看）。 */
 interface MoreMenuItemDef {
@@ -189,7 +190,6 @@ interface MoreMenuItemDef {
 
 const MORE_MENU_ITEMS: ReadonlyArray<MoreMenuItemDef> = [
   { key: 'unpublish', label: '下架', pending: true },
-  { key: 'reprice', label: '改价', pending: true },
   { key: 'view', label: '查看公开页', pending: false },
 ];
 
@@ -213,7 +213,7 @@ export interface MoreMenuProps {
 }
 
 /**
- * 更多菜单浮层（受控 open by state.row）。下架/改价为本期未开放占位项（aria-disabled + hint，
+ * 更多菜单浮层（受控 open by state.row）。下架为本期未开放占位项（aria-disabled + hint，
  * 点击给「本期未开放」反馈、不发命令）；查看为路由占位（点击触发 onView）。
  */
 export function MoreMenu({

@@ -177,15 +177,15 @@ describe('MoreMenu 更多菜单（外壳首页-35）', () => {
     expect(container.querySelector('.cb-more-menu')).toBeNull();
   });
 
-  it('打开 → 三项可达：下架 / 改价（本期未开放占位）/ 查看公开页（路由占位）', () => {
+  it('打开 → 两项可达：下架（本期未开放占位）/ 查看公开页（路由占位）；改价已随定价功能移除', () => {
     render(<MoreMenu state={baseState()} onView={noop} onPending={noop} onClose={noop} />);
     const menu = screen.getByRole('dialog', { name: /更多操作/ });
     expect(within(menu).getByRole('menuitem', { name: /下架/ })).toBeInTheDocument();
-    expect(within(menu).getByRole('menuitem', { name: /改价/ })).toBeInTheDocument();
+    expect(within(menu).queryByRole('menuitem', { name: /改价/ })).toBeNull();
     expect(within(menu).getByRole('menuitem', { name: /查看公开页/ })).toBeInTheDocument();
   });
 
-  it('下架/改价为本期未开放占位：aria-disabled + hint，点击 → onPending 占位反馈（不发命令）', async () => {
+  it('下架为本期未开放占位：aria-disabled + hint，点击 → onPending 占位反馈（不发命令）', async () => {
     const onPending = vi.fn();
     const onView = vi.fn();
     render(<MoreMenu state={baseState()} onView={onView} onPending={onPending} onClose={noop} />);

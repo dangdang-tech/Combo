@@ -2,7 +2,7 @@
 //
 // 为什么在 STEP①（开工总纲 §5.0「每步可存草稿 + 断点续传」 / 脊柱 §8）：
 //   新建五步向导若没有真实 drafts 行，fresh flow 无法成为可续传基线——STEP③ 存草稿无处可落、各步落点
-//   引用（snapshot/extract/version/capability/batch）无 draft 可回填。故进入向导第一步即先 POST /drafts
+//   引用（snapshot/extract/version/capability）无 draft 可回填。故进入向导第一步即先 POST /drafts
 //   拿真实 draftId，写进 WizardContext，之后每步把产物经各自后端推进 API 回填同一 draft（已生成不丢、续传精确）。
 //
 // 何时建（恰好一次，不空建）：

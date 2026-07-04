@@ -16,10 +16,9 @@ export function WizardLayout(): ReactElement {
   const initialSnapshotId = searchParams.get('snapshotId') ?? undefined;
   const initialExtractJobId = searchParams.get('extractJobId') ?? undefined;
   // STEP④/⑤ 续传引用：version=（建版后回填，续传不重建版）、capability=（真实 capabilities.id，
-  //   供 STEP⑤ 读 publication 拒绝态闭环，P1-5）、batchId=（全部发布续传同一批次）。
+  //   供 STEP⑤ 读 publication 拒绝态闭环，P1-5）。
   const initialVersionId = searchParams.get('version') ?? undefined;
   const initialCapabilityId = searchParams.get('capability') ?? undefined;
-  const initialBatchId = searchParams.get('batchId') ?? undefined;
 
   return (
     <WizardProvider
@@ -29,7 +28,6 @@ export function WizardLayout(): ReactElement {
       initialExtractJobId={initialExtractJobId}
       initialVersionId={initialVersionId}
       initialCapabilityId={initialCapabilityId}
-      initialBatchId={initialBatchId}
     >
       <WizardShell />
     </WizardProvider>

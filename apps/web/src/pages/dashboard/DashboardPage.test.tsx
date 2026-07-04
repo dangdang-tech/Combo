@@ -305,7 +305,7 @@ describe('DashboardPage 操作入口', () => {
     expect(screen.queryByTestId('probe')).toBeNull();
   });
 
-  it('行内「更多」→ 打开菜单（下架/改价占位 + 查看公开页），下架点击落本期未开放反馈、不导航', async () => {
+  it('行内「更多」→ 打开菜单（下架占位 + 查看公开页），下架点击落本期未开放反馈、不导航', async () => {
     restore = installRoutedFetch(ok());
     renderPage();
     await screen.findByText('保险方案速算');
@@ -313,7 +313,7 @@ describe('DashboardPage 操作入口', () => {
     await userEvent.click(screen.getByRole('button', { name: '更多操作' }));
     const menu = await screen.findByRole('dialog', { name: /更多操作/ });
     expect(within(menu).getByRole('menuitem', { name: /下架/ })).toBeInTheDocument();
-    expect(within(menu).getByRole('menuitem', { name: /改价/ })).toBeInTheDocument();
+    expect(within(menu).queryByRole('menuitem', { name: /改价/ })).toBeNull();
     expect(within(menu).getByRole('menuitem', { name: /查看公开页/ })).toBeInTheDocument();
 
     // 下架本期未开放：点击有占位反馈，且不导航（probe 不出现）。

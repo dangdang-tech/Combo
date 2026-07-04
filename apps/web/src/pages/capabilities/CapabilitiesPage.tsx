@@ -185,7 +185,7 @@ export function CapabilitiesPage(): ReactElement {
       {/* 试用占位浮层（点试用 → 「本期未开放」，不进 runtime）。 */}
       <TrialNotice capabilityName={trial.noticeName} onClose={trial.closeTrial} />
 
-      {/* 更多菜单（下架/改价占位 + 查看公开页路由占位，外壳首页-35）。 */}
+      {/* 更多菜单（下架占位 + 查看公开页路由占位，外壳首页-35）。 */}
       <MoreMenu
         state={more.state}
         onView={(row) => {

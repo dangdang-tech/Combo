@@ -125,7 +125,7 @@ describe('我的能力页', () => {
     expect(within(table).getByRole('button', { name: '重试 / 编辑' })).toBeInTheDocument();
   });
 
-  it('更多菜单：点「更多」打开菜单（下架/改价/查看可达），下架点击落本期未开放占位反馈', async () => {
+  it('更多菜单：点「更多」打开菜单（下架/查看可达，改价已移除），下架点击落本期未开放占位反馈', async () => {
     mock = installFetchMock({ status: 200, json: pageBody([row()]) });
     renderPage(<CapabilitiesPage />);
     await screen.findByText('保险话术助手');
@@ -134,7 +134,7 @@ describe('我的能力页', () => {
     await userEvent.click(screen.getByRole('button', { name: '更多操作' }));
     const menu = await screen.findByRole('dialog', { name: /更多操作/ });
     expect(within(menu).getByRole('menuitem', { name: /下架/ })).toBeInTheDocument();
-    expect(within(menu).getByRole('menuitem', { name: /改价/ })).toBeInTheDocument();
+    expect(within(menu).queryByRole('menuitem', { name: /改价/ })).toBeNull();
     expect(within(menu).getByRole('menuitem', { name: /查看公开页/ })).toBeInTheDocument();
 
     // 下架是本期未开放占位：点击有反馈（占位文案），不发任何命令。
