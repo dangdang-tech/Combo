@@ -524,6 +524,16 @@ body {
 .rt-msg__body {
   color: var(--cb-fg);
 }
+.rt-msg__body--failed {
+  color: var(--cb-muted);
+}
+/* 非文本块（工具调用/结果等）的占位行 */
+.rt-msg__placeholder {
+  margin-top: 8px;
+  font-family: var(--cb-font-mono);
+  font-size: 12px;
+  color: var(--cb-muted);
+}
 .rt-msg__artifacts {
   display: flex;
   flex-wrap: wrap;

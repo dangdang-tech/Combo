@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
-import type { RuntimeArtifact } from '@cb/shared';
+// 产物画布（右栏）：产物切换 + 内容回读（GET /runtime/artifacts/:id/content）+ 按 kind 渲染。
+import type { ArtifactView } from '@cb/shared';
+import { useState } from 'react';
+import { useArtifactContent } from '../api/runtime.js';
 import { ArtifactRenderer } from './ArtifactRenderer.js';
 
 const KIND_LABEL: Record<string, string> = {
@@ -11,35 +13,21 @@ const KIND_LABEL: Record<string, string> = {
 
 export interface ArtifactPanelProps {
   /** 当前展示的产物（active）。 */
-  artifact: RuntimeArtifact;
-  /** 本会话全部产物（共享状态里的），用于在多产物间切换。 */
-  artifacts: RuntimeArtifact[];
-  onSelectArtifact: (artifactKey: string) => void;
-  onClose: () => void;
+  artifact: ArtifactView;
+  /** 本会话全部产物，用于在多产物间切换。 */
+  artifacts: ArtifactView[];
+  onSelectArtifact: (id: string) => void;
 }
 
-export function ArtifactPanel({
-  artifact,
-  artifacts,
-  onSelectArtifact,
-  onClose,
-}: ArtifactPanelProps) {
-  const [selectedVersion, setSelectedVersion] = useState<number>(artifact.latestVersion);
+export function ArtifactPanel({ artifact, artifacts, onSelectArtifact }: ArtifactPanelProps) {
+  const content = useArtifactContent(artifact);
   const [copied, setCopied] = useState(false);
-
-  // 切换到另一个产物时，版本重置为其最新版。
-  useEffect(() => {
-    setSelectedVersion(artifact.latestVersion);
-  }, [artifact.artifactKey, artifact.latestVersion]);
-
-  const version =
-    artifact.versions.find((v) => v.version === selectedVersion) ??
-    artifact.versions[artifact.versions.length - 1];
+  const title = artifact.title ?? '未命名产物';
 
   const copy = async () => {
-    if (!version) return;
+    if (content.data === undefined) return;
     try {
-      await navigator.clipboard.writeText(version.content);
+      await navigator.clipboard.writeText(content.data);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -55,46 +43,37 @@ export function ArtifactPanel({
           {artifacts.length > 1 ? (
             <select
               className="rt-artifact__versions"
-              value={artifact.artifactKey}
+              value={artifact.id}
               onChange={(e) => onSelectArtifact(e.target.value)}
             >
               {artifacts.map((a) => (
-                <option key={a.artifactKey} value={a.artifactKey}>
-                  {a.title}
+                <option key={a.id} value={a.id}>
+                  {a.title ?? '未命名产物'}
                 </option>
               ))}
             </select>
           ) : (
-            <span className="rt-artifact__title">{artifact.title}</span>
+            <span className="rt-artifact__title">{title}</span>
           )}
         </div>
         <div className="rt-artifact__actions">
-          {artifact.versions.length > 1 && (
-            <select
-              className="rt-artifact__versions"
-              value={version?.version ?? artifact.latestVersion}
-              onChange={(e) => setSelectedVersion(Number(e.target.value))}
-            >
-              {artifact.versions.map((v) => (
-                <option key={v.version} value={v.version}>
-                  v{v.version}
-                </option>
-              ))}
-            </select>
-          )}
-          <button type="button" className="rt-icon-btn" onClick={copy} title="复制内容">
+          <button
+            type="button"
+            className="rt-icon-btn"
+            onClick={() => void copy()}
+            title="复制内容"
+          >
             {copied ? '已复制' : '复制'}
-          </button>
-          <button type="button" className="rt-icon-btn" onClick={onClose} title="收起面板">
-            ✕
           </button>
         </div>
       </header>
       <div className="rt-artifact__body">
-        {version ? (
-          <ArtifactRenderer artifact={version} />
+        {content.isPending ? (
+          <div className="rt-empty">产物加载中…</div>
+        ) : content.isError ? (
+          <div className="rt-empty rt-empty--error">产物内容加载失败，稍后重试。</div>
         ) : (
-          <div className="rt-empty">暂无内容</div>
+          <ArtifactRenderer kind={artifact.kind} title={title} content={content.data} />
         )}
       </div>
     </aside>

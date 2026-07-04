@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { MeViewSchema, envelopeSchema, type MeView } from '@cb/shared';
 import { useState, type ReactNode } from 'react';
+import { loginUrl } from '../navigation/login.js';
 
 const MeEnvelopeSchema = envelopeSchema(MeViewSchema);
-const AUTH_LOGIN_PATH = '/api/v1/auth/login';
 const DEV_LOGIN_PATH = '/api/v1/auth/dev-login';
 const LOCAL_DEV_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0']);
 
@@ -29,11 +29,6 @@ async function fetchMe(
   } catch {
     return { status: 'error' };
   }
-}
-
-function loginUrl(): string {
-  const returnTo = window.location.pathname + window.location.search;
-  return `${AUTH_LOGIN_PATH}?returnTo=${encodeURIComponent(returnTo || '/try/')}`;
 }
 
 function canUseLocalDevLogin(): boolean {

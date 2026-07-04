@@ -1,49 +1,30 @@
+// 左侧会话栏：历史会话列表（GET /runtime/sessions）+ 回创作端 / 回入口页。
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import type { RuntimeSessionListItem } from '@cb/shared';
+import type { SessionView } from '@cb/shared';
 import { useSessions } from '../api/runtime.js';
 import {
-  appendRuntimeReturnTo,
   runtimeBackLabel,
   runtimeBackTarget,
   safeRuntimeReturnTo,
 } from '../navigation/runtimeReturn.js';
 
-function modeLabel(mode: RuntimeSessionListItem['mode']): string {
-  return mode === 'consume' ? '正式' : '试用';
-}
-
-function sortLinkedSessions(items: RuntimeSessionListItem[]): RuntimeSessionListItem[] {
-  return [...items].sort((a, b) => {
-    if (a.mode !== b.mode) return a.mode === 'consume' ? -1 : 1;
-    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-  });
-}
-
 export function SessionSidebar({
-  activeSession,
   activeSessionId,
-  capabilitySlug,
   returnTo,
 }: {
-  activeSession?: RuntimeSessionListItem;
   activeSessionId?: string;
-  capabilitySlug?: string;
   returnTo?: string | null;
 }) {
   const safeReturnTo = safeRuntimeReturnTo(returnTo);
-  const sessions = useSessions(capabilitySlug);
-  const visibleSessions = useMemo(() => {
-    const items = (sessions.data?.items ?? []).filter(
-      (item) => !capabilitySlug || item.slug === capabilitySlug,
-    );
-    if (!activeSession) return sortLinkedSessions(items);
-    const exists = items.some((item) => item.id === activeSession.id);
-    if (!exists) return sortLinkedSessions([activeSession, ...items]);
-    return sortLinkedSessions(
-      items.map((item) => (item.id === activeSession.id ? activeSession : item)),
-    );
-  }, [activeSession, capabilitySlug, sessions.data?.items]);
+  const sessions = useSessions();
+  const ordered = useMemo(
+    () =>
+      [...(sessions.data ?? [])].sort(
+        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+      ),
+    [sessions.data],
+  );
 
   return (
     <nav className="rt-sidebar">
@@ -57,54 +38,44 @@ export function SessionSidebar({
           {runtimeBackLabel(safeReturnTo)}
         </button>
       </div>
-      <div className="rt-sidebar__label">正在运行</div>
+      <div className="rt-sidebar__label">会话</div>
       <div className="rt-sidebar__list">
-        {visibleSessions.map((s) => (
-          <SessionListLink
-            key={s.id}
-            session={s}
-            active={s.id === activeSessionId}
-            returnTo={safeReturnTo}
-          />
+        <Link to="/market" className="rt-sidebar__item">
+          <span className="rt-sidebar__avatar">＋</span>
+          <span className="rt-sidebar__item-copy">
+            <span className="rt-sidebar__item-title">新会话</span>
+            <span className="rt-sidebar__item-cap">从能力列表开始</span>
+          </span>
+        </Link>
+        {ordered.map((s) => (
+          <SessionListLink key={s.id} session={s} active={s.id === activeSessionId} />
         ))}
-        {sessions.data && visibleSessions.length === 0 && (
+        {sessions.data && ordered.length === 0 && (
           <div className="rt-sidebar__empty">还没有会话</div>
         )}
-      </div>
-      <div className="rt-sidebar__user">
-        <span className="rt-sidebar__user-avatar">W</span>
-        <span>Wayne · CGO</span>
       </div>
     </nav>
   );
 }
 
-function SessionListLink({
-  session,
-  active,
-  returnTo,
-}: {
-  session: RuntimeSessionListItem;
-  active: boolean;
-  returnTo: string | null;
-}) {
-  const title = session.capabilityName || session.title;
-  const secondary = session.title && session.title !== title ? session.title : '';
+function SessionListLink({ session, active }: { session: SessionView; active: boolean }) {
+  const title = session.title ?? '未命名会话';
   const avatar = title.trim().slice(0, 1).toUpperCase() || 'A';
+  const updated = new Date(session.updatedAt).toLocaleString('zh-CN', {
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
   return (
-    <Link
-      to={appendRuntimeReturnTo(`/session/${session.id}`, returnTo)}
-      className={`rt-sidebar__item${active ? ' is-active' : ''}`}
-    >
+    <Link to={`/session/${session.id}`} className={`rt-sidebar__item${active ? ' is-active' : ''}`}>
       <span className="rt-sidebar__avatar">{avatar}</span>
       <span className="rt-sidebar__item-copy">
         <span className="rt-sidebar__item-title">{title}</span>
         <span className="rt-sidebar__item-cap">
-          <span className={`rt-sidebar__mode rt-sidebar__mode--${session.mode}`}>
-            {modeLabel(session.mode)}
-          </span>
-          {secondary || '当前能力会话'}
+          {session.status === 'closed' ? '已结束 · ' : ''}
+          {updated}
         </span>
       </span>
       <span className="rt-sidebar__status" />
