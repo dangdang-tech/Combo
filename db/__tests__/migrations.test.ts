@@ -17,8 +17,9 @@ function allSql(): string {
     .join('\n');
 }
 
-// 2026-07-04 基线合并：原 0000-0018 已合并为 0000_baseline_schema.sql（由生产库 pg_dump 生成并经
-// 空库重放 diff 验证）。本套测试改为守护基线完整性；此后新增迁移按编号追加，本文件按需补断言。
+// 2026-07-04 基线合并：原 0000-0018 已合并为 0000_baseline_schema.sql（按业务域分节的手写风格，
+// 内容经空库重放后与生产库 pg_dump diff 为零）。本套测试改为守护基线完整性；
+// 此后新增迁移按编号追加，本文件按需补断言。
 
 const ACTIVE_TABLES = [
   // 核心基表
@@ -90,7 +91,7 @@ describe('migrations', () => {
   it(`baseline defines all ${ACTIVE_TABLES.length} active tables`, () => {
     const sql = readFileSync(join(MIGRATIONS_DIR, '0000_baseline_schema.sql'), 'utf-8');
     for (const t of ACTIVE_TABLES) {
-      expect(sql, `missing table ${t}`).toContain(`CREATE TABLE public.${t} (`);
+      expect(sql, `missing table ${t}`).toContain(`CREATE TABLE ${t} (`);
     }
     // 全量对齐：基线里的 CREATE TABLE 数量与活跃表清单一致（多一张都算漂移）。
     expect(sql.match(/CREATE TABLE /g)?.length).toBe(ACTIVE_TABLES.length);
@@ -99,7 +100,7 @@ describe('migrations', () => {
   it('dropped tables never come back', () => {
     const sql = allSql();
     for (const t of DROPPED_TABLES) {
-      expect(sql, `dropped table ${t} reappeared`).not.toContain(`CREATE TABLE public.${t} (`);
+      expect(sql, `dropped table ${t} reappeared`).not.toContain(`CREATE TABLE ${t} (`);
     }
     // jobs.type 枚举不再含 publish_batch。
     expect(sql).not.toMatch(/'publish_batch'/);
@@ -138,6 +139,6 @@ describe('migrations', () => {
 
   it('provides gen_uuid_v7 helper in the baseline', () => {
     const sql = readFileSync(join(MIGRATIONS_DIR, '0000_baseline_schema.sql'), 'utf-8');
-    expect(sql).toContain('CREATE FUNCTION public.gen_uuid_v7()');
+    expect(sql).toContain('CREATE OR REPLACE FUNCTION gen_uuid_v7()');
   });
 });

@@ -29,7 +29,7 @@ describe('gen_uuid_v7 · SQL 静态核对（A）', () => {
   const sql = readFileSync(SQL_0000, 'utf-8');
 
   it('定义了 gen_uuid_v7() 且建在最早一支迁移', () => {
-    expect(sql).toContain('CREATE FUNCTION public.gen_uuid_v7()');
+    expect(sql).toContain('CREATE OR REPLACE FUNCTION gen_uuid_v7()');
     expect(sql).toContain('CREATE EXTENSION IF NOT EXISTS pgcrypto');
   });
 
@@ -114,19 +114,19 @@ describe('gen_uuid_v7 · 默认插入逻辑 smoke（B，无 PG 复刻）', () =>
 
 // (C) candidate_evidence 复合 FK 在 session_segments 单表 UNIQUE(id,snapshot_id) 下成立
 //     —— D2 36 表单表方案的血缘 FK 静态核对（Codex#8/D2）。基线合并后统一从 baseline 读取
-//     （pg_dump 形态：UNIQUE 约束和 FK 落在 ALTER TABLE ... ADD CONSTRAINT）。
+//     （手写形态：UNIQUE 约束与复合 FK 内联在 CREATE TABLE 里，约束名固定）。
 describe('§11.E 复合血缘 FK · 单表方案静态核对（C）', () => {
   const sql = readFileSync(SQL_0000, 'utf-8');
 
   it('session_segments 携 UNIQUE(id, snapshot_id) 作复合 FK 目标', () => {
-    expect(sql).toContain('CREATE TABLE public.session_segments (');
+    expect(sql).toContain('CREATE TABLE session_segments (');
     expect(sql).toMatch(/uq_session_segments_id_snapshot\s+UNIQUE\s*\(id,\s*snapshot_id\)/);
   });
 
   it('candidate_evidence 复合 FK 指向 session_segments(id, snapshot_id)', () => {
     expect(sql).toContain('fk_evidence_segment_snapshot');
     expect(sql).toMatch(
-      /FOREIGN KEY \(segment_id, snapshot_id\) REFERENCES public\.session_segments\(id, snapshot_id\)/,
+      /FOREIGN KEY \(segment_id, snapshot_id\)\s+REFERENCES session_segments \(id, snapshot_id\)/,
     );
   });
 });
