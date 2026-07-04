@@ -84,12 +84,42 @@ describe('migrations', () => {
     expect(sql).toMatch(/visibility IN \('public','unlisted'\)/);
   });
 
-  it('publish_batch_items has subject column (batch-repo reads/writes it); eval_reports has passed (B-31 schema)', () => {
+  it('publish_batch_items has subject column (batch-repo reads/writes it)', () => {
     const sql = allSql();
     // batch-repo.ts 建批/读取依赖 publish_batch_items.subject（逐项发布入参），真实 PG 必须有此列（Codex#2）。
     expect(sql).toMatch(/subject\s+jsonb\s+NOT NULL/);
-    // eval_reports 契约 B-31 预留 passed boolean（Codex#7）。
-    expect(sql).toMatch(/passed\s+boolean/);
+  });
+
+  it('drops all frozen placeholder tables in 0017 (zero-usage cleanup, 2026-07-04)', () => {
+    const file = files().find((f) => f.startsWith('0017'));
+    expect(file).toBeDefined();
+    const sql = readFileSync(join(MIGRATIONS_DIR, file!), 'utf-8');
+    for (const t of [
+      'artifacts',
+      'usage_events',
+      'runtime_sessions',
+      'daily_capability_stats',
+      'daily_creator_consumers',
+      'daily_creator_llm_stats',
+      'experience_pack_item_sources',
+      'experience_pack_items',
+      'experience_packs',
+      'eval_reports',
+      'creator_capability_cooccur',
+    ]) {
+      expect(sql).toContain(`DROP TABLE ${t};`);
+    }
+    // 同为 0 行但有代码在用的表绝不能出现在删除清单里。
+    for (const t of [
+      'creator_profiles',
+      'follows',
+      'likes',
+      'dead_events',
+      'publish_batches',
+      'publish_batch_items',
+    ]) {
+      expect(sql).not.toContain(`DROP TABLE ${t};`);
+    }
   });
 
   it('provides gen_uuid_v7 helper before any DEFAULT gen_uuid_v7()', () => {

@@ -63,11 +63,12 @@ API（均在 `/api/v1`）：`GET /runtime/capabilities`、`GET /runtime/capabili
 `POST /runtime/sessions`、`GET /runtime/sessions`、`GET /runtime/sessions/:id`（详情，前端据此 seed AG-UI 客户端）、
 `POST /runtime/agui`（AG-UI 标准端点，body=RunAgentInput，回 AG-UI 事件流）。
 
-## 命名说明（与 0008 冻结表的关系）
+## 命名说明（rt_chat 前缀的由来）
 
-`0008_frozen_tables.sql` 早已【冻结预留】另一套 `runtime_sessions` / `artifacts`（事件溯源消费模型：
-mode/tier*code/phase/consumer_key/last_applied_command_id），那是 B-40 更重的未来设计。本 MVP 是「对话式
-Artifacts runtime」，与冻结设计不同形态，故用独立前缀 `rt_chat*\*`，**不动**冻结预留表；两套设计的归并留作后续决策。
+`0008_frozen_tables.sql` 曾【冻结预留】另一套 `runtime_sessions` / `artifacts`（B-40 事件溯源消费模型，
+含 `mode/tier_code/phase/consumer_key/last_applied_command_id` 等计费与控制通道字段），本 MVP 的「对话式
+Artifacts runtime」与其形态不同，故用独立前缀 `rt_chat_*` 另建。该套冻结表从未被任何代码使用，
+已于迁移 0017 删除（2026-07-04）；如未来做计费，在 `rt_chat_*` 上演进，原设计意图见 0008 的 git 历史。
 
 ## 待办 / 硬化
 

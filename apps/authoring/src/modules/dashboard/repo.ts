@@ -3,8 +3,8 @@
 //     （非本人 → 0 行/空，handler 据「本人身份」直接返本人聚合；无跨用户下钻）。
 //   单一真源（§1.4）：能力表状态列由 publications.review_status/reject_reason 经 derivePublicationDisplayState 派生
 //     （在 dashboard-view，不在 SQL 里拼状态文案）；本仓储只取原始列。
-//   usage（§决策②）：本仓储【不查】daily_capability_stats / daily_creator_llm_stats / daily_creator_consumers
-//     （本月调用/累计调用/本月消耗/活跃消费者/收益/token 趋势全占位），只查真实维度（已发布数/能力名简介状态/草稿条）。
+//   usage（§决策②）：本月调用/累计调用/本月消耗/活跃消费者/收益/token 趋势全占位，不查库
+//     （原冻结计量日表 daily_* 已于迁移 0017 删除），只查真实维度（已发布数/能力名简介状态/草稿条）。
 import type { DraftView, DraftStep, DraftStatus } from '@cb/shared';
 import { decodeIdCursor, encodeIdCursor, InvalidCursorError } from '@cb/shared';
 import type { Queryable } from '../../platform/jobs/types.js';

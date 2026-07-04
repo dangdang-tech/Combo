@@ -23,7 +23,7 @@ export interface SnapshotHit {
   capabilityIds: string[];
 }
 
-/** 规范化无向边键（capability_a < capability_b，与 creator_capability_cooccur CHECK 一致）。 */
+/** 规范化无向边键（capability_a < capability_b，保证无向边只有一个键）。 */
 function edgeKey(a: string, b: string, basis: NetworkEdgeBasis): string {
   const [lo, hi] = a < b ? [a, b] : [b, a];
   return `${lo}|${hi}|${basis}`;
