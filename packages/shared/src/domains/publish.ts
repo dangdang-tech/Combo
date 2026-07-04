@@ -50,7 +50,7 @@ export const PublicationViewSchema = z.object({
 });
 export type PublicationView = z.infer<typeof PublicationViewSchema>;
 
-// ───────── 封面 / 定价 ─────────
+// ───────── 封面 ─────────
 export const CoverSourceSchema = z.enum(['glyph', 'image', 'html_snapshot']);
 export type CoverSource = z.infer<typeof CoverSourceSchema>;
 
@@ -61,16 +61,11 @@ export const CoverInputSchema = z.object({
 });
 export type CoverInput = z.infer<typeof CoverInputSchema>;
 
-export const TierInputSchema = z.object({
-  tierCode: z.string(),
-  priceMicros: z.number().int().nonnegative().describe('发布时冻结'),
-});
-export type TierInput = z.infer<typeof TierInputSchema>;
+// 定价（capability_tiers / TierInput）已随定价功能移除（2026-07-04）：无计费则不需要定价表。
 
 // ───────── 发布请求 / 结果 ─────────
 export const PublishVersionBodySchema = z.object({
   cover: CoverInputSchema,
-  tiers: z.array(TierInputSchema).min(1),
   visibility: VisibilitySchema,
 });
 export type PublishVersionBody = z.infer<typeof PublishVersionBodySchema>;
@@ -87,7 +82,6 @@ export const MarketCardSchema = z.object({
   summary: z.string(),
   byline: z.string().describe('署名（自动取登录账号，不可改）'),
   trustBadge: z.literal('源自一次真实会话'),
-  price: z.object({ priceMicros: z.number().int().nullable(), display: z.string().nullable() }),
   trialEnabled: z.literal(false),
   installs: z.null().describe('usage 占位（meta.placeholders）'),
   rating: z.null().describe('usage 占位'),
@@ -110,7 +104,6 @@ export type PublishResult = z.infer<typeof PublishResultSchema>;
 
 export const MarketCardPreviewBodySchema = z.object({
   cover: CoverInputSchema.optional(),
-  tiers: z.array(TierInputSchema).optional(),
   visibility: VisibilitySchema.optional(),
 });
 export type MarketCardPreviewBody = z.infer<typeof MarketCardPreviewBodySchema>;

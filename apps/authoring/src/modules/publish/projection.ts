@@ -1,8 +1,8 @@
 // B-14/B-28 · MarketplaceProjection（消费 capability.*，lifecycle，70 §1/§3；50 §5.1/§5 投影约定）。
 //   - capability.published：upsert marketplace_listings（标 alpha_pending/published、刷新 card + search_tsv，
 //     ON CONFLICT (capability_id) DO UPDATE，event_id 幂等）。card 是 MarketCard 投影（封面/名称/卖点/署名/
-//     价格/类型，发布-03），由被发布版 manifest（软字段：name/tagline/goal/output.type 权威）+ 创作者账号（byline）
-//     + 冻结档位价（capability_tiers，按 version_id 寻址）+ 被发布版【冻结封面来源/冻结可见性】（capability_versions.
+//     类型，发布-03），由被发布版 manifest（软字段：name/tagline/goal/output.type 权威）+ 创作者账号（byline）
+//     + 被发布版【冻结封面来源/冻结可见性】（capability_versions.
 //     cover_source/visibility，发布门版本级冻结，r3 P1）在 SQL 内 INSERT…SELECT 组装；search_tsv 取 name/tagline/
 //     summary(goal) 全文（市集检索，§5）；slug 由 trg_listing_slug 与 capabilities.slug 焊死、不靠 payload（Codex#16）。
 //     封面/可见性读【被展示版自身】冻结值（非 mutable publications）：拒绝回退到上一版时，市集卡按上一版发布时的
@@ -45,7 +45,6 @@ const TYPE_LABEL_CASE = `CASE v.manifest -> 'output' ->> 'type'
  *       旧版 v.visibility NULL → COALESCE 兜 public（与历史 publications 默认一致）。
  *   - 复合 FK (capability_id, version_id) → capability_versions(capability_id, id) 由 50 域焊死。
  *   - 找不到对应版本（被引用版不存在）→ INSERT…SELECT 0 行：抛错让 lifecycle 卡住等人工（不放错状态）。
- *   - 价格 LEFT JOIN capability_tiers 取 tier_code 最小档（本期单档；未冻结价 → null + display null，发布-25）。
  */
 async function projectPublished(tx: Tx, p: CapabilityPublishedPayload): Promise<void> {
   const res = await tx.query(
@@ -68,14 +67,6 @@ async function projectPublished(tx: Tx, p: CapabilityPublishedPayload): Promise<
          'summary',      COALESCE(v.manifest ->> 'goal', ''),
          'byline',       '@' || u.account,
          'trustBadge',   '源自一次真实会话',
-         'price',        jsonb_build_object(
-                           'priceMicros', t.price_micros,
-                           'display', CASE
-                             WHEN t.price_micros IS NULL THEN NULL
-                             WHEN t.price_micros = 0 THEN '免费'
-                             ELSE '¥' || to_char(t.price_micros / 1000000.0, 'FM999999990.00')
-                           END
-                         ),
          'trialEnabled', false,
          'installs',     NULL,
          'rating',       NULL
@@ -93,13 +84,6 @@ async function projectPublished(tx: Tx, p: CapabilityPublishedPayload): Promise<
      FROM capability_versions v
      JOIN capabilities c ON c.id = v.capability_id
      JOIN users u        ON u.id = c.creator_user_id
-     LEFT JOIN LATERAL (
-       SELECT ct.price_micros
-         FROM capability_tiers ct
-        WHERE ct.version_id = v.id
-        ORDER BY ct.tier_code ASC
-        LIMIT 1
-     ) t ON true
      WHERE v.capability_id = $1 AND v.id = $2
      ON CONFLICT (capability_id)
      DO UPDATE SET version_id = EXCLUDED.version_id,

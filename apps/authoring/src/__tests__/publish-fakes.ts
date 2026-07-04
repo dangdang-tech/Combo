@@ -3,7 +3,6 @@
 //   忠实点（合规清单）：
 //     - 守门 UPDATE「status='draft' 才推 published」→ 非 draft 命中 0 行（rowCount=0）。
 //     - publications ON CONFLICT (capability_id)：第二次发布命中既有行 → 仍只一条 publication（防重）。
-//     - capability_tiers ON CONFLICT (version_id, tier_code) DO NOTHING：已冻结价不被回写。
 //     - outbox_events ON CONFLICT (event_id) DO NOTHING：同事件只一行（生产侧幂等）。
 //     - 事务内单行单次改、回读 share_token、复合 FK 参数透传。
 //   ROLLBACK 语义：每个连接开 BEGIN 时对受影响表打快照，ROLLBACK 还原（验「任一步失败整体回滚、不留半发布态」）。
@@ -39,11 +38,6 @@ export interface UserRow {
   id: string;
   account: string;
 }
-export interface TierRow {
-  version_id: string;
-  tier_code: string;
-  price_micros: number;
-}
 export interface PubRow {
   capability_id: string;
   current_version_id: string;
@@ -66,7 +60,6 @@ export interface OutboxRow {
 interface Snapshot {
   capabilities: Map<string, CapRow>;
   versions: Map<string, VerRow>;
-  tiers: TierRow[];
   publications: Map<string, PubRow>;
   outbox: OutboxRow[];
 }
@@ -90,7 +83,6 @@ export class PublishFakeDb implements Queryable {
   capabilities = new Map<string, CapRow>();
   versions = new Map<string, VerRow>();
   users = new Map<string, UserRow>();
-  tiers: TierRow[] = [];
   publications = new Map<string, PubRow>();
   outbox: OutboxRow[] = [];
   outboxSeq = 0;
@@ -103,7 +95,6 @@ export class PublishFakeDb implements Queryable {
     this.snapshot = {
       capabilities: new Map([...this.capabilities].map(([k, v]) => [k, { ...v }])),
       versions: new Map([...this.versions].map(([k, v]) => [k, { ...v }])),
-      tiers: this.tiers.map((t) => ({ ...t })),
       publications: new Map([...this.publications].map(([k, v]) => [k, { ...v }])),
       outbox: this.outbox.map((o) => ({ ...o })),
     };
@@ -112,7 +103,6 @@ export class PublishFakeDb implements Queryable {
     if (!this.snapshot) return;
     this.capabilities = this.snapshot.capabilities;
     this.versions = this.snapshot.versions;
-    this.tiers = this.snapshot.tiers;
     this.publications = this.snapshot.publications;
     this.outbox = this.snapshot.outbox;
     this.snapshot = null;
@@ -171,20 +161,6 @@ export class PublishFakeDb implements Queryable {
       ] as R[]);
     }
 
-    // —— readFrozenTiers（SELECT tier_code, price_micros FROM capability_tiers WHERE version_id ORDER BY tier_code）——
-    if (
-      sql.includes('SELECT tier_code, price_micros') &&
-      sql.includes('FROM capability_tiers') &&
-      sql.includes('WHERE version_id = $1')
-    ) {
-      const vid = params[0] as string;
-      const rows = this.tiers
-        .filter((t) => t.version_id === vid)
-        .sort((a, b) => (a.tier_code < b.tier_code ? -1 : 1))
-        .map((t) => ({ tier_code: t.tier_code, price_micros: t.price_micros }));
-      return ok<R>(rows as R[]);
-    }
-
     // —— ① 发布门事务内锁 capability 行 + 重读 current_version_id（FOR UPDATE，Codex#4）——
     if (sql.includes('SELECT current_version_id FROM capabilities') && sql.includes('FOR UPDATE')) {
       const cap = this.capabilities.get(params[0] as string);
@@ -218,19 +194,7 @@ export class PublishFakeDb implements Queryable {
       return ok<R>([], 1);
     }
 
-    // —— ③ INSERT capability_tiers ON CONFLICT DO NOTHING ——
-    if (sql.includes('INSERT INTO capability_tiers')) {
-      maybeThrow();
-      const versionId = params[0] as string;
-      const tierCode = params[1] as string;
-      const priceMicros = Number(params[2]);
-      const exists = this.tiers.find((t) => t.version_id === versionId && t.tier_code === tierCode);
-      if (exists) return ok<R>([], 0); // ON CONFLICT DO NOTHING：已冻结价不回写
-      this.tiers.push({ version_id: versionId, tier_code: tierCode, price_micros: priceMicros });
-      return ok<R>([], 1);
-    }
-
-    // —— ④ 旧版滚动 superseded（SET status='superseded' WHERE id AND capability_id AND status='published'）——
+    // —— ③ 旧版滚动 superseded（SET status='superseded' WHERE id AND capability_id AND status='published'）——
     if (
       sql.includes('UPDATE capability_versions') &&
       sql.includes("SET status = 'superseded'") &&
@@ -244,7 +208,7 @@ export class PublishFakeDb implements Queryable {
       return ok<R>([], 1);
     }
 
-    // —— ⑤ upsert publications ON CONFLICT (capability_id) ——
+    // —— ④ upsert publications ON CONFLICT (capability_id) ——
     if (sql.includes('INSERT INTO publications') && sql.includes('ON CONFLICT (capability_id)')) {
       maybeThrow();
       const capId = params[0] as string;
@@ -277,7 +241,7 @@ export class PublishFakeDb implements Queryable {
       return ok<R>(p ? ([{ share_token: p.share_token }] as R[]) : []);
     }
 
-    // —— ⑥ capabilities.current_version_id → 本版 ——
+    // —— ⑤ capabilities.current_version_id → 本版 ——
     if (
       sql.includes('UPDATE capabilities') &&
       sql.includes('current_version_id = $2') &&
@@ -290,7 +254,7 @@ export class PublishFakeDb implements Queryable {
       return ok<R>([], 1);
     }
 
-    // —— ⑦ emitInTx：INSERT outbox_events ON CONFLICT (event_id) DO NOTHING RETURNING seq ——
+    // —— ⑥ emitInTx：INSERT outbox_events ON CONFLICT (event_id) DO NOTHING RETURNING seq ——
     if (sql.includes('INSERT INTO outbox_events') && sql.includes('ON CONFLICT (event_id)')) {
       maybeThrow();
       const eventId = params[0] as string;

@@ -224,7 +224,6 @@ async function main(): Promise<void> {
         summary: demo.goal,
         byline: `@${user.account}`,
         trustBadge: '源自一次真实会话',
-        price: { priceMicros: 0, display: '免费' },
         trialEnabled: true,
         installs: null,
         rating: null,

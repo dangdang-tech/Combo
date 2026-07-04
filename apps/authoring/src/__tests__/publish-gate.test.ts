@@ -2,8 +2,7 @@
 //   覆盖：
 //     · manifest 冻结：canonical hash 键序无关、稳定。
 //     · 只接受 draft：published→ALREADY_PUBLISHED、superseded/review_rejected→STATE_CONFLICT、缺字段→PUBLISH_MISSING_FIELDS。
-//     · 价格冻结：发布固化 capability_tiers；发布后改 manifest 不变价（重发同版守门 0 行，价不被回写）。
-//     · 防重：重试/双标签页只一条 publication（ON CONFLICT capability_id）、ON CONFLICT DO NOTHING tiers/outbox。
+//     · 防重：重试/双标签页只一条 publication（ON CONFLICT capability_id）、ON CONFLICT DO NOTHING outbox。
 //     · 同事务 outbox 双事件：capability.published(lifecycle) + notify.publish_completed(notify)、event_id 幂等。
 //     · 旧版滚动 superseded + 复合 FK 参数透传。
 //     · 事务原子性：中途失败整体回滚（不留半发布态）。
@@ -30,7 +29,6 @@ import {
 } from '../modules/publish/manifest-hash.js';
 import {
   buildMarketCard,
-  priceDisplay,
   typeLabelOf,
   bylineOf,
   USAGE_PLACEHOLDERS,
@@ -39,7 +37,6 @@ import { PublishFakeDb, seedUser, seedCapabilityVersion, readyManifest } from '.
 
 const TRACE = 'trace-1';
 const stdCover = { source: 'glyph' as const };
-const stdTiers = [{ tierCode: 'standard', priceMicros: 9_900_000 }];
 
 function gateArgs(
   db: PublishFakeDb,
@@ -56,7 +53,6 @@ function gateArgs(
     manifest: v.manifest,
     ownerUserId: owner,
     cover: stdCover,
-    tiers: stdTiers,
     visibility: 'public' as const,
     currentVersionId: cap.current_version_id,
     traceId: TRACE,
@@ -100,26 +96,17 @@ describe('manifestHash 单源一致性（M1）', () => {
 // 必填校验 + 状态机判定（§1.1/§2.1）
 // ===========================================================================
 describe('必填校验 missingPublishFields（发布-24）', () => {
-  it('齐全（name/tagline 非空 + glyph 封面 + 价格档）→ 空', () => {
-    expect(missingPublishFields(readyManifest('c'), { cover: stdCover, tiers: stdTiers })).toEqual(
-      [],
-    );
+  it('齐全（name/tagline 非空 + glyph 封面）→ 空', () => {
+    expect(missingPublishFields(readyManifest('c'), { cover: stdCover })).toEqual([]);
   });
   it('name/tagline 空 → 标缺位置', () => {
     const m = { ...readyManifest('c'), name: '', tagline: '  ' };
-    expect(missingPublishFields(m, { cover: stdCover, tiers: stdTiers })).toEqual([
-      'name',
-      'tagline',
-    ]);
+    expect(missingPublishFields(m, { cover: stdCover })).toEqual(['name', 'tagline']);
   });
   it('封面 image 缺 assetKey → 标 cover；html_snapshot 缺 snapshotRef → 标 cover', () => {
     const m = readyManifest('c');
-    expect(missingPublishFields(m, { cover: { source: 'image' }, tiers: stdTiers })).toContain(
-      'cover',
-    );
-    expect(
-      missingPublishFields(m, { cover: { source: 'html_snapshot' }, tiers: stdTiers }),
-    ).toContain('cover');
+    expect(missingPublishFields(m, { cover: { source: 'image' } })).toContain('cover');
+    expect(missingPublishFields(m, { cover: { source: 'html_snapshot' } })).toContain('cover');
   });
 });
 
@@ -137,7 +124,7 @@ describe('版本状态机判定 publishStateError（§1.1，发布只接受 draf
 // 发布门单事务（§1.2）——成功路径
 // ===========================================================================
 describe('publishGateInTx 成功路径（§1.2 首发）', () => {
-  it('draft→published + 冻结 hash + 固化 tiers + publications + 滚动 + outbox 双事件（全在一事务内 COMMIT）', async () => {
+  it('draft→published + 冻结 hash + publications + 滚动 + outbox 双事件（全在一事务内 COMMIT）', async () => {
     const db = new PublishFakeDb();
     const owner = seedUser(db, 'WAYNE');
     const seeded = seedCapabilityVersion(db, owner);
@@ -149,10 +136,6 @@ describe('publishGateInTx 成功路径（§1.2 首发）', () => {
     expect(v.status).toBe('published');
     expect(v.manifest_hash).toBe(manifestHash(v.manifest));
     expect(r.reviewStatus).toBe('alpha_pending');
-    // 价格固化：capability_tiers 写入冻结价。
-    expect(db.tiers).toEqual([
-      { version_id: seeded.versionId, tier_code: 'standard', price_micros: 9_900_000 },
-    ]);
     // publications 一条（capability_id 唯一）。
     expect(db.publications.size).toBe(1);
     const pub = db.publications.get(seeded.capabilityId)!;
@@ -304,16 +287,14 @@ describe('防重：重试/双标签页只一条 publication（§4 / 发布-20）
 
     await publishGateInTx(asTxPool(db), gateArgs(db, owner, seeded));
     expect(db.publications.size).toBe(1);
-    const tiersAfterFirst = db.tiers.map((t) => ({ ...t }));
 
     // 第二次（双标签页/重试，幂等中间件未拦的极端窗口）：版本已 published → 守门 0 行 → 回滚。
     await expect(publishGateInTx(asTxPool(db), gateArgs(db, owner, seeded))).rejects.toMatchObject({
       code: 'STATE_CONFLICT',
     });
-    // 仍只一条 publication、无第二条 outbox、价格未被回写。
+    // 仍只一条 publication、无第二条 outbox。
     expect(db.publications.size).toBe(1);
     expect(db.outbox.filter((o) => o.topic === 'capability.published')).toHaveLength(1);
-    expect(db.tiers).toEqual(tiersAfterFirst);
     // 第二次整体回滚（ROLLBACK 调用）。
     expect(db.queries.filter((q) => q.sql === 'ROLLBACK').length).toBeGreaterThanOrEqual(1);
   });
@@ -398,45 +379,22 @@ describe('封面/可见性版本级冻结（r3 P1）', () => {
 });
 
 // ===========================================================================
-// 价格冻结血缘（§1.2 决策）：发布后改 manifest 不影响已发布价
-// ===========================================================================
-describe('价格冻结：发布后改 manifest 不影响已发布版价格（发布-28）', () => {
-  it('发布固化 9.9 元；之后改 manifest（库内行变）不回写 capability_tiers', async () => {
-    const db = new PublishFakeDb();
-    const owner = seedUser(db);
-    const seeded = seedCapabilityVersion(db, owner);
-    await publishGateInTx(asTxPool(db), gateArgs(db, owner, seeded));
-    const frozen = db.tiers.find((t) => t.version_id === seeded.versionId)!.price_micros;
-    expect(frozen).toBe(9_900_000);
-
-    // 模拟「发布后改 manifest」（B-26 PATCH 强制开新版；这里直接改库内行验价不动）。
-    db.versions.get(seeded.versionId)!.manifest = {
-      ...db.versions.get(seeded.versionId)!.manifest,
-      tagline: '改后的卖点',
-    };
-    // capability_tiers 行未被任何 manifest 编辑触碰：价仍 9.9 元（按 version_id 不可变寻址）。
-    expect(db.tiers.find((t) => t.version_id === seeded.versionId)!.price_micros).toBe(9_900_000);
-  });
-});
-
-// ===========================================================================
 // 事务原子性（§1.2 硬规则③：任一步失败整体回滚，不留半发布态）
 // ===========================================================================
 describe('发布门原子性（中途失败整体回滚，§1.2）', () => {
-  it('outbox 写入前注入失败 → 整事务回滚：版本仍 draft、无 publication、无 tiers、无 outbox', async () => {
+  it('outbox 写入前注入失败 → 整事务回滚：版本仍 draft、无 publication、无 outbox', async () => {
     const db = new PublishFakeDb();
     const owner = seedUser(db);
     const seeded = seedCapabilityVersion(db, owner);
-    // 第 5 条写后抛（②promote ③tiers ④(skip,无旧版) ⑤publications ⑥capabilities → 第5条 capabilities 写后）。
-    db.throwAfterWrites = 5;
+    // 第 4 条写后抛（②promote ③(skip,无旧版) ④publications ⑤capabilities → 第4条 outbox 写前）。
+    db.throwAfterWrites = 4;
 
     await expect(publishGateInTx(asTxPool(db), gateArgs(db, owner, seeded))).rejects.toThrow();
 
-    // 全部回滚：版本仍 draft、无 publication、无 tiers、无 outbox。
+    // 全部回滚：版本仍 draft、无 publication、无 outbox。
     expect(db.versions.get(seeded.versionId)!.status).toBe('draft');
     expect(db.versions.get(seeded.versionId)!.manifest_hash).toBeNull();
     expect(db.publications.size).toBe(0);
-    expect(db.tiers).toHaveLength(0);
     expect(db.outbox).toHaveLength(0);
     expect(db.queries.filter((q) => q.sql === 'ROLLBACK')).toHaveLength(1);
   });
@@ -453,7 +411,6 @@ describe('publishOne 前置闸（§2.1 错误用例）', () => {
         versionId: 'nope',
         ownerUserId: 'u1',
         cover: stdCover,
-        tiers: stdTiers,
         visibility: 'public',
         traceId: TRACE,
       }),
@@ -469,7 +426,6 @@ describe('publishOne 前置闸（§2.1 错误用例）', () => {
         versionId: seeded.versionId,
         ownerUserId: 'someone-else',
         cover: stdCover,
-        tiers: stdTiers,
         visibility: 'public',
         traceId: TRACE,
       }),
@@ -486,7 +442,6 @@ describe('publishOne 前置闸（§2.1 错误用例）', () => {
         versionId: seeded.versionId,
         ownerUserId: owner,
         cover: stdCover,
-        tiers: stdTiers,
         visibility: 'public',
         traceId: TRACE,
       }),
@@ -503,7 +458,6 @@ describe('publishOne 前置闸（§2.1 错误用例）', () => {
         versionId: seeded.versionId,
         ownerUserId: owner,
         cover: stdCover,
-        tiers: stdTiers,
         visibility: 'public',
         traceId: TRACE,
       }),
@@ -520,7 +474,6 @@ describe('publishOne 前置闸（§2.1 错误用例）', () => {
         versionId: seeded.versionId,
         ownerUserId: owner,
         cover: stdCover,
-        tiers: stdTiers,
         visibility: 'public',
         traceId: TRACE,
       });
@@ -533,7 +486,7 @@ describe('publishOne 前置闸（§2.1 错误用例）', () => {
     expect(db.publications.size).toBe(0); // 闸未过
   });
 
-  it('成功 → PublishResult 含即时市集卡 + marketUrl /a/{slug} + 冻结主档价', async () => {
+  it('成功 → PublishResult 含即时市集卡 + marketUrl /a/{slug}', async () => {
     const db = new PublishFakeDb();
     const owner = seedUser(db, 'WAYNE');
     const seeded = seedCapabilityVersion(db, owner);
@@ -541,15 +494,12 @@ describe('publishOne 前置闸（§2.1 错误用例）', () => {
       versionId: seeded.versionId,
       ownerUserId: owner,
       cover: stdCover,
-      tiers: stdTiers,
       visibility: 'public',
       traceId: TRACE,
     });
     expect(r.marketUrl).toBe(`/a/${seeded.slug}`);
     expect(r.reviewStatus).toBe('alpha_pending');
     expect(r.card.byline).toBe('@WAYNE');
-    expect(r.card.price.priceMicros).toBe(9_900_000);
-    expect(r.card.price.display).toBe('¥9.90');
     expect(r.card.installs).toBeNull();
     expect(r.card.rating).toBeNull();
     expect(r.card.trialEnabled).toBe(false);
@@ -570,7 +520,6 @@ describe('MarketCard 字段来源映射（发布-03/06）', () => {
       account: 'WAYNE',
       cover: { source: 'glyph' },
       coverUrl: null,
-      priceMicros: 9_900_000,
     });
     expect(card.name).toBe(m.name);
     expect(card.tagline).toBe(m.tagline);
@@ -582,38 +531,6 @@ describe('MarketCard 字段来源映射（发布-03/06）', () => {
     expect(card.installs).toBeNull();
     expect(card.rating).toBeNull();
     expect(card.cover).toEqual({ source: 'glyph', url: null });
-  });
-
-  it('价格未设 → priceMicros null + display null（待填提示，发布-25）', () => {
-    const card = buildMarketCard({
-      versionId: 'v1',
-      capabilityId: 'cap-1',
-      slug: 'my-cap',
-      manifest: readyManifest('cap-1'),
-      account: 'WAYNE',
-      priceMicros: null,
-    });
-    expect(card.price).toEqual({ priceMicros: null, display: null });
-  });
-
-  it('priceDisplay：0→免费、9.9 元、null→null', () => {
-    expect(priceDisplay(0)).toBe('免费');
-    expect(priceDisplay(9_900_000)).toBe('¥9.90');
-    expect(priceDisplay(null)).toBeNull();
-  });
-
-  // 单位/币种约定锁定（micros = 微元，1 元 = 1_000_000 micros，¥=CNY；非 micro-USD/$，
-  //   micro-USD 仅用于 infra/llm 成本审计，与定价域无关）。priceMicros 经 toFixed(2) 取两位小数，
-  //   属正常四舍五入而非币种/换算 bug。E2E 标的 999000 = 0.999 元 → toFixed(2) 进位 ¥1.00（预期、正确）。
-  it('priceDisplay 单位/币种约定锁定：micros=微元、¥=CNY、toFixed(2) 正常进位（999000→¥1.00）', () => {
-    // ¥ 符号（CNY），不是 $（micro-USD 是另一个域，不混用）。
-    expect(priceDisplay(1_000_000)).toBe('¥1.00'); // 1 元
-    expect(priceDisplay(990_000)).toBe('¥0.99'); // 0.99 元（分级精度）
-    expect(priceDisplay(99_000)).toBe('¥0.10'); // 0.099 元 → 进位 0.10
-    // 关键锁定：E2E 抓到的 999000（= 0.999 元）经 toFixed(2) 正常进位为 ¥1.00（非换算/币种 bug）。
-    expect(priceDisplay(999_000)).toBe('¥1.00');
-    // 若把 micros 误当 micro-USD 显示 $ 或除以 1e4（误读为「分」）会立刻偏离这些断言。
-    expect(priceDisplay(999_000)?.startsWith('¥')).toBe(true);
   });
 
   it('usage 占位文案存在（meta.placeholders，发布-07）', () => {

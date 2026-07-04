@@ -1,21 +1,20 @@
-// 50 · publish-one 编排（B-27/B-28，50-step5-publish §1.2/§2.1）。单发布 API 与批量 worker（B-29）共用入口。
+// 50 · publish-one 编排（B-27/B-28，50-step5-publish §1.2/§2.1）。单发布 API 入口。
 //   前置闸（事务外读，§2.1 错误用例）：owner（非本人 FORBIDDEN）+ status 状态机（draft 才可发；
 //     published→ALREADY_PUBLISHED；superseded/review_rejected→STATE_CONFLICT，发布事务只接受 draft，Codex#4-r2）
-//     + 必填软字段/封面/价格（缺 → PUBLISH_MISSING_FIELDS，details.missingFields，发布-24）。
-//   闸过 → publishGateInTx（单 PG 事务：冻结/价格固化/滚动/publications/outbox 双事件，§1.2）。
-//   返回 PublishResult（含即时回投市集卡，与下一步展示一致，§2.1）；市集卡 byline 取创作者账号、价格取本次冻结价。
+//     + 必填软字段/封面（缺 → PUBLISH_MISSING_FIELDS，details.missingFields，发布-24）。
+//   闸过 → publishGateInTx（单 PG 事务：冻结/滚动/publications/outbox 双事件，§1.2）。
+//   返回 PublishResult（含即时回投市集卡，与下一步展示一致，§2.1）；市集卡 byline 取创作者账号。
 import {
   ErrorCode,
   type PublishResult,
   type CoverInput,
-  type TierInput,
   type Visibility,
 } from '@cb/shared';
 import type { Queryable } from '../../platform/jobs/types.js';
 import type { TxPool } from '../../platform/events/db-tx.js';
 import { PublishError, readVersionForPublish, publishGateInTx, publishStateError } from './repo.js';
 import { missingPublishFields } from './manifest-hash.js';
-import { buildMarketCard, primaryPriceMicros } from './market-card.js';
+import { buildMarketCard } from './market-card.js';
 
 /** 公开市集地址（发布-15「可访问的市集地址」）。本期固定路径形态 /a/{slug}。 */
 export function marketUrlFor(slug: string): string {
@@ -31,7 +30,6 @@ export interface PublishOneArgs {
   versionId: string;
   ownerUserId: string;
   cover: CoverInput;
-  tiers: TierInput[];
   visibility: Visibility;
   traceId: string;
 }
@@ -63,8 +61,8 @@ export async function publishOne(
   if (stateErr) {
     throw new PublishError(stateErr, `version status ${row.status} not publishable`);
   }
-  // 必填校验（name/tagline 非空 + 封面来源齐 + 价格档齐，发布-24）。
-  const missing = missingPublishFields(row.manifest, { cover: args.cover, tiers: args.tiers });
+  // 必填校验（name/tagline 非空 + 封面来源齐，发布-24）。
+  const missing = missingPublishFields(row.manifest, { cover: args.cover });
   if (missing.length > 0) {
     const e = new PublishError(ErrorCode.PUBLISH_MISSING_FIELDS, 'missing required publish fields');
     (e as PublishError & { missingFields: string[] }).missingFields = missing;
@@ -78,14 +76,13 @@ export async function publishOne(
     manifest: row.manifest,
     ownerUserId: args.ownerUserId,
     cover: args.cover,
-    tiers: args.tiers,
     visibility: args.visibility,
     currentVersionId: row.currentVersionId,
     traceId: args.traceId,
     link: publishDoneLink(row.versionId),
   });
 
-  // 即时回投市集卡（与下一步展示一致，§2.1）：byline 取账号、价格取本次冻结主档价。
+  // 即时回投市集卡（与下一步展示一致，§2.1）：byline 取账号。
   const card = buildMarketCard({
     versionId: row.versionId,
     capabilityId: row.capabilityId,
@@ -94,7 +91,6 @@ export async function publishOne(
     account: row.account,
     cover: args.cover,
     coverUrl: null, // 封面 url 解析（glyph 生成/对象存储签发）本期前端兜底；投影/卡渲染再解析。
-    priceMicros: primaryPriceMicros(args.tiers),
   });
 
   const result: PublishResult = {

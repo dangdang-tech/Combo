@@ -16,7 +16,7 @@ import {
 import { asTxPool } from '../../platform/events/db-tx.js';
 import { publishOne } from './publish-one.js';
 import { PublishError, readVersionForPublish } from './repo.js';
-import { buildMarketCard, primaryPriceMicros, USAGE_PLACEHOLDERS } from './market-card.js';
+import { buildMarketCard, USAGE_PLACEHOLDERS } from './market-card.js';
 
 function requireUserId(req: FastifyRequest, reply: FastifyReply): string | null {
   const userId = req.auth?.userId;
@@ -64,7 +64,7 @@ export function publishVersionHandler(): RouteHandlerMethod {
     if (!parsed.success) {
       // 入参格式不对（封面来源枚举/价格非负/可见性枚举等）→ 422 缺必填人话（去补齐）。
       return replyError(req, reply, ErrorCode.PUBLISH_MISSING_FIELDS, 422, {
-        userMessage: '市集卡还差点内容：封面/价格/可见性要先设好，补齐后再发布。',
+        userMessage: '市集卡还差点内容：封面/可见性要先设好，补齐后再发布。',
         action: 'change_input',
       });
     }
@@ -75,7 +75,6 @@ export function publishVersionHandler(): RouteHandlerMethod {
         versionId,
         ownerUserId: userId,
         cover: parsed.data.cover,
-        tiers: parsed.data.tiers,
         visibility: parsed.data.visibility,
         traceId: req.id,
       });
@@ -149,10 +148,10 @@ function replyPublishError(
 // ===========================================================================
 
 /**
- * 市集卡预览（§2.2）。无副作用（不写库）：读 manifest 软字段 + 创作者账号，套未持久化的封面/价格预览入参，
+ * 市集卡预览（§2.2）。无副作用（不写库）：读 manifest 软字段 + 创作者账号，套未持久化的封面预览入参，
  *   组装一张 MarketCard 返回（与发布后展示一致，发布-01/03）。owner 守门（404/403）；
  *   软字段未生成完（结构化未完成）→ 409 STATE_CONFLICT（回上一步补全再预览，§2.2）。
- *   价格未设 → priceMicros null + display null（待填提示，发布-25）；封面缺 → glyph 默认（发布-25）。
+ *   封面缺 → glyph 默认（发布-25）。
  */
 export function marketCardPreviewHandler(): RouteHandlerMethod {
   return async function (req: FastifyRequest, reply: FastifyReply) {
@@ -205,7 +204,6 @@ export function marketCardPreviewHandler(): RouteHandlerMethod {
       account: row.account,
       ...(parsed.data.cover ? { cover: parsed.data.cover } : {}),
       coverUrl: null,
-      priceMicros: primaryPriceMicros(parsed.data.tiers),
     });
 
     const body: Envelope<MarketCard> = {

@@ -1,12 +1,11 @@
 // 50 · 发布域仓储 + 发布门事务（B-27/B-28，50-step5-publish §1.2）。注入 Queryable/TxPool，便于 mock，无真 PG。
 //   发布门是【单 PG 事务】（withTransaction），任一步失败整体回滚、不留半发布态（硬规则③）。步骤序遵 §1.2：
-//     ①校验(owner+status='draft'+必填) → ②冻结 manifest_hash + 本 draft→published → ③价格固化(capability_tiers)
-//     → ④旧版滚动 superseded → ⑤upsert publications(capability_id UNIQ + share_token) → ⑥capabilities.current_version_id
-//     → ⑦同事务 emit outbox 两条（capability.published→MarketplaceProjection / notify.publish_completed→NotifyConsumer）。
+//     ①校验(owner+status='draft'+必填) → ②冻结 manifest_hash + 本 draft→published
+//     → ③旧版滚动 superseded → ④upsert publications(capability_id UNIQ + share_token) → ⑤capabilities.current_version_id
+//     → ⑥同事务 emit outbox 两条（capability.published→MarketplaceProjection / notify.publish_completed→NotifyConsumer）。
+//   （定价固化步骤已随 capability_tiers 移除，2026-07-04：无计费则不需要定价。）
 //   防重三道闸（§4）：app 层 idempotency_keys(scope=publish.version)（中间件兜）+ publications.capability_id UNIQ
 //     + 本事务②的「status='draft' 才推 published」守门（重发命中 0 行 → STATE_CONFLICT，绝不产生第二条 publication）。
-//   价格冻结血缘（§1.2 决策）：价格落 capability_tiers(version_id,…)、按不可变 version_id 寻址；
-//     发布后改 manifest（B-26 PATCH 强制开新版）不回写已发布版的 capability_tiers 行（验收：发布后改 manifest 不变价）。
 //   复合 FK（§5 / 00 §11.E）：publications.(capability_id,current_version_id) → capability_versions(capability_id,id)，
 //     DB 层杜绝跨 capability 错指；旧版滚动/回退同此血缘。
 import { randomUUID } from 'node:crypto';
@@ -14,7 +13,6 @@ import {
   ErrorCode,
   type Manifest,
   type CoverInput,
-  type TierInput,
   type Visibility,
   type CapabilityPublishedPayload,
   type NotifyPublishCompletedPayload,
@@ -117,25 +115,6 @@ export async function readVersionForPublish(
 }
 
 // ===========================================================================
-// 读已冻结价格（市集卡预览/投影 / 已发布版价格真源，按不可变 version_id 寻址）
-// ===========================================================================
-
-/** 读某 version 的冻结档位价格（按 tier_code 序）。无 → 空数组（未发布/未设价）。 */
-export async function readFrozenTiers(
-  db: Queryable,
-  versionId: string,
-): Promise<{ tierCode: string; priceMicros: number }[]> {
-  const res = await db.query<{ tier_code: string; price_micros: string | number }>(
-    `SELECT tier_code, price_micros
-       FROM capability_tiers
-      WHERE version_id = $1
-      ORDER BY tier_code ASC`,
-    [versionId],
-  );
-  return res.rows.map((t) => ({ tierCode: t.tier_code, priceMicros: Number(t.price_micros) }));
-}
-
-// ===========================================================================
 // 发布门单事务（B-27，§1.2）——给单发布 API 与批量 worker 复用的 publish-one
 // ===========================================================================
 
@@ -148,7 +127,6 @@ export interface PublishGateArgs {
   manifest: Manifest;
   ownerUserId: string;
   cover: CoverInput;
-  tiers: TierInput[];
   visibility: Visibility;
   /**
    * 事务外读到的旧 active 发布版（仅观测用）。真正 supersede 的旧版按事务内 FOR UPDATE【锁后】重读的
@@ -226,24 +204,14 @@ export async function publishGateInTx(
       ],
     );
     if ((promoted.rowCount ?? 0) === 0) {
-      // 已非 draft（重发/并发/被拒/旧版）→ 回滚整事务（不产生 publication/tiers/outbox）。
+      // 已非 draft（重发/并发/被拒/旧版）→ 回滚整事务（不产生 publication/outbox）。
       throw new PublishError(
         ErrorCode.STATE_CONFLICT,
         'version no longer draft (already published / superseded / rejected)',
       );
     }
 
-    // ③ 价格固化（capability_tiers，按 version_id 不可变寻址；发布后改 manifest 不回写，§1.2 步3）。
-    for (const tier of args.tiers) {
-      await tx.query(
-        `INSERT INTO capability_tiers (version_id, tier_code, price_micros, quota)
-         VALUES ($1, $2, $3, NULL)
-         ON CONFLICT (version_id, tier_code) DO NOTHING`,
-        [args.versionId, tier.tierCode, tier.priceMicros],
-      );
-    }
-
-    // ④ 旧版滚动 superseded（按【锁后】current_version_id，仅当存在旧 active 发布版且 ≠ 本版，§1.2 步4 / Codex#4）。
+    // ③ 旧版滚动 superseded（按【锁后】current_version_id，仅当存在旧 active 发布版且 ≠ 本版，§1.2 步4 / Codex#4）。
     //    用 lockedCurrentVersionId（事务内 FOR UPDATE 重读）而非事务外 args.currentVersionId，杜绝并发双发布留多个 published。
     let supersededVersionId: string | undefined;
     if (lockedCurrentVersionId && lockedCurrentVersionId !== args.versionId) {

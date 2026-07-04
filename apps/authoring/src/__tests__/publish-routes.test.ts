@@ -78,7 +78,6 @@ function errOf(body: unknown): {
 
 const stdBody = {
   cover: { source: 'glyph' },
-  tiers: [{ tierCode: 'standard', priceMicros: 9_900_000 }],
   visibility: 'public',
 };
 
@@ -193,7 +192,7 @@ describe('publishVersionHandler (§2.1)', () => {
     assertNoCode(ctx.sent.body);
   });
 
-  it('body 格式错（缺 cover/tiers/visibility）→ 422 change_input（去补齐），无 code', async () => {
+  it('body 格式错（缺 cover/visibility）→ 422 change_input（去补齐），无 code', async () => {
     const db = new PublishFakeDb();
     const owner = seedUser(db);
     const seeded = seedCapabilityVersion(db, owner);
@@ -222,36 +221,9 @@ describe('publishVersionHandler (§2.1)', () => {
 // §2.2 · 市集卡预览
 // ===========================================================================
 describe('marketCardPreviewHandler (§2.2)', () => {
-  it('成功 → 200 Envelope<MarketCard>（不写库）+ meta.placeholders；价格按预览入参', async () => {
+  it('成功 → 200 Envelope<MarketCard>（不写库）+ meta.placeholders', async () => {
     const db = new PublishFakeDb();
     const owner = seedUser(db, 'WAYNE');
-    const seeded = seedCapabilityVersion(db, owner);
-    const ctx = makeReqReply({
-      userId: owner,
-      params: { versionId: seeded.versionId },
-      body: { tiers: [{ tierCode: 'standard', priceMicros: 5_000_000 }] },
-      db,
-    });
-    await call(marketCardPreviewHandler(), ctx);
-    expect(ctx.sent.code).toBe(200);
-    const card = dataOf<{
-      byline: string;
-      price: { priceMicros: number; display: string };
-      installs: null;
-    }>(ctx.sent.body);
-    expect(card.byline).toBe('@WAYNE');
-    expect(card.price.priceMicros).toBe(5_000_000);
-    expect(card.price.display).toBe('¥5.00');
-    expect(card.installs).toBeNull();
-    expect(metaOf(ctx.sent.body).placeholders?.rating).toMatch(/上线后/);
-    assertNoCode(ctx.sent.body);
-    // 不写库（预览无副作用）：无 publications。
-    expect(db.publications.size).toBe(0);
-  });
-
-  it('未设价 → priceMicros null + display null（待填）', async () => {
-    const db = new PublishFakeDb();
-    const owner = seedUser(db);
     const seeded = seedCapabilityVersion(db, owner);
     const ctx = makeReqReply({
       userId: owner,
@@ -261,10 +233,16 @@ describe('marketCardPreviewHandler (§2.2)', () => {
     });
     await call(marketCardPreviewHandler(), ctx);
     expect(ctx.sent.code).toBe(200);
-    const card = dataOf<{ price: { priceMicros: number | null; display: string | null } }>(
-      ctx.sent.body,
-    );
-    expect(card.price).toEqual({ priceMicros: null, display: null });
+    const card = dataOf<{
+      byline: string;
+      installs: null;
+    }>(ctx.sent.body);
+    expect(card.byline).toBe('@WAYNE');
+    expect(card.installs).toBeNull();
+    expect(metaOf(ctx.sent.body).placeholders?.rating).toMatch(/上线后/);
+    assertNoCode(ctx.sent.body);
+    // 不写库（预览无副作用）：无 publications。
+    expect(db.publications.size).toBe(0);
   });
 
   it('软字段未完（name 空）→ 409 STATE_CONFLICT（回上一步补全），无 code', async () => {
