@@ -1,8 +1,8 @@
-// LLM 模型与凭据解析（pi-ai 内置注册表）。0.80.2 口径：从 providers/all 子路径取内置模型对象（纯对象）。
-//   双 provider：anthropic 直连，或 openrouter（OpenAI 兼容，与本仓 authoring 同口径）。
-//   provider 留空则按 key 自动判定；模型 id 可经 RUNTIME_LLM_MODEL 覆盖。
+// LLM 模型与凭据解析（pi-ai 内置注册表）。
+//   双 provider：anthropic 直连，或 openrouter（OpenAI 兼容，与 authoring 同口径）。
+//   provider 留空按 key 自动判定；模型 id 可经 RUNTIME_LLM_MODEL 覆盖。
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all';
-import type { Env } from '../../platform/config/env.js';
+import type { Env } from '../config/env.js';
 
 export type LlmProvider = 'anthropic' | 'openrouter';
 
@@ -25,11 +25,12 @@ export function apiKeyFor(env: Env, provider: string): string | undefined {
   return undefined;
 }
 
-/** 当前配置是否具备可用 LLM 凭据（对话端点据此决定是否降级）。 */
+/** 当前配置是否具备可用 LLM 凭据（缺失 → 对话轮次降级报错、/ready 标 degraded）。 */
 export function hasLlmCredential(env: Env): boolean {
   return Boolean(apiKeyFor(env, resolveProvider(env)));
 }
 
+/** 解析内置模型对象（pi Agent 的 model 入参）。 */
 export function resolveModel(env: Env) {
   const provider = resolveProvider(env);
   const wanted = env.RUNTIME_LLM_MODEL || DEFAULT_MODEL[provider];
@@ -37,7 +38,7 @@ export function resolveModel(env: Env) {
   const found =
     models.find((m) => m.id === wanted) ?? models.find((m) => m.id === DEFAULT_MODEL[provider]);
   if (!found) {
-    throw new Error(`[model] 没有可用的 ${provider} 内置模型（wanted=${wanted}）`);
+    throw new Error(`[llm] 没有可用的 ${provider} 内置模型（wanted=${wanted}）`);
   }
   return found;
 }

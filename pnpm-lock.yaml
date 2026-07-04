@@ -126,6 +126,9 @@ importers:
       '@ag-ui/encoder':
         specifier: 0.0.57
         version: 0.0.57
+      '@aws-sdk/client-s3':
+        specifier: ^3.726.1
+        version: 3.1068.0
       '@cb/shared':
         specifier: workspace:*
         version: link:../../packages/shared
