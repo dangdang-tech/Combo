@@ -17,66 +17,42 @@ function allSql(): string {
     .join('\n');
 }
 
-// 2026-07-04 基线合并：原 0000-0018 已合并为 0000_baseline_schema.sql（按业务域分节的手写风格，
-// 内容经空库重放后与生产库 pg_dump diff 为零）。本套测试改为守护基线完整性；
-// 此后新增迁移按编号追加，本文件按需补断言。
+// 2026-07-04 重设计基线：三层九表（设计真源见飞书文档「Agora 数据库表设计」）。
+// 本套测试守护基线完整性；此后新增迁移按编号追加，本文件按需补断言。
 
-const ACTIVE_TABLES = [
-  // 核心基表
+const TABLES = [
+  // 身份层
   'users',
-  'jobs',
-  'idempotency_keys',
-  // 导入域
-  'raw_snapshots',
-  'session_segments',
-  'import_pairings',
-  'import_uploads',
-  // 提取域
-  'capability_candidates',
-  'candidate_evidence',
-  // 结构化域
-  'drafts',
+  // 流水线层
+  'tasks',
+  'uploads',
+  // 能力层
   'capabilities',
-  'capability_versions',
-  // 发布域
-  'publications',
-  'marketplace_listings',
-  // 社交/主页域（功能已上线、未被触发）
-  'creator_profiles',
-  'follows',
-  'likes',
-  // 事件与基础设施域
-  'outbox_events',
-  'consumer_cursors',
-  'dead_events',
-  'notifications',
-  'notification_channels',
+  // 试用层
+  'sessions',
+  'messages',
+  'stream_events',
+  'artifacts',
+  // 保留的审计表
   'audit_llm_calls',
-  // 试用端 runtime
-  'rt_chat_sessions',
-  'rt_chat_messages',
-  'rt_chat_artifacts',
-  'rt_chat_artifact_versions',
-  'rt_chat_runs',
-  'rt_chat_run_events',
 ];
 
-// 已删除的表（0017 冻结预留 / 0018 定价与批量发布）绝不允许回潮进 schema。
-const DROPPED_TABLES = [
-  'artifacts',
-  'usage_events',
-  'runtime_sessions',
-  'daily_capability_stats',
-  'daily_creator_consumers',
-  'daily_creator_llm_stats',
-  'experience_pack_item_sources',
-  'experience_pack_items',
-  'experience_packs',
-  'eval_reports',
-  'creator_capability_cooccur',
-  'capability_tiers',
-  'publish_batches',
-  'publish_batch_items',
+// 旧结构的表绝不允许回潮（完整清单见 git 历史；抽代表性的几张守门）。
+const LEGACY_TABLES = [
+  'jobs',
+  'idempotency_keys',
+  'drafts',
+  'raw_snapshots',
+  'session_segments',
+  'import_uploads',
+  'import_pairings',
+  'capability_candidates',
+  'capability_versions',
+  'publications',
+  'marketplace_listings',
+  'outbox_events',
+  'notifications',
+  'rt_chat_sessions',
 ];
 
 describe('migrations', () => {
@@ -88,53 +64,51 @@ describe('migrations', () => {
     expect(prefixes).toEqual([...prefixes].sort());
   });
 
-  it(`baseline defines all ${ACTIVE_TABLES.length} active tables`, () => {
+  it(`baseline defines all ${TABLES.length} tables of the redesign`, () => {
     const sql = readFileSync(join(MIGRATIONS_DIR, '0000_baseline_schema.sql'), 'utf-8');
-    for (const t of ACTIVE_TABLES) {
+    for (const t of TABLES) {
       expect(sql, `missing table ${t}`).toContain(`CREATE TABLE ${t} (`);
     }
-    // 全量对齐：基线里的 CREATE TABLE 数量与活跃表清单一致（多一张都算漂移）。
-    expect(sql.match(/CREATE TABLE /g)?.length).toBe(ACTIVE_TABLES.length);
+    // 全量对齐：CREATE TABLE 数量与清单一致（多一张都算漂移）。
+    expect(sql.match(/CREATE TABLE /g)?.length).toBe(TABLES.length);
   });
 
-  it('dropped tables never come back', () => {
+  it('legacy tables never come back', () => {
     const sql = allSql();
-    for (const t of DROPPED_TABLES) {
-      expect(sql, `dropped table ${t} reappeared`).not.toContain(`CREATE TABLE ${t} (`);
-    }
-    // jobs.type 枚举不再含 publish_batch。
-    expect(sql).not.toMatch(/'publish_batch'/);
-  });
-
-  it('keeps §11.E lineage composite constraints (fixed names)', () => {
-    const sql = allSql();
-    for (const name of [
-      'uq_session_segments_id_snapshot',
-      'uq_candidates_id_snapshot',
-      'fk_evidence_candidate_snapshot',
-      'fk_evidence_segment_snapshot',
-      'uq_capability_versions_capability_id',
-      'fk_publications_capability_version',
-      'fk_listings_capability_version',
-      'fk_capabilities_current_version',
-    ]) {
-      expect(sql).toContain(name);
+    for (const t of LEGACY_TABLES) {
+      expect(sql, `legacy table ${t} reappeared`).not.toContain(`CREATE TABLE ${t} (`);
     }
   });
 
-  it('keeps structure job version-level hard lock (partial unique index)', () => {
+  it('tasks carries the two orthogonal state axes plus lease and idempotency', () => {
     const sql = allSql();
-    expect(sql).toContain('uq_structure_job_active_version');
-    expect(sql).toMatch(/subject_ref ->> 'versionId'/);
+    // 双轴状态：step 只有 upload/extract（发布不在这个轴上）；status 三态。
+    expect(sql).toMatch(/current_step IN \('upload', 'extract'\)/);
+    expect(sql).toMatch(/status IN \('running', 'succeeded', 'failed'\)/);
+    for (const col of ['lease_owner', 'lease_expires_at', 'retry_count', 'last_error']) {
+      expect(sql).toContain(col);
+    }
+    // 建任务幂等：唯一约束在表内。
+    expect(sql).toMatch(/idempotency_key\s+text\s+NOT NULL UNIQUE/);
   });
 
-  it('keeps version-level frozen cover + visibility on capability_versions', () => {
+  it('big content stays in object storage: storage_key columns exist, no content columns', () => {
+    const sql = readFileSync(join(MIGRATIONS_DIR, '0000_baseline_schema.sql'), 'utf-8');
+    // uploads/capabilities/artifacts 均以 storage_key 指向 MinIO。
+    expect(sql.match(/storage_key/g)!.length).toBeGreaterThanOrEqual(3);
+    // 产物不再把正文存库（旧 rt_chat_artifact_versions.content 的教训）。
+    expect(sql).not.toMatch(/content\s+text/);
+  });
+
+  it('messages keep session-scoped ordering and native agent format', () => {
     const sql = allSql();
-    for (const name of ['cover_source', 'cover_asset_key', 'cover_snapshot_ref']) {
-      expect(sql).toContain(name);
-    }
-    expect(sql).toContain('ck_capver_cover_source');
-    expect(sql).toContain('ck_capver_visibility');
+    expect(sql).toContain('uq_messages_session_seq UNIQUE (session_id, seq)');
+    expect(sql).toMatch(/role IN \('user', 'assistant', 'tool'\)/);
+  });
+
+  it('stream_events use bigserial for resumable ordering', () => {
+    const sql = allSql();
+    expect(sql).toMatch(/CREATE TABLE stream_events \(\n\s+id\s+bigserial\s+PRIMARY KEY/);
   });
 
   it('provides gen_uuid_v7 helper in the baseline', () => {
