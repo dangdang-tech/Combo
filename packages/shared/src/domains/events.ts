@@ -116,7 +116,7 @@ export const NotificationKindSchema = z.enum([
 ]);
 export type NotificationKind = z.infer<typeof NotificationKindSchema>;
 
-export const NotificationChannelSchema = z.enum(['inapp', 'lark', 'email']);
+export const NotificationChannelSchema = z.enum(['inapp']);
 export type NotificationChannel = z.infer<typeof NotificationChannelSchema>;
 
 export const NotificationViewSchema = z.object({

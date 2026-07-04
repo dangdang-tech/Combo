@@ -153,7 +153,7 @@ describe('MarketplaceProjection (capability.*)', () => {
 });
 
 describe('NotifyConsumer (notify.*)', () => {
-  it('import_completed → 站内通知（dedupe=event_id）+ 三通道（inapp sent / lark,email pending）', async () => {
+  it('import_completed → 站内通知（dedupe=event_id）+ 单通道 inapp 落库即 sent', async () => {
     const { tx, calls } = recordingTx((sql) => {
       if (sql.includes('INSERT INTO notifications')) return { rows: [{ id: 'notif-1' }] };
       return { rows: [] };
@@ -180,12 +180,11 @@ describe('NotifyConsumer (notify.*)', () => {
     expect(notifInsert.params?.[0]).toBe('u1'); // recipient
     expect(notifInsert.params?.[5]).toBe('import_done:job-1:0'); // dedupe_key = event_id
     const channelInserts = calls.filter((c) => c.sql.includes('INSERT INTO notification_channels'));
-    expect(channelInserts).toHaveLength(3);
+    expect(channelInserts).toHaveLength(1);
     const channels = channelInserts.map((c) => c.params?.[1]);
-    expect(channels).toEqual(['inapp', 'lark', 'email']);
-    // inapp 落库即 sent；lark/email pending。
+    expect(channels).toEqual(['inapp']);
+    // inapp 落库即 sent。
     expect(channelInserts.find((c) => c.params?.[1] === 'inapp')!.params?.[2]).toBe('sent');
-    expect(channelInserts.find((c) => c.params?.[1] === 'lark')!.params?.[2]).toBe('pending');
   });
 
   it('重放 dedupe 命中（通知已存在，0 行 RETURNING）→ 不重复建通道（幂等）', async () => {

@@ -25,8 +25,8 @@ interface NotifyRecord {
   traceId: string;
 }
 
-/** 默认外发通道（站内必落；飞书/邮件 pending 待外发器投，§5.2）。 */
-const OUTBOUND_CHANNELS = ['inapp', 'lark', 'email'] as const;
+/** 外发通道只有站内。飞书/邮件的外发器从未落地，pending 行只会永远堆积，已收敛（2026-07-04）。 */
+const OUTBOUND_CHANNELS = ['inapp'] as const;
 
 /** topic → 站内通知人话（禁错误码/堆栈，硬规则②）。摘要取 payload 完成态字段。 */
 function buildRecord(evt: FetchedEvent): NotifyRecord {
