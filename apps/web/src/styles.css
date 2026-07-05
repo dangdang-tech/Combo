@@ -1489,3 +1489,278 @@ body {
     flex-direction: column;
   }
 }
+
+/* ---------- 能力挑选-发布区（任务详情页提取成果形态，布局对齐 Combo Builder 第二步） ---------- */
+.cb-capabilities {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.cb-capabilities__header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cb-capabilities__eyebrow {
+  margin: 0;
+  font-family: var(--cb-font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cb-accent);
+}
+
+.cb-capabilities__title {
+  margin: 0;
+  font-family: var(--cb-font-serif);
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--cb-fg);
+}
+
+.cb-capabilities__lead {
+  margin: 0;
+  max-width: 680px;
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--cb-muted);
+}
+
+.cb-capabilities__empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--cb-muted);
+}
+
+/* 统计工具条：已选/统计在左，全选在右。 */
+.cb-capabilities__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-card);
+  background: var(--cb-surface-raised);
+  padding: 10px 14px;
+}
+
+.cb-capabilities__selected {
+  min-width: 0;
+  font-size: 13px;
+  color: var(--cb-muted);
+}
+
+.cb-capabilities__selected strong {
+  color: var(--cb-fg);
+  font-family: var(--cb-font-mono);
+  font-weight: 700;
+}
+
+.cb-capabilities__analyzed {
+  white-space: nowrap;
+}
+
+.cb-capabilities__select-all {
+  white-space: nowrap;
+}
+
+.cb-capabilities__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 链接式按钮（全选等次要动作）。 */
+.cb-link {
+  border: none;
+  background: none;
+  color: var(--cb-accent);
+  font-size: 13px;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.cb-link:disabled {
+  color: var(--cb-muted);
+  cursor: default;
+}
+
+/* 能力行卡：左勾选 28px / 中主体 / 右动作区。 */
+.cb-cap-card {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-card);
+  background: var(--cb-surface-raised);
+  padding: 14px 16px;
+}
+
+.cb-cap-card[data-selected='true'] {
+  border-color: var(--cb-accent);
+  background: rgba(167, 55, 24, 0.06);
+}
+
+.cb-cap-card__select {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cb-cap-card__checkbox {
+  margin: 0;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--cb-accent);
+}
+
+.cb-cap-card__published-mark {
+  color: var(--cb-badge-ok);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.cb-cap-card__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cb-cap-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cb-cap-card__name {
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.cb-cap-card__type {
+  font-size: 12px;
+  color: var(--cb-accent);
+  border: 1px solid rgba(167, 55, 24, 0.28);
+  border-radius: var(--cb-radius-pill);
+  background: var(--cb-accent-soft);
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.cb-cap-card__intent {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--cb-muted);
+}
+
+.cb-cap-card__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 132px;
+}
+
+.cb-cap-card__trial {
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-control);
+  background: var(--cb-surface);
+  color: var(--cb-accent);
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.cb-cap-card__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--cb-muted);
+}
+
+.cb-cap-card__status-label {
+  font-weight: 600;
+}
+
+.cb-cap-card__status[data-state='published'] .cb-cap-card__status-label {
+  color: var(--cb-badge-ok);
+}
+
+.cb-cap-card__status[data-state='failed'] .cb-cap-card__status-label {
+  color: var(--cb-warn);
+}
+
+.cb-cap-card__status-msg {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--cb-muted);
+}
+
+.cb-cap-card__retry {
+  border: none;
+  background: none;
+  color: var(--cb-accent);
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* 底部动作区：细线隔开，主按钮/进度句右对齐。 */
+.cb-capabilities__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-end;
+  border-top: 1px solid var(--cb-border);
+  padding-top: 16px;
+}
+
+.cb-capabilities__publish {
+  min-width: 220px;
+  justify-content: center;
+}
+
+.cb-capabilities__progress {
+  margin: 0;
+  font-size: 13px;
+  color: var(--cb-muted);
+}
+
+@media (max-width: 720px) {
+  .cb-capabilities__toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .cb-capabilities__analyzed {
+    display: block;
+    white-space: normal;
+  }
+  .cb-cap-card {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+  .cb-cap-card__actions {
+    grid-column: 2;
+    justify-content: flex-start;
+    min-width: 0;
+  }
+  .cb-capabilities__foot {
+    align-items: stretch;
+  }
+  .cb-capabilities__publish {
+    width: 100%;
+  }
+}
