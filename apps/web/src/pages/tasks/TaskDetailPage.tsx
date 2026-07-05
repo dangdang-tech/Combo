@@ -1,13 +1,21 @@
 // 任务详情：GET /tasks/:id + SSE GET /tasks/:id/events 实时进度。
 //   - state_snapshot 全量 progress（subtasks 逐条点亮）+ progress 增量帧；
-//   - item-appended 逐个显示新提取的能力项（边提取边显示）；
+//   - item-appended 帧触发能力项列表刷新（边提取边出现，每项带试用/发布动作，刷新页面不丢）；
 //   - done 帧终态 → 重拉任务定格视图；失败显示 lastError 人话 + 重试。
-// 提取完成后引导跳能力页（带 taskId 过滤）。
 import { useEffect, type ReactElement } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CapabilityView, TaskView } from '@cb/shared';
-import { getTask, retryTask, taskEventsUrl, useTaskEvents } from '../../api/index.js';
+import {
+  getTask,
+  listCapabilities,
+  publishCapability,
+  retryTask,
+  taskEventsUrl,
+  unpublishCapability,
+  useTaskEvents,
+  type Page,
+} from '../../api/index.js';
 import {
   ErrorState,
   ProgressBar,
@@ -15,6 +23,7 @@ import {
   SlowHint,
   SubtaskChecklist,
 } from '../../components/index.js';
+import { CapabilityRow } from '../capabilities/CapabilityRow.js';
 import {
   formatTime,
   taskStatusLabel,
@@ -44,6 +53,20 @@ export function TaskDetailPage(): ReactElement {
   useEffect(() => {
     if (sseTerminal) void qc.invalidateQueries({ queryKey: ['task', taskId] });
   }, [sseTerminal, qc, taskId]);
+
+  // 本任务提取出的能力项（就地展示，带试用/发布动作）。SSE 每推一个 item-appended
+  // 就触发一次重拉——列表以库为真源，刷新页面不丢。
+  const extracting = task?.status === 'running' && task.currentStep === 'extract';
+  const capsQuery = useQuery({
+    queryKey: ['task-capabilities', taskId],
+    queryFn: () => listCapabilities({ taskId, limit: 50 }),
+    enabled: taskId.length > 0 && (extracting || task?.status === 'succeeded'),
+  });
+  useEffect(() => {
+    if (sse.items.length > 0) {
+      void qc.invalidateQueries({ queryKey: ['task-capabilities', taskId] });
+    }
+  }, [sse.items.length, qc, taskId]);
 
   const retryMutation = useMutation({
     mutationFn: () => retryTask(taskId),
@@ -77,7 +100,7 @@ export function TaskDetailPage(): ReactElement {
 
       <UploadCard task={task} />
       {task.status === 'running' && task.currentStep === 'extract' && <ExtractCard sse={sse} />}
-      {sse.items.length > 0 && <NewItemsCard items={sse.items} />}
+      <TaskCapabilitiesCard taskId={taskId} query={capsQuery} extracting={extracting} />
       <OutcomeCard
         task={task}
         onRetry={() => retryMutation.mutate()}
@@ -131,18 +154,75 @@ function ExtractCard({ sse }: { sse: ReturnType<typeof useTaskEvents> }): ReactE
   );
 }
 
-/** 边提取边显示：item-appended 逐个推出的新能力项。 */
-function NewItemsCard({ items }: { items: CapabilityView[] }): ReactElement {
+/**
+ * 本任务的能力项就地展示：提取中逐个出现，完成后定格；每项直接可试用/发布，
+ * 不用先跳能力页。
+ */
+function TaskCapabilitiesCard({
+  taskId,
+  query,
+  extracting,
+}: {
+  taskId: string;
+  query: ReturnType<typeof useQuery<Page<CapabilityView>>>;
+  extracting: boolean;
+}): ReactElement | null {
+  const qc = useQueryClient();
+  const toggleMutation = useMutation({
+    mutationFn: (input: { id: string; publish: boolean }) =>
+      input.publish ? publishCapability(input.id) : unpublishCapability(input.id),
+    onSuccess: (result) => {
+      qc.setQueryData<Page<CapabilityView>>(['task-capabilities', taskId], (data) =>
+        data
+          ? {
+              ...data,
+              items: data.items.map((item) =>
+                item.id === result.id
+                  ? {
+                      ...item,
+                      published: result.published,
+                      ...(result.publishedAt !== undefined
+                        ? { publishedAt: result.publishedAt }
+                        : {}),
+                      ...(result.shareToken !== undefined
+                        ? { shareToken: result.shareToken }
+                        : {}),
+                    }
+                  : item,
+              ),
+            }
+          : data,
+      );
+      // 能力页的列表缓存直接失效重拉（键结构不同，不做跨页就地合并）。
+      void qc.invalidateQueries({ queryKey: ['capabilities'] });
+    },
+  });
+
+  const items = query.data?.items ?? [];
+  if (!query.isSuccess && !query.isError) return null; // 未启用/加载中：不占版面
+  if (query.isError) {
+    return (
+      <div className="cb-card">
+        <h3 className="cb-card__title">提取出的能力项</h3>
+        <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+      </div>
+    );
+  }
+  if (items.length === 0) return null;
+
   return (
     <div className="cb-card">
-      <h3 className="cb-card__title">本次提取出的能力项</h3>
-      <ul className="cb-newitems">
-        {items.map((c) => (
-          <li key={c.id} className="cb-newitems__item">
-            <span className="cb-newitems__name">{c.name}</span>
-            <span className="cb-newitems__kind">{c.kind}</span>
-            <p className="cb-newitems__summary">{c.summary}</p>
-          </li>
+      <h3 className="cb-card__title">提取出的能力项</h3>
+      {extracting && <p className="cb-card__hint">还在提取中，新的能力项会陆续出现在这里。</p>}
+      {toggleMutation.isError && <ErrorState error={toggleMutation.error} />}
+      <ul className="cb-caps">
+        {items.map((cap) => (
+          <CapabilityRow
+            key={cap.id}
+            cap={cap}
+            pending={toggleMutation.isPending && toggleMutation.variables?.id === cap.id}
+            onToggle={(publish) => toggleMutation.mutate({ id: cap.id, publish })}
+          />
         ))}
       </ul>
     </div>
@@ -183,14 +263,9 @@ function OutcomeCard({
       <div className="cb-card cb-card--succeeded">
         <h3 className="cb-card__title">提取完成</h3>
         <p className="cb-card__line">
-          共提取出 {task.capabilityCount} 个能力项，去能力页查看、发布或试用。
+          共提取出 {task.capabilityCount} 个能力项，上面每一项都可以直接试用或发布；也可以在{' '}
+          <Link to="/capabilities">能力页</Link> 查看历史全部能力项。
         </p>
-        <Link
-          className="cb-primary-btn cb-primary-btn--link"
-          to={`/capabilities?taskId=${task.id}`}
-        >
-          去能力页
-        </Link>
       </div>
     );
   }

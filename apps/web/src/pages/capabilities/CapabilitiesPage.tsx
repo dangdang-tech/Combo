@@ -13,12 +13,11 @@ import type { CapabilityView, PublishResult } from '@cb/shared';
 import {
   listCapabilities,
   publishCapability,
-  trialUrl,
   unpublishCapability,
   type Page,
 } from '../../api/index.js';
 import { ErrorState, Skeleton } from '../../components/index.js';
-import { CopyButton } from '../../components/CopyButton.js';
+import { CapabilityRow } from './CapabilityRow.js';
 
 type CapabilityPages = InfiniteData<Page<CapabilityView>>;
 
@@ -146,47 +145,3 @@ export function CapabilitiesPage(): ReactElement {
   );
 }
 
-function CapabilityRow({
-  cap,
-  pending,
-  onToggle,
-}: {
-  cap: CapabilityView;
-  pending: boolean;
-  onToggle: (publish: boolean) => void;
-}): ReactElement {
-  return (
-    <li className="cb-caps__item">
-      <div className="cb-caps__main">
-        <p className="cb-caps__name">
-          {cap.name}
-          <span className="cb-caps__kind">{cap.kind}</span>
-          <span className={`cb-status-badge is-${cap.published ? 'published' : 'unpublished'}`}>
-            {cap.published ? '已发布' : '未发布'}
-          </span>
-        </p>
-        <p className="cb-caps__summary">{cap.summary}</p>
-        {cap.published && cap.shareToken && (
-          <p className="cb-caps__share">
-            分享令牌：<code className="cb-caps__token">{cap.shareToken}</code>
-            <CopyButton text={cap.shareToken} />
-          </p>
-        )}
-      </div>
-      <div className="cb-caps__actions">
-        <a className="cb-caps__trial" href={trialUrl(cap.id)}>
-          去试用
-        </a>
-        <button
-          type="button"
-          className="cb-caps__toggle"
-          data-published={cap.published ? 'true' : 'false'}
-          onClick={() => onToggle(!cap.published)}
-          disabled={pending}
-        >
-          {pending ? '处理中…' : cap.published ? '下架' : '发布'}
-        </button>
-      </div>
-    </li>
-  );
-}
