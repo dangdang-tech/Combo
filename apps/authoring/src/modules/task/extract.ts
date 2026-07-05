@@ -35,8 +35,8 @@ export interface ExtractDeps {
   audit: LlmAuditSink;
   /** 审计记账用的模型名（网关内部已定，这里只为落库可读）。 */
   model?: string;
-  /** 诊断日志（批次降级时记原因与文本头，便于排障；缺省静默）。 */
-  log?: { warn: (o: object, m: string) => void };
+  /** 诊断日志（批次降级记原因与文本头，info 记每批耗时；缺省静默）。 */
+  log?: { warn: (o: object, m: string) => void; info?: (o: object, m: string) => void };
 }
 
 export interface ExtractInput {
@@ -61,10 +61,11 @@ const SEGMENT_SAMPLE_CHARS = 1500;
 /** 全任务能力项上限（防 LLM 发散刷屏）。 */
 const MAX_CAPABILITIES = 12;
 /**
- * 批间并发路数。worker 任务级并发 2 → 进程内最多 8 路 LLM 调用在飞；
+ * 批间并发路数。实测（2026-07-05，44 段 6 批）单批时延 26-82s 且方差大，8 路让常规上传
+ * 一波跑完、提取步时长 ≈ 最慢一批。worker 任务级并发 2 → 进程内最多 16 路 LLM 调用在飞；
  * 网关限流桶 60 次/分钟且初始满额，单次上传超 60 批（480 段）才可能触限，触限批按现有语义降级。
  */
-const EXTRACT_CONCURRENCY = 4;
+const EXTRACT_CONCURRENCY = 8;
 
 /**
  * 提取主入口：分批归纳（批间并发）→ 跨批按名去重合并 → 空结果落兜底。
@@ -93,7 +94,17 @@ export async function extractCapabilities(
       const i = nextIndex;
       nextIndex += 1;
       if (i >= batches.length) return;
+      const startedAt = Date.now();
       results[i] = await extractBatch(deps, input, batches[i]!);
+      deps.log?.info?.(
+        {
+          batchIndex: i,
+          segments: batches[i]!.length,
+          ms: Date.now() - startedAt,
+          drafts: results[i]?.length ?? null, // null = 本批降级
+        },
+        'extract batch done',
+      );
       segmentsDone += batches[i]!.length;
       const done = segmentsDone;
       reportChain = reportChain.then(() => input.onBatchDone?.(done, input.segments.length));

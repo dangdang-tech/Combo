@@ -195,6 +195,16 @@ async function execute(
   ownerUserId: string,
   reporter: ProgressReporter,
 ): Promise<number> {
+  // 分步耗时（毫秒），最后汇总一条 info 日志——线上观测哪步是瓶颈。
+  const startedAt = Date.now();
+  let stepStartedAt = startedAt;
+  const stepMs: Record<string, number> = {};
+  const markStep = (name: string): void => {
+    const now = Date.now();
+    stepMs[name] = now - stepStartedAt;
+    stepStartedAt = now;
+  };
+
   // ① fetch：拉收齐的完整原始件。
   await reporter.subtask('fetch', 'running', 2, '正在读取上传内容…');
   const upload = await readUploadForPipeline(deps.db, taskId);
@@ -212,6 +222,7 @@ async function execute(
   }
   if (!raw.trim()) throw new PipelineFailure(ErrorCode.UPLOAD_NO_CONTENT, 'raw object empty');
   await reporter.subtask('fetch', 'done', 10, '上传内容读取完成');
+  markStep('fetch');
 
   // ② 解析 + 切段（先切段再脱敏：脱敏作用在段正文上，报告聚合到上传级）。
   const files = splitBundle(raw);
@@ -224,6 +235,7 @@ async function execute(
   if (parsed.segments.length === 0) {
     throw new PipelineFailure(ErrorCode.UPLOAD_NO_CONTENT, 'no parseable segments');
   }
+  markStep('parse');
 
   // ③ redact：合规硬要求，先抹隐私再进任何 LLM/落库路径。
   await reporter.subtask('redact', 'running', 15, '正在抹掉隐私信息…');
@@ -238,6 +250,7 @@ async function execute(
     30,
     `已抹除 ${redacted.report.totalRedactions} 处隐私信息`,
   );
+  markStep('redact');
 
   // ④ segment：段清单成型（一段 = 一会话，正文换成去敏后文本）。
   await reporter.subtask('segment', 'running', 35, '正在切分会话段落…');
@@ -249,6 +262,7 @@ async function execute(
   }));
   await reporter.subtask('segment', 'done', 45, `已切出 ${segments.length} 段会话`);
   await renewLease(deps.db, { taskId, leaseOwner: deps.leaseOwner });
+  markStep('segment');
 
   // ⑤ extract：LLM 归纳（降级兜底在 extract.ts 内收口，不裸抛）。
   await reporter.subtask('extract', 'running', 48, '正在归纳提炼能力…');
@@ -276,6 +290,7 @@ async function execute(
   );
   await reporter.subtask('extract', 'done', 80, `归纳出 ${extracted.items.length} 个能力项`);
   await renewLease(deps.db, { taskId, leaseOwner: deps.leaseOwner });
+  markStep('extract');
 
   // ⑥ persist：逐项校验 → 写 MinIO 定义 → 插 capabilities 行 → item-appended 帧（边生成边显示）。
   await reporter.subtask('persist', 'running', 82, '正在生成能力项…');
@@ -332,6 +347,19 @@ async function execute(
   }
   await markUploadProcessed(deps.db, taskId, purged);
   await reporter.subtask('persist', 'done', 100, `完成：${landed} 个能力项`);
+  markStep('persist');
+  deps.log?.info(
+    {
+      taskId,
+      traceId,
+      stepMs,
+      totalMs: Date.now() - startedAt,
+      segments: segments.length,
+      capabilities: landed,
+      degraded: extracted.degraded,
+    },
+    'pipeline step timings',
+  );
 
   return landed;
 }
