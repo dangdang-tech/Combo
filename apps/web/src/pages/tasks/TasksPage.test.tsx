@@ -151,9 +151,9 @@ describe('TasksPage — 新建上传任务', () => {
     expect(typeof body.idempotencyKey).toBe('string');
     expect(body.idempotencyKey!.length).toBeGreaterThanOrEqual(8);
 
-    // 配对码明文只出现这一次 + 一条命令（GET /connect/script?code=<配对码> | sh）。
+    // 配对码只出现这一次 + 一条命令（GET /connect/script?code=<配对码> | sh）。
     expect(await screen.findByText('PAIR-CODE-XYZ')).toBeInTheDocument();
-    expect(screen.getByText(/明文只显示这一次/)).toBeInTheDocument();
+    expect(screen.getByText(/只显示一次/)).toBeInTheDocument();
     const cmd = screen.getByText(/connect\/script\?code=PAIR-CODE-XYZ/);
     expect(cmd.textContent).toContain('curl -fsSL');
     expect(cmd.textContent).toContain('| sh');
