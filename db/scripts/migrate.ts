@@ -19,7 +19,7 @@ function listMigrations(): string[] {
 
 async function main(): Promise<void> {
   const statusOnly = process.argv.includes('--status');
-  const databaseUrl = process.env.DATABASE_URL ?? 'postgres://agora:agora@localhost:5432/agora';
+  const databaseUrl = process.env.DATABASE_URL ?? 'postgres://combo:combo@localhost:5432/combo';
   const files = listMigrations();
 
   if (statusOnly && !process.env.DATABASE_URL) {

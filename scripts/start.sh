@@ -21,7 +21,7 @@ die() {
 command -v docker >/dev/null 2>&1 || die "需要 docker（本期无 Docker，留作后续运行）"
 
 # 0) 生产无默认密钥守卫（Codex#13 + r5）：本编排即生产栈（业务容器 NODE_ENV=production）。
-#    compose 的 ${VAR:?} 已拦「未设/空」，但示例密钥（agora/minioadmin/postgres…）会满足 :? = 绕过
+#    compose 的 ${VAR:?} 已拦「未设/空」，但示例密钥（combo/agora/minioadmin…）会满足 :? = 绕过
 #    「无默认密钥」。故起栈前在此显式拒绝空值与已知弱默认值，与 apps/api env.ts 生产守卫双保险。
 #    从 .env（compose 自动加载）取值校验；未提供 .env 时这些变量也为空，照样被拦。
 ENV_FILE="${ROOT_DIR}/.env"
@@ -34,7 +34,7 @@ if [[ -f "${ENV_FILE}" ]]; then
 fi
 
 # 已知弱默认值黑名单（大小写不敏感比较）。命中即拒绝起栈。
-WEAK_DEFAULTS=("agora" "minioadmin" "postgres" "password" "admin" "root" "changeme" "secret" "test")
+WEAK_DEFAULTS=("combo" "agora" "minioadmin" "postgres" "password" "admin" "root" "changeme" "secret" "test")
 
 is_weak() {
   # $1 = 待校验值。空 → 弱；命中黑名单 → 弱。
@@ -65,7 +65,7 @@ for key in "${REQUIRED_SECRETS[@]}"; do
     printf '\033[1;31m[start:guard]\033[0m %s 未设（生产禁空密钥）\n' "${key}" >&2
     GUARD_FAILED=1
   elif is_weak "${val}"; then
-    printf '\033[1;31m[start:guard]\033[0m %s = 已知弱默认值（agora/minioadmin/postgres 等）禁上生产\n' "${key}" >&2
+    printf '\033[1;31m[start:guard]\033[0m %s = 已知弱默认值（combo/agora/minioadmin 等）禁上生产\n' "${key}" >&2
     GUARD_FAILED=1
   fi
 done
@@ -107,4 +107,4 @@ log "  - API   : http://localhost:3000/ready"
 log "  - Web   : http://localhost/"
 log "  - Logto : http://localhost:3001/oidc/.well-known/openid-configuration"
 log "  - MinIO : http://localhost:9001 (console)"
-log "  - Grafana: http://localhost:3003/d/agora-trace-debug/trace-debug"
+log "  - Grafana: http://localhost:3003/d/combo-trace-debug/trace-debug"

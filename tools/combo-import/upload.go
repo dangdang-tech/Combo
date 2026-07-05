@@ -17,7 +17,7 @@ import (
 
 // uploadConfig 上传所需的全部参数（来自环境变量，main 装配）。
 type uploadConfig struct {
-	Base         string // 形如 https://agora.xxx（无尾斜杠）
+	Base         string // 形如 https://combo.xxx（无尾斜杠）
 	PairID       string
 	Code         string // 配对码（Authorization: Bearer）
 	Source       string // 默认 mixed

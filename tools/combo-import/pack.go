@@ -15,7 +15,7 @@ import (
 
 // BundleSentinel 分隔符——必须与 session-parse.ts BUNDLE_SENTINEL 字节一致。
 // worker 端按 (BundleSentinel + "\n") split 还原每条记录原文。
-const BundleSentinel = "__AGORA_FILE_BOUNDARY__"
+const BundleSentinel = "__COMBO_FILE_BOUNDARY__"
 
 // 分片大小策略（修 413）：真正的约束不是「未压缩多大」，而是【每片 gzip 压缩后那一个 POST 请求体】
 // 必须 ≤ 链路最窄的 nginx 限额（当前 web 容器 nginx = 32m）。压缩率不可控（带图片的会话几乎压不动），

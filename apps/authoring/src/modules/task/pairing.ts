@@ -10,7 +10,7 @@ import { transition } from './service.js';
 import { findUploadByCodeHash, markUploadRaw, partsState, registerPart } from './repo.js';
 
 /** 上传原始件所在桶（处理完即清，不落正式盘）。 */
-export const RAW_BUCKET = 'agora-raw' as const;
+export const RAW_BUCKET = 'combo-raw' as const;
 
 /** 分片对象键。 */
 export function partObjectKey(taskId: string, partIndex: number): string {

@@ -4,7 +4,7 @@ import type { Queryable } from '../../platform/infra/db.js';
 import { toIso } from '../session/repo.js';
 
 /** 产物内容所在桶。 */
-export const ARTIFACT_BUCKET = 'agora-artifacts' as const;
+export const ARTIFACT_BUCKET = 'combo-artifacts' as const;
 
 /** 产物内容对象键：按 (session, artifact) 稳定——同产物反复更新覆写同一对象。 */
 export function artifactStorageKey(sessionId: string, artifactId: string): string {

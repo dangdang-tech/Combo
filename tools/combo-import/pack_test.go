@@ -120,7 +120,7 @@ func TestPackFormatExact(t *testing.T) {
 	}
 }
 
-// TestPackSplitRoundTrip 校验小文件「打包 → split(__AGORA_FILE_BOUNDARY__\n)」往返还原每个文件原文。
+// TestPackSplitRoundTrip 校验小文件「打包 → split(__COMBO_FILE_BOUNDARY__\n)」往返还原每个文件原文。
 func TestPackSplitRoundTrip(t *testing.T) {
 	dir, p := mkPartsDir(t)
 	partsDir := p[0]
@@ -376,7 +376,7 @@ func TestScanSessionsLimit(t *testing.T) {
 
 // TestSha256Hex 校验 sha256Hex 与标准库一致（hex 小写）。
 func TestSha256Hex(t *testing.T) {
-	in := []byte("hello agora")
+	in := []byte("hello combo")
 	sum := sha256.Sum256(in)
 	want := hex.EncodeToString(sum[:])
 	if got := sha256Hex(in); got != want {

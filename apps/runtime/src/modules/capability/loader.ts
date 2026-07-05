@@ -7,7 +7,7 @@ import type { RuntimeObjectStore } from '../../platform/infra/object-store.js';
 import { toIso } from '../session/repo.js';
 
 /** 能力定义所在桶（与 authoring 提取流水线写入侧一致）。 */
-export const CAPABILITY_BUCKET = 'agora-artifacts' as const;
+export const CAPABILITY_BUCKET = 'combo-artifacts' as const;
 
 /** 能力行摘要（库里那行轻量索引，试用端消费的子集）。 */
 export interface CapabilitySummary {

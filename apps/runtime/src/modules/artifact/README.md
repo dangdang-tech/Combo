@@ -13,7 +13,7 @@
 
 被谁使用：`bootstrap/routes.ts` 注册本模块路由；`modules/agent/run-turn.ts` 在每轮生成时用 `tool.ts` 建产物工具挂给模型代理；`modules/session/handlers.ts` 在会话详情里调 `repo.ts` 的 listArtifacts 返回产物列表。
 
-依赖什么：引用 `platform/infra/db.ts` 的数据库句柄类型和 `platform/infra/object-store.ts` 的对象存储接口，引用 `platform/middleware/auth.ts` 的鉴权守卫，引用 `platform/http/_helpers.ts` 的错误信封工具，引用 `modules/session/repo.ts` 的时间格式化函数。直接访问的外部资源是数据库的 artifacts 表（归属校验时连 sessions 表）和对象存储的 agora-artifacts 桶。
+依赖什么：引用 `platform/infra/db.ts` 的数据库句柄类型和 `platform/infra/object-store.ts` 的对象存储接口，引用 `platform/middleware/auth.ts` 的鉴权守卫，引用 `platform/http/_helpers.ts` 的错误信封工具，引用 `modules/session/repo.ts` 的时间格式化函数。直接访问的外部资源是数据库的 artifacts 表（归属校验时连 sessions 表）和对象存储的 combo-artifacts 桶。
 
 ## 典型流程
 

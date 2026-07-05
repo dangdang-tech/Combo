@@ -235,7 +235,7 @@ export function createS3ObjectStore(env: Env): ObjectStorePort {
 }
 
 /** ready 探针：HEAD 一个桶（连不上/凭证错 → down）。骨架用 ListObjectsV2 限 1 条做轻探。 */
-export async function pingObjectStore(env: Env, bucket: Bucket = 'agora-raw'): Promise<boolean> {
+export async function pingObjectStore(env: Env, bucket: Bucket = 'combo-raw'): Promise<boolean> {
   try {
     await getClient(env).send(new ListObjectsV2Command({ Bucket: bucket, MaxKeys: 1 }));
     return true;

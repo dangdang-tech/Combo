@@ -103,7 +103,7 @@ export function createS3ObjectStore(env: Env): RuntimeObjectStore {
 /** ready 探针：ListObjectsV2 限 1 条轻探（连不上/凭证错 → down）。 */
 export async function pingObjectStore(
   env: Env,
-  bucket: Bucket = 'agora-artifacts',
+  bucket: Bucket = 'combo-artifacts',
 ): Promise<boolean> {
   try {
     await getClient(env).send(new ListObjectsV2Command({ Bucket: bucket, MaxKeys: 1 }));

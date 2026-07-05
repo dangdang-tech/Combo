@@ -10,7 +10,7 @@ import (
 
 // reporter 进度展示口径。两种实现：
 //   - ttyReporter：终端（TTY）下的彩色 TUI，扫描/打包/上传各一行，上传是【就地刷新的进度条】。
-//   - plainReporter：非 TTY（管道/重定向/CI）下沿用逐行 [Agora] 文案，可被解析、不刷屏失控。
+//   - plainReporter：非 TTY（管道/重定向/CI）下沿用逐行 [Combo] 文案，可被解析、不刷屏失控。
 //
 // 同一时刻只有一个 goroutine 调用 reporter（打包在单循环、上传进度在单一收集循环），故无需加锁。
 type reporter interface {
@@ -22,11 +22,11 @@ type reporter interface {
 	failf(format string, args ...any)
 }
 
-// newReporter 按 stderr 是否 TTY 选实现；AGORA_FORCE_TUI=1 强开（测试用）、AGORA_NO_TUI=1 强关、NO_COLOR 去色。
+// newReporter 按 stderr 是否 TTY 选实现；COMBO_FORCE_TUI=1 强开（测试用）、COMBO_NO_TUI=1 强关、NO_COLOR 去色。
 func newReporter() reporter {
 	now := time.Now()
-	tty := os.Getenv("AGORA_FORCE_TUI") == "1" || isStderrTTY()
-	if os.Getenv("AGORA_NO_TUI") == "1" || !tty {
+	tty := os.Getenv("COMBO_FORCE_TUI") == "1" || isStderrTTY()
+	if os.Getenv("COMBO_NO_TUI") == "1" || !tty {
 		return &plainReporter{start: now}
 	}
 	return &ttyReporter{w: os.Stderr, color: os.Getenv("NO_COLOR") == "", start: now}
@@ -69,7 +69,7 @@ const (
 type plainReporter struct{ start time.Time }
 
 func (p *plainReporter) line(format string, a ...any) {
-	fmt.Fprintf(os.Stderr, "[Agora] "+format+"\n", a...)
+	fmt.Fprintf(os.Stderr, "[Combo] "+format+"\n", a...)
 }
 func (p *plainReporter) elapsed() time.Duration {
 	if p.start.IsZero() {
@@ -123,7 +123,7 @@ func (t *ttyReporter) header() {
 		return
 	}
 	t.started = true
-	fmt.Fprintln(t.w, "\n"+t.c(ansiBold, "  Agora")+t.c(ansiDim, "  本机助手 · 上传对话历史"))
+	fmt.Fprintln(t.w, "\n"+t.c(ansiBold, "  Combo")+t.c(ansiDim, "  本机助手 · 上传对话历史"))
 }
 
 // endBar 收束当前进度条（换行定格），让后续整行文案另起一行、不覆盖进度条。

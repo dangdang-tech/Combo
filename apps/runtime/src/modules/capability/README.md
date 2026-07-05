@@ -12,7 +12,7 @@
 
 被谁使用：`bootstrap/routes.ts` 注册本模块路由；`modules/session/handlers.ts` 在开会话和每次发消息前都调 `loader.ts` 的 loadCapability 做全链校验，在会话详情里调 readCapabilitySummary，加载失败时复用 `handlers.ts` 的 sendLoadFailure 回错误信封。
 
-依赖什么：引用 `platform/infra/db.ts` 的数据库句柄类型和 `platform/infra/object-store.ts` 的对象存储接口，引用 `platform/middleware/auth.ts` 的鉴权守卫和 `platform/http/_helpers.ts` 的错误信封工具，引用 `modules/session/repo.ts` 的时间格式化函数，能力定义的 schema 来自共享包 @cb/shared。直接访问的外部资源是数据库的 capabilities 表和对象存储的 agora-artifacts 桶。
+依赖什么：引用 `platform/infra/db.ts` 的数据库句柄类型和 `platform/infra/object-store.ts` 的对象存储接口，引用 `platform/middleware/auth.ts` 的鉴权守卫和 `platform/http/_helpers.ts` 的错误信封工具，引用 `modules/session/repo.ts` 的时间格式化函数，能力定义的 schema 来自共享包 @cb/shared。直接访问的外部资源是数据库的 capabilities 表和对象存储的 combo-artifacts 桶。
 
 ## 典型流程
 

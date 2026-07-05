@@ -171,7 +171,7 @@ describe('session 端点 owner 守卫', () => {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });
-    store.seedText('agora-artifacts', `artifacts/${sessionId}/art-1`, '<!doctype html>');
+    store.seedText('combo-artifacts', `artifacts/${sessionId}/art-1`, '<!doctype html>');
 
     const theirs = await call(
       artifactContentHandler(),

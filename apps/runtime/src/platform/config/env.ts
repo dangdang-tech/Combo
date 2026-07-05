@@ -20,7 +20,7 @@ const EnvSchema = z.object({
   OTEL_SDK_DISABLED: z.enum(['true', 'false']).default('false'),
 
   // PostgreSQL：与创作端同一个库（capabilities 只读 + 试用层四表读写）。
-  DATABASE_URL: z.string().default('postgres://agora:agora@localhost:5432/agora'),
+  DATABASE_URL: z.string().default('postgres://combo:combo@localhost:5432/combo'),
 
   // ObjectStore（MinIO/S3）：按 capabilities.storage_key 读能力定义 + 读写产物内容。
   S3_ENDPOINT: z.string().default('http://localhost:9000'),

@@ -8,7 +8,7 @@
 - 只依赖 `@cb/shared`，**禁止 import `apps/authoring/**` 的任何代码\*\*。
 - 两个服务只在两处相遇：同一个 PG（读 `capabilities` 表 + 写试用层四表
   `sessions/messages/stream_events/artifacts`）和 MinIO（按 `capabilities.storage_key`
-  读 CapabilityDefinition JSON，桶 `agora-artifacts`）。
+  读 CapabilityDefinition JSON，桶 `combo-artifacts`）。
 - 身份：验创作端同一个登录 Cookie（`cb_session`，Logto access_token；dev 环境兼容
   authoring dev-login 签发的 HS256 token）。runtime 只验不签、不建用户，同库查 `users` 解出 userId。
 

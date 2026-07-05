@@ -2,7 +2,7 @@
 //   sh 只做守门（检测 python3），重活在内嵌 python3 上传器里：扫 ~/.claude/projects 与
 //   ~/.codex/sessions 的 *.jsonl → 按 BUNDLE_SENTINEL 打包、按行切片 → 逐片 POST /connect/upload
 //   （JSON 体：pairingCode/partIndex/totalParts/content）。worker 端拆包口径见 session-parse.splitBundle。
-//   终端体验对齐旧 Go 助手（tools/agora-import/ui.go）：TTY 下绿色就地刷新进度条（打包/上传各一条，
+//   终端体验对齐旧 Go 助手（tools/combo-import/ui.go）：TTY 下绿色就地刷新进度条（打包/上传各一条，
 //   60ms 节流），非 TTY（管道/CI）退化为逐行日志。
 //   文案硬约束：明确是「在本机读取后全量上传原文、云端解析去敏」，绝不出现「数据不出本机」等字眼。
 import { BUNDLE_SENTINEL } from './session-parse.js';
@@ -13,7 +13,7 @@ function shq(s: string): string {
 }
 
 export interface ConnectScriptParams {
-  /** 对外基址，形如 https://agora.app（据请求 Host + x-forwarded-proto 算）。 */
+  /** 对外基址，形如 https://combo.app（据请求 Host + x-forwarded-proto 算）。 */
   base: string;
   /** 一次性配对码（助手凭它上传）。 */
   pairingCode: string;
@@ -22,24 +22,24 @@ export interface ConnectScriptParams {
 /** 渲染助手脚本（active 配对）。 */
 export function renderConnectScript(p: ConnectScriptParams): string {
   return `#!/bin/sh
-# Agora 本机助手 — 在本机读取你的对话历史后，把原文【完整上传】到云端，
+# Combo 本机助手 — 在本机读取你的对话历史后，把原文【完整上传】到云端，
 #   再由云端解析、抹掉手机号/密钥这类隐私信息后用于能力提取。
 set -u
 
-AGORA_BASE=${shq(p.base)}
-AGORA_CODE=${shq(p.pairingCode)}
-export AGORA_BASE AGORA_CODE
+COMBO_BASE=${shq(p.base)}
+COMBO_CODE=${shq(p.pairingCode)}
+export COMBO_BASE COMBO_CODE
 
 if ! command -v python3 >/dev/null 2>&1; then
-  printf '[Agora] %s\\n' '这台电脑没有 python3，命令行方式用不了。请回到任务页查看其它方式。' >&2
+  printf '[Combo] %s\\n' '这台电脑没有 python3，命令行方式用不了。请回到任务页查看其它方式。' >&2
   exit 1
 fi
 
-exec python3 - <<'AGORA_PY'
+exec python3 - <<'COMBO_PY'
 import json, os, pathlib, sys, time, urllib.error, urllib.request
 
-BASE = os.environ['AGORA_BASE'].rstrip('/')
-CODE = os.environ['AGORA_CODE']
+BASE = os.environ['COMBO_BASE'].rstrip('/')
+CODE = os.environ['COMBO_CODE']
 SENTINEL = ${JSON.stringify(BUNDLE_SENTINEL)}
 PART_LIMIT = 2 * 1024 * 1024  # 单片 2MB 文本；服务端 32MB 体上限对 JSON 转义膨胀有充分余量
 
@@ -55,7 +55,7 @@ def c(color, s):
     return color + s + RESET if IS_TTY else s
 
 def log(msg):
-    print('[Agora] ' + msg, file=sys.stderr)
+    print('[Combo] ' + msg, file=sys.stderr)
 
 _start = time.time()
 _last_draw = 0.0
@@ -95,7 +95,7 @@ def fail(msg):
     sys.exit(1)
 
 if IS_TTY:
-    sys.stderr.write('\\n  ' + c(BOLD, 'Agora') + c(DIM, '  本机助手 · 上传对话历史') + '\\n')
+    sys.stderr.write('\\n  ' + c(BOLD, 'Combo') + c(DIM, '  本机助手 · 上传对话历史') + '\\n')
     sys.stderr.write(c(DIM, '  正在查找本机对话历史…') + '\\n')
 else:
     log('正在查找本机对话历史…')
@@ -108,9 +108,9 @@ for root in roots:
 if not files:
     fail('没扫到可上传的对话历史（~/.claude/projects 或 ~/.codex/sessions 为空）。')
 # 内存护栏：默认只导入最近 N 个会话（按修改时间倒序），避免海量历史在本机打包阶段把内存打爆。
-# 设 AGORA_SESSION_LIMIT=0 导入全部；设具体数字自定上限。
+# 设 COMBO_SESSION_LIMIT=0 导入全部；设具体数字自定上限。
 try:
-    _limit = int(os.environ.get('AGORA_SESSION_LIMIT', '300'))
+    _limit = int(os.environ.get('COMBO_SESSION_LIMIT', '300'))
 except ValueError:
     _limit = 300
 def _mtime(p):
@@ -122,7 +122,7 @@ files.sort(key=_mtime, reverse=True)
 _found = len(files)
 if _limit > 0 and _found > _limit:
     files = files[:_limit]
-    log('本机共 %d 个会话，本次只导入最近 %d 个（按修改时间）。要导入全部请设 AGORA_SESSION_LIMIT=0 后重跑本命令。' % (_found, _limit))
+    log('本机共 %d 个会话，本次只导入最近 %d 个（按修改时间）。要导入全部请设 COMBO_SESSION_LIMIT=0 后重跑本命令。' % (_found, _limit))
 if not IS_TTY:
     log('找到 %d 个会话文件，开始打包上传…' % len(files))
 
@@ -179,14 +179,14 @@ if IS_TTY:
                      + c(DIM, ' · 用时 ' + fmt_clock() + '，云端已自动开始解析与提取，回到任务页查看进度。') + '\\n')
 else:
     log('上传完成（用时 %s），云端已自动开始解析与提取。回到任务页查看进度。' % fmt_clock())
-AGORA_PY
+COMBO_PY
 `;
 }
 
 /** 配对失效脚本（码无效/过期；脚本通道不裸 JSON 错误码）：打印一句人话并非零退出。 */
 export function renderExpiredScript(): string {
   return `#!/bin/sh
-printf '[Agora] %s\\n' '配对码已失效，请回到任务页重新生成连接命令。' >&2
+printf '[Combo] %s\\n' '配对码已失效，请回到任务页重新生成连接命令。' >&2
 exit 1
 `;
 }

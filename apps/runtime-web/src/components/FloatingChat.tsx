@@ -29,7 +29,7 @@ interface ViewportOffset {
 type ChatWindowMode = 'normal' | 'minimized' | 'maximized';
 type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 
-const STORAGE_PREFIX = 'agora-runtime-floating-chat';
+const STORAGE_PREFIX = 'combo-runtime-floating-chat';
 const MARGIN = 16;
 const MIN_WIDTH = 320;
 const MIN_HEIGHT = 280;

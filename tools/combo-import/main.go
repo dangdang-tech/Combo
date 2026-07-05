@@ -1,4 +1,4 @@
-// agora-import — Agora 本机对话历史上传器（B-21 引导脚本下载并 exec 之）。
+// combo-import — Combo 本机对话历史上传器（B-21 引导脚本下载并 exec 之）。
 //
 // 职责（重活全在此二进制，替代纯 shell 的脆弱并发/取消）：
 //
@@ -60,7 +60,7 @@ func run() int {
 	}
 
 	// 临时分片目录：os.MkdirTemp + defer os.RemoveAll（取消时也清，绝不留孤儿/不往已删路径写）。
-	tmpDir, err := os.MkdirTemp("", "agora-import-")
+	tmpDir, err := os.MkdirTemp("", "combo-import-")
 	if err != nil {
 		rep.failf("无法创建临时目录，命令行方式用不了。请回到网页，改用浏览器上传。")
 		return exitError
@@ -140,28 +140,28 @@ func resolveHome() (string, error) {
 
 // loadConfig 从环境变量装配上传配置。
 //
-//	AGORA_BASE     必填，如 https://agora.xxx
-//	AGORA_PAIR_ID  必填
-//	AGORA_CODE     必填，配对码
-//	AGORA_SOURCE   默认 mixed
-//	AGORA_JOBS     默认 8
-//	AGORA_SESSION_LIMIT 默认 0（不限）；测试时可设 50 等正整数
+//	COMBO_BASE     必填，如 https://combo.xxx
+//	COMBO_PAIR_ID  必填
+//	COMBO_CODE     必填，配对码
+//	COMBO_SOURCE   默认 mixed
+//	COMBO_JOBS     默认 8
+//	COMBO_SESSION_LIMIT 默认 0（不限）；测试时可设 50 等正整数
 //
 // 缺必填项 → 返回人话错误（main 打印后 exit 1）。
 func loadConfig() (uploadConfig, error) {
-	base := os.Getenv("AGORA_BASE")
-	pairID := os.Getenv("AGORA_PAIR_ID")
-	code := os.Getenv("AGORA_CODE")
+	base := os.Getenv("COMBO_BASE")
+	pairID := os.Getenv("COMBO_PAIR_ID")
+	code := os.Getenv("COMBO_CODE")
 
 	var missing []string
 	if base == "" {
-		missing = append(missing, "AGORA_BASE")
+		missing = append(missing, "COMBO_BASE")
 	}
 	if pairID == "" {
-		missing = append(missing, "AGORA_PAIR_ID")
+		missing = append(missing, "COMBO_PAIR_ID")
 	}
 	if code == "" {
-		missing = append(missing, "AGORA_CODE")
+		missing = append(missing, "COMBO_CODE")
 	}
 	if len(missing) > 0 {
 		return uploadConfig{}, fmt.Errorf(
@@ -170,16 +170,16 @@ func loadConfig() (uploadConfig, error) {
 		)
 	}
 
-	source := os.Getenv("AGORA_SOURCE")
+	source := os.Getenv("COMBO_SOURCE")
 	if source == "" {
 		source = defaultSource
 	}
 
-	jobs := parseIntEnv("AGORA_JOBS", defaultJobs)
+	jobs := parseIntEnv("COMBO_JOBS", defaultJobs)
 	if jobs < 1 {
 		jobs = defaultJobs
 	}
-	sessionLimit := parseIntEnv("AGORA_SESSION_LIMIT", defaultSessionLimit)
+	sessionLimit := parseIntEnv("COMBO_SESSION_LIMIT", defaultSessionLimit)
 
 	return uploadConfig{
 		Base:         base,

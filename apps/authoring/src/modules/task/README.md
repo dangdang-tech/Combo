@@ -20,14 +20,14 @@
 
 被谁使用：路由由 `bootstrap/routes.ts` 挂载；`processes/worker.ts` 消费队列时调 pipeline.ts 的 runPipeline、对账时调 repo.ts 的 findStalledExtractTasks。
 
-依赖什么：`platform/middleware/auth.ts`（登录与 SSE 守卫）、`platform/http/_helpers.ts`（错误信封）、`platform/infra/db.ts` 与 `db-tx.ts`（连接池与事务）、`platform/infra/queue.ts`（BullMQ 队列名与入队）、`platform/sse/`（建流与 Redis 流桥）、`platform/infra/llm/`（LLM 网关端口与审计类型）、`platform/text/session-noise.ts`（平台噪声识别）、`modules/capability/repo.ts`（落能力项行）、`modules/account/repo.ts`（toIso）。外部资源：PostgreSQL 的 tasks、uploads、capabilities 表，MinIO 的 agora-raw（原始件，处理完清除）与 agora-artifacts（能力项定义，长期保留）两个桶，Redis 队列（BullMQ）与 Redis 热流（进度帧），以及经网关调用的大模型上游。
+依赖什么：`platform/middleware/auth.ts`（登录与 SSE 守卫）、`platform/http/_helpers.ts`（错误信封）、`platform/infra/db.ts` 与 `db-tx.ts`（连接池与事务）、`platform/infra/queue.ts`（BullMQ 队列名与入队）、`platform/sse/`（建流与 Redis 流桥）、`platform/infra/llm/`（LLM 网关端口与审计类型）、`platform/text/session-noise.ts`（平台噪声识别）、`modules/capability/repo.ts`（落能力项行）、`modules/account/repo.ts`（toIso）。外部资源：PostgreSQL 的 tasks、uploads、capabilities 表，MinIO 的 combo-raw（原始件，处理完清除）与 combo-artifacts（能力项定义，长期保留）两个桶，Redis 队列（BullMQ）与 Redis 热流（进度帧），以及经网关调用的大模型上游。
 
 ## 典型流程：POST /connect/upload（助手上传一片，恰好收齐）
 
 1. 助手脚本发 JSON 体（配对码、分片序号、总片数、文本内容）到本端点，无登录态。
 2. `handlers.ts` 的 connectUploadHandler 用共享包的 Zod schema 校验请求体，然后调 `pairing.ts` 的 landPart。
 3. landPart 先调 verifyPairingCode：把码做 sha256 后查 uploads 表，确认码存在、未过期、上传仍是 pending 且任务停在 upload 步，否则按无效或过期返回对应错误。
-4. 把分片文本写进 MinIO 的 agora-raw 桶（先写桶再登记，保证登记过的分片一定可读）。
+4. 把分片文本写进 MinIO 的 combo-raw 桶（先写桶再登记，保证登记过的分片一定可读）。
 5. 调 `repo.ts` 的 registerPart 把「序号到对象键」登记进 uploads.parts；这条 UPDATE 只对 pending 且未过期的行生效，重复分片幂等覆盖同一序号。
 6. 用 partsState 判断 0 到 total-1 是否连续到齐；没齐就直接返回已落地片数，助手继续传下一片。
 7. 收齐了：按序号把各分片读出来拼接成完整原始件写回 MinIO，调 markUploadRaw 把 uploads 置为 raw。

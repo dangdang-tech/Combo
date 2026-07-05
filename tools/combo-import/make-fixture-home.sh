@@ -1,23 +1,23 @@
 #!/bin/sh
 # Create an isolated HOME containing a small sample of local Claude/Codex
-# session logs, preserving the directory shape expected by agora-import.
+# session logs, preserving the directory shape expected by combo-import.
 set -eu
 
-limit=${AGORA_FIXTURE_LIMIT:-50}
+limit=${COMBO_FIXTURE_LIMIT:-50}
 source_home=${SOURCE_HOME:-${HOME:-}}
 
 case "${limit}" in
   ''|*[!0-9]*)
-    printf '[Agora] AGORA_FIXTURE_LIMIT must be a positive integer.\n' >&2
+    printf '[Combo] COMBO_FIXTURE_LIMIT must be a positive integer.\n' >&2
     exit 1
     ;;
 esac
 if [ "${limit}" -lt 1 ]; then
-  printf '[Agora] AGORA_FIXTURE_LIMIT must be at least 1.\n' >&2
+  printf '[Combo] COMBO_FIXTURE_LIMIT must be at least 1.\n' >&2
   exit 1
 fi
 if [ -z "${source_home}" ] || [ ! -d "${source_home}" ]; then
-  printf '[Agora] SOURCE_HOME/HOME is not a readable directory.\n' >&2
+  printf '[Combo] SOURCE_HOME/HOME is not a readable directory.\n' >&2
   exit 1
 fi
 
@@ -25,11 +25,11 @@ if [ "${1:-}" ]; then
   fixture_home=$1
   mkdir -p "${fixture_home}"
 else
-  fixture_home=$(mktemp -d "${TMPDIR:-/tmp}/agora-upload-home.XXXXXX")
+  fixture_home=$(mktemp -d "${TMPDIR:-/tmp}/combo-upload-home.XXXXXX")
 fi
 
-claude_list=$(mktemp "${TMPDIR:-/tmp}/agora-claude-list.XXXXXX")
-codex_list=$(mktemp "${TMPDIR:-/tmp}/agora-codex-list.XXXXXX")
+claude_list=$(mktemp "${TMPDIR:-/tmp}/combo-claude-list.XXXXXX")
+codex_list=$(mktemp "${TMPDIR:-/tmp}/combo-codex-list.XXXXXX")
 trap 'rm -f "${claude_list}" "${codex_list}"' EXIT INT TERM HUP
 
 claude_root="${source_home}/.claude/projects"
@@ -78,34 +78,34 @@ case "\$0" in
   *) here=\$(pwd -P) ;;
 esac
 export HOME="\${here}"
-export AGORA_SESSION_LIMIT="\${AGORA_SESSION_LIMIT:-${limit}}"
-PS1="(agora-fake-home) \${PS1:-\$ }"
+export COMBO_SESSION_LIMIT="\${COMBO_SESSION_LIMIT:-${limit}}"
+PS1="(combo-fake-home) \${PS1:-\$ }"
 export PS1
-printf '[Agora] Fake HOME is %s\\n' "\${HOME}" >&2
-printf '[Agora] Paste the web connect command here; type exit when done.\\n' >&2
+printf '[Combo] Fake HOME is %s\\n' "\${HOME}" >&2
+printf '[Combo] Paste the web connect command here; type exit when done.\\n' >&2
 exec /bin/sh -i
 EOF
 
-cat >"${fixture_home}/run-agora-import.sh" <<EOF
+cat >"${fixture_home}/run-combo-import.sh" <<EOF
 #!/bin/sh
-# Run one pasted Agora web connect command with HOME set to this fixture directory.
+# Run one pasted Combo web connect command with HOME set to this fixture directory.
 set -eu
 case "\$0" in
   */*) here=\$(cd "\$(dirname "\$0")" && pwd -P) ;;
   *) here=\$(pwd -P) ;;
 esac
 export HOME="\${here}"
-export AGORA_SESSION_LIMIT="\${AGORA_SESSION_LIMIT:-${limit}}"
-printf '[Agora] Fake HOME is %s\\n' "\${HOME}" >&2
-printf '[Agora] Paste the web connect command, then press Enter:\\n' >&2
+export COMBO_SESSION_LIMIT="\${COMBO_SESSION_LIMIT:-${limit}}"
+printf '[Combo] Fake HOME is %s\\n' "\${HOME}" >&2
+printf '[Combo] Paste the web connect command, then press Enter:\\n' >&2
 IFS= read -r cmd
 if [ -z "\${cmd}" ]; then
-  printf '[Agora] Empty command; nothing ran.\\n' >&2
+  printf '[Combo] Empty command; nothing ran.\\n' >&2
   exit 1
 fi
 exec /bin/sh -c "\${cmd}"
 EOF
-chmod +x "${fixture_home}/enter-fake-home.sh" "${fixture_home}/run-agora-import.sh"
+chmod +x "${fixture_home}/enter-fake-home.sh" "${fixture_home}/run-combo-import.sh"
 
 quote() {
   printf "'"
@@ -113,9 +113,9 @@ quote() {
   printf "'"
 }
 
-printf '[Agora] Created isolated HOME with %s session file(s): %s\n' "${count}" "${fixture_home}" >&2
+printf '[Combo] Created isolated HOME with %s session file(s): %s\n' "${count}" "${fixture_home}" >&2
 if [ "${count}" -eq 0 ]; then
-  printf '[Agora] No non-empty .jsonl sessions were found under %s/.claude/projects or %s/.codex/sessions.\n' "${source_home}" "${source_home}" >&2
+  printf '[Combo] No non-empty .jsonl sessions were found under %s/.claude/projects or %s/.codex/sessions.\n' "${source_home}" "${source_home}" >&2
   exit 1
 fi
 
@@ -128,4 +128,4 @@ printf '\n'
 printf 'Run one pasted web connect command:\n'
 printf '  cd '
 quote "${fixture_home}"
-printf ' && sh ./run-agora-import.sh\n'
+printf ' && sh ./run-combo-import.sh\n'

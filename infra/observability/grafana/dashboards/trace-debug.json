@@ -40,7 +40,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{service_namespace=\"agora-mvp\"} | json | traceId=\"$traceId\"",
+          "expr": "{service_namespace=\"combo-mvp\"} | json | traceId=\"$traceId\"",
           "refId": "A"
         }
       ],
@@ -50,7 +50,7 @@
   ],
   "refresh": "",
   "schemaVersion": 39,
-  "tags": ["agora", "trace"],
+  "tags": ["combo", "trace"],
   "templating": {
     "list": [
       {
@@ -74,7 +74,7 @@
   },
   "timezone": "",
   "title": "Trace Debug",
-  "uid": "agora-trace-debug",
+  "uid": "combo-trace-debug",
   "version": 1,
   "weekStart": ""
 }

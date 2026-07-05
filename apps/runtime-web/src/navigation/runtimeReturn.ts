@@ -1,6 +1,6 @@
 export const CREATOR_CAPABILITIES_PATH = '/capabilities';
 
-const RETURN_TO_STORAGE_PREFIX = 'agora.runtime.returnTo:';
+const RETURN_TO_STORAGE_PREFIX = 'combo.runtime.returnTo:';
 
 export interface RuntimeReturnStorage {
   getItem(key: string): string | null;
