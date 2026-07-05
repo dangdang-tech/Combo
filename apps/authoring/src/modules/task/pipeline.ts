@@ -239,7 +239,15 @@ async function execute(
 
   // ③ redact：合规硬要求，先抹隐私再进任何 LLM/落库路径。
   await reporter.subtask('redact', 'running', 15, '正在抹掉隐私信息…');
-  const redacted = redactBatch(parsed.segments.map((s) => s.content));
+  // 内存护栏：段正文下游只被提取阶段采样前 SEGMENT_SAMPLE_CHARS(1500) 字符，从不整份落库/展示；
+  // 而 redactBatch 会把全部段正文整份驻留并产出等量副本 —— 海量历史下这正是 OOM 主现场。
+  // 进 redact 前把每段截到 REDACT_INPUT_CAP，对下游无损，却把峰值从 O(全量语料) 压到 O(段数×cap)。
+  const REDACT_INPUT_CAP = 4000;
+  const redacted = redactBatch(
+    parsed.segments.map((s) =>
+      s.content.length > REDACT_INPUT_CAP ? s.content.slice(0, REDACT_INPUT_CAP) : s.content,
+    ),
+  );
   await mergeUploadMeta(deps.db, taskId, {
     parseStats: parsed.stats,
     redaction: redacted.report,

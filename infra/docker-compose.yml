@@ -327,6 +327,9 @@ services:
       timeout: 5s
       retries: 6
       start_period: 15s
+    # OOM 护栏：api 也接收/缓冲上传体，给内存上限 + 崩溃自动重启（与 worker 同策略）。
+    mem_limit: 1g
+    restart: unless-stopped
 
   worker:
     build:
@@ -346,6 +349,8 @@ services:
     environment:
       NODE_ENV: production
       PROCESS: worker
+      # OOM 护栏：限制 V8 老生代堆，配合容器 mem_limit 让内存超限时容器内优雅 OOM 而非拖垮宿主。
+      NODE_OPTIONS: --max-old-space-size=1536
       DATABASE_URL: postgres://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:?}
       REDIS_QUEUE_URL: redis://redis_queue:6379/0
       REDIS_HOT_URL: redis://redis_hot:6379/0
@@ -361,6 +366,12 @@ services:
       OTEL_SERVICE_NAME: cb-authoring-worker
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       OTEL_RESOURCE_ATTRIBUTES: deployment.environment=compose
+    # OOM 护栏：worker 硬内存上限 + 崩溃自动重启。超限时是容器内可恢复的 OOM
+    # （任务失败 → 自动重启 → 开机 reconcile 重排失联任务），而非无上限撑爆 Docker VM /
+    # 拖垮宿主（曾致整机冻结 + 队列永久卡死）。
+    mem_limit: 2g
+    mem_reservation: 1g
+    restart: unless-stopped
 
   # consumer 受保序约束不可多实例（启动拿 advisory lock/lease 防误 scale，70 §3.1）；不要 deploy.replicas > 1。
   runtime:
