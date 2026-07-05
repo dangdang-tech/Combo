@@ -18,6 +18,8 @@ import {
   type PublishBatchView,
   type PublishBatchItemView,
   type CreatePublishBatchBody,
+  type SelectionDraft,
+  selectionCandidateIds,
 } from '@cb/shared';
 import { ApiError, useSSE, type UseSSEState } from '../../../api/index.js';
 import { ErrorState, LoadingState } from '../../../components/index.js';
@@ -153,6 +155,8 @@ export function CapabilitiesStepPage(): ReactElement {
     snapshotId: ctxSnapshotId,
     extractJobId: ctxExtractJobId,
     batchId: ctxBatchId,
+    selection: ctxSelection,
+    setSelection,
     setExtractJobId,
   } = useWizard();
 
@@ -182,6 +186,11 @@ export function CapabilitiesStepPage(): ReactElement {
   const [trialLaunch, setTrialLaunch] = useState<TrialLaunchState | null>(null);
   const batchKeyRef = useRef<string>(newKey());
   const itemKeysRef = useRef<Map<string, string>>(new Map());
+
+  const selectionFromIds = useCallback((ids: Iterable<string>): SelectionDraft | null => {
+    const candidateIds = Array.from(ids);
+    return candidateIds.length > 0 ? { mode: 'subset', candidateIds } : null;
+  }, []);
 
   // 续传（脊柱 §8）：URL 带 ?batchId=（工作台草稿条对「已发起批量」的续传）→ 拉回该批直接进「发布中/已发布」态，
   //   绝不重新触发一次发布（否则同候选被重复建版重复发布 → 市集重复上架，回归 BUG）。批 SSE 订阅其 jobId 恢复逐项态。
@@ -250,23 +259,30 @@ export function CapabilitiesStepPage(): ReactElement {
   }, [phase.kind, snapshotId, triggerKey, draftId, attempt, setExtractJobId, setSearchParams]);
 
   // SSE done → 拉全量候选 → 默认全选（ready 项）→ ready 态。
-  const handleJobDone = useCallback((doneJobId: string, done: DonePayload | undefined): void => {
-    setDoneResult(doneResultOf(done));
-    void (async () => {
-      try {
-        const res = await fetchCandidates(doneJobId, { limit: 50 });
-        failCountRef.current = 0;
-        setCandidates(res.candidates);
-        // 默认全选（仅 ready 可发布；失败项不入选）。
-        setSelectedIds(
-          new Set(res.candidates.filter((c) => c.status === 'ready').map((c) => c.id)),
-        );
-        setPhase({ kind: 'ready' });
-      } catch (e) {
-        setError(e instanceof ApiError ? e : fallbackError('候选加载失败，请稍后重试。'));
-      }
-    })();
-  }, []);
+  const handleJobDone = useCallback(
+    (doneJobId: string, done: DonePayload | undefined): void => {
+      setDoneResult(doneResultOf(done));
+      void (async () => {
+        try {
+          const res = await fetchCandidates(doneJobId, { limit: 50 });
+          failCountRef.current = 0;
+          setCandidates(res.candidates);
+          const readyIds = res.candidates.filter((c) => c.status === 'ready').map((c) => c.id);
+          const readySet = new Set(readyIds);
+          const restoredIds = ctxSelection
+            ? selectionCandidateIds(ctxSelection).filter((id) => readySet.has(id))
+            : readyIds;
+          const nextIds = new Set(restoredIds);
+          setSelectedIds(nextIds);
+          setSelection(selectionFromIds(nextIds));
+          setPhase({ kind: 'ready' });
+        } catch (e) {
+          setError(e instanceof ApiError ? e : fallbackError('候选加载失败，请稍后重试。'));
+        }
+      })();
+    },
+    [ctxSelection, selectionFromIds, setSelection],
+  );
 
   const handleJobError = useCallback((): void => {
     failCountRef.current += 1;
@@ -278,22 +294,21 @@ export function CapabilitiesStepPage(): ReactElement {
   }, []);
 
   const handleToggle = useCallback((candidateId: string): void => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(candidateId)) next.delete(candidateId);
-      else next.add(candidateId);
-      return next;
-    });
-  }, []);
+    const next = new Set(selectedIds);
+    if (next.has(candidateId)) next.delete(candidateId);
+    else next.add(candidateId);
+    setSelectedIds(next);
+    setSelection(selectionFromIds(next));
+  }, [selectedIds, selectionFromIds, setSelection]);
 
   const handleToggleAll = useCallback((): void => {
-    setSelectedIds((prev) => {
-      const readyIds = candidates.filter((c) => c.status === 'ready').map((c) => c.id);
-      if (readyIds.length === 0) return prev;
-      const allSelected = readyIds.every((id) => prev.has(id));
-      return allSelected ? new Set() : new Set(readyIds);
-    });
-  }, [candidates]);
+    const readyIds = candidates.filter((c) => c.status === 'ready').map((c) => c.id);
+    if (readyIds.length === 0) return;
+    const allSelected = readyIds.every((id) => selectedIds.has(id));
+    const next = allSelected ? new Set<string>() : new Set(readyIds);
+    setSelectedIds(next);
+    setSelection(selectionFromIds(next));
+  }, [candidates, selectedIds, selectionFromIds, setSelection]);
 
   // —— 一键发布：每项仅 candidateId + idempotencyKey（封面/档位/可见性走后端默认）——
   const handlePublish = useCallback((): void => {

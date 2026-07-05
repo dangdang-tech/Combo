@@ -1,12 +1,12 @@
 // useSaveDraft 单测（F-12 / F-15）——存草稿诚实落库语义（Codex P0-1 修复后）：
-//   - STEP③ select + 有 selection + draftId → patchSelection 真落库（端点 G）。
-//   - 非 select 步 + 有 draftId（后端建产物时已落 drafts 行）→ 不打后端、退出即真草稿，诚实成功。
+//   - STEP③ select / 2 步流 capabilities + 有 selection + draftId → patchSelection 真落库（端点 G）。
+//   - 非选择步 + 有 draftId（后端建产物时已落 drafts 行）→ 不打后端、退出即真草稿，诚实成功。
 //   - 任一步【无 draftId】（尚无已落库草稿）→ 不谎报成功、不空退出：返回 false + 人话退路（绝不固化「假成功」）。
 //   - 失败落 error（人话 + 退路，不裸崩、无 code）。
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { DraftStep, SelectionDraft } from '@cb/shared';
+import type { SelectionDraft } from '@cb/shared';
 import { WizardProvider, useWizard } from './WizardContext.js';
 import { useSaveDraft } from './useSaveDraft.js';
 import { installFetchMock, type FetchMock } from '../../test/mockFetch.js';
@@ -38,7 +38,7 @@ function Probe({ initialSelection }: { initialSelection?: SelectionDraft }) {
   );
 }
 
-function setup(step: DraftStep, draftId: string | undefined, initialSelection?: SelectionDraft) {
+function setup(step: string, draftId: string | undefined, initialSelection?: SelectionDraft) {
   return render(
     <WizardProvider initialStep={step} initialDraftId={draftId}>
       <Probe {...(initialSelection ? { initialSelection } : {})} />
@@ -63,7 +63,22 @@ describe('useSaveDraft', () => {
     expect(mock.calls[0]!.headers['X-Idempotency-Scope']).toBe('draft.selection.patch');
   });
 
-  it('非 select 步 + 有 draftId（后端建产物已落 drafts 行）→ 不打后端、诚实成功退出', async () => {
+  it('capabilities 步 + 有 selection + draftId → PATCH selection（保存能力页勾选）', async () => {
+    mock = installFetchMock({ status: 200, json: { data: {} } });
+    setup('capabilities', 'd1', { mode: 'subset', candidateIds: ['c1', 'c2'] });
+    await userEvent.click(screen.getByText('预置选择'));
+    await userEvent.click(screen.getByText('保存'));
+    await waitFor(() => {
+      expect(
+        mock.calls.some((c) => c.url === '/api/v1/drafts/d1/selection' && c.method === 'PATCH'),
+      ).toBe(true);
+    });
+    expect(mock.calls[0]!.body).toEqual({
+      selection: { mode: 'subset', candidateIds: ['c1', 'c2'] },
+    });
+  });
+
+  it('非选择步 + 有 draftId（后端建产物已落 drafts 行）→ 不打后端、诚实成功退出', async () => {
     mock = installFetchMock({ status: 200, json: { data: {} } });
     setup('import', 'd1');
     await userEvent.click(screen.getByText('保存'));
@@ -73,7 +88,7 @@ describe('useSaveDraft', () => {
     expect(screen.getByTestId('error')).toHaveTextContent('none');
   });
 
-  it('非 select 步 + 无 draftId（尚无已落库草稿）→ 不谎报成功：返回 false + 人话退路（Codex P0-1）', async () => {
+  it('非选择步 + 无 draftId（尚无已落库草稿）→ 不谎报成功：返回 false + 人话退路（Codex P0-1）', async () => {
     mock = installFetchMock({ status: 200, json: { data: {} } });
     setup('import', undefined);
     await userEvent.click(screen.getByText('保存'));

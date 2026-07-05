@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
-import { WizardProvider } from '../../wizard/index.js';
+import { WizardProvider, useWizard } from '../../wizard/index.js';
 import { CapabilitiesStepPage } from './CapabilitiesStepPage.js';
 import { __setOpenRuntimeTrialForTests } from './trialApi.js';
 import { installFetchMock, type FetchMock } from '../../../test/mockFetch.js';
@@ -23,6 +23,16 @@ function renderPage(
     const location = useLocation();
     return <span data-testid="path">{`${location.pathname}${location.search}`}</span>;
   }
+  function SelectionProbe() {
+    const { selection } = useWizard();
+    const text =
+      selection == null
+        ? 'none'
+        : selection.mode === 'single'
+          ? `single:${selection.candidateId}`
+          : `${selection.mode}:${selection.candidateIds.join(',')}`;
+    return <span data-testid="selection">{text}</span>;
+  }
 
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
@@ -34,6 +44,7 @@ function renderPage(
         initialBatchId={opts.batchId}
       >
         <LocationProbe />
+        <SelectionProbe />
         <Routes>
           <Route path="/create/capabilities" element={<CapabilitiesStepPage />} />
           <Route path="/a/:slug" element={<span data-testid="market">market</span>} />
@@ -166,6 +177,7 @@ describe('CapabilitiesStepPage', () => {
     const boxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
     expect(boxes).toHaveLength(2);
     expect(boxes.every((b) => b.checked)).toBe(true);
+    expect(screen.getByTestId('selection')).toHaveTextContent('subset:c1,c2');
     // 一键发布可点（已选 2 项）。
     expect(screen.getByRole('button', { name: /一键发布到市集 · 2 项/ })).toBeEnabled();
 
@@ -174,9 +186,11 @@ describe('CapabilitiesStepPage', () => {
     expect((screen.getAllByRole('checkbox') as HTMLInputElement[]).every((b) => !b.checked)).toBe(
       true,
     );
+    expect(screen.getByTestId('selection')).toHaveTextContent('none');
 
     await userEvent.click(screen.getByRole('button', { name: '全选' }));
     expect(screen.getByRole('button', { name: /一键发布到市集 · 2 项/ })).toBeEnabled();
+    expect(screen.getByTestId('selection')).toHaveTextContent('subset:c1,c2');
   });
 
   it('草稿恢复出 extractJobId → 直接续接候选，不重新 POST 萃取旧幂等任务', async () => {
