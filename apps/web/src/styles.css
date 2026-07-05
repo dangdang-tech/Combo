@@ -1,31 +1,36 @@
-/* 创作者中心设计系统：暖米中性面 + 砖红强调 + 衬线标题 / 等宽 label。 */
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;600&family=Noto+Sans+SC:wght@400;500;700&family=Geist+Mono:wght@400;500;700&display=swap');
+/* Combo 设计系统（Figma XwOk3OdwHGSt6gviqS2Doy / node 2409:24）。
+   白色内容底 + 浅灰侧栏 + Combo 墨色/砖红品牌 + 衬线标题 / 等宽 label。 */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,900&family=Noto+Serif+SC:wght@500;600&family=Noto+Sans+SC:wght@400;500;700&family=Geist+Mono:wght@400;500;700&display=swap');
 :root {
   /* 尺寸 */
   --cb-sidebar-w: 288px;
   --cb-sidebar-w-collapsed: 64px;
-  /* 暖米中性面：bone(页面) → rail(侧栏) → paper(卡片) → raised(抬升面) */
-  --cb-bg: #f7f3ec;
-  --cb-rail: #f4f0e7;
-  --cb-surface: #fbf9f4;
-  --cb-surface-raised: #fffdf9;
-  /* 文字 / 边框 / 骨架 */
-  --cb-fg: #14141a;
-  --cb-muted: #6f6860;
-  --cb-border: #e1d8ca;
-  --cb-skeleton: rgba(115, 110, 102, 0.28);
-  /* 砖红强调 */
+  /* 页面底 / 侧栏 / surface */
+  --cb-bg: #ffffff;
+  --cb-rail: #f7f7f7;
+  --cb-surface: #ffffff;
+  --cb-surface-raised: #ffffff;
+  /* 文字 / 边框 / 骨架 / 网格纸底 */
+  --cb-fg: #1c1b19;
+  --cb-muted: #66706c;
+  --cb-border: #dbe0db;
+  --cb-skeleton: #eef2ef;
+  --cb-grid: rgba(219, 224, 219, 0.72);
+  /* Combo 砖红强调 */
   --cb-accent: #a73718;
+  --cb-accent-strong: #8f2f14;
   --cb-accent-soft: rgba(167, 55, 24, 0.1);
+  --cb-focus-ring: #77a590;
   /* 语义色 */
-  --cb-badge-ok: #0e6d52;
-  --cb-warn: #b8893a;
-  --cb-danger: #d83931;
+  --cb-badge-ok: #47714f;
+  --cb-warn: #8a6414;
+  --cb-danger: #b3261e;
   /* 圆角 */
   --cb-radius-card: 8px;
   --cb-radius-control: 6px;
   --cb-radius-pill: 999px;
-  /* 字体三族：衬线标题 / 无衬线正文 / 等宽 label */
+  /* 字体四族：品牌字标 / 衬线标题 / 无衬线正文 / 等宽 label */
+  --cb-font-brand: 'Fraunces', 'Noto Serif SC', serif;
   --cb-font-serif: 'Noto Serif SC', 'Songti SC', 'STSong', serif;
   --cb-font-sans:
     'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
@@ -43,7 +48,45 @@ body {
   background: var(--cb-bg);
 }
 
-/* ---------- Shell（左侧固定侧栏 + 顶栏 + 主内容区） ---------- */
+/* ---------- Combo 品牌元素（字标 / 徽标） ---------- */
+.cb-brand-wordmark {
+  display: inline-flex;
+  align-items: baseline;
+  font-family: var(--cb-font-brand);
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 0.9;
+  color: var(--cb-fg);
+}
+
+.cb-brand-wordmark__accent,
+.cb-brand-wordmark__dot {
+  color: var(--cb-accent);
+}
+
+.cb-brand-mark {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--cb-fg);
+  color: var(--cb-surface-raised);
+  font-family: var(--cb-font-brand);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.cb-brand-mark__dot {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--cb-accent);
+}
+
+/* ---------- Shell（左侧固定侧栏 + 主内容区） ---------- */
 .cb-shell {
   display: grid;
   grid-template-columns: var(--cb-sidebar-w) 1fr;
@@ -84,26 +127,18 @@ body {
   min-width: 0;
 }
 
-/* 展开态隐去徽标，仅留衬线「Agora」字；收起态再现身做品牌锚。 */
+/* 展开态隐去徽标，仅留 Combo 字标；收起态再现身做品牌锚。底色/字体来自 cb-brand-mark。 */
 .cb-shell__brand-mark {
   display: none;
-  align-items: center;
-  justify-content: center;
   width: 28px;
   height: 28px;
   flex: 0 0 auto;
   border-radius: 8px;
-  background: var(--cb-accent);
-  color: #fff;
-  font-weight: 700;
   font-size: 16px;
 }
 
 .cb-shell__brand-word {
-  font-family: var(--cb-font-serif);
-  font-weight: 500;
-  font-size: 22px;
-  letter-spacing: 0.2px;
+  font-size: 28px;
   white-space: nowrap;
 }
 
@@ -245,44 +280,6 @@ body {
   display: flex;
   flex-direction: column;
   min-width: 0;
-}
-
-.cb-shell__topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  height: 52px;
-  padding: 0 24px;
-  border-bottom: 1px solid var(--cb-border);
-  background: var(--cb-surface);
-  position: relative;
-}
-
-.cb-shell__topbar-spacer {
-  flex: 0 0 auto;
-}
-
-/* 顶栏居中字标（AGORA · CREATOR · 当前页，等宽大写小字）。 */
-.cb-shell__eyebrow {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  margin: 0;
-  font-family: var(--cb-font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  color: var(--cb-muted);
-  white-space: nowrap;
-  pointer-events: none;
-}
-
-.cb-shell__topbar-avatar {
-  width: 32px;
-  height: 32px;
 }
 
 .cb-shell__content {
@@ -934,29 +931,65 @@ body {
   cursor: default;
 }
 
-/* ---------- 登录守卫闸门（裸页：无创作者外壳/侧栏/账号） ---------- */
+/* ---------- 登录守卫闸门（裸页：无创作者外壳/侧栏/账号）——网格纸底 + 居中 Combo 面板 ---------- */
 .cb-auth-gate {
   min-height: 100vh;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
   padding: 24px;
+  background:
+    linear-gradient(to right, var(--cb-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--cb-grid) 1px, transparent 1px), var(--cb-bg);
+  background-size: 48px 48px;
+}
+
+.cb-auth-gate__panel {
+  width: min(100%, 380px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 34px 40px 30px;
   text-align: center;
+  background: var(--cb-surface);
+  border: 1px solid var(--cb-border);
+  border-radius: 8px;
 }
 
 .cb-auth-gate__brand {
+  display: inline-flex;
+  align-items: center;
+  color: var(--cb-fg);
+  margin-bottom: 2px;
+}
+
+.cb-auth-gate__brand-word {
+  font-size: 34px;
+  line-height: 0.86;
+}
+
+.cb-auth-gate__eyebrow {
+  margin: -2px 0 0;
+  font-family: var(--cb-font-mono);
+  font-size: 10px;
   font-weight: 700;
-  font-size: 22px;
-  letter-spacing: 0.2px;
-  color: var(--cb-accent);
+  letter-spacing: 0.08em;
+  color: var(--cb-muted);
 }
 
 .cb-auth-gate__msg {
-  margin: 0;
-  font-size: 15px;
+  margin: 2px 0 0;
+  font-size: 14px;
+  line-height: 1.7;
   color: var(--cb-fg);
+}
+
+.cb-auth-gate__actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 2px;
 }
 
 .cb-auth-gate__action {
@@ -964,9 +997,17 @@ body {
   background: var(--cb-accent);
   color: #fff;
   border-radius: 6px;
-  padding: 8px 24px;
+  min-width: 72px;
+  height: 36px;
+  padding: 0 22px;
   font-size: 14px;
+  font-weight: 700;
+  font-family: var(--cb-font-sans);
   cursor: pointer;
+}
+
+.cb-auth-gate__action:hover {
+  background: var(--cb-accent-strong);
 }
 
 /* ---------- 对外裸壳 PublicLayout ---------- */
@@ -994,22 +1035,14 @@ body {
 
 .cb-public-shell__brand-mark {
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  background: var(--cb-accent);
-  color: #fff;
-  font-weight: 700;
   font-size: 16px;
 }
 
 .cb-public-shell__brand-word {
-  font-family: var(--cb-font-serif);
-  font-weight: 700;
-  font-size: 17px;
-  letter-spacing: 0.2px;
+  font-size: 24px;
 }
 
 .cb-public-shell__content {
