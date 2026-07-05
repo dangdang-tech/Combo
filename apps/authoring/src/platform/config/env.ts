@@ -2,7 +2,7 @@
 //
 // 两条铁律（Codex#13）：
 //   1) 生产模式（NODE_ENV=production）禁止 DB/对象存储/Redis/Logto 等密钥与连接串用默认 fallback：
-//      缺失即【启动失败】（throw），绝不带着 minioadmin/agora:agora 这类默认凭据上生产。
+//      缺失即【启动失败】（throw），绝不带着 minioadmin/combo:combo 这类默认凭据上生产。
 //   2) dev/test 可保留默认便于直跑/冒烟，但加守卫：用了默认值会显式 warn（看得见、可追责）。
 //
 // redis_hot 默认口径以 compose 独立服务为权威（redis_hot 是独立实例、db 索引 /0，
@@ -34,7 +34,7 @@ const EnvSchema = z.object({
   OTEL_SDK_DISABLED: z.enum(['true', 'false']).default('false'),
 
   // PostgreSQL
-  DATABASE_URL: z.string().default('postgres://agora:agora@localhost:5432/agora'),
+  DATABASE_URL: z.string().default('postgres://combo:combo@localhost:5432/combo'),
 
   // Redis 双实例（70 §8.1）。redis_hot 以 compose 独立服务为权威：本地直跑 6380/0（非共实例 /1）。
   REDIS_QUEUE_URL: z.string().default('redis://localhost:6379/0'),

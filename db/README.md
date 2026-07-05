@@ -17,7 +17,7 @@
 
 ## migrate 脚本
 
-脚本在 `scripts/migrate.ts`。在本目录执行 `npm run migrate` 会按文件名字典序执行 `migrations/` 下尚未记账的 SQL 文件，每个文件在一个事务里执行并写入 `schema_migrations`；`npm run migrate:status` 只列出各文件是否已执行。连接串取环境变量 `DATABASE_URL`，缺省连本机的 agora 库；没设 `DATABASE_URL` 时 status 模式不连库、仅列文件清单。
+脚本在 `scripts/migrate.ts`。在本目录执行 `npm run migrate` 会按文件名字典序执行 `migrations/` 下尚未记账的 SQL 文件，每个文件在一个事务里执行并写入 `schema_migrations`；`npm run migrate:status` 只列出各文件是否已执行。连接串取环境变量 `DATABASE_URL`，缺省连本机的 combo 库；没设 `DATABASE_URL` 时 status 模式不连库、仅列文件清单。
 
 ## 测试
 

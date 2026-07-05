@@ -36,7 +36,7 @@ import { extractCapabilities, type ExtractSegment } from './extract.js';
 import { insertCapability } from '../capability/repo.js';
 
 /** 能力项可运行定义所在桶（长期保留，与会被清除的原始件分桶）。 */
-export const CAPABILITY_BUCKET = 'agora-artifacts' as const;
+export const CAPABILITY_BUCKET = 'combo-artifacts' as const;
 
 /** 能力项定义对象键。 */
 export function capabilityDefinitionKey(capabilityId: string): string {

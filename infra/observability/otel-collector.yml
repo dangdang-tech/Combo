@@ -34,7 +34,7 @@ processors:
   resource/defaults:
     attributes:
       - key: service.namespace
-        value: agora-mvp
+        value: combo-mvp
         action: upsert
 
 exporters:

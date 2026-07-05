@@ -1,5 +1,5 @@
 #!/bin/sh
-# postgres 首次启动钩子（docker-entrypoint-initdb.d）：建 Logto 独立库（与业务库 agora 同实例、不同 database，技术方案 §6.1）。
+# postgres 首次启动钩子（docker-entrypoint-initdb.d）：建 Logto 独立库（与业务库 combo 同实例、不同 database，技术方案 §6.1）。
 # 幂等：库已存在则跳过。仅首次卷为空时由官方 entrypoint 调用一次。
 set -eu
 

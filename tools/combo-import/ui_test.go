@@ -17,15 +17,15 @@ func TestComma(t *testing.T) {
 }
 
 func TestReporterSelection(t *testing.T) {
-	t.Setenv("AGORA_FORCE_TUI", "")
-	t.Setenv("AGORA_NO_TUI", "1")
+	t.Setenv("COMBO_FORCE_TUI", "")
+	t.Setenv("COMBO_NO_TUI", "1")
 	if _, ok := newReporter().(*plainReporter); !ok {
-		t.Fatal("AGORA_NO_TUI=1 应返回 plainReporter")
+		t.Fatal("COMBO_NO_TUI=1 应返回 plainReporter")
 	}
-	t.Setenv("AGORA_NO_TUI", "")
-	t.Setenv("AGORA_FORCE_TUI", "1")
+	t.Setenv("COMBO_NO_TUI", "")
+	t.Setenv("COMBO_FORCE_TUI", "1")
 	if _, ok := newReporter().(*ttyReporter); !ok {
-		t.Fatal("AGORA_FORCE_TUI=1 应返回 ttyReporter")
+		t.Fatal("COMBO_FORCE_TUI=1 应返回 ttyReporter")
 	}
 }
 

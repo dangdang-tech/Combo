@@ -3,7 +3,7 @@
 # 固定启动顺序（技术方案 §6.2，硬性）：
 #   postgres → logto_db_seed → logto_alteration → logto → migrate(业务迁移) → 业务容器(api/worker/consumer/sweeper/web)
 #   Logto OSS 不自跑迁移：必须先 CLI `db seed` 建表，再把 `db alteration deploy` 作为单实例一次性 job 跑；跑完才起 logto 运行态。
-#   业务迁移与 Logto 迁移各自独立 schema/库（agora / logto），互不干扰；任一迁移失败即止、不起后续。
+#   业务迁移与 Logto 迁移各自独立 schema/库（combo / logto），互不干扰；任一迁移失败即止、不起后续。
 #
 # Redis 物理拆两实例（70 §8.1 / 技术方案 §6.1）：
 #   redis_queue（appendonly AOF + noeviction，BullMQ 队列绝不被驱逐）/ redis_hot（maxmemory + allkeys-lru，事件 Streams/锁/限流，可驱逐、无持久卷）。
@@ -16,14 +16,14 @@
 #
 # 生产密钥不允许默认 fallback（Codex#13）：
 #   本编排即生产栈（业务容器 NODE_ENV=production）。真密钥用 `${VAR:?...}` 必填形式——未设则 `docker compose` 直接报错中止，
-#   绝不静默注入 minioadmin / agora:agora 这类默认凭据上生产（与 apps/api env.ts 的生产守卫双保险）。
+#   绝不静默注入 minioadmin / combo:combo 这类默认凭据上生产（与 apps/api env.ts 的生产守卫双保险）。
 #   非密钥的运行参数（端口/region/由服务名推导的 endpoint）保留默认。dev 直跑请用 .env 显式提供这些值。
 services:
   # ───────────────────────── 数据与中间件（先起，业务/Logto 都依赖）─────────────────────────
   postgres:
     image: postgres:16
     environment:
-      # 密钥/连接身份必填（Codex#13）：未设即中止启动，绝不默认 agora:agora。
+      # 密钥/连接身份必填（Codex#13）：未设即中止启动，绝不默认 combo:combo。
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER 必填（生产禁默认）}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 必填（生产禁默认）}
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB 必填（生产禁默认）}
@@ -31,7 +31,7 @@ services:
       - '5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # 首次启动建 logto 独立库（业务库 agora 与身份库 logto 同实例、不同 database，§6.1）
+      # 首次启动建 logto 独立库（业务库 combo 与身份库 logto 同实例、不同 database，§6.1）
       - ./postgres/init-logto-db.sh:/docker-entrypoint-initdb.d/10-init-logto-db.sh:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:?} -d ${POSTGRES_DB:?}']
@@ -86,7 +86,7 @@ services:
       timeout: 3s
       retries: 10
 
-  # 一次性容器：建四桶（agora-raw/artifacts/exports/experience，70 §8.2）。minio healthy 后跑、跑完退。幂等。
+  # 一次性容器：建四桶（combo-raw/artifacts/exports/experience，70 §8.2）。minio healthy 后跑、跑完退。幂等。
   minio_mc:
     image: minio/mc
     depends_on:

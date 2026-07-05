@@ -41,7 +41,7 @@ export function startNodeObservability(env: Env): ObservabilityHandle {
     ...parseResourceAttributes(env.OTEL_RESOURCE_ATTRIBUTES),
     [ATTR_SERVICE_NAME]: serviceName,
     [ATTR_SERVICE_VERSION]: process.env.npm_package_version ?? '0.0.0',
-    'service.namespace': 'agora-mvp',
+    'service.namespace': 'combo-mvp',
     'service.instance.id': `runtime-api-${process.pid}`,
     'process.runtime.name': 'nodejs',
     'process.name': 'runtime-api',

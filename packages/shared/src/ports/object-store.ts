@@ -2,13 +2,13 @@
 import type { IsoDateTime } from '../core/ids.js';
 
 /** 四桶（70 §8.2）。原文不落正式盘——导入处理完即弃（技术方案 1.2）。 */
-export type Bucket = 'agora-raw' | 'agora-artifacts' | 'agora-exports' | 'agora-experience';
+export type Bucket = 'combo-raw' | 'combo-artifacts' | 'combo-exports' | 'combo-experience';
 
 export const BUCKETS: readonly Bucket[] = [
-  'agora-raw',
-  'agora-artifacts',
-  'agora-exports',
-  'agora-experience',
+  'combo-raw',
+  'combo-artifacts',
+  'combo-exports',
+  'combo-experience',
 ];
 
 export interface ObjectStorePort {
@@ -33,7 +33,7 @@ export interface ObjectStorePort {
   getObject(bucket: Bucket, key: string): Promise<Uint8Array>;
   /**
    * 直写对象（本机助手 multipart 直传落加密临时桶，B-21 §3.3）。
-   * 助手把原文经 api 转存到 agora-raw 桶（前端直传走 presignPut；助手没有预签名 URL，经 api 中转写桶）。
+   * 助手把原文经 api 转存到 combo-raw 桶（前端直传走 presignPut；助手没有预签名 URL，经 api 中转写桶）。
    */
   putObject(
     bucket: Bucket,

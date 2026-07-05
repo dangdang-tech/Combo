@@ -1,9 +1,9 @@
 apiVersion: 1
 
 providers:
-  - name: agora-observability
+  - name: combo-observability
     orgId: 1
-    folder: Agora MVP
+    folder: Combo MVP
     type: file
     disableDeletion: false
     updateIntervalSeconds: 30

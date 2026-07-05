@@ -466,11 +466,11 @@ export function parseSessions(inputs: RawSessionInput[]): ParseResult {
 // ---------------------------------------------------------------------------
 
 /** 打包分隔行（助手脚本写、worker 拆共用真源）。真实 JSONL 不会有这一行（非合法 JSON 对象行）。 */
-export const BUNDLE_SENTINEL = '__AGORA_FILE_BOUNDARY__';
+export const BUNDLE_SENTINEL = '__COMBO_FILE_BOUNDARY__';
 
 /**
  * 把打包文本拆回各文件原文。形如：
- *   __AGORA_FILE_BOUNDARY__\n<文件0原文>\n__AGORA_FILE_BOUNDARY__\n<文件1原文>\n …
+ *   __COMBO_FILE_BOUNDARY__\n<文件0原文>\n__COMBO_FILE_BOUNDARY__\n<文件1原文>\n …
  * 返回非空文件原文数组（每段含末尾换行无妨，parseSessions 的 toLines 会 trim）。
  */
 export function splitBundle(text: string): string[] {
