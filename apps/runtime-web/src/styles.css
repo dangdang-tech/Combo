@@ -1168,6 +1168,20 @@ body {
 .rt-genui__overlay--plain {
   background: transparent;
 }
+/* 画布顶部的多产物切换 chips（悬浮在产物之上）。 */
+.rt-canvas-chips {
+  position: sticky;
+  top: 10px;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 32px;
+}
+.rt-artifact-chip.is-active {
+  border-color: var(--cb-accent);
+  box-shadow: inset 0 0 0 1px var(--cb-accent);
+}
 .rt-artifact-stage {
   min-height: 100%;
   padding: 24px 32px 20px;
