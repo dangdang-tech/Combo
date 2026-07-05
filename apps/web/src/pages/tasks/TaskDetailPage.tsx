@@ -150,17 +150,17 @@ function UploadCard({ task }: { task: TaskView }): ReactElement {
     ? Math.min(1, task.upload.partsLanded / task.upload.partsExpected!)
     : 0;
   const detailLine = uploadDetailLine(task);
+  const statusLine = waiting && !hasProgress ? '等待本机助手连接' : '正在接收对话历史';
   return (
-    <div className={`cb-card cb-upload-card${waiting ? ' cb-upload-card--waiting' : ''}`}>
+    <div
+      className={`cb-card cb-upload-card${waiting ? ' cb-upload-card--waiting' : ''}`}
+      aria-label={`上传状态：${statusLine}`}
+    >
       <div className="cb-upload-card__top">
-        <p className="cb-section-kicker">上传</p>
         <span className={`cb-status-badge is-${taskStatusVariant(task)}`}>
           {uploadProgressLabel(task)}
         </span>
       </div>
-      <h3 className="cb-card__title">
-        {waiting && !hasProgress ? '等待本机助手连接' : '正在接收对话历史'}
-      </h3>
       {hasProgress && (
         <div
           className="cb-upload-card__meter"
