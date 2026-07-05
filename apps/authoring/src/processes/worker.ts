@@ -68,7 +68,9 @@ async function main(): Promise<void> {
     {
       prefix: QUEUE_PREFIX, // 必须与生产端 Queue 一致，否则入队了收不到。
       connection: bullConnectionFor(env),
-      concurrency: 2,
+      // 内存护栏：导入 pipeline 会把整份语料多副本驻留内存，并发>1 会成倍放大峰值内存
+      // （海量历史下直接 OOM）。降为 1 顺序处理，配合容器 mem_limit 稳住内存上界。
+      concurrency: 1,
     },
   );
   worker.on('failed', (job, err) => {

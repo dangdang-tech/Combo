@@ -104,9 +104,25 @@ roots = [pathlib.Path.home() / '.claude' / 'projects', pathlib.Path.home() / '.c
 files = []
 for root in roots:
     if root.is_dir():
-        files.extend(sorted(root.rglob('*.jsonl')))
+        files.extend(root.rglob('*.jsonl'))
 if not files:
     fail('没扫到可上传的对话历史（~/.claude/projects 或 ~/.codex/sessions 为空）。')
+# 内存护栏：默认只导入最近 N 个会话（按修改时间倒序），避免海量历史在本机打包阶段把内存打爆。
+# 设 AGORA_SESSION_LIMIT=0 导入全部；设具体数字自定上限。
+try:
+    _limit = int(os.environ.get('AGORA_SESSION_LIMIT', '300'))
+except ValueError:
+    _limit = 300
+def _mtime(p):
+    try:
+        return p.stat().st_mtime
+    except OSError:
+        return 0.0
+files.sort(key=_mtime, reverse=True)
+_found = len(files)
+if _limit > 0 and _found > _limit:
+    files = files[:_limit]
+    log('本机共 %d 个会话，本次只导入最近 %d 个（按修改时间）。要导入全部请设 AGORA_SESSION_LIMIT=0 后重跑本命令。' % (_found, _limit))
 if not IS_TTY:
     log('找到 %d 个会话文件，开始打包上传…' % len(files))
 
