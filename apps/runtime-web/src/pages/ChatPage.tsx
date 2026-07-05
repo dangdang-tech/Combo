@@ -64,70 +64,6 @@ function fieldValue(values: Record<string, string>, field: PublicInputField): st
   return values[field.key]?.trim() ?? '';
 }
 
-function includesAny(value: string, needles: string[]): boolean {
-  return needles.some((needle) => value.includes(needle));
-}
-
-function defaultFieldValue(
-  capability: PublicCapabilityView,
-  field: PublicInputField,
-  index: number,
-): string {
-  const name = `${field.key} ${field.label}`.toLowerCase();
-
-  if (field.type === 'enum') return field.options?.[0] ?? '';
-  if (field.type === 'number') return includesAny(name, ['day', '天', 'week', '周']) ? '7' : '3';
-
-  if (
-    includesAny(name, ['audience', 'user', 'customer', 'persona', '受众', '用户', '客户', '人群'])
-  ) {
-    return '准备购买 AI 工具的独立开发者，熟悉基础自动化，但希望减少试错成本。';
-  }
-  if (includesAny(name, ['tone', 'style', 'voice', '语气', '风格', '口吻'])) {
-    return '清晰、专业、具体，带一点鼓励感。';
-  }
-  if (includesAny(name, ['reference', 'case', 'example', '素材', '案例', '参考'])) {
-    return '参考案例：用户之前试过两款工具，但因为配置复杂和结果不可控而放弃。希望看到更直接的行动建议。';
-  }
-  if (includesAny(name, ['topic', 'theme', '主题'])) {
-    return capability.name;
-  }
-  if (includesAny(name, ['point', 'outline', '要点', '大纲'])) {
-    return `目标：${capability.description}\n受众：独立开发者和小团队\n形式：可直接执行的一页方案`;
-  }
-  if (includesAny(name, ['competitor', 'company', 'product', '竞品', '产品', '公司'])) {
-    return 'Cursor';
-  }
-  if (includesAny(name, ['dimension', 'criteria', '维度', '标准'])) {
-    return '产品力\n上手成本\n生态与扩展\n商业化风险';
-  }
-  if (includesAny(name, ['ingredient', '食材'])) {
-    return '鸡胸肉、鸡蛋、西兰花、番茄、燕麦、酸奶';
-  }
-
-  if (field.type === 'text') {
-    return `我想用「${capability.name}」快速得到一版可直接使用的结果。请优先给出结构清晰、能马上行动的版本。`;
-  }
-
-  return index === 0 ? capability.description : capability.tagline;
-}
-
-function buildDefaultValues(capability: PublicCapabilityView): Record<string, string> {
-  return Object.fromEntries(
-    capability.inputs.fields.map((field, index) => [
-      field.key,
-      defaultFieldValue(capability, field, index),
-    ]),
-  );
-}
-
-function defaultExtra(capability: PublicCapabilityView): string {
-  return (
-    capability.starterPrompts[0] ??
-    `请基于这些输入生成一版完整、可直接使用的${capability.output.type === 'score' ? '评分卡' : '产物'}。`
-  );
-}
-
 function buildTrialPrompt(
   fields: PublicInputField[],
   values: Record<string, string>,
@@ -152,18 +88,18 @@ function TrialIntakeForm({
   disabled: boolean;
   onSubmit: (prompt: string) => void;
 }) {
-  const defaultValues = useMemo(() => buildDefaultValues(capability), [capability]);
-  const defaultPrompt = useMemo(() => defaultExtra(capability), [capability]);
-  const [values, setValues] = useState<Record<string, string>>(defaultValues);
-  const [extra, setExtra] = useState(defaultPrompt);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [extra, setExtra] = useState('');
   const requiredMissing = capability.inputs.fields.some(
     (f) => f.required && !fieldValue(values, f),
   );
 
+  // 切换能力时清空本次输入。不再预填 demo 假值——必填框留空、label 作引导，
+  // 避免用户把「能力简介/示例文案」当成自己的输入原样提交（垃圾入参）。
   useEffect(() => {
-    setValues(defaultValues);
-    setExtra(defaultPrompt);
-  }, [defaultPrompt, defaultValues]);
+    setValues({});
+    setExtra('');
+  }, [capability.slug]);
 
   return (
     <section className="rt-intake" aria-label="本次试用输入">
