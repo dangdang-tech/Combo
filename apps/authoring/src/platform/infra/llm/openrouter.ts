@@ -156,6 +156,9 @@ export function createOpenRouterClient(opts: OpenRouterClientOptions): LlmSdkCli
       model: opts.model,
       max_tokens: body.max_tokens,
       messages,
+      // 吞吐优先路由。实测(2026-07-05,deepseek-v4-flash 同 prompt 各 3 次):默认路由被分到
+      // 21-90 tok/s 不等的供应商(尾延迟主因),sort:throughput 后稳定 105+ tok/s 且方差 <1s。
+      provider: { sort: 'throughput' },
     };
     if (stream) {
       chatBody.stream = true;
