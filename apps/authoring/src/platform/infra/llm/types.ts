@@ -44,6 +44,11 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     inputMicrosPerMTok: 3_000_000,
     outputMicrosPerMTok: 15_000_000,
   },
+  // DeepSeek V4 Flash(OpenRouter,提取步现用模型):$0.09 / $0.18 per MTok。
+  'deepseek/deepseek-v4-flash': {
+    inputMicrosPerMTok: 90_000,
+    outputMicrosPerMTok: 180_000,
+  },
 };
 
 /** 缺模型时的回落费率(取 Opus 档，宁可高估成本不低估)。 */
