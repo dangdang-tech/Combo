@@ -23,7 +23,7 @@ export function useCapabilities() {
 }
 
 /** 我的会话列表；给 capabilityId 时只取该能力下的会话（对话页侧栏按能力隔离）。 */
-export function useSessions(capabilityId?: string) {
+export function useSessions(capabilityId?: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['sessions', capabilityId ?? null],
     queryFn: () =>
@@ -32,6 +32,7 @@ export function useSessions(capabilityId?: string) {
           ? `/runtime/sessions?capabilityId=${encodeURIComponent(capabilityId)}`
           : '/runtime/sessions',
       ),
+    enabled: options?.enabled ?? true,
   });
 }
 

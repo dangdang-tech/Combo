@@ -3,7 +3,7 @@
 //   - 第一轮生成中且还没有任何产出时显示生成进度卡；
 //   - 有产物后画布渲染产物（多产物顶部 chips 切换），FloatingChat 负责继续微调；
 //   - 恢复：GET /runtime/sessions/:id（详情真源）；实时：/stream SSE（useSessionStream）。
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import type { ArtifactView } from '@cb/shared';
 import { useArtifactContent, useSession } from '../api/runtime.js';
@@ -26,6 +26,10 @@ export function ChatPage() {
   const detail = sessionQ.data;
   const stream = useSessionStream(sessionId, detail?.artifacts);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const [lastSidebarCapability, setLastSidebarCapability] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
   // 创作端带 ?returnTo= 深链进来：记住它，侧栏「返回发布页」用。
   const queryReturnTo = safeRuntimeReturnTo(searchParams.get('returnTo'));
@@ -35,6 +39,9 @@ export function ChatPage() {
   }, [queryReturnTo, sessionId]);
 
   const capability = detail?.capability;
+  const sidebarCapability = capability
+    ? { id: capability.id, name: capability.name }
+    : lastSidebarCapability;
   const messages = detail?.messages ?? [];
   const activeArtifact = stream.activeArtifactId
     ? (stream.artifacts[stream.activeArtifactId] ?? null)
@@ -50,12 +57,21 @@ export function ChatPage() {
   const showGenerating = stream.running && !hasAssistantOutput;
   const canvasState = showIntake ? 'intake' : showGenerating ? 'running' : 'output';
 
+  useEffect(() => {
+    if (!capability) return;
+    setLastSidebarCapability((current) =>
+      current?.id === capability.id && current.name === capability.name
+        ? current
+        : { id: capability.id, name: capability.name },
+    );
+  }, [capability?.id, capability?.name]);
+
   return (
     <div className="rt-app rt-trial-app">
       <SessionSidebar
         activeSessionId={sessionId}
-        capabilityId={capability?.id}
-        capabilityName={capability?.name}
+        capabilityId={sidebarCapability?.id}
+        capabilityName={sidebarCapability?.name}
         returnTo={returnTo}
       />
       <div className="rt-trial">

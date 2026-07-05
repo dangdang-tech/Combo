@@ -25,15 +25,16 @@ export function SessionSidebar({
 }) {
   const safeReturnTo = safeRuntimeReturnTo(returnTo);
   const navigate = useNavigate();
-  const sessions = useSessions(capabilityId);
+  const hasCapability = Boolean(capabilityId);
+  const sessions = useSessions(capabilityId, { enabled: hasCapability });
   const createSession = useCreateSession();
   const [createError, setCreateError] = useState(false);
   const ordered = useMemo(
     () =>
-      [...(sessions.data ?? [])].sort(
+      [...(hasCapability ? (sessions.data ?? []) : [])].sort(
         (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
       ),
-    [sessions.data],
+    [hasCapability, sessions.data],
   );
 
   const startNewSession = () => {
@@ -80,7 +81,7 @@ export function SessionSidebar({
         {ordered.map((s) => (
           <SessionListLink key={s.id} session={s} active={s.id === activeSessionId} />
         ))}
-        {sessions.data && ordered.length === 0 && (
+        {hasCapability && sessions.data && ordered.length === 0 && (
           <div className="rt-sidebar__empty">这个能力下还没有会话</div>
         )}
       </div>
