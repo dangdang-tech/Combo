@@ -60,10 +60,16 @@ const BATCH_SIZE = 8;
 const SEGMENT_SAMPLE_CHARS = 1500;
 /** 全任务能力项上限（防 LLM 发散刷屏）。 */
 const MAX_CAPABILITIES = 12;
+/**
+ * 批间并发路数。worker 任务级并发 2 → 进程内最多 8 路 LLM 调用在飞；
+ * 网关限流桶 60 次/分钟且初始满额，单次上传超 60 批（480 段）才可能触限，触限批按现有语义降级。
+ */
+const EXTRACT_CONCURRENCY = 4;
 
 /**
- * 提取主入口：分批归纳 → 跨批按名去重合并 → 空结果落兜底。
+ * 提取主入口：分批归纳（批间并发）→ 跨批按名去重合并 → 空结果落兜底。
  * 不抛上游错误：网关异常按该批降级处理（部分批成功仍产出）。
+ * 并发只改时间不改结果：产出按批下标序合并，同输入必得同输出。
  */
 export async function extractCapabilities(
   deps: ExtractDeps,
@@ -74,21 +80,44 @@ export async function extractCapabilities(
     batches.push(input.segments.slice(i, i + BATCH_SIZE));
   }
 
+  // 结果按批下标存放，完成乱序不影响合并顺序。
+  const results = new Array<CapabilityDraft[] | null>(batches.length).fill(null);
+  let nextIndex = 0;
+  let segmentsDone = 0;
+  // 进度上报经 promise 链串行化：reporter 的 done/phrase 无单调守卫，
+  // 乱序上报会让「已分析 x/y」倒退；链上值只增不减，落库/推帧顺序与值序一致。
+  let reportChain: Promise<void> = Promise.resolve();
+
+  const runWorker = async (): Promise<void> => {
+    while (true) {
+      const i = nextIndex;
+      nextIndex += 1;
+      if (i >= batches.length) return;
+      results[i] = await extractBatch(deps, input, batches[i]!);
+      segmentsDone += batches[i]!.length;
+      const done = segmentsDone;
+      reportChain = reportChain.then(() => input.onBatchDone?.(done, input.segments.length));
+      await reportChain; // 上报失败中止整个提取（与串行版语义一致），且链上无未处理拒绝。
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(EXTRACT_CONCURRENCY, batches.length) }, runWorker),
+  );
+
   const merged: CapabilityDraft[] = [];
   const seenNames = new Set<string>();
   let degraded = false;
-
-  for (let i = 0; i < batches.length; i += 1) {
-    const drafts = await extractBatch(deps, input, batches[i]!);
-    if (drafts === null) degraded = true;
-    for (const d of drafts ?? []) {
+  for (const drafts of results) {
+    if (drafts === null) {
+      degraded = true;
+      continue;
+    }
+    for (const d of drafts) {
       const nameKey = d.name.replace(/\s+/g, '').toLowerCase();
       if (seenNames.has(nameKey)) continue;
       seenNames.add(nameKey);
       if (merged.length < MAX_CAPABILITIES) merged.push(d);
     }
-    const segmentsDone = Math.min((i + 1) * BATCH_SIZE, input.segments.length);
-    await input.onBatchDone?.(segmentsDone, input.segments.length);
   }
 
   if (merged.length === 0) {
