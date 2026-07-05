@@ -54,19 +54,28 @@ if not files:
     sys.exit(1)
 log('找到 %d 个会话文件，开始打包上传…' % len(files))
 
-# 整文件打包：sentinel 行 + 文件原文；单个分片只含整文件（不跨分片切文件）。
-parts, buf, size = [], [], 0
+# 打包后按【行】切片：服务端重组是分片间换行拼接，行边界切分对 JSONL 无损；
+# 单个超限文件也会被切开（整文件打包会产生超大分片，被服务端请求体上限拒收）。
+bundle_lines = []
 for f in files:
     try:
         text = f.read_text('utf-8', errors='replace')
     except OSError:
         continue
-    piece = SENTINEL + '\\n' + text + '\\n'
-    if buf and size + len(piece) > PART_LIMIT:
-        parts.append(''.join(buf)); buf, size = [], 0
-    buf.append(piece); size += len(piece)
+    bundle_lines.append(SENTINEL)
+    bundle_lines.extend(text.splitlines())
+
+parts, buf, size = [], [], 0
+for line in bundle_lines:
+    piece_len = len(line) + 1
+    if buf and size + piece_len > PART_LIMIT:
+        parts.append('\\n'.join(buf)); buf, size = [], 0
+    buf.append(line); size += piece_len
 if buf:
-    parts.append(''.join(buf))
+    parts.append('\\n'.join(buf))
+if not parts:
+    log('会话文件都是空的，没有可上传内容。')
+    sys.exit(1)
 
 total = len(parts)
 for i, content in enumerate(parts):

@@ -47,7 +47,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   const env = opts.env ?? loadEnv();
   const app = Fastify({
     // 请求体上限：助手分片上传是 JSON 体（单片 2MB 文本 + JSON 转义开销），8MB 足够且不失守。
-    bodyLimit: 8 * 1024 * 1024,
+    bodyLimit: 32 * 1024 * 1024, // 与 nginx client_max_body_size 32m 对齐；分片 2MB 文本 JSON 转义后仍有充分余量
     logger: {
       level: env.LOG_LEVEL,
       base: { service: env.OTEL_SERVICE_NAME, process: env.PROCESS },
@@ -105,10 +105,18 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
       code = ErrorCode.RATE_LIMITED;
     } else if ((err as { validation?: unknown }).validation || statusCode === 400) {
       code = ErrorCode.VALIDATION_FAILED;
+    } else if (statusCode === 413) {
+      code = ErrorCode.VALIDATION_FAILED; // 载荷超限：人话直说，不落 INTERNAL 的「开小差」
     }
-    const { http, body } = errorBodyFor(code, req.id);
+    const { http, body } = errorBodyFor(
+      code,
+      req.id,
+      statusCode === 413
+        ? { userMessage: '这一片内容太大，重跑助手命令即可（新版脚本会切成更小的分片）。' }
+        : undefined,
+    );
     req.log.error({ err, code, ...currentTraceLogFields(req.id) }, 'request failed');
-    reply.code(http).send({ error: body });
+    reply.code(statusCode === 413 ? 413 : http).send({ error: body });
   });
 
   // —— 404 也走信封（不裸露路由信息）——
