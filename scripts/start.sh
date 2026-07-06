@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 全栈起栈（O-05 / 技术方案 §6.2）。固定启动顺序（硬性）：
-#   postgres → logto_db_seed → logto_alteration → logto → migrate(业务迁移) → 业务容器(api/worker/consumer/sweeper/web)
+#   postgres → logto_db_seed → logto_alteration → logto → migrate(业务迁移) → 业务容器(api/worker/runtime/web)
 # Logto OSS 不自跑迁移：先 CLI db seed 建表，再把 alteration 作为单实例一次性 job 跑，跑完才起 logto 运行态。
 # 业务迁移失败即止、不起业务容器。任一步失败立刻退出（set -e + pipefail）。
 #
@@ -98,9 +98,9 @@ log "4/6 起 logto 运行态并等待 OIDC discovery 就绪 ..."
 log "5/6 业务迁移（db/scripts/migrate.ts）..."
 "${COMPOSE[@]}" run --rm migrate || die "业务迁移失败，已中止；业务容器未启动"
 
-# 6) 起业务容器（api/worker/consumer/sweeper/web），等 api/web healthy
-log "6/6 起 api / worker / consumer / sweeper / runtime / web ..."
-"${COMPOSE[@]}" up -d --wait api worker consumer sweeper web
+# 6) 起业务容器（api/worker/runtime/web），等 healthy
+log "6/6 起 api / worker / runtime / web ..."
+"${COMPOSE[@]}" up -d --wait api worker runtime web
 
 log "全栈已启动。健康检查："
 log "  - API   : http://localhost:3000/ready"
