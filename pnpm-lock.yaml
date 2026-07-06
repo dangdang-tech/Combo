@@ -92,6 +92,9 @@ importers:
       jose:
         specifier: ^5.10.0
         version: 5.10.0
+      jsonrepair:
+        specifier: ^3.15.0
+        version: 3.15.0
       pg:
         specifier: ^8.13.1
         version: 8.21.0
@@ -2810,6 +2813,10 @@ packages:
   json5@2.2.3:
     resolution: {integrity: sha512-XmOWe7eyHYH14cLdVPoyg+GOH3rYX++KpzrylJwSW98t3Nk+U8XOl8FWKOgwtzdb8lXGf6zYwDUzeHMWfxasyg==}
     engines: {node: '>=6'}
+    hasBin: true
+
+  jsonrepair@3.15.0:
+    resolution: {integrity: sha512-wy8OTjwsJwQRnQJkKnMJJ9vcytRdBPAgIF/Hy6+s1dAj42BHMKiyL8JzEieIl3JY7idt8eyHwBWTO8mh/+mtwA==}
     hasBin: true
 
   jwa@2.0.1:
@@ -6576,6 +6583,8 @@ snapshots:
   json-stable-stringify-without-jsonify@1.0.1: {}
 
   json5@2.2.3: {}
+
+  jsonrepair@3.15.0: {}
 
   jwa@2.0.1:
     dependencies:
