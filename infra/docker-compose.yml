@@ -125,10 +125,13 @@ services:
       - ./observability/tempo.yml:/etc/tempo/tempo.yml:ro
       - tempo_data:/var/tempo
     healthcheck:
-      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:3200/ready >/dev/null 2>&1 || exit 1']
+      # tempo 镜像无 /bin/sh（只有 busybox），CMD-SHELL 形式必失败——用 exec 形式直接调 wget。
+      # ingester 就绪后还有固定 15 秒等待期才返回 ready，start_period 放宽到 30 秒。
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3200/ready']
       interval: 10s
       timeout: 5s
       retries: 12
+      start_period: 30s
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.135.0
@@ -145,11 +148,9 @@ services:
       - ./observability/otel-collector.yml:/etc/otelcol/config.yml:ro
       # 本地自托管日志入口：tail Docker JSON stdout/stderr，保留应用 JSON 日志里的 traceId/trace_id/span_id。
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
-    healthcheck:
-      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:13133/ >/dev/null 2>&1 || exit 1']
-      interval: 10s
-      timeout: 5s
-      retries: 12
+    # 不设 healthcheck：collector 镜像是 distroless（无 shell、无 wget/curl），容器内探活无从谈起；
+    # 就绪门槛由 depends_on（loki/tempo healthy）承担，collector 自身故障靠上游应用的导出报错与重启策略兜底。
+    restart: unless-stopped
 
   grafana:
     image: grafana/grafana:12.1.1
