@@ -9,8 +9,9 @@
 #       migrate / api 的 depends_on 相应用 !override 摘掉对内置 logto 的依赖（否则 --wait 永远等不到）。
 #   三、宿主机 80 / 443 / 9001 已被系统 nginx 与其他项目占用：web 入口改绑 8080（系统 nginx 反代到这里），
 #       MinIO 控制台改绑 9011；postgres / redis 两实例只绑 127.0.0.1（公网服务器不裸露数据端口）。
-#   四、api / worker / runtime 跑 NODE_ENV=development 以启用 dev 种子登录（与线上现状一致；
-#       真正切 production + 公网 Logto 登录是独立事项，切换时删掉这三段 environment 即可）。
+#   四、api / runtime 显式 NODE_ENV=production + 关死 dev 种子登录（基础 compose 为验收方便默认
+#       test/development + dev-login，生产必须收口）：登录走真实 Logto 授权码流程，
+#       回调地址等 OIDC 参数在 .env（LOGTO_REDIRECT_URI 必须已注册进 Logto 应用配置）。
 #
 # 项目名固定为 infra：沿用既有 named volume（infra_pgdata / infra_redis_queue_data / infra_miniodata 等），
 # 换部署目录不换数据。
@@ -28,9 +29,10 @@ services:
     image: ghcr.io/dangdang-tech/combo-api:${IMAGE_TAG:?IMAGE_TAG 必填（CD 写入部署 SHA）}
     build: !reset null
     environment:
-      NODE_ENV: development
-      DEV_LOGIN_ENABLED: ${DEV_LOGIN_ENABLED:-}
-      DEV_SESSION_SECRET: ${DEV_SESSION_SECRET:-}
+      # 真实 Logto 登录：production 下 env 守卫无条件关死 dev-login（显式 false 双保险），
+      # /api/v1/auth/dev-login 不注册（404），鉴权只认 Logto JWT 与真实会话 Cookie。
+      NODE_ENV: production
+      DEV_LOGIN_ENABLED: 'false'
     depends_on: !override
       postgres:
         condition: service_healthy
@@ -46,21 +48,18 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # worker 不覆盖 environment：基础 compose 即 NODE_ENV=production，无登录面。
   worker:
     image: ghcr.io/dangdang-tech/combo-api:${IMAGE_TAG:?IMAGE_TAG 必填（CD 写入部署 SHA）}
     build: !reset null
-    environment:
-      NODE_ENV: development
-      DEV_LOGIN_ENABLED: ${DEV_LOGIN_ENABLED:-}
-      DEV_SESSION_SECRET: ${DEV_SESSION_SECRET:-}
 
   runtime:
     image: ghcr.io/dangdang-tech/combo-runtime:${IMAGE_TAG:?IMAGE_TAG 必填（CD 写入部署 SHA）}
     build: !reset null
     environment:
-      NODE_ENV: development
-      DEV_LOGIN_ENABLED: ${DEV_LOGIN_ENABLED:-}
-      DEV_SESSION_SECRET: ${DEV_SESSION_SECRET:-}
+      # 与 api 同口径：production + 关死 dev-login，试用端同样只认真实会话。
+      NODE_ENV: production
+      DEV_LOGIN_ENABLED: 'false'
 
   web:
     image: ghcr.io/dangdang-tech/combo-web:${IMAGE_TAG:?IMAGE_TAG 必填（CD 写入部署 SHA）}
