@@ -974,23 +974,19 @@ body {
 
 .cb-upload-card {
   padding: 18px 20px;
+  background: var(--cb-surface);
 }
 
 .cb-upload-card--waiting {
-  border-color: color-mix(in srgb, var(--cb-accent) 26%, var(--cb-border));
-  background: linear-gradient(90deg, var(--cb-accent-soft), var(--cb-surface) 34%);
+  border-color: var(--cb-border);
 }
 
 .cb-upload-card__top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
   margin-bottom: 8px;
-}
-
-.cb-upload-card__top .cb-section-kicker {
-  margin: 0;
 }
 
 .cb-upload-card__meter {
@@ -1020,7 +1016,7 @@ body {
   position: relative;
   border: 1px solid var(--cb-border);
   border-radius: 6px;
-  background: var(--cb-surface);
+  background: transparent;
   color: var(--cb-muted);
   font-size: 12px;
   line-height: 1.2;
@@ -1040,7 +1036,7 @@ body {
 }
 
 .cb-upload-card__steps span.is-active {
-  border-color: color-mix(in srgb, var(--cb-accent) 38%, var(--cb-border));
+  border-color: var(--cb-line-1);
   color: var(--cb-fg);
   background: var(--cb-surface-raised);
 }
