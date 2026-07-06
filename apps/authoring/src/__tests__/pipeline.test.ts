@@ -149,7 +149,9 @@ describe('parseCapabilityJson · 真实模型输出形态', () => {
 
   it('输出截断（外层数组没闭合）→ 整段修复兜底，救回已完整的条目', () => {
     const truncated =
-      '```json\n[' + item + ',{"name":"另一个能力","summary":"s","kind":"分析","instructions":"写到一半被截';
+      '```json\n[' +
+      item +
+      ',{"name":"另一个能力","summary":"s","kind":"分析","instructions":"写到一半被截';
     const parsed = parseCapabilityJson(truncated);
     expect(parsed!.length).toBeGreaterThanOrEqual(1);
     expect(parsed![0]!.name).toBe('周报整理');
