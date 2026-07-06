@@ -36,8 +36,25 @@ const ARTIFACT_PROTOCOL = [
   '- 产出后用一两句话说明你做了什么、可以怎么用，并主动邀请用户继续迭代；不要在正文重复产物全文。',
 ].join('\n');
 
+/**
+ * 事实纪律：模型没有可靠的「今天」，也倾向把片段材料外推成完整事实下确定性结论
+ * （真实验收中产物写错生成日期、对摘录外代码作否定判断，见 issue #19）。
+ * 日期由服务端注入；证据边界作为平台约定强制声明。
+ */
+function factDiscipline(now: Date): string {
+  const date = now.toISOString().slice(0, 10);
+  return [
+    '# 事实纪律 —— 必须遵守',
+    `今天的日期是 ${date}（服务端时间）。产物或正文里需要写日期时以此为准，`,
+    '不要凭记忆推断日期；拿不准的时间信息宁可省略，不要编造。',
+    '用户提供的材料可能只是片段。只对材料直接支持的事实下确定性结论；',
+    '材料没有覆盖的部分，明确写「当前材料未覆盖，需要补充确认」，不要当作已证实的问题或事实。',
+    '涉及判断时把内容分清三类：材料直接证明的结论、材料暗示但需要完整信息才能确认的风险、纯建议或待补查项。',
+  ].join('\n');
+}
+
 /** 编排完整 systemPrompt：作者 instructions 逐字 + 平台注入的运行约定。 */
-export function composeSystemPrompt(definition: CapabilityDefinition): string {
+export function composeSystemPrompt(definition: CapabilityDefinition, now: Date = new Date()): string {
   return [
     definition.instructions.trim(),
     '',
@@ -47,6 +64,8 @@ export function composeSystemPrompt(definition: CapabilityDefinition): string {
     '# 这个能力',
     `名称：${definition.name}`,
     `简介：${definition.summary}`,
+    '',
+    factDiscipline(now),
     '',
     ARTIFACT_PROTOCOL,
   ].join('\n');
