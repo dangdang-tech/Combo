@@ -106,12 +106,26 @@ async function main(): Promise<void> {
     'worker booted',
   );
 
+  let shuttingDown = false;
   const shutdown = (): void => {
+    if (shuttingDown) return; // 重复信号无视：只跑一次关停
+    shuttingDown = true;
     clearInterval(reconcileTimer);
+    // 兜底：worker.close() 等活动 job 跑完（提取可长达 lockDuration=120s，远超容器 10s 停机宽限）；
+    // 到点强制退出，被中断的任务由租约对账下一轮重投（claimTask 吸收，多投无害）。
+    const force = setTimeout(() => {
+      log.error(`[worker] 关停在 ${env.SHUTDOWN_TIMEOUT_MS}ms 内未完成，强制退出`);
+      process.exit(1);
+    }, env.SHUTDOWN_TIMEOUT_MS);
+    force.unref();
     void worker
       .close()
       .then(() => observability.shutdown())
-      .finally(() => process.exit(0));
+      .then(() => process.exit(0))
+      .catch((err) => {
+        log.error({ err }, '[worker] 关停出错，强制退出');
+        process.exit(1);
+      });
   };
   for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, shutdown);
 }

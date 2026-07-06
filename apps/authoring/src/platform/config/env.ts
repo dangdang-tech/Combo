@@ -24,6 +24,9 @@ const EnvSchema = z.object({
   PORT: z.coerce.number().int().default(3000),
   HOST: z.string().default('0.0.0.0'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+  // 关停兜底：收到 SIGTERM/SIGINT 后，即使 in-flight 请求 / 活动 job 未 drain，到点也强制退出。
+  // 默认 8s（略低于容器默认 10s 停机宽限，确保先自行干净退出而非等 docker SIGKILL）。
+  SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
 
   // Observability（OpenTelemetry）。默认不启用导出；配置 OTLP endpoint 后才向 Collector 发 traces。
   OTEL_SERVICE_NAME: z.string().default('cb-authoring'),
