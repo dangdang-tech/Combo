@@ -1,6 +1,7 @@
 // LLM 提取：把切好的去敏段落分批喂 LLM 网关，归纳出结构化能力列表（name/summary/kind/instructions）。
 //   - 上游降级/坏输出/无 key：落到确定性兜底（按段落标题生成占位能力），保证链路可跑、不裸抛。
 //   - 每次 LLM 调用记 audit_llm_calls（经注入的 LlmAuditSink，归属 task_id）。
+import { jsonrepair } from 'jsonrepair';
 import type { CapabilityInputField, LlmGatewayPort } from '@cb/shared';
 import type { LlmAuditSink } from '../../platform/infra/llm/types.js';
 import {
@@ -171,13 +172,17 @@ async function extractBatch(
     return null;
   }
 
-  const parsed = parseCapabilityJson(result.text);
+  const diag: ParseDiag = {};
+  const parsed = parseCapabilityJson(result.text, diag);
   if (!parsed || parsed.length === 0) {
     deps.log?.warn(
       {
         textLen: result.text.length,
         textHead: result.text.slice(0, 200),
         textTail: result.text.slice(-200),
+        // 首个配平候选的严格 JSON.parse 报错（含出错位置）。头尾采样看不出中段病灶，
+        // 没有它会把非法 JSON 误诊成围栏问题（issue #57 的验收就是这么误判的）。
+        parseError: diag.parseError ?? null,
       },
       'extract batch degraded: model text not parseable as capability array',
     );
@@ -212,14 +217,20 @@ export function buildPrompt(segments: ExtractSegment[]): string {
   );
 }
 
+/** 解析诊断出参：首个配平候选的严格 JSON.parse 报错，供降级日志定位病灶。 */
+export interface ParseDiag {
+  parseError?: string;
+}
+
 /**
  * 容错解析 LLM 输出的能力数组。模型常在数组前后加说明文字或 markdown 围栏，
  * 且说明文字里可能含方括号——贪婪正则会抓出非法 JSON。改为括号配平扫描：
- * 从每个 '[' 起点按字符串感知的深度计数找到配对 ']'，逐个候选尝试 JSON.parse，
- * 取第一个合法数组。坏 JSON / 坏条目 → 丢弃。
+ * 从每个 '[' 起点按字符串感知的深度计数找到配对 ']'，逐个候选先严格 JSON.parse，
+ * 失败再用 jsonrepair 修复重试（覆盖字符串内裸控制字符、尾逗号、未转义引号、
+ * 截断等模型常见毛病，见 issue #57）。坏 JSON / 坏条目 → 丢弃。
  */
-export function parseCapabilityJson(text: string): CapabilityDraft[] | null {
-  const arr = extractFirstJsonArray(text);
+export function parseCapabilityJson(text: string, diag?: ParseDiag): CapabilityDraft[] | null {
+  const arr = extractFirstJsonArray(text, diag);
   if (!Array.isArray(arr)) return null;
   const out: CapabilityDraft[] = [];
   for (const item of arr) {
@@ -281,8 +292,15 @@ export function coerceStarterPrompts(raw: unknown): string[] {
     .slice(0, 3);
 }
 
-/** 从自由文本中提取第一个可解析的 JSON 数组（字符串感知的括号配平扫描）。 */
-function extractFirstJsonArray(text: string): unknown | null {
+/**
+ * 从自由文本中提取第一个能力形 JSON 数组（字符串感知的括号配平扫描）。
+ * 优先返回「能力形」候选（至少一个条目带非空字符串 name）：外层数组坏掉时，
+ * 后续 '[' 起点会撞上条目里的 inputs 嵌套数组，无条件收下会拿空数组掩盖真实病灶
+ * （issue #57）。非能力形的首个合法数组（如空数组）记为兜底返回，保住
+ * 「模型明说没能力可归纳」的空数组语义。
+ */
+function extractFirstJsonArray(text: string, diag?: ParseDiag): unknown | null {
+  let fallback: unknown | null = null;
   for (let start = text.indexOf('['); start !== -1; start = text.indexOf('[', start + 1)) {
     let depth = 0;
     let inString = false;
@@ -306,16 +324,53 @@ function extractFirstJsonArray(text: string): unknown | null {
       else if (ch === ']') {
         depth -= 1;
         if (depth === 0) {
-          try {
-            return JSON.parse(text.slice(start, i + 1));
-          } catch {
-            break; // 本起点配平但不是合法 JSON：换下一个 '[' 起点
-          }
+          const parsed = parseCandidate(text.slice(start, i + 1), diag);
+          if (isCapabilityShapedArray(parsed)) return parsed;
+          if (fallback === null && Array.isArray(parsed)) fallback = parsed;
+          break; // 本起点不是能力形数组：换下一个 '[' 起点
         }
       }
     }
   }
-  return null;
+  // 没有任何能力形候选：典型是输出截断导致外层数组没闭合，配平扫描永远走不到
+  // 外层候选。把首个 '[' 到结尾整段交给 jsonrepair 补全兜底一把，修出来的结果
+  // 仍要过能力形校验，修歪了就丢弃。
+  const start = text.indexOf('[');
+  if (start !== -1) {
+    const parsed = parseCandidate(text.slice(start), diag);
+    if (isCapabilityShapedArray(parsed)) return parsed;
+  }
+  return fallback;
+}
+
+/** 单个候选串：严格 JSON.parse 失败 → jsonrepair 修复重试；都失败返回 null。 */
+function parseCandidate(candidate: string, diag?: ParseDiag): unknown | null {
+  try {
+    return JSON.parse(candidate);
+  } catch (e) {
+    if (diag && diag.parseError === undefined) {
+      diag.parseError = e instanceof Error ? e.message : String(e);
+    }
+  }
+  try {
+    return JSON.parse(jsonrepair(candidate));
+  } catch {
+    return null;
+  }
+}
+
+/** 能力形数组：至少一个条目是带非空字符串 name 的对象。 */
+function isCapabilityShapedArray(v: unknown): v is unknown[] {
+  return (
+    Array.isArray(v) &&
+    v.some(
+      (item) =>
+        typeof item === 'object' &&
+        item !== null &&
+        typeof (item as { name?: unknown }).name === 'string' &&
+        (item as { name: string }).name.trim().length > 0,
+    )
+  );
 }
 
 /**

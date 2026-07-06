@@ -123,6 +123,43 @@ describe('parseCapabilityJson · 真实模型输出形态', () => {
     expect(parsed![0]!.inputs).toEqual([]);
     expect(parsed![0]!.starterPrompts).toEqual([]);
   });
+
+  // 下面四条对应 issue #57：围栏内的数组本身不是严格合法 JSON 时，
+  // 靠 jsonrepair 修复重试而不是整批降级落占位兜底。
+  it('字符串值内裸换行（JSON.parse 零容忍）→ 修复后解析且换行保留', () => {
+    const rawNewline =
+      '```json\n[{"name":"周报整理","summary":"s","kind":"写作",' +
+      '"instructions":"第一步：收集\n第二步：汇总"}]\n```';
+    const parsed = parseCapabilityJson(rawNewline);
+    expect(parsed).toHaveLength(1);
+    expect(parsed![0]!.instructions).toBe('第一步：收集\n第二步：汇总');
+  });
+
+  it('尾逗号 → 修复后解析', () => {
+    const parsed = parseCapabilityJson('```json\n[' + item + ',]\n```');
+    expect(parsed).toHaveLength(1);
+    expect(parsed![0]!.name).toBe('周报整理');
+  });
+
+  it('正文前的合法小数组（如 [1]）不被误当结果，仍取能力形数组', () => {
+    const parsed = parseCapabilityJson('共归纳出 [1] 个能力：\n```json\n[' + item + ']\n```');
+    expect(parsed).toHaveLength(1);
+    expect(parsed![0]!.name).toBe('周报整理');
+  });
+
+  it('输出截断（外层数组没闭合）→ 整段修复兜底，救回已完整的条目', () => {
+    const truncated =
+      '```json\n[' + item + ',{"name":"另一个能力","summary":"s","kind":"分析","instructions":"写到一半被截';
+    const parsed = parseCapabilityJson(truncated);
+    expect(parsed!.length).toBeGreaterThanOrEqual(1);
+    expect(parsed![0]!.name).toBe('周报整理');
+  });
+
+  it('降级诊断：候选串非法时首个 JSON.parse 报错写入 diag 供日志定位', () => {
+    const diag: { parseError?: string } = {};
+    parseCapabilityJson('```json\n[' + item + ',]\n```', diag);
+    expect(diag.parseError).toBeTruthy();
+  });
 });
 
 describe('runPipeline · 成功路径', () => {
