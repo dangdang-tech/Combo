@@ -36,12 +36,13 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 
 exec python3 - <<'COMBO_PY'
-import json, os, pathlib, sys, time, urllib.error, urllib.request
+import json, os, pathlib, platform, sys, time, traceback, urllib.error, urllib.request
 
 BASE = os.environ['COMBO_BASE'].rstrip('/')
 CODE = os.environ['COMBO_CODE']
 SENTINEL = ${JSON.stringify(BUNDLE_SENTINEL)}
 PART_LIMIT = 2 * 1024 * 1024  # 单片 2MB 文本；服务端 32MB 体上限对 JSON 转义膨胀有充分余量
+DEBUG = os.environ.get('COMBO_DEBUG', '') not in ('', '0')  # COMBO_DEBUG=1 打开逐片详细日志
 
 # ---------- 终端展示（对齐旧 Go 助手的 TUI）：TTY 就地进度条，非 TTY 逐行日志 ----------
 IS_TTY = sys.stderr.isatty()
@@ -93,6 +94,44 @@ def fail(msg):
     end_bar()
     log(msg)
     sys.exit(1)
+
+def dbg(msg):
+    """COMBO_DEBUG=1 时输出的详细日志，带时钟时间，便于和服务端日志对时间。"""
+    if not DEBUG:
+        return
+    end_bar()
+    print('[Combo debug %s] %s' % (time.strftime('%H:%M:%S'), msg), file=sys.stderr)
+
+def dump_upload_failure(i, total, body_len, elapsed, e):
+    """上传失败时无条件打印诊断信息（不依赖 DEBUG 开关，让报障截图自带定位线索）。
+    重点是分辨错误出自哪一层：502 这类网关错误，响应头 Server / 响应体格式
+    （nginx HTML 错误页 vs 应用 JSON）能区分是反向代理回的还是应用回的。"""
+    end_bar()
+    log('—— 上传失败诊断 ——')
+    log('时间：%s（本地时钟）' % time.strftime('%Y-%m-%d %H:%M:%S'))
+    log('分片：第 %d / %d 片，请求体 %d 字节，本次请求耗时 %.1f 秒' % (i + 1, total, body_len, elapsed))
+    log('目标：%s/api/v1/connect/upload' % BASE)
+    if isinstance(e, urllib.error.HTTPError):
+        log('状态：HTTP %d %s' % (e.code, getattr(e, 'reason', '') or ''))
+        try:
+            hdrs = ' | '.join('%s: %s' % kv for kv in e.headers.items())
+        except Exception:
+            hdrs = ''
+        if hdrs:
+            log('响应头：' + hdrs)
+        body = getattr(e, '_combo_body', b'')
+        if body:
+            log('响应体（前 500 字节）：' + body[:500].decode('utf-8', errors='replace'))
+        else:
+            log('响应体：空')
+    else:
+        log('异常：%s: %s' % (type(e).__name__, e))
+        reason = getattr(e, 'reason', None)
+        if reason is not None:
+            log('底层原因：%r' % (reason,))
+    if DEBUG:
+        traceback.print_exc(file=sys.stderr)
+    log('—— 诊断信息结束，请把以上内容一并反馈 ——')
 
 if IS_TTY:
     sys.stderr.write('\\n  ' + c(BOLD, 'Combo') + c(DIM, '  本机助手 · 上传对话历史') + '\\n')
@@ -151,21 +190,35 @@ if not parts:
     fail('会话文件都是空的，没有可上传内容。')
 
 total = len(parts)
+dbg('运行环境：python %s，%s' % (platform.python_version(), platform.platform()))
+dbg('开始上传：共 %d 片（合计 %d 字节，最大单片 %d 字节），目标 %s/api/v1/connect/upload，单请求超时 120 秒'
+    % (total, sum(len(p) for p in parts), max(len(p) for p in parts), BASE))
 draw_bar('上传', 0, total, '0 / %d 片' % total, True)
 for i, content in enumerate(parts):
     body = json.dumps({'pairingCode': CODE, 'partIndex': i, 'totalParts': total, 'content': content}).encode('utf-8')
     req = urllib.request.Request(BASE + '/api/v1/connect/upload', data=body,
                                  headers={'Content-Type': 'application/json'})
+    dbg('第 %d/%d 片开始：请求体 %d 字节' % (i + 1, total, len(body)))
+    t0 = time.time()
     try:
         with urllib.request.urlopen(req, timeout=120) as resp:
+            status = resp.status
             data = json.load(resp)
+        dbg('第 %d/%d 片完成：HTTP %d，耗时 %.1f 秒，服务端确认 %s'
+            % (i + 1, total, status, time.time() - t0, json.dumps(data.get('data', {}), ensure_ascii=False)))
     except urllib.error.HTTPError as e:
         try:
-            msg = json.load(e).get('error', {}).get('userMessage', '')
+            e._combo_body = e.read()
+        except Exception:
+            e._combo_body = b''
+        dump_upload_failure(i, total, len(body), time.time() - t0, e)
+        try:
+            msg = json.loads(e._combo_body.decode('utf-8', errors='replace')).get('error', {}).get('userMessage', '')
         except Exception:
             msg = ''
         fail(msg or ('上传失败（HTTP %d），重跑本命令续传。' % e.code))
     except Exception as e:
+        dump_upload_failure(i, total, len(body), time.time() - t0, e)
         fail('网络异常：%s。重跑本命令续传。' % e)
     landed = data['data']['landed']
     remote_total = data['data'].get('total', total)
