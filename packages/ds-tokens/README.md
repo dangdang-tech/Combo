@@ -12,7 +12,7 @@
 
 ## token 分三层
 
-第一层是原料层（`tokens/primitives.json`），存放裸值：墨色阶（ink）、暖纸阶（paper）、绿灰阶（sage）、砖红阶（brick）、聚焦青绿（moss）、绿（green）、赭黄（amber）、红（red）等色板，字体族栈，字号阶梯，间距阶梯，圆角刻度，阴影，动效时长与缓动曲线。
+第一层是原料层（`tokens/primitives.json`），存放裸值：墨色阶（ink）、中性纸白阶（paper）、暖中性灰阶（neutral）、珊瑚红阶（coral）、聚焦冷蓝（sky）、绿（green）、赭黄（amber）、红（red）等色板，字体族栈，字号阶梯，间距阶梯，圆角刻度，阴影，动效时长与缓动曲线。当前主题为「活力红橙主色 × 暖中性画布」（2026-07-08 从早期暖纸/砖红主题换肤而来）。
 
 第二层是语义层（`tokens/semantic.json` 与 `tokens/motion.json` 合并构成），每个 token 的 `$value` 都是形如 `{xx.yy}` 的纯引用，不允许出现任何裸值。语义 key 与 canon 变量一一对应（例如语义 key `paper` 对应 canon 的 `--cb-paper`），并新增了 canon 里没有的 `space-1` 到 `space-8`、`text-xs` 到 `text-3xl`、`duration-*` 与 `ease-*`。
 
@@ -26,7 +26,7 @@
 
 ## 双模式（light/dark）
 
-每个非别名、非配方的 color 语义 token（以及三个 shadow token）的 `$value` 是 `{ "light": "{...}", "dark": "{...}" }` 形态的对象，两个模式各给一个引用。**dark 值是 v1 提案，尚未经人工调校**：纸感反转成墨底（paper 落在 #1c1b19 一系的墨色阶上）、前景色反转成暖纸浅色、accent 提亮一档、分隔线转为暗色系，后续视觉走查时按需要直接改语义层的 dark 引用或原料层色阶即可。
+每个非别名、非配方的 color 语义 token（以及三个 shadow token）的 `$value` 是 `{ "light": "{...}", "dark": "{...}" }` 形态的对象，两个模式各给一个引用。**dark 值是提案，尚未经人工调校**：纸感反转成墨底（paper 落在 #1a1917 一系的墨色阶上）、前景色反转成暖白、accent 提亮一档、分隔线转为深中性灰，后续视觉走查时按需要直接改语义层的 dark 引用或原料层色阶即可。
 
 ## 动效 token 放在独立文件
 

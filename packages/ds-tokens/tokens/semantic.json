@@ -18,7 +18,7 @@
     "bg": {
       "$type": "color",
       "$value": {
-        "light": "{color.sage.50}",
+        "light": "{color.neutral.50}",
         "dark": "{color.ink.950}"
       }
     },
@@ -39,7 +39,7 @@
     "muted-bg": {
       "$type": "color",
       "$value": {
-        "light": "{color.sage.100}",
+        "light": "{color.neutral.100}",
         "dark": "{color.ink.750}"
       }
     },
@@ -60,29 +60,29 @@
     "muted": {
       "$type": "color",
       "$value": {
-        "light": "{color.sage.500}",
-        "dark": "{color.sage.400}"
+        "light": "{color.neutral.500}",
+        "dark": "{color.neutral.400}"
       }
     },
     "line-1": {
       "$type": "color",
       "$value": {
-        "light": "{color.sage.300}",
-        "dark": "{color.sage.700}"
+        "light": "{color.neutral.300}",
+        "dark": "{color.neutral.700}"
       }
     },
     "line-2": {
       "$type": "color",
       "$value": {
-        "light": "{color.sage.200}",
-        "dark": "{color.sage.750}"
+        "light": "{color.neutral.200}",
+        "dark": "{color.neutral.750}"
       }
     },
     "line-3": {
       "$type": "color",
       "$value": {
-        "light": "{color.sage.150}",
-        "dark": "{color.sage.800}"
+        "light": "{color.neutral.150}",
+        "dark": "{color.neutral.800}"
       }
     },
     "border": {
@@ -92,57 +92,57 @@
     "skeleton": {
       "$type": "color",
       "$value": {
-        "light": "{color.sage.100}",
+        "light": "{color.neutral.100}",
         "dark": "{color.ink.750}"
       }
     },
     "grid": {
       "$type": "color",
       "$value": {
-        "light": "{color.alpha.grid-sage}",
+        "light": "{color.alpha.grid-neutral}",
         "dark": "{color.alpha.grid-ink}"
       }
     },
     "accent": {
       "$type": "color",
       "$value": {
-        "light": "{color.brick.500}",
-        "dark": "{color.brick.400}"
+        "light": "{color.coral.500}",
+        "dark": "{color.coral.400}"
       }
     },
     "accent-strong": {
       "$type": "color",
       "$value": {
-        "light": "{color.brick.600}",
-        "dark": "{color.brick.300}"
+        "light": "{color.coral.600}",
+        "dark": "{color.coral.300}"
       }
     },
     "accent-pressed": {
       "$type": "color",
       "$value": {
-        "light": "{color.brick.700}",
-        "dark": "{color.brick.500}"
+        "light": "{color.coral.700}",
+        "dark": "{color.coral.500}"
       }
     },
     "accent-soft": {
       "$type": "color",
       "$value": {
-        "light": "{color.brick.100}",
-        "dark": "{color.brick.900}"
+        "light": "{color.coral.100}",
+        "dark": "{color.coral.900}"
       }
     },
     "accent-tint": {
       "$type": "color",
       "$value": {
-        "light": "{color.brick.200}",
-        "dark": "{color.brick.800}"
+        "light": "{color.coral.200}",
+        "dark": "{color.coral.800}"
       }
     },
     "focus-ring": {
       "$type": "color",
       "$value": {
-        "light": "{color.moss.400}",
-        "dark": "{color.moss.300}"
+        "light": "{color.sky.400}",
+        "dark": "{color.sky.300}"
       }
     },
     "ok": {
