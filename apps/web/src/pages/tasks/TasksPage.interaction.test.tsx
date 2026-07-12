@@ -32,13 +32,11 @@ describe('TasksPage — 表格交互语义', () => {
     const row = taskLink.closest('tr')!;
     expect(row).toHaveClass('cb-task-row');
     expect(row).not.toHaveAttribute('role', 'link');
-    expect(within(row).getAllByRole('cell').map((cell) => cell.getAttribute('data-label'))).toEqual([
-      '任务',
-      '状态',
-      '上传进度',
-      '能力项',
-      '下一步',
-    ]);
+    expect(
+      within(row)
+        .getAllByRole('cell')
+        .map((cell) => cell.getAttribute('data-label')),
+    ).toEqual(['任务', '状态', '上传进度', '能力项', '下一步']);
 
     const capabilityLink = within(row).getByRole('link', { name: '查看能力项' });
     expect(capabilityLink).toHaveClass('cb-task-action');
