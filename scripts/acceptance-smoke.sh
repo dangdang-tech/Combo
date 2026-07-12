@@ -149,7 +149,7 @@ pass "A5 任务 SSE 流：无会话/Bearer/query token → 建流前 401 ErrorEn
 
 # A6 · connect 通道（配对码鉴权，无登录态）：
 #      /connect/script 走 `curl | sh` 管道，无码/坏码必须回【可执行脚本】而非 JSON（裸 JSON 进 sh 会报错）；
-#      /connect/upload 坏请求体 → 400 ErrorEnvelope（校验前置，不裸过）。
+#      /connect/prepare、/connect/upload 坏请求体 → 400 ErrorEnvelope（校验前置，不裸过）。
 log "A6 connect 通道（脚本通道不裸 JSON；上传坏体 400 信封）"
 c="$(http_code "${API_BASE}/api/v1/connect/script")"
 [ "$c" = "404" ] || fail "A6 /connect/script 无码期望 404，实际 ${c}"
@@ -160,6 +160,9 @@ c="$(http_code "${API_BASE}/api/v1/connect/script?code=000000")"
 c="$(http_code -X POST -H 'Content-Type: application/json' -d '{}' "${API_BASE}/api/v1/connect/upload")"
 [ "$c" = "400" ] || fail "A6 /connect/upload 空体期望 400（校验前置），实际 ${c}"
 assert_error_envelope "A6 connect/upload 400" "$(curl -sS -X POST -H 'Content-Type: application/json' -d '{}' "${API_BASE}/api/v1/connect/upload")"
+c="$(http_code -X POST -H 'Content-Type: application/json' -d '{}' "${API_BASE}/api/v1/connect/prepare")"
+[ "$c" = "400" ] || fail "A6 /connect/prepare 空体期望 400（校验前置），实际 ${c}"
+assert_error_envelope "A6 connect/prepare 400" "$(curl -sS -X POST -H 'Content-Type: application/json' -d '{}' "${API_BASE}/api/v1/connect/prepare")"
 pass "A6 connect 通道：脚本无码/坏码 404 且回 shellscript；上传坏体 400 ErrorEnvelope"
 
 # A7 · logout 永不拦（bestEffortAuth：logout 语义是无论如何清会话，未登录也应 2xx）。
