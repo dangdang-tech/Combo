@@ -1,10 +1,6 @@
 // 本机助手脚本渲染（GET /connect/script 下发，`curl ... | sh` 直跑）。
-//   sh 只做守门（检测 python3），重活在内嵌 python3 上传器里：扫 ~/.claude/projects 与
-//   ~/.codex/sessions 的 *.jsonl → 按 BUNDLE_SENTINEL 打包、按行切片 → 逐片 POST /connect/upload
-//   （JSON 体：pairingCode/partIndex/totalParts/content）。worker 端拆包口径见 session-parse.splitBundle。
-//   终端体验对齐旧 Go 助手（tools/combo-import/ui.go）：TTY 下绿色就地刷新进度条（打包/上传各一条，
-//   60ms 节流），非 TTY（管道/CI）退化为逐行日志。
-//   文案硬约束：明确是「在本机读取后全量上传原文、云端解析去敏」，绝不出现「数据不出本机」等字眼。
+// Python 上传器把本次扫描固化成权限收紧的本地快照，先向服务端准备 bundle 清单，再按缺片续传。
+// 每片网络异常后先确认服务端状态，只有未落地才重发，覆盖“响应丢失但服务端已接收”的歧义。
 import { BUNDLE_SENTINEL } from './session-parse.js';
 
 /** POSIX shell 单引号安全注入（' → '\''，防注入闭合脚本字符串）。 */
@@ -13,13 +9,10 @@ function shq(s: string): string {
 }
 
 export interface ConnectScriptParams {
-  /** 对外基址，形如 https://combo.app（据请求 Host + x-forwarded-proto 算）。 */
   base: string;
-  /** 一次性配对码（助手凭它上传）。 */
   pairingCode: string;
 }
 
-/** 渲染助手脚本（active 配对）。 */
 export function renderConnectScript(p: ConnectScriptParams): string {
   return `#!/bin/sh
 # Combo 本机助手 — 在本机读取你的对话历史后，把原文【完整上传】到云端，
@@ -36,38 +29,58 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 
 exec python3 - <<'COMBO_PY'
-import json, os, pathlib, platform, sys, time, traceback, urllib.error, urllib.request
+import hashlib, json, os, pathlib, platform, random, shutil, sys, time, traceback
+import urllib.error, urllib.request
 
 BASE = os.environ['COMBO_BASE'].rstrip('/')
 CODE = os.environ['COMBO_CODE']
 SENTINEL = ${JSON.stringify(BUNDLE_SENTINEL)}
-PART_LIMIT = 2 * 1024 * 1024  # 单片 2MB 文本；服务端 32MB 体上限对 JSON 转义膨胀有充分余量
-DEBUG = os.environ.get('COMBO_DEBUG', '') not in ('', '0')  # COMBO_DEBUG=1 打开逐片详细日志
+PROTOCOL_VERSION = 2
+PART_LIMIT = 2 * 1024 * 1024  # 兼容旧任务：按 Python 字符数、只在行边界切片
+MAX_PARTS = 10000
+DEBUG = os.environ.get('COMBO_DEBUG', '') not in ('', '0')
+TRANSIENT_HTTP = {408, 425, 429, 500, 502, 503, 504}
 
-# ---------- 终端展示（对齐旧 Go 助手的 TUI）：TTY 就地进度条，非 TTY 逐行日志 ----------
+def env_float(name, default, low, high):
+    try:
+        value = float(os.environ.get(name, str(default)))
+    except ValueError:
+        value = default
+    return min(max(value, low), high)
+
+def env_int(name, default, low, high):
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except ValueError:
+        value = default
+    return min(max(value, low), high)
+
+UPLOAD_TIMEOUT = env_float('COMBO_UPLOAD_TIMEOUT', 300, 0.1, 3600)
+MAX_ATTEMPTS = env_int('COMBO_UPLOAD_ATTEMPTS', 4, 1, 8)
+RETRY_BASE_DELAY = env_float('COMBO_RETRY_BASE_DELAY', 1, 0, 60)
+
 IS_TTY = sys.stderr.isatty()
-ACCENT = '\\x1b[38;2;60;160;95m'   # 进度条边（绿）
-BOLD   = '\\x1b[1;38;2;60;160;95m' # 进度条填充/标签/百分比（粗绿）
-DIM    = '\\x1b[38;2;150;145;138m' # 空槽/次要文案（灰）
-RESET  = '\\x1b[0m'
+ACCENT = '\\x1b[38;2;60;160;95m'
+BOLD = '\\x1b[1;38;2;60;160;95m'
+DIM = '\\x1b[38;2;150;145;138m'
+RESET = '\\x1b[0m'
 CLREOL = '\\x1b[K'
-
-def c(color, s):
-    return color + s + RESET if IS_TTY else s
-
-def log(msg):
-    print('[Combo] ' + msg, file=sys.stderr)
-
-_start = time.time()
+_started = time.time()
 _last_draw = 0.0
 _bar_active = False
 
-def fmt_clock():
-    d = int(time.time() - _start)
-    return '%d 分 %d 秒' % (d // 60, d % 60) if d >= 60 else '%d 秒' % d
+def c(color, text):
+    return color + text + RESET if IS_TTY else text
 
-def draw_bar(label, cur, total, suffix, force=False):
-    """就地刷新一条进度条（回行首重绘 + 擦残留，不换行）；60ms 节流，0%/100% 强制画。"""
+def log(message):
+    print('[Combo] ' + message, file=sys.stderr)
+
+def dbg(message):
+    if DEBUG:
+        end_bar()
+        print('[Combo debug %s] %s' % (time.strftime('%H:%M:%S'), message), file=sys.stderr)
+
+def draw_bar(label, current, total, suffix, force=False):
     global _last_draw, _bar_active
     if not IS_TTY:
         return
@@ -77,7 +90,7 @@ def draw_bar(label, cur, total, suffix, force=False):
     _last_draw = now
     width = 26
     total = max(total, 1)
-    filled = min(max(cur * width // total, 0), width)
+    filled = min(max(current * width // total, 0), width)
     sys.stderr.write('\\r  ' + c(BOLD, label) + '  ' + c(ACCENT, '▕')
                      + c(BOLD, '█' * filled) + c(DIM, '░' * (width - filled))
                      + c(ACCENT, '▏') + '  ' + c(DIM, suffix) + CLREOL)
@@ -90,156 +103,352 @@ def end_bar():
         sys.stderr.write('\\n')
         _bar_active = False
 
-def fail(msg):
+def fail(message):
     end_bar()
-    log(msg)
+    log(message)
     sys.exit(1)
 
-def dbg(msg):
-    """COMBO_DEBUG=1 时输出的详细日志，带时钟时间，便于和服务端日志对时间。"""
-    if not DEBUG:
-        return
-    end_bar()
-    print('[Combo debug %s] %s' % (time.strftime('%H:%M:%S'), msg), file=sys.stderr)
+def elapsed_text():
+    seconds = int(time.time() - _started)
+    return '%d 分 %d 秒' % (seconds // 60, seconds % 60) if seconds >= 60 else '%d 秒' % seconds
 
-def dump_upload_failure(i, total, body_len, elapsed, e):
-    """上传失败时无条件打印诊断信息（不依赖 DEBUG 开关，让报障截图自带定位线索）。
-    重点是分辨错误出自哪一层：502 这类网关错误，响应头 Server / 响应体格式
-    （nginx HTML 错误页 vs 应用 JSON）能区分是反向代理回的还是应用回的。"""
+def cache_paths():
+    root_env = os.environ.get('COMBO_CACHE_DIR', '')
+    root = pathlib.Path(root_env).expanduser() if root_env else pathlib.Path.home() / '.combo' / 'uploads'
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if root.is_symlink():
+        fail('上传缓存根目录是符号链接，已停止以保护本机数据。')
+    os.chmod(root, 0o700)
+    key = hashlib.sha256((BASE + '\\0' + CODE).encode('utf-8')).hexdigest()
+    return root, root / key
+
+def part_path(cache_dir, index):
+    return cache_dir / ('part-%05d.txt' % index)
+
+def atomic_write(path, data):
+    tmp = path.with_name(path.name + '.tmp-%d' % os.getpid())
+    with open(tmp, 'wb') as handle:
+        os.chmod(tmp, 0o600)
+        handle.write(data)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(tmp, path)
+    os.chmod(path, 0o600)
+
+def bundle_digest(entries, cache_dir):
+    digest = hashlib.sha256()
+    for index, entry in enumerate(entries):
+        data = part_path(cache_dir, index).read_bytes()
+        if len(data) != entry['size'] or hashlib.sha256(data).hexdigest() != entry['sha256']:
+            raise ValueError('缓存分片校验失败')
+        digest.update(len(data).to_bytes(8, 'big'))
+        digest.update(data)
+    return digest.hexdigest()
+
+def load_cache(cache_dir):
+    manifest_path = cache_dir / 'manifest.json'
+    if not manifest_path.is_file():
+        return None
+    try:
+        manifest = json.loads(manifest_path.read_text('utf-8'))
+        if manifest.get('protocolVersion') != PROTOCOL_VERSION or manifest.get('base') != BASE:
+            return None
+        entries = manifest.get('parts')
+        if not isinstance(entries, list) or not 0 < len(entries) <= MAX_PARTS:
+            return None
+        if bundle_digest(entries, cache_dir) != manifest.get('bundleId'):
+            return None
+        return manifest
+    except (OSError, ValueError, json.JSONDecodeError, KeyError, TypeError):
+        return None
+
+def scan_files():
+    roots = [pathlib.Path.home() / '.claude' / 'projects', pathlib.Path.home() / '.codex' / 'sessions']
+    files = []
+    for root in roots:
+        if root.is_dir():
+            files.extend(root.rglob('*.jsonl'))
+    if not files:
+        fail('没扫到可上传的对话历史（~/.claude/projects 或 ~/.codex/sessions 为空）。')
+    try:
+        limit = int(os.environ.get('COMBO_SESSION_LIMIT', '300'))
+    except ValueError:
+        limit = 300
+    def mtime(path):
+        try:
+            return path.stat().st_mtime
+        except OSError:
+            return 0.0
+    files.sort(key=mtime, reverse=True)
+    found = len(files)
+    if limit > 0 and found > limit:
+        files = files[:limit]
+        log('本机共 %d 个会话，本次只导入最近 %d 个（按修改时间）。要导入全部请设 COMBO_SESSION_LIMIT=0 后重跑本命令。' % (found, limit))
+    return files
+
+def build_cache(cache_dir):
+    if cache_dir.exists():
+        if cache_dir.is_symlink():
+            fail('上传缓存目录是符号链接，已停止以保护本机数据。')
+        shutil.rmtree(cache_dir)
+    cache_dir.mkdir(parents=True, mode=0o700)
+    os.chmod(cache_dir, 0o700)
+    files = scan_files()
+    entries = []
+    buffer = []
+    size = 0
+
+    def flush():
+        nonlocal buffer, size
+        if not buffer:
+            return
+        if len(entries) >= MAX_PARTS:
+            raise ValueError('分片超过 10000 片，请减少 COMBO_SESSION_LIMIT 后重试。')
+        data = '\\n'.join(buffer).encode('utf-8')
+        index = len(entries)
+        atomic_write(part_path(cache_dir, index), data)
+        entries.append({'size': len(data), 'sha256': hashlib.sha256(data).hexdigest()})
+        buffer, size = [], 0
+
+    def add_line(line):
+        nonlocal size
+        piece_len = len(line) + 1
+        if buffer and size + piece_len > PART_LIMIT:
+            flush()
+        buffer.append(line)
+        size += piece_len
+
+    try:
+        for number, path in enumerate(files):
+            try:
+                text = path.read_text('utf-8', errors='replace')
+            except OSError:
+                continue
+            add_line(SENTINEL)
+            for line in text.splitlines():
+                add_line(line)
+            draw_bar('打包', number + 1, len(files), '%d / %d 会话' % (number + 1, len(files)), number + 1 == len(files))
+        flush()
+        end_bar()
+        if not entries:
+            raise ValueError('会话文件都是空的，没有可上传内容。')
+        bundle_id = bundle_digest(entries, cache_dir)
+        manifest = {
+            'protocolVersion': PROTOCOL_VERSION,
+            'base': BASE,
+            'bundleId': bundle_id,
+            'totalParts': len(entries),
+            'parts': entries,
+        }
+        atomic_write(cache_dir / 'manifest.json', json.dumps(manifest, ensure_ascii=False, separators=(',', ':')).encode('utf-8'))
+        return manifest
+    except Exception:
+        shutil.rmtree(cache_dir, ignore_errors=True)
+        raise
+
+class RequestFailure(Exception):
+    def __init__(self, message, retryable, status=None, body=b'', headers=None, cause=None):
+        super().__init__(message)
+        self.retryable = retryable
+        self.status = status
+        self.body = body
+        self.headers = headers or {}
+        self.cause = cause
+
+def post_json(path, payload):
+    body = json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+    request = urllib.request.Request(BASE + path, data=body, headers={'Content-Type': 'application/json'})
+    try:
+        with urllib.request.urlopen(request, timeout=UPLOAD_TIMEOUT) as response:
+            return json.load(response), len(body), response.status, dict(response.headers.items())
+    except urllib.error.HTTPError as error:
+        try:
+            response_body = error.read()
+        except Exception:
+            response_body = b''
+        raise RequestFailure('HTTP %d' % error.code, error.code in TRANSIENT_HTTP,
+                             status=error.code, body=response_body,
+                             headers=dict(error.headers.items()) if error.headers else {}, cause=error)
+    except Exception as error:
+        raise RequestFailure(str(error), True, cause=error)
+
+def retry_delay(attempt, failure):
+    retry_after = failure.headers.get('Retry-After') or failure.headers.get('retry-after')
+    if retry_after:
+        try:
+            return min(max(float(retry_after), 0), 60)
+        except ValueError:
+            pass
+    return RETRY_BASE_DELAY * (2 ** max(attempt - 1, 0)) + random.uniform(0, RETRY_BASE_DELAY * 0.25)
+
+def user_message(failure):
+    try:
+        return json.loads(failure.body.decode('utf-8', errors='replace')).get('error', {}).get('userMessage', '')
+    except Exception:
+        return ''
+
+def request_with_retry(path, payload, label):
+    last = None
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        started = time.time()
+        try:
+            result = post_json(path, payload)
+            dbg('%s 成功：HTTP %d，耗时 %.1f 秒' % (label, result[2], time.time() - started))
+            return result
+        except RequestFailure as failure:
+            last = failure
+            dbg('%s 第 %d/%d 次失败：%s，耗时 %.1f 秒' % (label, attempt, MAX_ATTEMPTS, failure, time.time() - started))
+            if not failure.retryable or attempt >= MAX_ATTEMPTS:
+                raise
+            end_bar()
+            delay = retry_delay(attempt, failure)
+            log('%s网络不稳定，%.1f 秒后重试（%d / %d）。' % (label, delay, attempt + 1, MAX_ATTEMPTS))
+            time.sleep(delay)
+    raise last
+
+def prepare_payload(manifest, replace_existing):
+    return {
+        'pairingCode': CODE,
+        'protocolVersion': PROTOCOL_VERSION,
+        'bundleId': manifest['bundleId'],
+        'totalParts': manifest['totalParts'],
+        'replaceExisting': replace_existing,
+    }
+
+def prepare(manifest, replace_existing, retries=True):
+    payload = prepare_payload(manifest, replace_existing)
+    response = request_with_retry('/api/v1/connect/prepare', payload, '确认上传状态时') if retries else post_json('/api/v1/connect/prepare', payload)
+    return response[0]['data']
+
+def dump_failure(index, total, attempt, body_len, failure):
     end_bar()
     log('—— 上传失败诊断 ——')
     log('时间：%s（本地时钟）' % time.strftime('%Y-%m-%d %H:%M:%S'))
-    log('分片：第 %d / %d 片，请求体 %d 字节，本次请求耗时 %.1f 秒' % (i + 1, total, body_len, elapsed))
-    log('目标：%s/api/v1/connect/upload' % BASE)
-    if isinstance(e, urllib.error.HTTPError):
-        log('状态：HTTP %d %s' % (e.code, getattr(e, 'reason', '') or ''))
-        try:
-            hdrs = ' | '.join('%s: %s' % kv for kv in e.headers.items())
-        except Exception:
-            hdrs = ''
-        if hdrs:
-            log('响应头：' + hdrs)
-        body = getattr(e, '_combo_body', b'')
-        if body:
-            log('响应体（前 500 字节）：' + body[:500].decode('utf-8', errors='replace'))
-        else:
-            log('响应体：空')
+    log('分片：第 %d / %d 片，请求体 %d 字节，已尝试 %d / %d 次' % (index + 1, total, body_len, attempt, MAX_ATTEMPTS))
+    log('目标：%s/api/v1/connect/upload；单次超时 %.1f 秒' % (BASE, UPLOAD_TIMEOUT))
+    if failure.status:
+        log('状态：HTTP %d' % failure.status)
     else:
-        log('异常：%s: %s' % (type(e).__name__, e))
-        reason = getattr(e, 'reason', None)
-        if reason is not None:
-            log('底层原因：%r' % (reason,))
-    if DEBUG:
-        traceback.print_exc(file=sys.stderr)
+        log('异常：%s' % failure)
+    trace = failure.headers.get('x-trace-id') or failure.headers.get('X-Trace-Id')
+    if trace:
+        log('Trace ID：' + trace)
+    if failure.body:
+        log('响应体（前 500 字节）：' + failure.body[:500].decode('utf-8', errors='replace'))
+    if DEBUG and failure.cause:
+        traceback.print_exception(type(failure.cause), failure.cause, failure.cause.__traceback__, file=sys.stderr)
     log('—— 诊断信息结束，请把以上内容一并反馈 ——')
 
 if IS_TTY:
     sys.stderr.write('\\n  ' + c(BOLD, 'Combo') + c(DIM, '  本机助手 · 上传对话历史') + '\\n')
-    sys.stderr.write(c(DIM, '  正在查找本机对话历史…') + '\\n')
+    sys.stderr.write(c(DIM, '  正在准备可续传的本地快照…') + '\\n')
 else:
-    log('正在查找本机对话历史…')
+    log('正在准备可续传的本地快照…')
 
-roots = [pathlib.Path.home() / '.claude' / 'projects', pathlib.Path.home() / '.codex' / 'sessions']
-files = []
-for root in roots:
-    if root.is_dir():
-        files.extend(root.rglob('*.jsonl'))
-if not files:
-    fail('没扫到可上传的对话历史（~/.claude/projects 或 ~/.codex/sessions 为空）。')
-# 内存护栏：默认只导入最近 N 个会话（按修改时间倒序），避免海量历史在本机打包阶段把内存打爆。
-# 设 COMBO_SESSION_LIMIT=0 导入全部；设具体数字自定上限。
+cache_root, cache_dir = cache_paths()
+manifest = load_cache(cache_dir) if cache_dir.exists() and not cache_dir.is_symlink() else None
+fresh_cache = manifest is None
 try:
-    _limit = int(os.environ.get('COMBO_SESSION_LIMIT', '300'))
-except ValueError:
-    _limit = 300
-def _mtime(p):
-    try:
-        return p.stat().st_mtime
-    except OSError:
-        return 0.0
-files.sort(key=_mtime, reverse=True)
-_found = len(files)
-if _limit > 0 and _found > _limit:
-    files = files[:_limit]
-    log('本机共 %d 个会话，本次只导入最近 %d 个（按修改时间）。要导入全部请设 COMBO_SESSION_LIMIT=0 后重跑本命令。' % (_found, _limit))
-if not IS_TTY:
-    log('找到 %d 个会话文件，开始打包上传…' % len(files))
-
-# 打包后按【行】切片：服务端重组是分片间换行拼接，行边界切分对 JSONL 无损；
-# 单个超限文件也会被切开（整文件打包会产生超大分片，被服务端请求体上限拒收）。
-bundle_lines = []
-for n, f in enumerate(files):
-    try:
-        text = f.read_text('utf-8', errors='replace')
-    except OSError:
-        continue
-    bundle_lines.append(SENTINEL)
-    bundle_lines.extend(text.splitlines())
-    draw_bar('打包', n + 1, len(files), '%d / %d 会话' % (n + 1, len(files)), n + 1 == len(files))
-end_bar()
-
-parts, buf, size = [], [], 0
-for line in bundle_lines:
-    piece_len = len(line) + 1
-    if buf and size + piece_len > PART_LIMIT:
-        parts.append('\\n'.join(buf)); buf, size = [], 0
-    buf.append(line); size += piece_len
-if buf:
-    parts.append('\\n'.join(buf))
-if not parts:
-    fail('会话文件都是空的，没有可上传内容。')
-
-total = len(parts)
-dbg('运行环境：python %s，%s' % (platform.python_version(), platform.platform()))
-dbg('开始上传：共 %d 片（合计 %d 字节，最大单片 %d 字节），目标 %s/api/v1/connect/upload，单请求超时 120 秒'
-    % (total, sum(len(p) for p in parts), max(len(p) for p in parts), BASE))
-draw_bar('上传', 0, total, '0 / %d 片' % total, True)
-for i, content in enumerate(parts):
-    body = json.dumps({'pairingCode': CODE, 'partIndex': i, 'totalParts': total, 'content': content}).encode('utf-8')
-    req = urllib.request.Request(BASE + '/api/v1/connect/upload', data=body,
-                                 headers={'Content-Type': 'application/json'})
-    dbg('第 %d/%d 片开始：请求体 %d 字节' % (i + 1, total, len(body)))
-    t0 = time.time()
-    try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            status = resp.status
-            data = json.load(resp)
-        dbg('第 %d/%d 片完成：HTTP %d，耗时 %.1f 秒，服务端确认 %s'
-            % (i + 1, total, status, time.time() - t0, json.dumps(data.get('data', {}), ensure_ascii=False)))
-    except urllib.error.HTTPError as e:
-        try:
-            e._combo_body = e.read()
-        except Exception:
-            e._combo_body = b''
-        dump_upload_failure(i, total, len(body), time.time() - t0, e)
-        try:
-            msg = json.loads(e._combo_body.decode('utf-8', errors='replace')).get('error', {}).get('userMessage', '')
-        except Exception:
-            msg = ''
-        fail(msg or ('上传失败（HTTP %d），重跑本命令续传。' % e.code))
-    except Exception as e:
-        dump_upload_failure(i, total, len(body), time.time() - t0, e)
-        fail('网络异常：%s。重跑本命令续传。' % e)
-    landed = data['data']['landed']
-    remote_total = data['data'].get('total', total)
-    if IS_TTY:
-        draw_bar('上传', landed, remote_total, '%d / %d 片' % (landed, remote_total), data['data'].get('complete') or landed == remote_total)
+    if manifest is None:
+        if cache_dir.exists() and not cache_dir.is_symlink():
+            log('上次缓存不完整或已损坏，正在安全重建。')
+        manifest = build_cache(cache_dir)
     else:
-        log('已上传 %d / %d 片' % (landed, remote_total))
-    if data['data'].get('complete'):
-        break
-end_bar()
+        log('找到上次未完成的安全缓存，将从服务端缺少的位置续传。')
+except OSError as error:
+    fail('本地缓存写入失败：%s。请检查磁盘空间和 %s 的权限。' % (error, cache_root))
+except ValueError as error:
+    fail(str(error))
 
+total = manifest['totalParts']
+dbg('运行环境：python %s，%s' % (platform.python_version(), platform.platform()))
+dbg('快照：%s，共 %d 片，单请求超时 %.1f 秒，最多 %d 次' % (manifest['bundleId'][:12], total, UPLOAD_TIMEOUT, MAX_ATTEMPTS))
+
+try:
+    remote = prepare(manifest, fresh_cache)
+except RequestFailure as failure:
+    message = user_message(failure)
+    fail(message or ('无法确认上传状态：%s。安全缓存已保留，重跑命令即可续传。' % failure))
+
+if remote.get('complete'):
+    shutil.rmtree(cache_dir, ignore_errors=True)
+    log('服务端已确认上传完成，本地缓存已清理。')
+    sys.exit(0)
+
+landed = set(remote.get('landedParts', []))
+draw_bar('上传', len(landed), total, '%d / %d 片' % (len(landed), total), True)
+complete = False
+for index in range(total):
+    if index in landed:
+        continue
+    content = part_path(cache_dir, index).read_text('utf-8')
+    payload = {
+        'pairingCode': CODE,
+        'bundleId': manifest['bundleId'],
+        'partIndex': index,
+        'totalParts': total,
+        'content': content,
+    }
+    body_len = len(json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode('utf-8'))
+    last_failure = None
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        started = time.time()
+        try:
+            response, _, status, _ = post_json('/api/v1/connect/upload', payload)
+            data = response['data']
+            dbg('第 %d/%d 片完成：HTTP %d，耗时 %.1f 秒' % (index + 1, total, status, time.time() - started))
+            landed.add(index)
+            complete = bool(data.get('complete'))
+            break
+        except RequestFailure as failure:
+            last_failure = failure
+            dbg('第 %d/%d 片第 %d 次失败：%s' % (index + 1, total, attempt, failure))
+            if not failure.retryable:
+                dump_failure(index, total, attempt, body_len, failure)
+                fail(user_message(failure) or '上传请求被拒绝，安全缓存已保留。')
+            try:
+                confirmed = prepare(manifest, False, retries=False)
+                confirmed_landed = set(confirmed.get('landedParts', []))
+                if confirmed.get('complete'):
+                    landed.update(range(total))
+                    complete = True
+                    break
+                if index in confirmed_landed:
+                    landed.update(confirmed_landed)
+                    break
+            except RequestFailure as confirm_failure:
+                dbg('失败后的状态确认也未成功：%s' % confirm_failure)
+            if attempt >= MAX_ATTEMPTS:
+                dump_failure(index, total, attempt, body_len, failure)
+                fail('网络多次中断，安全缓存已保留；网络恢复后重跑本命令续传。')
+            end_bar()
+            delay = retry_delay(attempt, failure)
+            log('第 %d / %d 片网络中断，%.1f 秒后重试（%d / %d）。' % (index + 1, total, delay, attempt + 1, MAX_ATTEMPTS))
+            time.sleep(delay)
+    draw_bar('上传', len(landed), total, '%d / %d 片' % (len(landed), total), complete or len(landed) == total)
+    if complete:
+        break
+
+if not complete:
+    try:
+        remote = prepare(manifest, False)
+        complete = bool(remote.get('complete'))
+    except RequestFailure as failure:
+        fail('分片已发完，但最终状态确认失败：%s。安全缓存已保留，重跑命令即可确认。' % failure)
+
+if not complete:
+    fail('服务端尚未确认全部分片，安全缓存已保留，重跑命令续传。')
+
+end_bar()
+shutil.rmtree(cache_dir, ignore_errors=True)
 if IS_TTY:
-    sys.stderr.write('  ' + c(ACCENT, '✓ 上传完成')
-                     + c(DIM, ' · 用时 ' + fmt_clock() + '，云端已自动开始解析与提取，回到任务页查看进度。') + '\\n')
+    sys.stderr.write('  ' + c(ACCENT, '上传完成') + c(DIM, ' · 用时 ' + elapsed_text() + '，云端已自动开始解析与提取，回到任务页查看进度。') + '\\n')
 else:
-    log('上传完成（用时 %s），云端已自动开始解析与提取。回到任务页查看进度。' % fmt_clock())
+    log('上传完成（用时 %s），云端已自动开始解析与提取。回到任务页查看进度。' % elapsed_text())
 COMBO_PY
 `;
 }
 
-/** 配对失效脚本（码无效/过期；脚本通道不裸 JSON 错误码）：打印一句人话并非零退出。 */
 export function renderExpiredScript(): string {
   return `#!/bin/sh
 printf '[Combo] %s\\n' '配对码已失效，请回到任务页重新生成连接命令。' >&2
