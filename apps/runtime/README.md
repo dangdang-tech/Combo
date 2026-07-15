@@ -68,4 +68,4 @@ DATABASE_URL=... REDIS_URL=redis://localhost:6379 S3_ENDPOINT=http://localhost:9
   PORT=3100 NODE_ENV=development pnpm -F @cb/runtime dev
 ```
 
-`REDIS_URL` 是必填连接串，必须指向采用 noeviction 策略的 redis_queue 实例，不能指向会驱逐键的 redis_hot。`RUNTIME_INSTANCE_ID` 可选；未配置时进程启动会生成一个随机标识。每个运行实例保留自己的执行句柄，Redis 只保存租约状态、打断标记并广播打断信号。
+`REDIS_URL` 是必填连接串，必须指向采用 noeviction 策略的 redis_queue 实例，不能指向会驱逐键的 redis_hot。每个运行实例保留自己的执行句柄，Redis 只保存租约状态、打断标记并广播打断信号；租约归属用每轮生成的 runId 比对。

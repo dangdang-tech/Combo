@@ -26,7 +26,7 @@ const definition: CapabilityDefinition = {
   meta: {},
 };
 
-async function makeRunner(gate: FakeTurnGateStore, instanceId: string, idleTimeoutMs = 60_000) {
+async function makeRunner(gate: FakeTurnGateStore, idleTimeoutMs = 60_000) {
   const db = new FakeDb();
   const cap = db.seedCapability({ owner_user_id: 'me' });
   const session = await createSession(db, { capabilityId: cap.id, ownerUserId: 'me' });
@@ -40,7 +40,6 @@ async function makeRunner(gate: FakeTurnGateStore, instanceId: string, idleTimeo
     agentFactory: handle.factory,
     idleTimeoutMs,
     gate,
-    instanceId,
   });
   return { db, eventLog, session, runner };
 }
@@ -50,8 +49,8 @@ afterEach(() => vi.useRealTimers());
 describe('Redis 会话闸语义', () => {
   it('共享闸跨实例互斥，不同会话互不影响', async () => {
     const gate = new FakeTurnGateStore();
-    const a = await makeRunner(gate, 'a');
-    const b = await makeRunner(gate, 'b');
+    const a = await makeRunner(gate);
+    const b = await makeRunner(gate);
     expect(
       (await a.runner.startTurn({ session: a.session, definition, text: 'a', log: silentLog }))
         .status,
@@ -70,8 +69,8 @@ describe('Redis 会话闸语义', () => {
 
   it('任意实例发出的打断会终止真正执行轮次', async () => {
     const gate = new FakeTurnGateStore();
-    const a = await makeRunner(gate, 'a');
-    const b = await makeRunner(gate, 'b');
+    const a = await makeRunner(gate);
+    const b = await makeRunner(gate);
     await a.runner.startTurn({ session: a.session, definition, text: 'a', log: silentLog });
     expect(await b.runner.interrupt(a.session.id)).toBe(true);
     await waitFor(async () => !(await a.runner.isBusy(a.session.id)));
@@ -81,7 +80,7 @@ describe('Redis 会话闸语义', () => {
 
   it('本地打断走快路径，不写 Redis 打断标记', async () => {
     const gate = new FakeTurnGateStore();
-    const a = await makeRunner(gate, 'a');
+    const a = await makeRunner(gate);
     await a.runner.startTurn({ session: a.session, definition, text: 'a', log: silentLog });
     expect(await a.runner.interrupt(a.session.id)).toBe(true);
     expect(gate.requestInterruptCalls).toBe(0);
@@ -96,7 +95,7 @@ describe('Redis 会话闸语义', () => {
       .mockRejectedValueOnce(new Error('redis 瞬断'))
       .mockResolvedValueOnce({ owned: true, interrupted: false });
     // 看门狗阈值放大到 10 分钟：本测试专测续租失败路径，别让空闲看门狗抢先杀轮。
-    const a = await makeRunner(gate, 'a', 600_000);
+    const a = await makeRunner(gate, 600_000);
     await a.runner.startTurn({ session: a.session, definition, text: 'a', log: silentLog });
 
     // 第一次续租报错 + 第二次成功：轮子不该被杀，失败计数被清零。
@@ -121,7 +120,7 @@ describe('Redis 会话闸语义', () => {
       owned: false,
       interrupted: false,
     });
-    const a = await makeRunner(gate, 'a');
+    const a = await makeRunner(gate);
     await a.runner.startTurn({ session: a.session, definition, text: 'a', log: silentLog });
     await vi.advanceTimersByTimeAsync(GATE_RENEW_MS);
     await Promise.resolve();

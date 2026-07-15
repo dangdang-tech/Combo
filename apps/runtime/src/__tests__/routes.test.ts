@@ -91,7 +91,6 @@ function makeReq(input: {
     agentFactory: makeFakeAgentFactory().factory,
     idleTimeoutMs: 60_000,
     gate: new FakeTurnGateStore(),
-    instanceId: 'routes-test',
   });
   return {
     id: 'trace-test',

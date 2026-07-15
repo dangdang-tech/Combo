@@ -80,7 +80,6 @@ export interface TurnRunnerDeps {
    */
   idleTimeoutMs: number;
   gate: TurnGateStore;
-  instanceId: string;
 }
 
 export type StartTurnResult =
@@ -355,7 +354,8 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
     async startTurn(input) {
       const sessionId = input.session.id;
       const runId = randomUUID();
-      const owner = `${deps.instanceId}:${runId}`;
+      // owner 就用 runId(每轮唯一):归属比对只需要唯一性;定位实例看日志,不进业务状态。
+      const owner = runId;
       if (!(await deps.gate.acquire(sessionId, owner, GATE_TTL_MS))) return { status: 'busy' };
       const controller = new AbortController();
       active.set(sessionId, controller);

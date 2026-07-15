@@ -44,7 +44,6 @@ async function setup(script: FakeAgentScript = {}, idleTimeoutMs = 60_000) {
     agentFactory: handle.factory,
     idleTimeoutMs,
     gate,
-    instanceId: 'test-instance',
   });
   const cap = db.seedCapability({ owner_user_id: ME });
   const session: SessionRow = await createSession(db, { capabilityId: cap.id, ownerUserId: ME });
@@ -246,7 +245,6 @@ describe('run-turn 失败路径（失败落 failed 消息 + RUN_ERROR）', () =>
       },
       idleTimeoutMs: 60_000,
       gate: new FakeTurnGateStore(),
-      instanceId: 'test-instance',
     });
     const result = await runner.startTurn({
       session,
