@@ -11,6 +11,7 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/*.tsbuildinfo',
       '**/coverage/**',
+      'tools/local-extract-poc/**', // 本地提取 POC:验证环境非线上代码,不参与 lint
     ],
   },
   js.configs.recommended,
