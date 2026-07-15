@@ -1,4 +1,4 @@
-export const EVENT_STREAM_MAXLEN = 5000;
+export const EVENT_STREAM_MAXLEN = 20_000;
 export const EVENT_STREAM_TTL_MS = 21_600_000;
 
 export interface StreamEventEntry {

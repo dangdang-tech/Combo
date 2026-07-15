@@ -31,7 +31,7 @@
 
 pi 是执行层，事件翻成标准 AG-UI 事件：`RUN_STARTED → TEXT_MESSAGE_START/CONTENT/END → RUN_FINISHED`，
 失败/打断 `RUN_ERROR`（终态）；产物走共享状态 `STATE_DELTA`（`add /artifacts/<id>` + `/activeArtifactId`）。
-Redis Stream 保存进行中轮次的有序事件日志，断线连接凭 Last-Event-ID 补发后切到 Redis 发布订阅直播。事件流最多保留 5000 条，并在六小时闲置后过期；历史轮次以 `messages` 表为真源。
+Redis Stream 保存进行中轮次的有序事件日志，断线连接凭 Last-Event-ID 补发后切到 Redis 发布订阅直播。事件流最多保留 20000 条，并在六小时闲置后过期；历史轮次以 `messages` 表为真源。
 正常结束把整轮 assistant/toolResult 消息落 `messages`（completed），失败/打断落一条 failed 消息。
 
 ## LLM provider
