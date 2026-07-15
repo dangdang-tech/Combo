@@ -14,7 +14,13 @@ import { createSession } from '../modules/session/repo.js';
 import { createTurnRunner } from '../modules/agent/run-turn.js';
 import { FakeTurnGateStore } from './fake-turn-gate.js';
 import { createSessionEventBus } from '../platform/infra/event-bus.js';
-import { FakeDb, FakeObjectStore, makeFakeAgentFactory, silentLog } from './fakes.js';
+import {
+  FakeDb,
+  FakeObjectStore,
+  FakeSessionEventLog,
+  makeFakeAgentFactory,
+  silentLog,
+} from './fakes.js';
 
 const ME = 'user-me';
 const OTHER = 'user-other';
@@ -81,6 +87,7 @@ function makeReq(input: {
     db: input.db,
     objectStore: input.objectStore ?? new FakeObjectStore(),
     bus: createSessionEventBus(),
+    eventLog: new FakeSessionEventLog(),
     agentFactory: makeFakeAgentFactory().factory,
     idleTimeoutMs: 60_000,
     gate: new FakeTurnGateStore(),

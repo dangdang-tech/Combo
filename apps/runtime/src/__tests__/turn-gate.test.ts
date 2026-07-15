@@ -6,7 +6,14 @@ import { GATE_RENEW_MS, GATE_TTL_MS } from '../modules/agent/turn-gate.js';
 import { createSession } from '../modules/session/repo.js';
 import { createSessionEventBus } from '../platform/infra/event-bus.js';
 import { FakeTurnGateStore } from './fake-turn-gate.js';
-import { FakeDb, FakeObjectStore, makeFakeAgentFactory, silentLog, waitFor } from './fakes.js';
+import {
+  FakeDb,
+  FakeObjectStore,
+  FakeSessionEventLog,
+  makeFakeAgentFactory,
+  silentLog,
+  waitFor,
+} from './fakes.js';
 
 const definition: CapabilityDefinition = {
   version: 1,
@@ -24,16 +31,18 @@ async function makeRunner(gate: FakeTurnGateStore, instanceId: string, idleTimeo
   const cap = db.seedCapability({ owner_user_id: 'me' });
   const session = await createSession(db, { capabilityId: cap.id, ownerUserId: 'me' });
   const handle = makeFakeAgentFactory({ deltas: ['部分'], hangUntilAbort: true });
+  const eventLog = new FakeSessionEventLog();
   const runner = createTurnRunner({
     db,
     objectStore: new FakeObjectStore(),
     bus: createSessionEventBus(),
+    eventLog,
     agentFactory: handle.factory,
     idleTimeoutMs,
     gate,
     instanceId,
   });
-  return { db, session, runner };
+  return { db, eventLog, session, runner };
 }
 
 afterEach(() => vi.useRealTimers());
@@ -67,7 +76,7 @@ describe('Redis 会话闸语义', () => {
     expect(await b.runner.interrupt(a.session.id)).toBe(true);
     await waitFor(async () => !(await a.runner.isBusy(a.session.id)));
     expect(a.db.messages.find((row) => row.role === 'assistant')?.status).toBe('failed');
-    expect(a.db.streamEvents.at(-1)?.event.type).toBe(EventType.RUN_ERROR);
+    expect(a.eventLog.entries(a.session.id).at(-1)?.event.type).toBe(EventType.RUN_ERROR);
   });
 
   it('本地打断走快路径，不写 Redis 打断标记', async () => {
@@ -100,7 +109,9 @@ describe('Redis 会话闸语义', () => {
     await vi.advanceTimersByTimeAsync(GATE_RENEW_MS * renewFailLimit);
     await Promise.resolve();
     await Promise.resolve();
-    expect(a.db.streamEvents.at(-1)?.event.message).toBe('服务调度异常，本轮已终止，请重试。');
+    expect(a.eventLog.entries(a.session.id).at(-1)?.event.message).toBe(
+      '服务调度异常，本轮已终止，请重试。',
+    );
   });
 
   it('租约丢失会 fence 并写入调度异常终态', async () => {
@@ -117,7 +128,9 @@ describe('Redis 会话闸语义', () => {
     await Promise.resolve();
     const failed = a.db.messages.find((row) => row.role === 'assistant');
     expect(failed?.content).toEqual([{ type: 'text', text: '部分' }]);
-    expect(a.db.streamEvents.at(-1)?.event.message).toBe('服务调度异常，本轮已终止，请重试。');
+    expect(a.eventLog.entries(a.session.id).at(-1)?.event.message).toBe(
+      '服务调度异常，本轮已终止，请重试。',
+    );
   });
 });
 

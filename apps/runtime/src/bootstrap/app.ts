@@ -64,6 +64,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
       db: infra.db,
       objectStore: infra.objectStore,
       bus: infra.bus,
+      eventLog: infra.eventLog,
       agentFactory: createPiTurnAgentFactory(env),
       idleTimeoutMs: env.RUNTIME_TURN_IDLE_TIMEOUT_MS,
       gate,

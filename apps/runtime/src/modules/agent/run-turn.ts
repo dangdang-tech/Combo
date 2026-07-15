@@ -1,7 +1,7 @@
 // 一轮生成的编排（生命周期不绑 HTTP 连接：POST messages 落完 user 消息即返回，本文件异步跑完整轮）。
 //   - 会话级并发闸：Redis 租约保证跨实例同会话同时只跑一轮，续租失败触发 fence 自停。
 //   - 打断：Redis 广播提供低延迟路由，打断标记由续租消费兜底；本地 Map 只保存执行句柄。
-//   - 事件：pi 事件翻成 AG-UI 标准事件，经 TurnEmitter 双写（stream_events 表 + 进程内总线）。
+//   - 事件：pi 事件翻成 AG-UI 标准事件，经 TurnEmitter 双写（Redis Stream + 发布订阅）。
 //   - 终态：正常结束把整轮 assistant/toolResult 消息落 messages（completed）+ RUN_FINISHED；
 //     失败/打断落一条 failed 消息 + RUN_ERROR。
 //   - 空闲看门狗：LLM 流两次活动间隔超过 idleTimeoutMs 判连接夯死 → abort + RUN_ERROR
@@ -13,6 +13,7 @@ import type { CapabilityDefinition } from '@cb/shared';
 import type { RuntimeDb } from '../../platform/infra/db.js';
 import type { RuntimeObjectStore } from '../../platform/infra/object-store.js';
 import type { SessionEventBus } from '../../platform/infra/event-bus.js';
+import type { SessionEventLog } from './event-log.js';
 import {
   appendMessage,
   getMessages,
@@ -70,6 +71,7 @@ export interface TurnRunnerDeps {
   db: RuntimeDb;
   objectStore: RuntimeObjectStore;
   bus: SessionEventBus;
+  eventLog: SessionEventLog;
   agentFactory: TurnAgentFactory;
   /**
    * 空闲看门狗阈值：LLM 流两次活动（任意事件）间隔超过此值判定连接夯死，
@@ -145,7 +147,12 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
     log: TurnLogger;
   }): Promise<void> {
     const { sessionId, controller, log, runId, owner } = args;
-    const emitter: TurnEmitter = createTurnEmitter({ db: deps.db, bus: deps.bus, sessionId, log });
+    const emitter: TurnEmitter = createTurnEmitter({
+      eventLog: deps.eventLog,
+      bus: deps.bus,
+      sessionId,
+      log,
+    });
     // 流式 messageId：前端聚增量用（落库行 id 由 DB 生成，终态后前端以详情接口为真源）。
     const messageId = randomUUID();
     const base = { threadId: sessionId, runId };
@@ -163,7 +170,7 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
       emitter.emit({ type: EventType.TEXT_MESSAGE_END, ...base, messageId });
     };
 
-    /** 失败/打断统一收尾：落 failed 消息 + RUN_ERROR（终态事件必先落表再返回）。 */
+    /** 失败/打断统一收尾：落 failed 消息 + RUN_ERROR（终态事件必先写日志再返回）。 */
     const finishFailed = async (userMessage: string, failedContent?: unknown[]): Promise<void> => {
       closeText();
       await appendMessage(deps.db, {

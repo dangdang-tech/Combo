@@ -7,6 +7,7 @@ import { createSession, type SessionRow } from '../modules/session/repo.js';
 import { createSessionEventBus, type PublishedStreamEvent } from '../platform/infra/event-bus.js';
 import {
   FakeDb,
+  FakeSessionEventLog,
   FakeObjectStore,
   makeFakeAgentFactory,
   silentLog,
@@ -32,12 +33,14 @@ async function setup(script: FakeAgentScript = {}, idleTimeoutMs = 60_000) {
   const db = new FakeDb();
   const store = new FakeObjectStore();
   const bus = createSessionEventBus();
+  const eventLog = new FakeSessionEventLog();
   const handle = makeFakeAgentFactory(script);
   const gate = new FakeTurnGateStore();
   const runner = createTurnRunner({
     db,
     objectStore: store,
     bus,
+    eventLog,
     agentFactory: handle.factory,
     idleTimeoutMs,
     gate,
@@ -47,11 +50,11 @@ async function setup(script: FakeAgentScript = {}, idleTimeoutMs = 60_000) {
   const session: SessionRow = await createSession(db, { capabilityId: cap.id, ownerUserId: ME });
   const published: PublishedStreamEvent[] = [];
   bus.subscribe(session.id, (e) => published.push(e));
-  return { db, store, bus, handle, gate, runner, session, published };
+  return { db, eventLog, store, bus, handle, gate, runner, session, published };
 }
 
-function eventTypes(db: FakeDb): unknown[] {
-  return db.streamEvents.map((e) => e.event.type);
+function eventTypes(eventLog: FakeSessionEventLog, sessionId: string): unknown[] {
+  return eventLog.entries(sessionId).map((e) => e.event.type);
 }
 
 async function runToIdle(
@@ -66,7 +69,7 @@ async function runToIdle(
 
 describe('run-turn 成功路径', () => {
   it('事件双写（表+总线同 id 同序）、整轮消息落 completed', async () => {
-    const { db, runner, session, published, handle } = await setup({
+    const { db, eventLog, runner, session, published, handle } = await setup({
       deltas: ['我来', '整理'],
       invokeTool: { title: '纪要', content: '<!doctype html><html>纪要</html>' },
       finalMessages: [
@@ -96,7 +99,7 @@ describe('run-turn 成功路径', () => {
     }
 
     // 事件顺序：RUN_STARTED → 文本开闭之间夹产物 STATE_DELTA → RUN_FINISHED。
-    expect(eventTypes(db)).toEqual([
+    expect(eventTypes(eventLog, session.id)).toEqual([
       EventType.RUN_STARTED,
       EventType.TEXT_MESSAGE_START,
       EventType.TEXT_MESSAGE_CONTENT,
@@ -106,8 +109,8 @@ describe('run-turn 成功路径', () => {
       EventType.RUN_FINISHED,
     ]);
     // 双写：总线收到同一批（id = 表自增 id，同序）。
-    expect(published.map((e) => e.id)).toEqual(db.streamEvents.map((e) => e.id));
-    expect(published.map((e) => e.event.type)).toEqual(eventTypes(db));
+    expect(published.map((e) => e.id)).toEqual(eventLog.entries(session.id).map((e) => e.id));
+    expect(published.map((e) => e.event.type)).toEqual(eventTypes(eventLog, session.id));
 
     // 整轮定稿：user + assistant + tool + assistant，全 completed。
     const rows = db.messages.filter((m) => m.session_id === session.id);
@@ -140,7 +143,10 @@ describe('run-turn 成功路径', () => {
 
 describe('run-turn busy 闸与打断', () => {
   it('同会话生成中再发 → busy 且不落第二条 user 消息；打断后闸释放', async () => {
-    const { db, runner, session } = await setup({ deltas: ['部分'], hangUntilAbort: true });
+    const { db, eventLog, runner, session } = await setup({
+      deltas: ['部分'],
+      hangUntilAbort: true,
+    });
 
     const first = await runner.startTurn({
       session,
@@ -167,7 +173,7 @@ describe('run-turn busy 闸与打断', () => {
     const failed = db.messages.find((m) => m.role === 'assistant');
     expect(failed?.status).toBe('failed');
     expect(failed?.content).toEqual([{ type: 'text', text: '部分' }]);
-    const types = eventTypes(db);
+    const types = eventTypes(eventLog, session.id);
     expect(types).toContain(EventType.RUN_ERROR);
     expect(types).not.toContain(EventType.RUN_FINISHED);
 
@@ -178,7 +184,10 @@ describe('run-turn busy 闸与打断', () => {
 
 describe('run-turn 空闲看门狗（issue #51：流中途停滞永无终态）', () => {
   it('LLM 流停滞超过阈值 → abort + RUN_ERROR，已生成的部分文本保进 failed 消息', async () => {
-    const { db, runner, session } = await setup({ deltas: ['部分'], hangUntilAbort: true }, 30);
+    const { db, eventLog, runner, session } = await setup(
+      { deltas: ['部分'], hangUntilAbort: true },
+      30,
+    );
 
     const result = await runner.startTurn({
       session,
@@ -194,22 +203,22 @@ describe('run-turn 空闲看门狗（issue #51：流中途停滞永无终态）'
     expect(failed?.status).toBe('failed');
     expect(failed?.content).toEqual([{ type: 'text', text: '部分' }]);
 
-    const last = db.streamEvents.at(-1)?.event as { type: unknown; message?: string };
+    const last = eventLog.entries(session.id).at(-1)?.event as { type: unknown; message?: string };
     expect(last.type).toBe(EventType.RUN_ERROR);
     expect(last.message).toContain('停滞');
-    expect(eventTypes(db)).not.toContain(EventType.RUN_FINISHED);
+    expect(eventTypes(eventLog, session.id)).not.toContain(EventType.RUN_FINISHED);
   });
 });
 
 describe('run-turn 失败路径（失败落 failed 消息 + RUN_ERROR）', () => {
   it('agent.prompt 抛错', async () => {
-    const { db, runner, session } = await setup({ promptError: new Error('llm down') });
+    const { db, eventLog, runner, session } = await setup({ promptError: new Error('llm down') });
     await runToIdle(runner, session);
 
     const failed = db.messages.find((m) => m.role === 'assistant');
     expect(failed?.status).toBe('failed');
     expect(failed?.content).toEqual([{ type: 'text', text: '对话生成失败，请重试。' }]);
-    expect(eventTypes(db).at(-1)).toBe(EventType.RUN_ERROR);
+    expect(eventTypes(eventLog, session.id).at(-1)).toBe(EventType.RUN_ERROR);
   });
 
   it('pi 把失败编码进消息（runtimeError）', async () => {
@@ -231,6 +240,7 @@ describe('run-turn 失败路径（失败落 failed 消息 + RUN_ERROR）', () =>
       db,
       objectStore: new FakeObjectStore(),
       bus: createSessionEventBus(),
+      eventLog: new FakeSessionEventLog(),
       agentFactory: () => {
         throw new TurnAgentUnavailableError('试用服务未配置模型密钥，暂时无法对话。');
       },

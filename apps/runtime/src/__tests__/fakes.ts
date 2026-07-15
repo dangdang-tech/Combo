@@ -5,6 +5,12 @@ import type { Queryable, QueryResultLike, TxConn, TxPool } from '../platform/inf
 import type { RuntimeObjectStore } from '../platform/infra/object-store.js';
 import type { TurnAgent, TurnAgentFactory, TurnAgentInput } from '../modules/agent/run-turn.js';
 import type { ArtifactAgentTool } from '../modules/artifact/tool.js';
+import {
+  compareStreamIds,
+  EVENT_STREAM_MAXLEN,
+  type SessionEventLog,
+  type StreamEventEntry,
+} from '../modules/agent/event-log.js';
 
 let seq = 0;
 /** 递增的假 UUID（保持 id 可比较排序，模拟 UUID v7 时间有序）。 */
@@ -49,13 +55,6 @@ export interface MessageRowF {
   created_at: string;
 }
 
-export interface StreamEventRowF {
-  id: number;
-  session_id: string;
-  message_id: string | null;
-  event: Record<string, unknown>;
-}
-
 export interface ArtifactRowF {
   id: string;
   session_id: string;
@@ -67,14 +66,45 @@ export interface ArtifactRowF {
   updated_at: string;
 }
 
-/** 忠实假 PG（capabilities / sessions / messages / stream_events / artifacts）。也可当 TxPool 用。 */
+export class FakeSessionEventLog implements SessionEventLog {
+  private readonly streams = new Map<string, StreamEventEntry[]>();
+  private lastMilliseconds = -1;
+  private sequence = 0;
+
+  constructor(
+    private readonly now: () => number = Date.now,
+    private readonly maxlen = EVENT_STREAM_MAXLEN,
+  ) {}
+
+  async append(sessionId: string, event: Record<string, unknown>): Promise<string> {
+    const milliseconds = Math.max(this.now(), this.lastMilliseconds);
+    this.sequence = milliseconds === this.lastMilliseconds ? this.sequence + 1 : 0;
+    this.lastMilliseconds = milliseconds;
+    const entry = { id: `${milliseconds}-${this.sequence}`, event };
+    const stream = this.streams.get(sessionId) ?? [];
+    stream.push(entry);
+    if (stream.length > this.maxlen) stream.splice(0, stream.length - this.maxlen);
+    this.streams.set(sessionId, stream);
+    return entry.id;
+  }
+
+  async rangeAfter(sessionId: string, afterId: string, count: number): Promise<StreamEventEntry[]> {
+    return (this.streams.get(sessionId) ?? [])
+      .filter((entry) => compareStreamIds(entry.id, afterId) > 0)
+      .slice(0, count);
+  }
+
+  entries(sessionId: string): StreamEventEntry[] {
+    return [...(this.streams.get(sessionId) ?? [])];
+  }
+}
+
+/** 忠实假 PG（capabilities / sessions / messages / artifacts）。也可当 TxPool 用。 */
 export class FakeDb implements Queryable, TxPool {
   capabilities = new Map<string, CapabilityRowF>();
   sessions = new Map<string, SessionRowF>();
   messages: MessageRowF[] = [];
-  streamEvents: StreamEventRowF[] = [];
   artifacts = new Map<string, ArtifactRowF>();
-  private streamEventSeq = 0;
   /** 事务轨迹（断言 BEGIN/COMMIT/ROLLBACK 收口）。 */
   txLog: string[] = [];
 
@@ -244,29 +274,6 @@ export class FakeDb implements Queryable, TxPool {
           status: m.status,
           created_at: m.created_at,
         }));
-      return { rows: rows as R[], rowCount: rows.length };
-    }
-
-    // ---------- stream_events ----------
-    if (s.startsWith('INSERT INTO stream_events')) {
-      const [sessionId, messageId, eventJson] = params as [string, string | null, string];
-      this.streamEventSeq += 1;
-      const row: StreamEventRowF = {
-        id: this.streamEventSeq,
-        session_id: sessionId,
-        message_id: messageId,
-        event: JSON.parse(eventJson) as Record<string, unknown>,
-      };
-      this.streamEvents.push(row);
-      return { rows: [{ id: row.id }] as R[], rowCount: 1 };
-    }
-    if (s.includes('FROM stream_events WHERE session_id = $1 AND id > $2')) {
-      const [sessionId, afterId, limit] = params as [string, number, number];
-      const rows = this.streamEvents
-        .filter((e) => e.session_id === sessionId && e.id > afterId)
-        .sort((a, b) => a.id - b.id)
-        .slice(0, limit)
-        .map((e) => ({ id: e.id, event: e.event }));
       return { rows: rows as R[], rowCount: rows.length };
     }
 

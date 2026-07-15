@@ -6,8 +6,8 @@
 ## 与 authoring 的边界（铁律）
 
 - 只依赖 `@cb/shared`，**禁止 import `apps/authoring/**` 的任何代码\*\*。
-- 两个服务只在两处相遇：同一个 PG（读 `capabilities` 表 + 写试用层四表
-  `sessions/messages/stream_events/artifacts`）和 MinIO（按 `capabilities.storage_key`
+- 两个服务只在两处相遇：同一个 PG（读 `capabilities` 表并写试用层三表
+  `sessions/messages/artifacts`）和 MinIO（按 `capabilities.storage_key`
   读 CapabilityDefinition JSON，桶 `combo-artifacts`）。
 - 身份：验创作端同一个登录 Cookie（`cb_session`，Logto access_token；dev 环境兼容
   authoring dev-login 签发的 HS256 token）。runtime 只验不签、不建用户，同库查 `users` 解出 userId。
@@ -15,13 +15,13 @@
 ## 结构
 
 - `platform/`：config/env · infra（db / redis / object-store / llm provider / logto / dev-session /
-  进程内事件总线）· middleware/auth（登录态校验）· http（错误信封 / 健康检查 / client-events）· observability。
+  Redis 事件日志与跨实例事件总线）· middleware/auth（登录态校验）· http（错误信封 / 健康检查 / client-events）· observability。
 - `modules/capability/`：loader（owner 本人 OR published 才放行 → MinIO 读定义 → schema 校验，
   version 不认识报「能力格式过新」）· 试用入口列表。
 - `modules/session/`：sessions/messages 两表 SQL（appendMessage 锁行分配 seq；content 写入前
   过 pi 原生消息块 schema，坏块拒写）· 会话端点 handler。
 - `modules/agent/`：build-agent（instructions 组系统提示词 + messages 历史以 pi 原生格式喂回）·
-  run-turn（一轮编排：会话级并发闸 / pi 事件翻 AG-UI / 双写）· stream（SSE，Last-Event-ID 表补发 + 实时）·
+  run-turn（一轮编排：会话级并发闸 / pi 事件翻 AG-UI / 双写）· stream（SSE，Last-Event-ID 补发 + 实时）·
   event-log / turn-emitter。
 - `modules/artifact/`：upsert_artifact pi 工具（内容写 MinIO `artifacts/{sessionId}/{artifactId}`，
   无版本原地覆盖）· 内容回读端点。
@@ -31,7 +31,7 @@
 
 pi 是执行层，事件翻成标准 AG-UI 事件：`RUN_STARTED → TEXT_MESSAGE_START/CONTENT/END → RUN_FINISHED`，
 失败/打断 `RUN_ERROR`（终态）；产物走共享状态 `STATE_DELTA`（`add /artifacts/<id>` + `/activeArtifactId`）。
-`stream_events` 表是真源（断线凭 Last-Event-ID 从表补发再切实时），进程内总线只服务在线订阅者。
+Redis Stream 保存进行中轮次的有序事件日志，断线连接凭 Last-Event-ID 补发后切到 Redis 发布订阅直播。事件流最多保留 5000 条，并在六小时闲置后过期；历史轮次以 `messages` 表为真源。
 正常结束把整轮 assistant/toolResult 消息落 `messages`（completed），失败/打断落一条 failed 消息。
 
 ## LLM provider
