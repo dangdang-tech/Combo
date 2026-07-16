@@ -5,12 +5,15 @@ metadata:
   labels:
     app: minio
 spec:
+  # NodePort 30900：系统 nginx 把 s3 公网 vhost（浏览器预签直传）反代到这里。
+  type: NodePort
   selector:
     app: minio
   ports:
     - name: api
       port: 9000
       targetPort: 9000
+      nodePort: 30900
     - name: console
       port: 9001
       targetPort: 9001

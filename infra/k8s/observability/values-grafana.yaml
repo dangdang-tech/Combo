@@ -1,0 +1,102 @@
+# 管理员密码不落盘，README 的安装命令会从服务器环境变量通过 --set 注入。
+adminUser: admin
+
+persistence:
+  enabled: true
+  storageClassName: local-path
+  size: 2Gi
+
+service:
+  type: NodePort
+  port: 80
+  targetPort: 3000
+  nodePort: 30300
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+grafana.ini:
+  auth.anonymous:
+    enabled: true
+    org_role: Viewer
+  analytics:
+    reporting_enabled: false
+
+# 数据源使用 Helm release 生成的集群内 Service 名；Loki 通过 gateway，Tempo 直接访问单实例服务。
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        uid: loki
+        type: loki
+        access: proxy
+        url: http://loki-gateway.observability.svc.cluster.local
+        isDefault: true
+        jsonData:
+          maxLines: 1000
+      - name: Tempo
+        uid: tempo
+        type: tempo
+        access: proxy
+        url: http://tempo.observability.svc.cluster.local:3200
+        jsonData:
+          httpMethod: GET
+          tracesToLogsV2:
+            datasourceUid: loki
+            spanStartTimeShift: -5m
+            spanEndTimeShift: 5m
+            filterByTraceID: true
+            filterBySpanID: false
+
+# 直接把现有 trace-debug.json 纳入 chart 的文件 provisioning，部署后无需手工导入。
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: combo-observability
+        orgId: 1
+        folder: Combo MVP
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 30
+        options:
+          path: /var/lib/grafana/dashboards/combo
+
+dashboards:
+  combo:
+    trace-debug:
+      json: |
+        {
+          "annotations": {"list": []},
+          "editable": true,
+          "fiscalYearStartMonth": 0,
+          "graphTooltip": 0,
+          "links": [],
+          "liveNow": false,
+          "panels": [{
+            "datasource": {"type": "loki", "uid": "loki"},
+            "fieldConfig": {"defaults": {}, "overrides": []},
+            "gridPos": {"h": 18, "w": 24, "x": 0, "y": 0},
+            "id": 1,
+            "options": {"dedupStrategy": "none", "enableLogDetails": true, "prettifyLogMessage": true, "showCommonLabels": false, "showLabels": false, "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true},
+            "targets": [{"datasource": {"type": "loki", "uid": "loki"}, "expr": "{service_namespace=\"combo-mvp\"} | json | traceId=\"$traceId\"", "refId": "A"}],
+            "title": "Logs By Feedback Trace ID",
+            "type": "logs"
+          }],
+          "refresh": "",
+          "schemaVersion": 39,
+          "tags": ["combo", "trace"],
+          "templating": {"list": [{"current": {"selected": false, "text": "", "value": ""}, "hide": 0, "label": "Trace ID", "name": "traceId", "query": "", "skipUrlSync": false, "type": "textbox"}]},
+          "time": {"from": "now-6h", "to": "now"},
+          "timezone": "",
+          "title": "Trace Debug",
+          "uid": "combo-trace-debug",
+          "version": 1,
+          "weekStart": ""
+        }
