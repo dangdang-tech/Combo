@@ -37,38 +37,38 @@ spec:
               value: us-east-1
             - name: POSTGRES_USER
               valueFrom:
-                secretKeyRef: {name: combo-env, key: POSTGRES_USER}
+                secretKeyRef: { name: combo-env, key: POSTGRES_USER }
             - name: POSTGRES_PASSWORD
               valueFrom:
-                secretKeyRef: {name: combo-env, key: POSTGRES_PASSWORD}
+                secretKeyRef: { name: combo-env, key: POSTGRES_PASSWORD }
             - name: POSTGRES_DB
               valueFrom:
-                secretKeyRef: {name: combo-env, key: POSTGRES_DB}
+                secretKeyRef: { name: combo-env, key: POSTGRES_DB }
             - name: DATABASE_URL
               value: postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)
             - name: S3_ACCESS_KEY
               valueFrom:
-                secretKeyRef: {name: combo-env, key: S3_ACCESS_KEY}
+                secretKeyRef: { name: combo-env, key: S3_ACCESS_KEY }
             - name: S3_SECRET_KEY
               valueFrom:
-                secretKeyRef: {name: combo-env, key: S3_SECRET_KEY}
+                secretKeyRef: { name: combo-env, key: S3_SECRET_KEY }
             # LLM 相关键允许缺失（代码契约：缺 key 只降级不阻塞启动），必须 optional，
             # 否则 Secret 缺键时 Pod 直接 CreateContainerConfigError 起不来。
             - name: ANTHROPIC_API_KEY
               valueFrom:
-                secretKeyRef: {name: combo-env, key: ANTHROPIC_API_KEY, optional: true}
+                secretKeyRef: { name: combo-env, key: ANTHROPIC_API_KEY, optional: true }
             - name: LLM_PROVIDER
               valueFrom:
-                secretKeyRef: {name: combo-env, key: LLM_PROVIDER, optional: true}
+                secretKeyRef: { name: combo-env, key: LLM_PROVIDER, optional: true }
             - name: OPENROUTER_API_KEY
               valueFrom:
-                secretKeyRef: {name: combo-env, key: OPENROUTER_API_KEY, optional: true}
+                secretKeyRef: { name: combo-env, key: OPENROUTER_API_KEY, optional: true }
             - name: LLM_BASE_URL
               valueFrom:
-                secretKeyRef: {name: combo-env, key: LLM_BASE_URL, optional: true}
+                secretKeyRef: { name: combo-env, key: LLM_BASE_URL, optional: true }
             - name: LLM_MODEL
               valueFrom:
-                secretKeyRef: {name: combo-env, key: LLM_MODEL, optional: true}
+                secretKeyRef: { name: combo-env, key: LLM_MODEL, optional: true }
           resources:
             requests:
               memory: 1Gi
