@@ -1,21 +1,14 @@
-// 一轮生成的编排（生命周期不绑 HTTP 连接：POST messages 落完 user 消息即返回，本文件异步跑完整轮）。
-//   - 会话级并发闸：Redis 租约保证跨实例同会话同时只跑一轮，续租失败触发 fence 自停。
-//   - 打断：Redis 广播提供低延迟路由，打断标记由续租消费兜底；本地 Map 只保存执行句柄。
-//   - 事件：pi 事件翻成 AG-UI 标准事件，经 TurnEmitter 双写（Redis Stream + 发布订阅）。
-//   - 终态：正常结束把整轮 assistant/toolResult 消息落 messages（completed）+ RUN_FINISHED；
-//     失败/打断落一条 failed 消息 + RUN_ERROR。
-//   - 空闲看门狗：LLM 流两次活动间隔超过 idleTimeoutMs 判连接夯死 → abort + RUN_ERROR
-//     （只判停滞不限总时长，长时间但持续有输出的轮次不受影响）。
-//   - agent 经注入的 TurnAgentFactory 构造（生产 = pi 实现见 build-agent.ts；单测注入假 agent）。
+// 一轮生成的无锁编排：每轮独立持久化与收尾，HTTP 提交后在进程内异步执行。
 import { randomUUID } from 'node:crypto';
 import { EventType } from '@ag-ui/core';
 import type { CapabilityDefinition } from '@cb/shared';
 import type { RuntimeDb } from '../../platform/infra/db.js';
 import type { RuntimeObjectStore } from '../../platform/infra/object-store.js';
 import type { SessionEventBus } from '../../platform/infra/event-bus.js';
+import type { InterruptBus } from '../../platform/infra/redis-interrupt-bus.js';
 import type { SessionEventLog } from './event-log.js';
 import {
-  appendMessage,
+  appendTurnMessage,
   getMessages,
   type MessageRecord,
   type SessionRow,
@@ -23,41 +16,27 @@ import {
 import { createArtifactTool, type ArtifactAgentTool } from '../artifact/tool.js';
 import { createTurnEmitter, type TurnEmitter, type TurnLogger } from './turn-emitter.js';
 import {
-  GATE_RENEW_MS,
-  GATE_TTL_MS,
-  INTERRUPT_FLAG_TTL_MS,
-  type TurnGateStore,
-} from './turn-gate.js';
-
-// ───────────────────────────── agent 注入口 ─────────────────────────────
+  createTurn,
+  finishTurnCas,
+  hasRunningTurn,
+  sweepExpiredTurns,
+  TURN_ABANDON_AFTER_MS,
+} from './turn-repo.js';
 
 export interface TurnAgentInput {
   definition: CapabilityDefinition;
-  /** 本轮 user 消息之前的定稿历史（pi 原生格式重建由实现方负责）。 */
   history: MessageRecord[];
   tools: ArtifactAgentTool[];
 }
-
-/** run-turn 消费的最小 agent 面（pi Agent 的包装见 build-agent.ts；单测注入假实现）。 */
 export interface TurnAgent {
-  /** 订阅助手文本增量；返回退订函数。 */
   subscribeTextDelta(fn: (delta: string) => void): () => void;
-  /**
-   * 订阅「任意 agent 活动」（含工具调用参数流等一切事件，不只文本 delta）；返回退订函数。
-   * 空闲看门狗以此判活；不实现则看门狗只依赖文本 delta。
-   */
   subscribeActivity?(fn: () => void): () => void;
   prompt(text: string): Promise<void>;
   abort(): void;
-  /** 完整转录（历史 + 本轮 user + 本轮新消息），pi AgentMessage[] plain JSON。 */
   transcript(): unknown[];
-  /** pi 把运行时失败编码进最终消息而非抛错；有失败 → 返回内部错误信息。 */
   runtimeError(): string | undefined;
 }
-
 export type TurnAgentFactory = (input: TurnAgentInput) => TurnAgent;
-
-/** agent 不可用（如未配置模型密钥）：message 是可直接展示的人话。 */
 export class TurnAgentUnavailableError extends Error {
   constructor(message: string) {
     super(message);
@@ -65,41 +44,29 @@ export class TurnAgentUnavailableError extends Error {
   }
 }
 
-// ───────────────────────────── 编排器 ─────────────────────────────
-
 export interface TurnRunnerDeps {
   db: RuntimeDb;
   objectStore: RuntimeObjectStore;
   bus: SessionEventBus;
   eventLog: SessionEventLog;
   agentFactory: TurnAgentFactory;
-  /**
-   * 空闲看门狗阈值：LLM 流两次活动（任意事件）间隔超过此值判定连接夯死，
-   * abort 本轮并发 RUN_ERROR（issue #51：流中途停滞时链路上没有任何超时）。
-   * 只判「无输出的停滞」，不限制轮次总时长——持续有输出的长任务不受影响。
-   */
   idleTimeoutMs: number;
-  gate: TurnGateStore;
+  interrupts: InterruptBus;
+  sweepIntervalMs?: number;
+  log: TurnLogger;
 }
-
-export type StartTurnResult =
-  | { status: 'busy' }
-  | { status: 'started'; userMessage: MessageRecord };
-
+export type StartTurnResult = { status: 'started'; userMessage: MessageRecord };
 export interface TurnRunner {
-  /** 占闸 → 落 user 消息 → 异步启动一轮生成，立即返回。占不到闸 → busy。 */
   startTurn(input: {
     session: SessionRow;
     definition: CapabilityDefinition;
     text: string;
     log: TurnLogger;
   }): Promise<StartTurnResult>;
-  /** 打断当前轮（会话保留）；无进行中的轮 → false。 */
   interrupt(sessionId: string): Promise<boolean>;
-  isBusy(sessionId: string): Promise<boolean>;
+  dispose(): void;
 }
 
-/** pi 转录消息 → messages 行入参（user 已单独落、自定义消息不落 → null）。 */
 function agentMessageToRow(m: unknown): { role: 'assistant' | 'tool'; content: unknown[] } | null {
   if (typeof m !== 'object' || m === null) return null;
   const msg = m as {
@@ -109,11 +76,9 @@ function agentMessageToRow(m: unknown): { role: 'assistant' | 'tool'; content: u
     toolName?: unknown;
     isError?: unknown;
   };
-  if (msg.role === 'assistant' && Array.isArray(msg.content) && msg.content.length > 0) {
+  if (msg.role === 'assistant' && Array.isArray(msg.content) && msg.content.length > 0)
     return { role: 'assistant', content: msg.content };
-  }
-  if (msg.role === 'toolResult') {
-    // pi ToolResultMessage → 单元素 toolResult 包装块（保住 toolCallId 配对，见 message-content.ts）。
+  if (msg.role === 'toolResult')
     return {
       role: 'tool',
       content: [
@@ -126,89 +91,145 @@ function agentMessageToRow(m: unknown): { role: 'assistant' | 'tool'; content: u
         },
       ],
     };
-  }
   return null;
 }
 
 export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
   const active = new Map<string, AbortController>();
-  deps.gate.subscribeInterrupts((sessionId) => active.get(sessionId)?.abort());
+  const unsubscribeInterrupts = deps.interrupts.subscribe((sessionId) =>
+    active.get(sessionId)?.abort(),
+  );
+  const sweepTimer =
+    deps.sweepIntervalMs === undefined
+      ? undefined
+      : setInterval(() => {
+          void (async () => {
+            try {
+              const swept = await sweepExpiredTurns(
+                deps.db,
+                new Date(Date.now() - TURN_ABANDON_AFTER_MS),
+              );
+              for (const turn of swept) {
+                const emitter = createTurnEmitter({
+                  eventLog: deps.eventLog,
+                  bus: deps.bus,
+                  sessionId: turn.sessionId,
+                  log: deps.log,
+                });
+                emitter.emit({
+                  type: EventType.RUN_ERROR,
+                  threadId: turn.sessionId,
+                  runId: turn.id,
+                  message: '服务异常中断,本轮已终止,请重试。',
+                });
+                await emitter.flush();
+              }
+            } catch (err) {
+              deps.log.error({ err }, 'turn sweep failed');
+            }
+          })();
+        }, deps.sweepIntervalMs);
+  sweepTimer?.unref?.();
 
   async function executeTurn(args: {
     sessionId: string;
     definition: CapabilityDefinition;
     text: string;
-    /** 本轮 user 消息的 seq（它之前的定稿才是历史）。 */
-    userSeq: number;
     controller: AbortController;
     runId: string;
-    owner: string;
     log: TurnLogger;
   }): Promise<void> {
-    const { sessionId, controller, log, runId, owner } = args;
+    const { sessionId, controller, log, runId } = args;
     const emitter: TurnEmitter = createTurnEmitter({
       eventLog: deps.eventLog,
       bus: deps.bus,
       sessionId,
       log,
     });
-    // 流式 messageId：前端聚增量用（落库行 id 由 DB 生成，终态后前端以详情接口为真源）。
     const messageId = randomUUID();
     const base = { threadId: sessionId, runId };
-
+    let nextIdx = 1;
     let assistantText = '';
     let textOpen = false;
     const openText = (): void => {
-      if (textOpen) return;
-      textOpen = true;
-      emitter.emit({ type: EventType.TEXT_MESSAGE_START, ...base, messageId, role: 'assistant' });
+      if (!textOpen) {
+        textOpen = true;
+        emitter.emit({ type: EventType.TEXT_MESSAGE_START, ...base, messageId, role: 'assistant' });
+      }
     };
     const closeText = (): void => {
-      if (!textOpen) return;
-      textOpen = false;
-      emitter.emit({ type: EventType.TEXT_MESSAGE_END, ...base, messageId });
+      if (textOpen) {
+        textOpen = false;
+        emitter.emit({ type: EventType.TEXT_MESSAGE_END, ...base, messageId });
+      }
     };
 
-    /** 失败/打断统一收尾：落 failed 消息 + RUN_ERROR（终态事件必先写日志再返回）。 */
     const finishFailed = async (userMessage: string, failedContent?: unknown[]): Promise<void> => {
       closeText();
-      await appendMessage(deps.db, {
+      await appendTurnMessage(deps.db, {
         sessionId,
+        turnId: runId,
+        idx: nextIdx++,
         role: 'assistant',
         content: failedContent ?? [{ type: 'text', text: userMessage }],
         status: 'failed',
       }).catch((err) => log.error({ err }, 'persist failed message failed'));
+      const ok = await finishTurnCas(deps.db, {
+        id: runId,
+        status: 'failed',
+        lastError: { code: 'TURN_FAILED', message: userMessage },
+      });
+      if (!ok) {
+        log.error({ runId }, 'turn terminal state already claimed');
+        return;
+      }
       emitter.emit({ type: EventType.RUN_ERROR, ...base, message: userMessage });
       await emitter.flush();
     };
     const finishInterrupted = async (): Promise<void> => {
-      // 已生成的部分文本保进 failed 消息，不静默丢弃。
-      await finishFailed(
-        '本轮生成已打断。',
-        assistantText ? [{ type: 'text', text: assistantText }] : undefined,
-      );
+      closeText();
+      const message = '本轮生成已打断。';
+      await appendTurnMessage(deps.db, {
+        sessionId,
+        turnId: runId,
+        idx: nextIdx++,
+        role: 'assistant',
+        content: assistantText
+          ? [{ type: 'text', text: assistantText }]
+          : [{ type: 'text', text: message }],
+        status: 'failed',
+      }).catch((err) => log.error({ err }, 'persist interrupted message failed'));
+      const ok = await finishTurnCas(deps.db, {
+        id: runId,
+        status: 'interrupted',
+        lastError: { code: 'TURN_FAILED', message },
+      });
+      if (!ok) {
+        log.error({ runId }, 'turn terminal state already claimed');
+        return;
+      }
+      emitter.emit({ type: EventType.RUN_ERROR, ...base, message });
+      await emitter.flush();
     };
 
     emitter.emit({ type: EventType.RUN_STARTED, ...base });
-
     let history: MessageRecord[];
     try {
-      // 历史 = 本轮 user 消息之前的定稿；failed 消息是 UI 错误记录，不进 agent 上下文。
       const all = await getMessages(deps.db, sessionId);
-      history = all.filter((m) => m.seq < args.userSeq && m.status === 'completed');
+      history = all.filter((m) =>
+        m.turnId ? m.turnStatus === 'completed' : m.status === 'completed',
+      );
     } catch (err) {
       log.error({ err }, 'load history failed');
       await finishFailed('服务开小差了，请重试。');
       return;
     }
-
     const tools = [
       createArtifactTool({
         db: deps.db,
         objectStore: deps.objectStore,
         sessionId,
-        // 产物更新 → AG-UI 共享状态：add /artifacts/<id>（对已存在成员即替换）+ 置活跃产物。
-        onArtifact: (artifact) => {
+        onArtifact: (artifact) =>
           emitter.emit({
             type: EventType.STATE_DELTA,
             ...base,
@@ -216,11 +237,9 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
               { op: 'add', path: `/artifacts/${artifact.id}`, value: artifact },
               { op: 'add', path: '/activeArtifactId', value: artifact.id },
             ],
-          });
-        },
+          }),
       }),
     ];
-
     let agent: TurnAgent;
     try {
       agent = deps.agentFactory({ definition: args.definition, history, tools });
@@ -234,11 +253,8 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
 
     const onAbort = (): void => agent.abort();
     controller.signal.addEventListener('abort', onAbort, { once: true });
-
-    // 空闲看门狗：任意活动（文本 delta / 工具调用等一切事件）之间超过阈值 → 判连接夯死，
-    // abort 走统一打断链路，随后按 idleTimedOut 区分文案收尾（不限制轮次总时长）。
+    if (controller.signal.aborted) agent.abort();
     let idleTimedOut = false;
-    let leaseLost = false;
     let idleTimer: NodeJS.Timeout | undefined;
     const armIdleWatchdog = (): void => {
       clearTimeout(idleTimer);
@@ -249,7 +265,6 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
       }, deps.idleTimeoutMs);
       idleTimer.unref?.();
     };
-
     const unsubscribe = agent.subscribeTextDelta((delta) => {
       armIdleWatchdog();
       openText();
@@ -257,46 +272,13 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
       emitter.emit({ type: EventType.TEXT_MESSAGE_CONTENT, ...base, messageId, delta });
     });
     const unsubscribeActivity = agent.subscribeActivity?.(armIdleWatchdog);
-
-    const finishAborted = async (): Promise<void> =>
-      leaseLost
+    const finishAborted = (): Promise<void> =>
+      idleTimedOut
         ? finishFailed(
-            '服务调度异常，本轮已终止，请重试。',
+            `模型响应停滞超过 ${Math.round(deps.idleTimeoutMs / 1000)} 秒，本轮已终止，请重试。`,
             assistantText ? [{ type: 'text', text: assistantText }] : undefined,
           )
-        : idleTimedOut
-          ? finishFailed(
-              `模型响应停滞超过 ${Math.round(deps.idleTimeoutMs / 1000)} 秒，本轮已终止，请重试。`,
-              assistantText ? [{ type: 'text', text: assistantText }] : undefined,
-            )
-          : finishInterrupted();
-
-    // 续租报错容忍瞬断：单次网络抖动不杀轮，连续失败快耗尽租约窗口才按丢租约自停
-    // （阈值 = 窗口内续租次数 - 1，触发时租约仍有余量，别的实例还抢不到闸，自停是安全侧）。
-    const renewFailLimit = Math.max(1, Math.floor(GATE_TTL_MS / GATE_RENEW_MS) - 1);
-    let renewFailStreak = 0;
-    const renewTimer = setInterval(() => {
-      void deps.gate
-        .renewAndReadInterrupt(sessionId, owner, GATE_TTL_MS)
-        .then((result) => {
-          renewFailStreak = 0;
-          if (!result.owned) {
-            leaseLost = true;
-            controller.abort();
-          } else if (result.interrupted) {
-            controller.abort();
-          }
-        })
-        .catch((err) => {
-          renewFailStreak += 1;
-          log.error({ err, renewFailStreak }, 'turn lease renewal failed');
-          if (renewFailStreak >= renewFailLimit) {
-            leaseLost = true;
-            controller.abort();
-          }
-        });
-    }, GATE_RENEW_MS);
-    renewTimer.unref?.();
+        : finishInterrupted();
     armIdleWatchdog();
     try {
       await agent.prompt(args.text);
@@ -309,43 +291,45 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
       await finishFailed('对话生成失败，请重试。');
       return;
     } finally {
-      clearInterval(renewTimer);
       clearTimeout(idleTimer);
       unsubscribe();
       unsubscribeActivity?.();
       controller.signal.removeEventListener('abort', onAbort);
     }
-
     if (controller.signal.aborted) {
       await finishAborted();
       return;
     }
-
-    // pi 把运行时失败编码进最终消息（stopReason='error'）而非抛错，显式探测。
     const runtimeError = agent.runtimeError();
     if (runtimeError !== undefined) {
       log.error({ runtimeError }, 'llm runtime failure (encoded in message)');
       await finishFailed('模型调用失败（额度/网络/服务波动），请重试。');
       return;
     }
-
     closeText();
-
     try {
-      // 转录 = 历史 + 本轮 user（prompt 注入）+ 本轮新消息；只落新消息。
       const fresh = agent.transcript().slice(history.length + 1);
       for (const m of fresh) {
         const row = agentMessageToRow(m);
-        if (row) {
-          await appendMessage(deps.db, { sessionId, ...row, status: 'completed' });
-        }
+        if (row)
+          await appendTurnMessage(deps.db, {
+            sessionId,
+            turnId: runId,
+            idx: nextIdx++,
+            ...row,
+            status: 'completed',
+          });
       }
     } catch (err) {
       log.error({ err }, 'persist turn messages failed');
       await finishFailed('本轮回复未能保存（数据库异常），请重试。');
       return;
     }
-
+    const ok = await finishTurnCas(deps.db, { id: runId, status: 'completed' });
+    if (!ok) {
+      log.error({ runId }, 'turn terminal state already claimed');
+      return;
+    }
     emitter.emit({ type: EventType.RUN_FINISHED, ...base });
     await emitter.flush();
   }
@@ -354,60 +338,57 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
     async startTurn(input) {
       const sessionId = input.session.id;
       const runId = randomUUID();
-      // owner 就用 runId(每轮唯一):归属比对只需要唯一性;定位实例看日志,不进业务状态。
-      const owner = runId;
-      if (!(await deps.gate.acquire(sessionId, owner, GATE_TTL_MS))) return { status: 'busy' };
-      const controller = new AbortController();
-      active.set(sessionId, controller);
-
+      await createTurn(deps.db, { id: runId, sessionId });
       let userMessage: MessageRecord;
       try {
-        userMessage = await appendMessage(deps.db, {
+        userMessage = await appendTurnMessage(deps.db, {
           sessionId,
+          turnId: runId,
+          idx: 0,
           role: 'user',
           content: [{ type: 'text', text: input.text }],
           status: 'completed',
         });
       } catch (err) {
-        if (active.get(sessionId) === controller) active.delete(sessionId);
-        await deps.gate.release(sessionId, owner).catch(() => undefined);
+        await finishTurnCas(deps.db, {
+          id: runId,
+          status: 'failed',
+          lastError: {
+            code: 'SUBMIT_FAILED',
+            message: err instanceof Error ? err.message : String(err),
+          },
+        }).catch(() => false);
         throw err;
       }
-
+      const controller = new AbortController();
+      active.set(sessionId, controller);
       void executeTurn({
         sessionId,
         definition: input.definition,
         text: input.text,
-        userSeq: userMessage.seq,
         controller,
         runId,
-        owner,
         log: input.log,
       })
         .catch((err) => input.log.error({ err }, 'turn crashed'))
         .finally(() => {
           if (active.get(sessionId) === controller) active.delete(sessionId);
-          void deps.gate
-            .release(sessionId, owner)
-            .catch((err) => input.log.error({ err }, 'release turn lease failed'));
         });
-
       return { status: 'started', userMessage };
     },
-
     async interrupt(sessionId) {
       const controller = active.get(sessionId);
       if (controller) {
         controller.abort();
         return true;
       }
-      if (!(await deps.gate.isHeld(sessionId))) return false;
-      await deps.gate.requestInterrupt(sessionId, INTERRUPT_FLAG_TTL_MS);
+      if (!(await hasRunningTurn(deps.db, sessionId))) return false;
+      deps.interrupts.publish(sessionId);
       return true;
     },
-
-    isBusy(sessionId) {
-      return deps.gate.isHeld(sessionId);
+    dispose() {
+      clearInterval(sweepTimer);
+      unsubscribeInterrupts();
     },
   };
 }

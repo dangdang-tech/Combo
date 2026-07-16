@@ -14,7 +14,7 @@ import {
   waitFor,
   type FakeAgentScript,
 } from './fakes.js';
-import { FakeTurnGateStore } from './fake-turn-gate.js';
+import { createInterruptBus } from '../platform/infra/redis-interrupt-bus.js';
 
 const ME = 'user-me';
 
@@ -35,7 +35,6 @@ async function setup(script: FakeAgentScript = {}, idleTimeoutMs = 60_000) {
   const bus = createSessionEventBus();
   const eventLog = new FakeSessionEventLog();
   const handle = makeFakeAgentFactory(script);
-  const gate = new FakeTurnGateStore();
   const runner = createTurnRunner({
     db,
     objectStore: store,
@@ -43,13 +42,14 @@ async function setup(script: FakeAgentScript = {}, idleTimeoutMs = 60_000) {
     eventLog,
     agentFactory: handle.factory,
     idleTimeoutMs,
-    gate,
+    interrupts: createInterruptBus(),
+    log: silentLog,
   });
   const cap = db.seedCapability({ owner_user_id: ME });
   const session: SessionRow = await createSession(db, { capabilityId: cap.id, ownerUserId: ME });
   const published: PublishedStreamEvent[] = [];
   bus.subscribe(session.id, (e) => published.push(e));
-  return { db, eventLog, store, bus, handle, gate, runner, session, published };
+  return { db, eventLog, store, bus, handle, runner, session, published };
 }
 
 function eventTypes(eventLog: FakeSessionEventLog, sessionId: string): unknown[] {
@@ -58,11 +58,16 @@ function eventTypes(eventLog: FakeSessionEventLog, sessionId: string): unknown[]
 
 async function runToIdle(
   runner: ReturnType<typeof createTurnRunner>,
+  db: FakeDb,
   session: SessionRow,
   text = '帮我整理这份速记',
 ) {
   const result = await runner.startTurn({ session, definition: DEFINITION, text, log: silentLog });
-  if (result.status === 'started') await waitFor(async () => !(await runner.isBusy(session.id)));
+  await waitFor(() =>
+    [...db.turns.values()].every(
+      (turn) => turn.session_id !== session.id || turn.status !== 'running',
+    ),
+  );
   return result;
 }
 
@@ -90,7 +95,7 @@ describe('run-turn 成功路径', () => {
       ],
     });
 
-    const result = await runToIdle(runner, session);
+    const result = await runToIdle(runner, db, session);
     expect(result.status).toBe('started');
     if (result.status === 'started') {
       expect(result.userMessage.seq).toBe(1);
@@ -113,11 +118,11 @@ describe('run-turn 成功路径', () => {
 
     // 整轮定稿：user + assistant + tool + assistant，全 completed。
     const rows = db.messages.filter((m) => m.session_id === session.id);
-    expect(rows.map((m) => [m.seq, m.role, m.status])).toEqual([
-      [1, 'user', 'completed'],
-      [2, 'assistant', 'completed'],
-      [3, 'tool', 'completed'],
-      [4, 'assistant', 'completed'],
+    expect(rows.map((m) => [m.idx, m.role, m.status])).toEqual([
+      [0, 'user', 'completed'],
+      [1, 'assistant', 'completed'],
+      [2, 'tool', 'completed'],
+      [3, 'assistant', 'completed'],
     ]);
     // 产物工具真实走通（表 + MinIO 在 artifact.test 覆盖，这里验接线）。
     expect(db.artifacts.size).toBe(1);
@@ -128,11 +133,11 @@ describe('run-turn 成功路径', () => {
   });
 
   it('第二轮把上一轮定稿作为历史喂给 agent（failed 消息除外）', async () => {
-    const { runner, session, handle } = await setup({
+    const { db, runner, session, handle } = await setup({
       finalMessages: [{ role: 'assistant', content: [{ type: 'text', text: '好的' }] }],
     });
-    await runToIdle(runner, session, '第一轮');
-    await runToIdle(runner, session, '第二轮');
+    await runToIdle(runner, db, session, '第一轮');
+    await runToIdle(runner, db, session, '第二轮');
 
     const secondHistory = handle.calls[1]?.history ?? [];
     // 历史 = 第一轮的 user + assistant（不含第二轮自己的 user 消息）。
@@ -140,8 +145,8 @@ describe('run-turn 成功路径', () => {
   });
 });
 
-describe('run-turn busy 闸与打断', () => {
-  it('同会话生成中再发 → busy 且不落第二条 user 消息；打断后闸释放', async () => {
+describe('run-turn 打断', () => {
+  it('本地执行句柄被打断后落 interrupted 终态', async () => {
     const { db, eventLog, runner, session } = await setup({
       deltas: ['部分'],
       hangUntilAbort: true,
@@ -154,19 +159,8 @@ describe('run-turn busy 闸与打断', () => {
       log: silentLog,
     });
     expect(first.status).toBe('started');
-    expect(await runner.isBusy(session.id)).toBe(true);
-
-    const second = await runner.startTurn({
-      session,
-      definition: DEFINITION,
-      text: '第二条',
-      log: silentLog,
-    });
-    expect(second.status).toBe('busy');
-    expect(db.messages.filter((m) => m.role === 'user')).toHaveLength(1); // 第二条没落库
-
     expect(await runner.interrupt(session.id)).toBe(true);
-    await waitFor(async () => !(await runner.isBusy(session.id)));
+    await waitFor(() => [...db.turns.values()].every((turn) => turn.status !== 'running'));
 
     // 打断落 failed 消息（已生成的部分文本保留），事件以 RUN_ERROR 收尾、无 RUN_FINISHED。
     const failed = db.messages.find((m) => m.role === 'assistant');
@@ -176,7 +170,6 @@ describe('run-turn busy 闸与打断', () => {
     expect(types).toContain(EventType.RUN_ERROR);
     expect(types).not.toContain(EventType.RUN_FINISHED);
 
-    // 闸已释放：可开下一轮；无进行中的轮时 interrupt → false。
     expect(await runner.interrupt(session.id)).toBe(false);
   });
 });
@@ -196,7 +189,7 @@ describe('run-turn 空闲看门狗（issue #51：流中途停滞永无终态）'
     });
     expect(result.status).toBe('started');
     // 不做人工 interrupt：看门狗自己判死并收尾。
-    await waitFor(async () => !(await runner.isBusy(session.id)));
+    await waitFor(() => [...db.turns.values()].every((turn) => turn.status !== 'running'));
 
     const failed = db.messages.find((m) => m.role === 'assistant');
     expect(failed?.status).toBe('failed');
@@ -212,7 +205,7 @@ describe('run-turn 空闲看门狗（issue #51：流中途停滞永无终态）'
 describe('run-turn 失败路径（失败落 failed 消息 + RUN_ERROR）', () => {
   it('agent.prompt 抛错', async () => {
     const { db, eventLog, runner, session } = await setup({ promptError: new Error('llm down') });
-    await runToIdle(runner, session);
+    await runToIdle(runner, db, session);
 
     const failed = db.messages.find((m) => m.role === 'assistant');
     expect(failed?.status).toBe('failed');
@@ -222,7 +215,7 @@ describe('run-turn 失败路径（失败落 failed 消息 + RUN_ERROR）', () =>
 
   it('pi 把失败编码进消息（runtimeError）', async () => {
     const { db, runner, session } = await setup({ runtimeError: 'credit exhausted' });
-    await runToIdle(runner, session);
+    await runToIdle(runner, db, session);
 
     const failed = db.messages.find((m) => m.role === 'assistant');
     expect(failed?.status).toBe('failed');
@@ -244,7 +237,8 @@ describe('run-turn 失败路径（失败落 failed 消息 + RUN_ERROR）', () =>
         throw new TurnAgentUnavailableError('试用服务未配置模型密钥，暂时无法对话。');
       },
       idleTimeoutMs: 60_000,
-      gate: new FakeTurnGateStore(),
+      interrupts: createInterruptBus(),
+      log: silentLog,
     });
     const result = await runner.startTurn({
       session,
@@ -253,7 +247,7 @@ describe('run-turn 失败路径（失败落 failed 消息 + RUN_ERROR）', () =>
       log: silentLog,
     });
     expect(result.status).toBe('started');
-    await waitFor(async () => !(await runner.isBusy(session.id)));
+    await waitFor(() => [...db.turns.values()].every((turn) => turn.status !== 'running'));
 
     const failed = db.messages.find((m) => m.role === 'assistant');
     expect(failed?.status).toBe('failed');

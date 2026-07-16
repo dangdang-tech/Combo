@@ -14,7 +14,7 @@ import {
   type ErrorCodeValue,
 } from '@cb/shared';
 import { loadEnv, type Env } from '../platform/config/env.js';
-import { buildInfra, createRedisTurnGateStore } from '../platform/infra/index.js';
+import { buildInfra, createRedisInterruptBus } from '../platform/infra/index.js';
 import { registerHealthRoutes } from '../platform/http/health.js';
 import {
   currentTraceId,
@@ -22,6 +22,7 @@ import {
   currentTraceparent,
 } from '../platform/observability/node.js';
 import { createTurnRunner } from '../modules/agent/run-turn.js';
+import { TURN_SWEEP_INTERVAL_MS } from '../modules/agent/turn-repo.js';
 import { createPiTurnAgentFactory } from '../modules/agent/build-agent.js';
 import { registerBusinessRoutes } from './routes.js';
 // 副作用导入：注册 Fastify 类型增强（req.auth / app.infra / app.turns）。
@@ -56,7 +57,6 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
 
   // —— 基础设施容器 + 轮次编排器 ——
   const infra = buildInfra(env);
-  const gate = createRedisTurnGateStore(env);
   app.decorate('infra', infra);
   app.decorate(
     'turns',
@@ -67,7 +67,9 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
       eventLog: infra.eventLog,
       agentFactory: createPiTurnAgentFactory(env),
       idleTimeoutMs: env.RUNTIME_TURN_IDLE_TIMEOUT_MS,
-      gate,
+      interrupts: createRedisInterruptBus(env),
+      sweepIntervalMs: TURN_SWEEP_INTERVAL_MS,
+      log: app.log,
     }),
   );
 
@@ -126,6 +128,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
 
   // 进程退出时关闭基础设施连接。
   app.addHook('onClose', async () => {
+    app.turns.dispose();
     const { closeDb, closeObjectStore, closeRedis } = await import('../platform/infra/index.js');
     await closeDb();
     closeObjectStore();

@@ -33,5 +33,5 @@ export * from './llm.js';
 export * from './logto.js';
 export * from './dev-session.js';
 export * from './redis.js';
-export * from './redis-turn-gate.js';
+export * from './redis-interrupt-bus.js';
 export * from './redis-event-log.js';

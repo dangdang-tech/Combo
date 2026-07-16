@@ -1,7 +1,7 @@
 // sessions / messages 两表 SQL。owner 校验统一收在 SQL 的 owner_user_id 条件里：
 // 非本人与不存在同样 0 行（不暴露存在性）。
 import type { MessageRole, MessageStatus, MessageView, SessionView } from '@cb/shared';
-import { withTransaction, type Queryable, type RuntimeDb } from '../../platform/infra/db.js';
+import type { Queryable } from '../../platform/infra/db.js';
 import { parseMessageContent } from './message-content.js';
 
 /** timestamptz → ISO 字符串（pg 可能回 Date 或字符串）。 */
@@ -203,55 +203,4 @@ export async function appendTurnMessage(
     [input.sessionId],
   );
   return toMessageRecord(row, Number(count.rows[0]?.count ?? 0));
-}
-
-/**
- * 追加一条消息：锁会话行 → max(seq)+1 插入（并发轮次串行化 seq 分配；
- * uq_messages_session_seq 唯一约束兜底撞车）。同事务里 touch sessions.updated_at，
- * 首条用户消息时顺手补会话标题。content 写入前必过 parseMessageContent（坏块拒写）。
- */
-export async function appendMessage(
-  db: RuntimeDb,
-  input: {
-    sessionId: string;
-    role: MessageRole;
-    content: unknown[];
-    status?: MessageStatus;
-  },
-): Promise<MessageRecord> {
-  const content = parseMessageContent(input.role, input.content);
-  const status: MessageStatus = input.status ?? 'completed';
-
-  return withTransaction(db, async (tx) => {
-    const locked = await tx.query<{ id: string; title: string | null }>(
-      `SELECT id, title FROM sessions WHERE id = $1 FOR UPDATE`,
-      [input.sessionId],
-    );
-    if (!locked.rows[0]) throw new Error(`appendMessage: session ${input.sessionId} not found`);
-
-    const seqRes = await tx.query<{ m: number | null }>(
-      `SELECT MAX(seq) AS m FROM messages WHERE session_id = $1`,
-      [input.sessionId],
-    );
-    const seq = (seqRes.rows[0]?.m ?? 0) + 1;
-
-    const inserted = await tx.query<MessageDbRow>(
-      `INSERT INTO messages (session_id, seq, role, content, status)
-       VALUES ($1, $2, $3, $4::jsonb, $5)
-       RETURNING id, seq, role, content, status, created_at`,
-      [input.sessionId, seq, input.role, JSON.stringify(content), status],
-    );
-    const row = inserted.rows[0];
-    if (!row) throw new Error('appendMessage: insert returned no row');
-
-    // 首条用户消息 + 会话还没标题 → 用输入前 30 字补标题；其余只 touch updated_at。
-    const derivedTitle =
-      input.role === 'user' && !locked.rows[0].title ? deriveTitle(content) : null;
-    await tx.query(
-      `UPDATE sessions SET updated_at = now(), title = COALESCE(title, $2) WHERE id = $1`,
-      [input.sessionId, derivedTitle],
-    );
-
-    return toMessageRecord(row);
-  });
 }

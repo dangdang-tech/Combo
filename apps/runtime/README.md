@@ -1,7 +1,7 @@
 # apps/runtime（试用端 · 能力项播放器）
 
 创作者对某个 Capability 开会话试用的独立后端：形态类 Claude Artifacts（左聊天流右产物画布）。
-对话生成在接收请求的实例内异步运行，生命周期不绑定 HTTP 连接。Redis 会话租约保证多实例部署时同一会话同时最多运行一轮，打断请求可以发送到任意实例。
+对话生成在接收请求的实例内异步运行，生命周期不绑定 HTTP 连接。每次提交都会创建独立自治轮次并返回 202，同一会话可以并发运行多轮。打断请求通过 Redis 广播尽力送达任意实例。
 
 ## 与 authoring 的边界（铁律）
 
@@ -18,10 +18,10 @@
   Redis 事件日志与跨实例事件总线）· middleware/auth（登录态校验）· http（错误信封 / 健康检查 / client-events）· observability。
 - `modules/capability/`：loader（owner 本人 OR published 才放行 → MinIO 读定义 → schema 校验，
   version 不认识报「能力格式过新」）· 试用入口列表。
-- `modules/session/`：sessions/messages 两表 SQL（appendMessage 锁行分配 seq；content 写入前
+- `modules/session/`：sessions/messages 两表 SQL（按 turnId 与 idx 写入；content 写入前
   过 pi 原生消息块 schema，坏块拒写）· 会话端点 handler。
 - `modules/agent/`：build-agent（instructions 组系统提示词 + messages 历史以 pi 原生格式喂回）·
-  run-turn（一轮编排：会话级并发闸 / pi 事件翻 AG-UI / 双写）· stream（SSE，Last-Event-ID 补发 + 实时）·
+  run-turn（自治轮次编排、pi 事件翻 AG-UI 与事件双写）· stream（SSE，Last-Event-ID 补发 + 实时）·
   event-log / turn-emitter。
 - `modules/artifact/`：upsert_artifact pi 工具（内容写 MinIO `artifacts/{sessionId}/{artifactId}`，
   无版本原地覆盖）· 内容回读端点。
@@ -50,7 +50,7 @@ Redis Stream 保存进行中轮次的有序事件日志，断线连接凭 Last-E
 - `GET  /runtime/capabilities` 试用入口列表（我的全部 + 已发布的）
 - `POST /runtime/sessions` 开会话 · `GET /runtime/sessions` 我的会话列表（可带 `?capabilityId=` 只列某个能力下的会话）
 - `GET  /runtime/sessions/:id` 详情（消息按 seq + 产物 + 能力摘要，含定义里的开场表单字段与提示语）
-- `POST /runtime/sessions/:id/messages` 发消息（异步生成立即返回；生成中再发 → 409 SESSION_BUSY）
+- `POST /runtime/sessions/:id/messages` 发消息（异步生成并始终返回 202；并发提交各自创建轮次）
 - `POST /runtime/sessions/:id/interrupt` 打断当前轮
 - `GET  /runtime/sessions/:id/stream` 流式生成事件（SSE，心跳 15s，Last-Event-ID 续传）
 - `GET  /runtime/artifacts/:id/content` 产物内容回读（带正确 Content-Type）
@@ -68,4 +68,4 @@ DATABASE_URL=... REDIS_URL=redis://localhost:6379 S3_ENDPOINT=http://localhost:9
   PORT=3100 NODE_ENV=development pnpm -F @cb/runtime dev
 ```
 
-`REDIS_URL` 是必填连接串，必须指向采用 noeviction 策略的 redis_queue 实例，不能指向会驱逐键的 redis_hot。每个运行实例保留自己的执行句柄，Redis 只保存租约状态、打断标记并广播打断信号；租约归属用每轮生成的 runId 比对。
+`REDIS_URL` 是必填连接串，必须指向采用 noeviction 策略的 redis_queue 实例，不能指向会驱逐键的 redis_hot。每个运行实例保留自己的执行句柄，Redis 广播跨实例打断信号并承载事件流。打断是尽力而为的瞬时控制；超过三十分钟仍为 running 的孤儿轮次由周期清扫器补失败消息和终态事件。

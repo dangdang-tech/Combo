@@ -216,11 +216,6 @@ export class FakeDb implements Queryable, TxPool {
       if (!x || x.owner_user_id !== params[1]) return { rows: [], rowCount: 0 };
       return { rows: [{ ...x }] as R[], rowCount: 1 };
     }
-    if (s.includes('SELECT id, title FROM sessions WHERE id = $1 FOR UPDATE')) {
-      const x = this.sessions.get(params[0] as string);
-      if (!x) return { rows: [], rowCount: 0 };
-      return { rows: [{ id: x.id, title: x.title }] as R[], rowCount: 1 };
-    }
     if (s.includes('UPDATE sessions SET updated_at = now(), title = COALESCE(title, $2)')) {
       const [id, title] = params as [string, string | null];
       const x = this.sessions.get(id);
@@ -278,12 +273,6 @@ export class FakeDb implements Queryable, TxPool {
     }
 
     // ---------- messages ----------
-    if (s.includes('SELECT MAX(seq) AS m FROM messages WHERE session_id = $1')) {
-      const rows = this.messages.filter((m) => m.session_id === params[0]);
-      const seqs = rows.flatMap((r) => (r.seq === null ? [] : [r.seq]));
-      const m = seqs.length > 0 ? Math.max(...seqs) : null;
-      return { rows: [{ m }] as R[], rowCount: 1 };
-    }
     if (
       s.startsWith('INSERT INTO messages') &&
       s.includes('SELECT $1, $2, COALESCE(MAX(idx), 0)')
@@ -336,48 +325,6 @@ export class FakeDb implements Queryable, TxPool {
       };
       this.messages.push(row);
       return { rows: [{ ...row }] as R[], rowCount: 1 };
-    }
-    if (s.startsWith('INSERT INTO messages')) {
-      const [sessionId, msgSeq, role, contentJson, status] = params as [
-        string,
-        number,
-        string,
-        string,
-        string,
-      ];
-      // uq_messages_session_seq 唯一约束（兜底撞车语义与真库一致）。
-      if (this.messages.some((m) => m.session_id === sessionId && m.seq === msgSeq)) {
-        const err = new Error('duplicate key value violates "uq_messages_session_seq"') as Error & {
-          code: string;
-        };
-        err.code = '23505';
-        throw err;
-      }
-      const row: MessageRowF = {
-        id: nextId('msg'),
-        session_id: sessionId,
-        seq: msgSeq,
-        turn_id: null,
-        idx: null,
-        role,
-        content: JSON.parse(contentJson) as unknown[],
-        status,
-        created_at: nowIso(),
-      };
-      this.messages.push(row);
-      return {
-        rows: [
-          {
-            id: row.id,
-            seq: row.seq,
-            role: row.role,
-            content: row.content,
-            status: row.status,
-            created_at: row.created_at,
-          },
-        ] as R[],
-        rowCount: 1,
-      };
     }
     if (s.startsWith('SELECT count(*) AS count FROM messages')) {
       const count = this.messages.filter((m) => m.session_id === params[0]).length;
