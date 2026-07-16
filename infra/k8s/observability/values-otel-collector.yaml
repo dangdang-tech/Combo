@@ -1,0 +1,135 @@
+# 固定 fullname 后，跨命名空间入口就是 otel-collector.observability.svc.cluster.local。
+fullnameOverride: otel-collector
+mode: daemonset
+
+image:
+  repository: otel/opentelemetry-collector-contrib
+
+service:
+  # DaemonSet 模式默认不创建 Service，这里显式开启供 combo 命名空间应用发送 OTLP。
+  enabled: true
+  type: ClusterIP
+  internalTrafficPolicy: Cluster
+
+ports:
+  otlp:
+    enabled: true
+    containerPort: 4317
+    servicePort: 4317
+    # 不使用 hostPort，避免单节点端口占用，并让流量统一经过 ClusterIP Service。
+    hostPort: null
+    protocol: TCP
+    appProtocol: grpc
+  otlp-http:
+    enabled: true
+    containerPort: 4318
+    servicePort: 4318
+    hostPort: null
+    protocol: TCP
+  jaeger-compact:
+    enabled: false
+  jaeger-thrift:
+    enabled: false
+  jaeger-grpc:
+    enabled: false
+  zipkin:
+    enabled: false
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+# k3s 使用 containerd，实际日志入口是 /var/log/pods，因此不挂无用的 Docker containers 目录。
+extraVolumes:
+  - name: varlogpods
+    hostPath:
+      path: /var/log/pods
+      type: Directory
+extraVolumeMounts:
+  - name: varlogpods
+    mountPath: /var/log/pods
+    readOnly: true
+
+# 不启用 logsCollection preset，因为这里需要完整接管 CRI 解包及应用 JSON 字段提取规则。
+presets:
+  logsCollection:
+    enabled: false
+
+config:
+  extensions:
+    health_check:
+      endpoint: ${env:MY_POD_IP}:13133
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: ${env:MY_POD_IP}:4317
+        http:
+          endpoint: ${env:MY_POD_IP}:4318
+    filelog/k8s:
+      include:
+        - /var/log/pods/**/*.log
+      # 只采新日志，以对齐 Compose 版 start_at: end 并避免首次安装重灌历史文件。
+      start_at: end
+      include_file_path: true
+      operators:
+        # kubelet 的 CRI 行格式是“时间戳 stream F/P 原始行”，必须先去掉这一层包装。
+        - type: regex_parser
+          id: parse_cri
+          regex: '^(?P<time>[^ ]+) (?P<stream>stdout|stderr) (?P<cri_flag>[FP]) ?(?P<message>.*)$'
+          timestamp:
+            parse_from: attributes.time
+            layout_type: gotime
+            layout: '2006-01-02T15:04:05.999999999Z07:00'
+        # CRI 的 P 表示分片、F 表示一条日志结束；这里先重组再解析应用 JSON。
+        - type: recombine
+          id: recombine_cri
+          combine_field: attributes.message
+          is_last_entry: 'attributes.cri_flag == "F"'
+          source_identifier: attributes["log.file.path"]
+        - type: move
+          from: attributes.message
+          to: body
+        # 解析不会删除原始 body；traceId、trace_id 与 span_id 会成为日志属性并通过 Loki OTLP 保留为结构化元数据。
+        - type: json_parser
+          id: parse_app_json
+          parse_from: body
+          if: 'body matches "^\\{"'
+          on_error: send
+  processors:
+    memory_limiter:
+      check_interval: 5s
+      limit_percentage: 80
+      spike_limit_percentage: 25
+    resource/defaults:
+      attributes:
+        # 沿用 Compose 仪表盘依赖的资源属性，Loki 会把点号规范化为 service_namespace。
+        - key: service.namespace
+          value: combo-mvp
+          action: upsert
+    batch:
+      timeout: 2s
+      send_batch_size: 1024
+  exporters:
+    # Loki 3.x 原生接收 OTLP HTTP；这是当前推荐路径，避免使用已从 Collector 移除的 loki exporter。
+    otlphttp/loki:
+      endpoint: http://loki-gateway.observability.svc.cluster.local/otlp
+    otlp/tempo:
+      endpoint: tempo.observability.svc.cluster.local:4317
+      tls:
+        insecure: true
+  service:
+    extensions: [health_check]
+    pipelines:
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, resource/defaults, batch]
+        exporters: [otlp/tempo]
+      logs:
+        receivers: [otlp, filelog/k8s]
+        processors: [memory_limiter, resource/defaults, batch]
+        exporters: [otlphttp/loki]

@@ -1,0 +1,41 @@
+# grafana/tempo chart 本身就是单实例 chart，这里保持一个 StatefulSet 副本。
+replicas: 1
+
+tempo:
+  # 关闭多租户，与 Compose 中未配置租户认证的语义一致。
+  multitenancyEnabled: false
+  reportingEnabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  # Compose 未设置 trace 保留期，因此沿用 chart 的单机默认值 24h。
+  retention: 24h
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+  storage:
+    trace:
+      backend: local
+      wal:
+        path: /var/tempo/wal
+      local:
+        path: /var/tempo/traces
+
+persistence:
+  enabled: true
+  storageClassName: local-path
+  size: 5Gi
+
+# metrics-generator 在 Compose 蓝本中不存在，关闭它可避免引入 Prometheus 依赖。
+tempoQuery:
+  enabled: false
+serviceMonitor:
+  enabled: false
