@@ -35,7 +35,7 @@ spec:
       containers:
         - name: minio
           image: minio/minio
-          args: ["server", "/data", "--console-address", ":9001"]
+          args: ['server', '/data', '--console-address', ':9001']
           env:
             - name: MINIO_ROOT_USER
               valueFrom:
@@ -71,7 +71,7 @@ spec:
     - metadata:
         name: data
       spec:
-        accessModes: ["ReadWriteOnce"]
+        accessModes: ['ReadWriteOnce']
         storageClassName: local-path
         resources:
           requests:

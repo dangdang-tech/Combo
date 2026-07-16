@@ -49,7 +49,7 @@ spec:
       containers:
         - name: minio-init
           image: minio/mc
-          command: ["/bin/sh", "/scripts/init-buckets.sh"]
+          command: ['/bin/sh', '/scripts/init-buckets.sh']
           env:
             - name: S3_ENDPOINT
               value: http://minio:9000

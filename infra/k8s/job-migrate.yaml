@@ -18,17 +18,17 @@ spec:
       containers:
         - name: migrate
           image: ghcr.io/dangdang-tech/combo-api:latest
-          command: ["node", "--experimental-strip-types", "db/scripts/migrate.ts"]
+          command: ['node', '--experimental-strip-types', 'db/scripts/migrate.ts']
           env:
             - name: POSTGRES_USER
               valueFrom:
-                secretKeyRef: {name: combo-env, key: POSTGRES_USER}
+                secretKeyRef: { name: combo-env, key: POSTGRES_USER }
             - name: POSTGRES_PASSWORD
               valueFrom:
-                secretKeyRef: {name: combo-env, key: POSTGRES_PASSWORD}
+                secretKeyRef: { name: combo-env, key: POSTGRES_PASSWORD }
             - name: POSTGRES_DB
               valueFrom:
-                secretKeyRef: {name: combo-env, key: POSTGRES_DB}
+                secretKeyRef: { name: combo-env, key: POSTGRES_DB }
             - name: DATABASE_URL
               value: postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)
           resources:

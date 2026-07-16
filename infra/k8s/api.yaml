@@ -42,11 +42,11 @@ spec:
             - name: NODE_ENV
               value: production
             - name: DEV_LOGIN_ENABLED
-              value: "false"
+              value: 'false'
             - name: HOST
               value: 0.0.0.0
             - name: PORT
-              value: "3000"
+              value: '3000'
             - name: REDIS_QUEUE_URL
               value: redis://redis-queue:6379/0
             - name: REDIS_HOT_URL
@@ -57,13 +57,13 @@ spec:
               value: us-east-1
             - name: POSTGRES_USER
               valueFrom:
-                secretKeyRef: {name: combo-env, key: POSTGRES_USER}
+                secretKeyRef: { name: combo-env, key: POSTGRES_USER }
             - name: POSTGRES_PASSWORD
               valueFrom:
-                secretKeyRef: {name: combo-env, key: POSTGRES_PASSWORD}
+                secretKeyRef: { name: combo-env, key: POSTGRES_PASSWORD }
             - name: POSTGRES_DB
               valueFrom:
-                secretKeyRef: {name: combo-env, key: POSTGRES_DB}
+                secretKeyRef: { name: combo-env, key: POSTGRES_DB }
             - name: DATABASE_URL
               value: postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)
           ports:
