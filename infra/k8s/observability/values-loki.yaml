@@ -86,3 +86,9 @@ gateway:
     limits:
       cpu: 100m
       memory: 64Mi
+
+  # 单节点集群必须用 Recreate：chart 默认给 gateway 加了硬性 podAntiAffinity（且该字段是字符串模板，
+  # 空值会回落默认），滚动更新要求新旧 Pod 同节点共存，会永远 Pending 死锁。先杀旧再起新即可，
+  # 秒级空窗由采集器的重试队列兜底。
+  deploymentStrategy:
+    type: Recreate
