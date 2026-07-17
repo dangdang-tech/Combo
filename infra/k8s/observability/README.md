@@ -4,14 +4,12 @@
 
 ## 固定版本与仓库
 
-以下 chart 版本已于 2026-07-17 根据各项目官方 chart 仓库核实。Loki 使用 `7.0.0`，Tempo 使用 `1.24.4`，Grafana 使用 `10.5.15`，OpenTelemetry Collector 使用 `0.164.0`。固定版本可以避免后续上游 values 结构变化造成静默漂移。
+Grafana 系三个 chart（Loki、Tempo、Grafana）已从原 `grafana.github.io/helm-charts` 迁移到社区仓库 `grafana-community/helm-charts`（旧仓库 2026 年 1 月 30 日起停止更新，只剩带弃用标记的最终版本；Loki 的 OSS 版 2026 年 3 月 16 日也完成迁移）。本目录自 2026-07-17 起从社区仓库安装。
 
-请先添加并更新仓库。两个 Grafana 命令虽然指向同一个仓库，但这里按四个组件分别列出，便于逐项核对来源。
+当前固定版本：Loki 使用 `18.5.0`（社区仓库重新编号，应用版本 3.7.3），Tempo 使用 `2.2.3`（应用 2.10.7），Grafana 使用 `12.7.2`（应用 13.1.0），OpenTelemetry Collector 使用 `0.164.0`。固定版本可以避免后续上游 values 结构变化造成静默漂移。
 
 ```bash
-helm repo add grafana-loki https://grafana.github.io/helm-charts
-helm repo add grafana-tempo https://grafana.github.io/helm-charts
-helm repo add grafana https://grafana.github.io/helm-charts
+helm repo add grafana-community https://grafana-community.github.io/helm-charts
 helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
 helm repo update
 ```
@@ -21,13 +19,15 @@ helm repo update
 请在本目录执行命令。安装顺序是 Loki、Tempo、Collector、Grafana，这样 Collector 启动发送数据时两个后端已经存在，最后启动的 Grafana 也能立即连接数据源。`--create-namespace` 会在首次安装时创建命名空间。
 
 ```bash
-helm upgrade --install loki grafana-loki/loki --version 7.0.0 --namespace observability --create-namespace --values values-loki.yaml --wait
-helm upgrade --install tempo grafana-tempo/tempo --version 1.24.4 --namespace observability --values values-tempo.yaml --wait
+helm upgrade --install loki grafana-community/loki --version 18.5.0 --namespace observability --create-namespace --values values-loki.yaml --wait
+helm upgrade --install tempo grafana-community/tempo --version 2.2.3 --namespace observability --values values-tempo.yaml --wait
 helm upgrade --install otel-collector open-telemetry/opentelemetry-collector --version 0.164.0 --namespace observability --values values-otel-collector.yaml --wait
 set -a; source /opt/combo/infra/.env; set +a
 test -n "${GRAFANA_ADMIN_PASSWORD:?/opt/combo/infra/.env 必须设置 GRAFANA_ADMIN_PASSWORD}"
-helm upgrade --install grafana grafana/grafana --version 10.5.15 --namespace observability --values values-grafana.yaml --set-string adminPassword="$GRAFANA_ADMIN_PASSWORD" --wait
+helm upgrade --install grafana grafana-community/grafana --version 12.7.2 --namespace observability --values values-grafana.yaml --set-string adminPassword="$GRAFANA_ADMIN_PASSWORD" --wait
 ```
+
+单节点集群上升级 Loki 有一个必须知道的坑：chart 默认给 gateway 加了硬性的 Pod 反亲和，而滚动更新要求新旧 Pod 在同一节点短暂共存，两者矛盾会让新 Pod 永远排不上、升级超时死锁。values-loki.yaml 里已把 gateway 的更新策略固定为 Recreate（先杀旧再起新），不要移除；gateway 的 affinity 字段是字符串模板类型，传空值会回落到默认反亲和，改它无效。
 
 密码只通过 Helm 生成的 Kubernetes Secret 注入，不写入 values 文件。执行完安装后建议立即运行 `unset GRAFANA_ADMIN_PASSWORD`，减少密码留在当前 shell 环境中的时间。业务 `api`、`worker` 和 `runtime` 应把 `OTEL_EXPORTER_OTLP_ENDPOINT` 设置为 `http://otel-collector.observability.svc.cluster.local:4318`。
 
