@@ -1,5 +1,6 @@
 // useBootstrapDraft 单测（P0-2 草稿 bootstrap）：全新进入建草稿 / 已有 draftId 不建 / needsBootstrap=false 不建 /
 //   失败落 error + 重试复用同 key / 只建一次（不重复建行）。
+import { StrictMode } from 'react';
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -60,6 +61,23 @@ describe('useBootstrapDraft（P0-2 草稿 bootstrap）', () => {
     expect(call.headers['Idempotency-Key']).toBeTruthy();
     // 只建一次（不重复建行）。
     expect(mock.calls.filter((c) => c.method === 'POST')).toHaveLength(1);
+  });
+
+  it('StrictMode effect 重放复用同一在途请求，只发一次 POST（不与自身争抢幂等租约）', async () => {
+    mock = installFetchMock({ status: 201, json: { data: draftView({ id: 'draft-strict' }) } });
+    render(
+      <StrictMode>
+        <WizardProvider initialStep="import">
+          <Probe needsBootstrap />
+        </WizardProvider>
+      </StrictMode>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('ready'));
+    expect(screen.getByTestId('ctx-draft')).toHaveTextContent('draft-strict');
+    expect(mock.calls.filter((c) => c.url === '/api/v1/drafts' && c.method === 'POST')).toHaveLength(
+      1,
+    );
   });
 
   it('已有 draftId（续传/已建）→ ready，不再建（不打 POST /drafts）', async () => {

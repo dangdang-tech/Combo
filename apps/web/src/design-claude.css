@@ -386,7 +386,7 @@ body {
   background: var(--cb-action-primary-pressed);
 }
 
-:is(.cb-btn, .cb-auth-gate__action, .cb-error-state__action):disabled {
+:is(.cb-btn, .cb-auth-gate__action, .cb-public__action, .cb-error-state__action):disabled {
   border-color: var(--cb-border);
   background: var(--cb-border);
   color: var(--cb-muted);

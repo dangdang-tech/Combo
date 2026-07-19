@@ -14,6 +14,7 @@
 //
 // 失败：落人话 ApiError（上层就地 ErrorState + 重试，永不裸错）；不阻塞——重试即重发同 key 回放/补建。
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { DraftView } from '@cb/shared';
 import { ApiError } from '../../api/index.js';
 import { createDraft } from './draftApi.js';
 import { useWizard } from './WizardContext.js';
@@ -51,6 +52,9 @@ export function useBootstrapDraft(opts: { needsBootstrap: boolean }): UseBootstr
   const [error, setError] = useState<ApiError | null>(null);
   // 本次会话固定的幂等键（重试复用，回放首次草稿；仅在真正发请求时生成）。
   const keyRef = useRef<string | null>(null);
+  // 写请求一旦发出，服务端可能已经落库；StrictMode effect 重放必须复用同一 Promise，不能
+  // abort 后立刻再发同 key，否则第二笔会在首笔提交前命中幂等租约并得到 423。
+  const requestRef = useRef<Promise<DraftView> | null>(null);
   // 已建/已有过的 draftId（避免 ctx 回填后 effect 抖动重建）。
   const settledRef = useRef(false);
   const [attempt, setAttempt] = useState(0);
@@ -70,7 +74,6 @@ export function useBootstrapDraft(opts: { needsBootstrap: boolean }): UseBootstr
     // 已建过（settled）但 ctx 尚未刷出（极短窗口）：不重复建。
     if (settledRef.current) return;
 
-    const ctrl = new AbortController();
     let active = true;
     if (!keyRef.current) keyRef.current = newBootstrapKey();
     setStatus('creating');
@@ -78,17 +81,17 @@ export function useBootstrapDraft(opts: { needsBootstrap: boolean }): UseBootstr
 
     void (async () => {
       try {
-        const draft = await createDraft(
-          { idempotencyKey: keyRef.current ?? undefined },
-          { signal: ctrl.signal },
-        );
+        requestRef.current ??= createDraft({ idempotencyKey: keyRef.current ?? undefined });
+        const draft = await requestRef.current;
         if (!active) return;
         settledRef.current = true;
         setDraftId(draft.id); // 贯穿到 WizardContext，后续各步回填同一 draft。
         setStatus('ready');
       } catch (e) {
+        // 即使当前 effect 已因条件变化变为 inactive，也不能把 rejected Promise 留给下一次启用；
+        // 清掉后重试仍复用 keyRef 的幂等键，由服务端安全回放或补建。
+        requestRef.current = null;
         if (!active) return;
-        if (e instanceof DOMException && e.name === 'AbortError') return;
         const err =
           e instanceof ApiError
             ? e
@@ -107,7 +110,6 @@ export function useBootstrapDraft(opts: { needsBootstrap: boolean }): UseBootstr
 
     return () => {
       active = false;
-      ctrl.abort();
     };
   }, [ctxDraftId, needsBootstrap, attempt, setDraftId]);
 

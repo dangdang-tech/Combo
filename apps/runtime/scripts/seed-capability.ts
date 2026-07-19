@@ -1,7 +1,9 @@
 // 本地播种：插入 1~N 个【已发布】demo 能力（capabilities + capability_versions(status=published) +
-//   capabilities.current_version_id + marketplace_listings 卡片），让试用端本地可跑可演示。
+//   publications + capabilities.current_version_id + marketplace_listings 卡片），让创作者端与试用端
+//   都能按同一套真实发布读模型进行本地演示。
 //   manifest_hash 用 @cb/shared 的 canonicalManifest（与 authoring 发布门同算法）+ sha256，确保 runtime 载入校验通过。
-//   幂等：按 slug 已存在则跳过。需 DATABASE_URL（默认连本地 compose 的 PG）。
+//   幂等：按 slug 已存在时会修复旧版 demo 的发布投影；非 seed 产生的同名能力只跳过、不覆盖。
+//   需 DATABASE_URL（默认连本地 compose 的 PG）。
 import { createHash, randomUUID } from 'node:crypto';
 import { Client } from 'pg';
 import { canonicalManifest, ManifestSchema, type Manifest, type OutputType } from '@cb/shared';
@@ -183,14 +185,81 @@ async function main(): Promise<void> {
     if (!user) {
       throw new Error('seed: 库里没有任何 users，先建一个用户再播种（创作者归属需要）。');
     }
+    const normalizedProfileSlug = user.account
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    const profileSlug =
+      normalizedProfileSlug ||
+      `creator-${user.id.replace(/[^a-z0-9]/gi, '').slice(0, 12).toLowerCase()}`;
+    await client.query(
+      `INSERT INTO creator_profiles (user_id, slug, display_name, identity_tags, bio)
+       VALUES ($1, $2, $3, $4, '')
+       ON CONFLICT (user_id) DO NOTHING`,
+      [user.id, profileSlug, user.account, ['创作者']],
+    );
 
     for (const demo of DEMOS) {
-      const exists = await client.query<{ id: string }>(
-        `SELECT id FROM capabilities WHERE slug = $1`,
+      const exists = await client.query<{
+        id: string;
+        current_version_id: string | null;
+        has_listing: boolean;
+      }>(
+        `SELECT c.id,
+                c.current_version_id,
+                EXISTS (
+                  SELECT 1 FROM marketplace_listings ml WHERE ml.capability_id = c.id
+                ) AS has_listing
+           FROM capabilities c
+          WHERE c.slug = $1`,
         [demo.slug],
       );
-      if (exists.rows[0]) {
-        console.log(`skip（已存在）：${demo.slug}`);
+      const existing = exists.rows[0];
+      if (existing) {
+        // 旧版 seed 曾写入 trialEnabled=true 且缺 publications，导致 runtime schema 丢卡、
+        // authoring 又把同一能力显示为草稿。仅修复同时具备 current version + listing 的 seed 形态，
+        // 避免覆盖开发者自己创建的同 slug 能力。
+        if (!existing.current_version_id || !existing.has_listing) {
+          console.log(`skip（同 slug 非完整 demo）：${demo.slug}`);
+          continue;
+        }
+        await client.query('BEGIN');
+        try {
+          await client.query(
+            `UPDATE capabilities SET status = 'active', updated_at = now() WHERE id = $1`,
+            [existing.id],
+          );
+          await client.query(
+            `UPDATE capability_versions
+                SET status = 'published', visibility = 'public', updated_at = now()
+              WHERE id = $1 AND capability_id = $2`,
+            [existing.current_version_id, existing.id],
+          );
+          await client.query(
+            `INSERT INTO publications
+               (capability_id, current_version_id, share_token, visibility, review_status)
+             VALUES ($1, $2, $3, 'public', 'published')
+             ON CONFLICT (capability_id) DO UPDATE
+               SET current_version_id = EXCLUDED.current_version_id,
+                   visibility = 'public', review_status = 'published', reject_reason = NULL,
+                   reviewed_at = now(), updated_at = now()`,
+            [existing.id, existing.current_version_id, randomUUID()],
+          );
+          await client.query(
+            `UPDATE marketplace_listings
+                SET version_id = $2,
+                    card = jsonb_set(card, '{trialEnabled}', 'false'::jsonb, true),
+                    status = 'published', updated_at = now()
+              WHERE capability_id = $1`,
+            [existing.id, existing.current_version_id],
+          );
+          await client.query('COMMIT');
+          console.log(`repaired（已存在）：${demo.slug}`);
+        } catch (err) {
+          await client.query('ROLLBACK');
+          throw err;
+        }
         continue;
       }
 
@@ -225,7 +294,9 @@ async function main(): Promise<void> {
         byline: `@${user.account}`,
         trustBadge: '源自一次真实会话',
         price: { priceMicros: 0, display: '免费' },
-        trialEnabled: true,
+        // 正式发布卡遵循当前契约：试用入口由 runtime session 创建能力提供，卡片本身不声明
+        // authoring draft trial。这里必须保持 false，否则 MarketCardSchema 会防御性跳过整张卡。
+        trialEnabled: false,
         installs: null,
         rating: null,
       };
@@ -246,6 +317,12 @@ async function main(): Promise<void> {
         await client.query(
           `UPDATE capabilities SET current_version_id = $2, updated_at = now() WHERE id = $1`,
           [capabilityId, versionId],
+        );
+        await client.query(
+          `INSERT INTO publications
+             (capability_id, current_version_id, share_token, visibility, review_status)
+           VALUES ($1, $2, $3, 'public', 'published')`,
+          [capabilityId, versionId, randomUUID()],
         );
         await client.query(
           `INSERT INTO marketplace_listings
