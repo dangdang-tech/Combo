@@ -7,14 +7,7 @@
 //   - value=null 的点透传 null（ECharts connectNulls=false 默认断线），绝不补 0 误导。
 import type { EChartsOption, MarkPointComponentOption } from 'echarts';
 import type { TokenTrend } from '@cb/shared';
-import {
-  CHART_BORDER,
-  CHART_MUTED,
-  CHART_PEAK,
-  CHART_SERIES_FILL,
-  CHART_SERIES_FILL_BOTTOM,
-  CHART_SERIES_PRIMARY,
-} from '../theme.js';
+import { LIGHT_CHART_PALETTE, type ChartPalette } from '../theme.js';
 import { shortDate, trendValues, isAllNull, compactNumber } from './util.js';
 
 /** 口径 → 纵轴/tooltip 单位人话。 */
@@ -32,7 +25,10 @@ export function metricLabel(metric: TokenTrend['metric']): string {
  * @param trend 后端 TokenTrend（points 非空、且至少一个非 null 时才该调用本函数）。
  * 峰值标注仅当 trend.peak 非 null 且其 value 非 null 时落 markPoint（不误标）。
  */
-export function buildTokenTrendOption(trend: TokenTrend): EChartsOption {
+export function buildTokenTrendOption(
+  trend: TokenTrend,
+  palette: ChartPalette = LIGHT_CHART_PALETTE,
+): EChartsOption {
   const dates = trend.points.map((p) => shortDate(p.date));
   const values = trendValues(trend.points);
   const unit = metricUnit(trend.metric);
@@ -44,8 +40,8 @@ export function buildTokenTrendOption(trend: TokenTrend): EChartsOption {
     peak != null && peak.value != null && !isAllNull(trend.points)
       ? {
           symbolSize: 46,
-          itemStyle: { color: CHART_PEAK },
-          label: { color: '#fff', fontSize: 10, formatter: '峰值' },
+          itemStyle: { color: palette.peak },
+          label: { color: palette.peakLabel, fontSize: 10, formatter: '峰值' },
           data: [{ name: '峰值', coord: [shortDate(peak.date), peak.value], value: peak.value }],
         }
       : undefined;
@@ -60,16 +56,16 @@ export function buildTokenTrendOption(trend: TokenTrend): EChartsOption {
       type: 'category',
       data: dates,
       boundaryGap: false,
-      axisLine: { lineStyle: { color: CHART_BORDER } },
-      axisLabel: { color: CHART_MUTED, fontSize: 11, hideOverlap: true },
+      axisLine: { lineStyle: { color: palette.border } },
+      axisLabel: { color: palette.muted, fontSize: 11, hideOverlap: true },
       axisTick: { show: false },
     },
     yAxis: {
       type: 'value',
       name: unit,
-      nameTextStyle: { color: CHART_MUTED, fontSize: 11, align: 'right' },
-      axisLabel: { color: CHART_MUTED, fontSize: 11, formatter: (v: number) => compactNumber(v) },
-      splitLine: { lineStyle: { color: CHART_BORDER, type: 'dashed' } },
+      nameTextStyle: { color: palette.muted, fontSize: 11, align: 'right' },
+      axisLabel: { color: palette.muted, fontSize: 11, formatter: (v: number) => compactNumber(v) },
+      splitLine: { lineStyle: { color: palette.border, type: 'dashed' } },
     },
     series: [
       {
@@ -79,7 +75,7 @@ export function buildTokenTrendOption(trend: TokenTrend): EChartsOption {
         showSymbol: false,
         connectNulls: false, // 缺测断线，绝不连成假数据
         data: values,
-        lineStyle: { color: CHART_SERIES_PRIMARY, width: 2 },
+        lineStyle: { color: palette.seriesPrimary, width: 2 },
         areaStyle: {
           color: {
             type: 'linear',
@@ -88,8 +84,8 @@ export function buildTokenTrendOption(trend: TokenTrend): EChartsOption {
             x2: 0,
             y2: 1,
             colorStops: [
-              { offset: 0, color: CHART_SERIES_FILL },
-              { offset: 1, color: CHART_SERIES_FILL_BOTTOM },
+              { offset: 0, color: palette.seriesFill },
+              { offset: 1, color: palette.seriesFillBottom },
             ],
           },
         },

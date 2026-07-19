@@ -10,6 +10,8 @@ import type { DensityRankRow } from '@cb/shared';
 import { EChart } from './EChart.js';
 import { ChartSkeleton, ChartEmpty } from './ChartStates.js';
 import { buildDensityBarOption } from './options/densityBarOption.js';
+import { getChartPalette } from './theme.js';
+import { useResolvedTheme } from '../../theme/ThemeProvider.js';
 
 export interface DensityBarProps {
   /** 密度榜行（首屏前 3 或展开后更多）；null/undefined = 加载中。 */
@@ -25,12 +27,13 @@ export function DensityBar({
   rowHeight = 26,
   minHeight = 60,
 }: DensityBarProps): ReactElement {
+  const palette = getChartPalette(useResolvedTheme());
   if (rows == null) return <ChartSkeleton height={minHeight} label="密度榜加载中" />;
   if (rows.length === 0) return <ChartEmpty text="还没有能力" height={minHeight} />;
   const height = Math.max(minHeight, rows.length * rowHeight + 16);
   return (
     <EChart
-      option={buildDensityBarOption(rows)}
+      option={buildDensityBarOption(rows, palette)}
       height={height}
       ariaLabel={`能力会话密度排行，共 ${rows.length} 项`}
     />

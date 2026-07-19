@@ -5,13 +5,7 @@
 // 数据均真实，无占位分支；空（rows=[]）由调用方走空态组件。
 import type { EChartsOption } from 'echarts';
 import type { DensityRankRow } from '@cb/shared';
-import {
-  DENSITY_BAR_TOP,
-  DENSITY_BAR_REST,
-  CHART_MUTED,
-  CHART_FG,
-  TREND_COLORS,
-} from '../theme.js';
+import { LIGHT_CHART_PALETTE, TREND_COLORS, type ChartPalette } from '../theme.js';
 
 const TREND_ARROW: Record<DensityRankRow['trend'], string> = {
   up: '▲',
@@ -24,7 +18,10 @@ const TREND_ARROW: Record<DensityRankRow['trend'], string> = {
  * Y 轴名称含名次；条值=densityScore；tooltip 带支撑段数(信任货币)+趋势。
  * 名次靠前(前 3)用强调色，其余用淡色，传达「头部能力」。
  */
-export function buildDensityBarOption(rows: DensityRankRow[]): EChartsOption {
+export function buildDensityBarOption(
+  rows: DensityRankRow[],
+  palette: ChartPalette = LIGHT_CHART_PALETTE,
+): EChartsOption {
   // ECharts 类目轴自下而上，故倒序让 rank1 在最上。
   const ordered = [...rows].sort((a, b) => b.rank - a.rank);
   const names = ordered.map((r) => `${r.rank}. ${r.name}`);
@@ -51,21 +48,21 @@ export function buildDensityBarOption(rows: DensityRankRow[]): EChartsOption {
       data: names,
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: CHART_FG, fontSize: 12 },
+      axisLabel: { color: palette.fg, fontSize: 12 },
     },
     series: [
       {
         type: 'bar',
         data: ordered.map((r) => ({
           value: r.densityScore,
-          itemStyle: { color: r.rank <= 3 ? DENSITY_BAR_TOP : DENSITY_BAR_REST },
+          itemStyle: { color: r.rank <= 3 ? palette.densityBarTop : palette.densityBarRest },
         })),
         barWidth: 14,
         itemStyle: { borderRadius: [0, 7, 7, 0] },
         label: {
           show: true,
           position: 'right',
-          color: CHART_MUTED,
+          color: palette.muted,
           fontSize: 11,
           // 条尾显示趋势箭头 + 段数（信任货币露出）。
           formatter: (p: unknown) => {

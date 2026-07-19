@@ -14,6 +14,8 @@ import { ChartPlaceholder, ChartSkeleton, ChartEmpty } from './ChartStates.js';
 import { buildTokenTrendOption, metricLabel } from './options/tokenTrendOption.js';
 import { isAllNull } from './options/util.js';
 import { isPlaceholder } from '../UsagePlaceholder.js';
+import { getChartPalette } from './theme.js';
+import { useResolvedTheme } from '../../theme/ThemeProvider.js';
 
 export type TrendMetric = 'tokens' | 'invocations';
 
@@ -70,6 +72,7 @@ export function TokenTrendChart({
   onMetricChange,
 }: TokenTrendChartProps): ReactElement {
   const showToggle = metric !== undefined && onMetricChange !== undefined;
+  const palette = getChartPalette(useResolvedTheme());
 
   function body(): ReactElement {
     // 1. 加载中
@@ -85,7 +88,7 @@ export function TokenTrendChart({
     // 4. 真实数据
     return (
       <EChart
-        option={buildTokenTrendOption(trend)}
+        option={buildTokenTrendOption(trend, palette)}
         height={height}
         ariaLabel={`${metricLabel(trend.metric)}趋势图`}
       />

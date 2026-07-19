@@ -4,11 +4,14 @@
 // 占位/空（spendSparkline=null 或全 null）→ 调用方走占位组件，不调用本函数。
 import type { EChartsOption } from 'echarts';
 import type { TrendPoint } from '@cb/shared';
-import { CHART_SERIES_FILL, CHART_SERIES_PRIMARY } from '../theme.js';
+import { LIGHT_CHART_PALETTE, type ChartPalette } from '../theme.js';
 import { trendValues } from './util.js';
 
 /** 构造 sparkline option（无坐标系装饰，纯线形）。 */
-export function buildSparklineOption(points: TrendPoint[]): EChartsOption {
+export function buildSparklineOption(
+  points: TrendPoint[],
+  palette: ChartPalette = LIGHT_CHART_PALETTE,
+): EChartsOption {
   const values = trendValues(points);
   return {
     grid: { left: 1, right: 1, top: 2, bottom: 2 },
@@ -22,8 +25,8 @@ export function buildSparklineOption(points: TrendPoint[]): EChartsOption {
         showSymbol: false,
         connectNulls: false,
         data: values,
-        lineStyle: { color: CHART_SERIES_PRIMARY, width: 1.5 },
-        areaStyle: { color: CHART_SERIES_FILL, opacity: 0.5 },
+        lineStyle: { color: palette.seriesPrimary, width: 1.5 },
+        areaStyle: { color: palette.seriesFill, opacity: 0.5 },
       },
     ],
   };

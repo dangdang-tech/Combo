@@ -11,6 +11,8 @@ import { EChart } from './EChart.js';
 import { buildSparklineOption } from './options/sparklineOption.js';
 import { isAllNull } from './options/util.js';
 import { isPlaceholder, placeholderText } from '../UsagePlaceholder.js';
+import { getChartPalette } from './theme.js';
+import { useResolvedTheme } from '../../theme/ThemeProvider.js';
 
 export interface MiniSparklineProps {
   /** 行内趋势点；null = usage 占位（与 DashboardCapabilityRow.spendSparkline 一致）。 */
@@ -33,6 +35,7 @@ export function MiniSparkline({
   height = 28,
   ariaLabel = '消耗趋势迷你图',
 }: MiniSparklineProps): ReactElement {
+  const palette = getChartPalette(useResolvedTheme());
   // usage 占位（null 或后端标注）→ 行内得体占位，绝不画 0 线
   if (points == null || isPlaceholder(meta, placeholderField)) {
     return (
@@ -56,7 +59,7 @@ export function MiniSparkline({
   return (
     <span className="cb-sparkline">
       <EChart
-        option={buildSparklineOption(points)}
+        option={buildSparklineOption(points, palette)}
         width={width}
         height={height}
         ariaLabel={ariaLabel}
