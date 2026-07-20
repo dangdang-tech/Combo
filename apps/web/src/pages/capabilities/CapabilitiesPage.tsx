@@ -100,12 +100,24 @@ export function CapabilitiesPage(): ReactElement {
     body = <ErrorState error={capsQuery.error} onRetry={() => void capsQuery.refetch()} />;
   } else if (items.length === 0) {
     body = (
-      <div className="cb-empty">
-        <p className="cb-empty__title">{taskId ? '这个任务还没有能力项' : '还没有能力项'}</p>
-        <p className="cb-empty__hint">先在任务页上传对话历史，提取完成后能力项会出现在这里。</p>
-        <Link className="cb-empty__action" to="/tasks">
-          去任务页
-        </Link>
+      <div className="cb-empty cb-empty--capabilities">
+        <span className="cb-empty__index" aria-hidden="true">
+          01
+        </span>
+        <div className="cb-empty__copy">
+          <p className="cb-empty__title">{taskId ? '这个任务还没有能力项' : '还没有能力项'}</p>
+          <p className="cb-empty__hint">
+            先上传一段真实对话，提取完成后就能在这里发布、试用与分享。
+          </p>
+          <div className="cb-empty__actions">
+            <Link className="cb-empty__action cb-empty__action--primary" to="/tasks">
+              去上传任务
+            </Link>
+            <a className="cb-empty__action" href="/try/market">
+              先逛能力市集
+            </a>
+          </div>
+        </div>
       </div>
     );
   } else {

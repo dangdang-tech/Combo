@@ -1,7 +1,7 @@
 // 试用端 API：端点函数 + React Query hooks。类型全来自 @cb/shared 试用域契约。
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { ArtifactView, MessageView, SessionDetail, SessionView } from '@cb/shared';
-import { apiGet, apiGetText, apiPost } from './client.js';
+import { apiDelete, apiGet, apiGetText, apiPatch, apiPost } from './client.js';
 
 /** GET /runtime/capabilities 列表项（runtime 侧 TrialCapabilityItem，shared 未收录，这里对齐声明）。 */
 export interface TrialCapability {
@@ -52,6 +52,41 @@ export function useCreateSession() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['sessions'] });
     },
+  });
+}
+
+export interface UpdateSessionTitleInput {
+  sessionId: string;
+  title: string;
+}
+
+export function updateSessionTitle(input: UpdateSessionTitleInput): Promise<SessionView> {
+  return apiPatch<SessionView>(`/runtime/sessions/${input.sessionId}`, { title: input.title });
+}
+
+export function archiveSession(sessionId: string): Promise<SessionView> {
+  return apiDelete<SessionView>(`/runtime/sessions/${sessionId}`);
+}
+
+/** 改名/归档后，列表与当条详情都不能留旧缓存。 */
+export function invalidateSessionMutation(queryClient: QueryClient, sessionId: string): void {
+  void queryClient.invalidateQueries({ queryKey: ['sessions'] });
+  void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+}
+
+export function useUpdateSessionTitle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: updateSessionTitle,
+    onSuccess: (session) => invalidateSessionMutation(qc, session.id),
+  });
+}
+
+export function useArchiveSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: archiveSession,
+    onSuccess: (session) => invalidateSessionMutation(qc, session.id),
   });
 }
 

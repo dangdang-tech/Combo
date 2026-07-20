@@ -13,7 +13,9 @@ import {
   ConnectPrepareBodySchema,
   CapabilityDefinitionSchema,
   MessageViewSchema,
+  SESSION_TITLE_MAX_LENGTH,
   SendMessageBodySchema,
+  UpdateSessionBodySchema,
 } from '../index.js';
 import { z } from 'zod';
 
@@ -169,6 +171,15 @@ describe('试用域 DTO', () => {
     expect(SendMessageBodySchema.safeParse({ text: '你好' }).success).toBe(true);
     expect(SendMessageBodySchema.safeParse({ text: '' }).success).toBe(false);
     expect(SendMessageBodySchema.safeParse({ text: 'a'.repeat(20_001) }).success).toBe(false);
+  });
+
+  it('改名请求体会 trim，并拒绝空标题与超长标题', () => {
+    expect(UpdateSessionBodySchema.parse({ title: '  新名称  ' })).toEqual({ title: '新名称' });
+    expect(UpdateSessionBodySchema.safeParse({ title: '   ' }).success).toBe(false);
+    expect(
+      UpdateSessionBodySchema.safeParse({ title: 'a'.repeat(SESSION_TITLE_MAX_LENGTH + 1) })
+        .success,
+    ).toBe(false);
   });
 });
 

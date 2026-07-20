@@ -1,6 +1,6 @@
 // 导航外壳 Shell：左侧固定侧栏 + 主内容区，全流程恒定结构（无顶栏，内容直接从主区顶部开始）。
 //
-// 侧栏：顶部 Combo 品牌字标 + 收起/展开开关；中段两项导航（任务 / 能力）；底部当前账号常驻区。
+// 侧栏：顶部 Combo 品牌字标 + 收起/展开开关；中段三项导航（任务 / 能力 / 市集）；底部当前账号常驻区。
 // 子页经 <Outlet> 渲染。
 import type { ReactElement } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
@@ -64,6 +64,25 @@ export function Shell(): ReactElement {
 /** 单条侧栏导航项：展开显图标+文字；收起仅图标，文字降级为 title tooltip。 */
 function NavItemLink({ item, collapsed }: { item: NavItem; collapsed: boolean }): ReactElement {
   const Icon = item.icon;
+  const content = (
+    <>
+      <Icon className="cb-shell__navicon" />
+      <span className="cb-shell__navlabel">{item.label}</span>
+    </>
+  );
+  if (item.external) {
+    return (
+      <li>
+        <a
+          href={item.path}
+          className="cb-shell__navlink"
+          title={collapsed ? item.label : undefined}
+        >
+          {content}
+        </a>
+      </li>
+    );
+  }
   return (
     <li>
       <NavLink
@@ -73,8 +92,7 @@ function NavItemLink({ item, collapsed }: { item: NavItem; collapsed: boolean })
         }
         title={collapsed ? item.label : undefined}
       >
-        <Icon className="cb-shell__navicon" />
-        <span className="cb-shell__navlabel">{item.label}</span>
+        {content}
       </NavLink>
     </li>
   );

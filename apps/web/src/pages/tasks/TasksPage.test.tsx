@@ -117,7 +117,7 @@ describe('TasksPage — 列表状态渲染', () => {
     const rowOk = screen.getByText('完成的任务').closest('tr')!;
     expect(within(rowOk).getByText('提取完成')).toBeInTheDocument();
     expect(within(rowOk).getByText('4 个')).toBeInTheDocument();
-    expect(within(rowOk).getByRole('link', { name: '查看能力项' })).toHaveAttribute(
+    expect(within(rowOk).getByRole('link', { name: '查看并试用能力' })).toHaveAttribute(
       'href',
       '/capabilities?taskId=task-ok',
     );

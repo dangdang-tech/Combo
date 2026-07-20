@@ -1,7 +1,7 @@
 // sessions / messages 两表 SQL。owner 校验统一收在 SQL 的 owner_user_id 条件里：
 // 非本人与不存在同样 0 行（不暴露存在性）。
 import type { MessageRole, MessageStatus, MessageView, SessionView } from '@cb/shared';
-import type { Queryable } from '../../platform/infra/db.js';
+import { withTransaction, type Queryable, type RuntimeDb } from '../../platform/infra/db.js';
 import { parseMessageContent } from './message-content.js';
 
 /** timestamptz → ISO 字符串（pg 可能回 Date 或字符串）。 */
@@ -57,6 +57,33 @@ export function toSessionView(row: SessionRow): SessionView {
   };
 }
 
+/**
+ * 锁住一条 active 会话直到当前事务结束。开始轮次与归档必须共用这把行锁，
+ * 否则“请求已读到 active、turn 尚未插入”的窗口会把后台生成留在 closed 会话里。
+ */
+export async function lockActiveSession(
+  db: Queryable,
+  id: string,
+  ownerUserId: string,
+): Promise<SessionRow | null> {
+  const res = await db.query<SessionDbRow>(
+    `SELECT ${SESSION_COLUMNS}
+       FROM sessions
+      WHERE id = $1 AND owner_user_id = $2 AND status = 'active'
+      FOR UPDATE`,
+    [id, ownerUserId],
+  );
+  const row = res.rows[0];
+  return row ? toSessionRow(row) : null;
+}
+
+export class SessionBusyError extends Error {
+  constructor() {
+    super('session has a running turn');
+    this.name = 'SessionBusyError';
+  }
+}
+
 /** 建会话（loader 校验通过后调用）。 */
 export async function createSession(
   db: Queryable,
@@ -81,8 +108,9 @@ export async function listSessions(
 ): Promise<SessionRow[]> {
   const res = await db.query<SessionDbRow>(
     `SELECT ${SESSION_COLUMNS}
-       FROM sessions
+      FROM sessions
       WHERE owner_user_id = $1
+        AND status = 'active'
         AND ($2::uuid IS NULL OR capability_id = $2)
       ORDER BY updated_at DESC
       LIMIT 100`,
@@ -91,14 +119,63 @@ export async function listSessions(
   return res.rows.map(toSessionRow);
 }
 
-/** owner-scoped 取会话；非本人/不存在 → null。 */
+/** owner-scoped 改名；非本人、不存在或已归档 → null。 */
+export async function updateSessionTitle(
+  db: Queryable,
+  id: string,
+  ownerUserId: string,
+  title: string,
+): Promise<SessionRow | null> {
+  const res = await db.query<SessionDbRow>(
+    `UPDATE sessions
+        SET title = $3, updated_at = now()
+      WHERE id = $1 AND owner_user_id = $2 AND status = 'active'
+      RETURNING ${SESSION_COLUMNS}`,
+    [id, ownerUserId, title],
+  );
+  const row = res.rows[0];
+  return row ? toSessionRow(row) : null;
+}
+
+/** owner-scoped 软归档；保留会话与产物，但不再出现在默认列表或运行入口。 */
+export async function archiveSession(
+  db: RuntimeDb,
+  id: string,
+  ownerUserId: string,
+): Promise<SessionRow | null> {
+  return withTransaction(db, async (tx) => {
+    const active = await lockActiveSession(tx, id, ownerUserId);
+    if (!active) return null;
+
+    const running = await tx.query<{ exists: boolean }>(
+      `SELECT EXISTS (SELECT 1 FROM turns WHERE session_id = $1 AND status = 'running') AS exists`,
+      [id],
+    );
+    if (running.rows[0]?.exists) throw new SessionBusyError();
+
+    const res = await tx.query<SessionDbRow>(
+      `UPDATE sessions
+          SET status = 'closed', updated_at = now()
+        WHERE id = $1 AND owner_user_id = $2 AND status = 'active'
+        RETURNING ${SESSION_COLUMNS}`,
+      [id, ownerUserId],
+    );
+    const row = res.rows[0];
+    return row ? toSessionRow(row) : null;
+  });
+}
+
+/** owner-scoped 取 active 会话；非本人、不存在或已归档 → null。 */
 export async function getSession(
   db: Queryable,
   id: string,
   ownerUserId: string,
 ): Promise<SessionRow | null> {
   const res = await db.query<SessionDbRow>(
-    `SELECT ${SESSION_COLUMNS} FROM sessions WHERE id = $1 AND owner_user_id = $2 LIMIT 1`,
+    `SELECT ${SESSION_COLUMNS}
+       FROM sessions
+      WHERE id = $1 AND owner_user_id = $2 AND status = 'active'
+      LIMIT 1`,
     [id, ownerUserId],
   );
   const row = res.rows[0];

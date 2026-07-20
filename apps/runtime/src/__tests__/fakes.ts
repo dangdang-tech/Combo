@@ -205,6 +205,7 @@ export class FakeDb implements Queryable, TxPool {
       const capabilityId = (params[1] ?? null) as string | null;
       const rows = [...this.sessions.values()]
         .filter((x) => x.owner_user_id === owner)
+        .filter((x) => x.status === 'active')
         .filter((x) => capabilityId === null || x.capability_id === capabilityId)
         .sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1))
         .slice(0, 100)
@@ -213,7 +214,38 @@ export class FakeDb implements Queryable, TxPool {
     }
     if (s.includes('FROM sessions WHERE id = $1 AND owner_user_id = $2')) {
       const x = this.sessions.get(params[0] as string);
-      if (!x || x.owner_user_id !== params[1]) return { rows: [], rowCount: 0 };
+      if (!x || x.owner_user_id !== params[1] || x.status !== 'active') {
+        return { rows: [], rowCount: 0 };
+      }
+      return { rows: [{ ...x }] as R[], rowCount: 1 };
+    }
+    if (s.startsWith('UPDATE sessions SET title = $3')) {
+      const [id, ownerUserId, title] = params as [string, string, string];
+      const x = this.sessions.get(id);
+      if (!x || x.owner_user_id !== ownerUserId || x.status !== 'active') {
+        return { rows: [], rowCount: 0 };
+      }
+      x.title = title;
+      x.updated_at = nowIso();
+      return { rows: [{ ...x }] as R[], rowCount: 1 };
+    }
+    if (s.startsWith("UPDATE sessions SET status = 'closed'")) {
+      const [id, ownerUserId] = params as [string, string];
+      const x = this.sessions.get(id);
+      const guardsRunningTurn =
+        s.includes('NOT EXISTS') &&
+        s.includes('FROM turns') &&
+        s.includes("turns.session_id = sessions.id AND turns.status = 'running'");
+      const hasRunningTurn =
+        guardsRunningTurn &&
+        [...this.turns.values()].some(
+          (turn) => turn.session_id === id && turn.status === 'running',
+        );
+      if (!x || x.owner_user_id !== ownerUserId || x.status !== 'active' || hasRunningTurn) {
+        return { rows: [], rowCount: 0 };
+      }
+      x.status = 'closed';
+      x.updated_at = nowIso();
       return { rows: [{ ...x }] as R[], rowCount: 1 };
     }
     if (s.includes('UPDATE sessions SET updated_at = now(), title = COALESCE(title, $2)')) {

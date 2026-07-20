@@ -38,7 +38,7 @@ describe('TasksPage — 表格交互语义', () => {
         .map((cell) => cell.getAttribute('data-label')),
     ).toEqual(['任务', '状态', '上传进度', '能力项', '下一步']);
 
-    const capabilityLink = within(row).getByRole('link', { name: '查看能力项' });
+    const capabilityLink = within(row).getByRole('link', { name: '查看并试用能力' });
     expect(capabilityLink).toHaveClass('cb-task-action');
     expect(capabilityLink).toHaveAttribute('href', '/capabilities?taskId=task-ok');
     expect(screen.getByRole('columnheader', { name: '下一步' })).toBeInTheDocument();

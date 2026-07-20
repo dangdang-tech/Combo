@@ -3,14 +3,17 @@ import { describe, expect, it } from 'vitest';
 import type { FastifyReply, FastifyRequest, RouteHandlerMethod } from 'fastify';
 import { ALL_ENDPOINTS } from '../bootstrap/routes.js';
 import {
+  archiveSessionHandler,
   getSessionDetailHandler,
   interruptHandler,
   listSessionsHandler,
   sendMessageHandler,
+  updateSessionHandler,
 } from '../modules/session/handlers.js';
 import { CAPABILITY_BUCKET } from '../modules/capability/loader.js';
 import { artifactContentHandler } from '../modules/artifact/handlers.js';
 import { createSession } from '../modules/session/repo.js';
+import { createTurn } from '../modules/agent/turn-repo.js';
 import { createTurnRunner } from '../modules/agent/run-turn.js';
 import { createSessionEventBus } from '../platform/infra/event-bus.js';
 import { createInterruptBus } from '../platform/infra/redis-interrupt-bus.js';
@@ -26,8 +29,8 @@ const ME = 'user-me';
 const OTHER = 'user-other';
 
 describe('route registry self-check', () => {
-  it('registers exactly 8 endpoints (capability 1 + session 6 + artifact 1)', () => {
-    expect(ALL_ENDPOINTS).toHaveLength(8);
+  it('registers exactly 10 endpoints (capability 1 + session 8 + artifact 1)', () => {
+    expect(ALL_ENDPOINTS).toHaveLength(10);
   });
 
   it('no duplicate (method,url) pairs', () => {
@@ -165,6 +168,75 @@ describe('session 端点 owner 守卫', () => {
     expect(reply.statusCode).toBe(404);
   });
 
+  it('PATCH /runtime/sessions/:id：本人可改名，非本人 404', async () => {
+    const db = new FakeDb();
+    const sessionId = await seedOwnedSession(db, ME);
+
+    const mine = await call(
+      updateSessionHandler(),
+      makeReq({ db, userId: ME, params: { id: sessionId }, body: { title: '  项目复盘  ' } }),
+    );
+    expect(mine.statusCode).toBe(200);
+    expect((mine.body as { data: { title: string } }).data.title).toBe('项目复盘');
+
+    const theirs = await call(
+      updateSessionHandler(),
+      makeReq({ db, userId: OTHER, params: { id: sessionId }, body: { title: '篡改' } }),
+    );
+    expect(theirs.statusCode).toBe(404);
+    expect(db.sessions.get(sessionId)?.title).toBe('项目复盘');
+  });
+
+  it('PATCH /runtime/sessions/:id：拒绝空标题和超长标题', async () => {
+    const db = new FakeDb();
+    const sessionId = await seedOwnedSession(db, ME);
+    for (const title of ['   ', 'a'.repeat(61)]) {
+      const reply = await call(
+        updateSessionHandler(),
+        makeReq({ db, userId: ME, params: { id: sessionId }, body: { title } }),
+      );
+      expect(reply.statusCode).toBe(400);
+    }
+    expect(db.sessions.get(sessionId)?.title).toBeNull();
+  });
+
+  it('DELETE /runtime/sessions/:id：本人软归档，非本人 404', async () => {
+    const db = new FakeDb();
+    const sessionId = await seedOwnedSession(db, ME);
+
+    const theirs = await call(
+      archiveSessionHandler(),
+      makeReq({ db, userId: OTHER, params: { id: sessionId } }),
+    );
+    expect(theirs.statusCode).toBe(404);
+    expect(db.sessions.get(sessionId)?.status).toBe('active');
+
+    const mine = await call(
+      archiveSessionHandler(),
+      makeReq({ db, userId: ME, params: { id: sessionId } }),
+    );
+    expect(mine.statusCode).toBe(200);
+    expect((mine.body as { data: { status: string } }).data.status).toBe('closed');
+    expect(db.sessions.get(sessionId)?.status).toBe('closed');
+  });
+
+  it('DELETE /runtime/sessions/:id：运行中返回 SESSION_BUSY 对应的 409 且保持 active', async () => {
+    const db = new FakeDb();
+    const sessionId = await seedOwnedSession(db, ME);
+    await createTurn(db, { id: 'turn-running', sessionId });
+
+    const reply = await call(
+      archiveSessionHandler(),
+      makeReq({ db, userId: ME, params: { id: sessionId } }),
+    );
+
+    expect(reply.statusCode).toBe(409);
+    expect((reply.body as { error: { userMessage: string } }).error.userMessage).toContain(
+      '等待完成后再归档',
+    );
+    expect(db.sessions.get(sessionId)?.status).toBe('active');
+  });
+
   it('GET /runtime/artifacts/:id/content：非本人 404', async () => {
     const db = new FakeDb();
     const store = new FakeObjectStore();
@@ -222,6 +294,20 @@ describe('GET /runtime/sessions 按能力过滤', () => {
     const items = (onlyA.body as { data: { capabilityId: string }[] }).data;
     expect(items).toHaveLength(2);
     expect(items.every((s) => s.capabilityId === CAP_A)).toBe(true);
+  });
+
+  it('默认只回 active 会话', async () => {
+    const db = new FakeDb();
+    db.seedCapability({ id: CAP_A, owner_user_id: ME });
+    const active = await createSession(db, { capabilityId: CAP_A, ownerUserId: ME });
+    const archived = await createSession(db, { capabilityId: CAP_A, ownerUserId: ME });
+    db.sessions.get(archived.id)!.status = 'closed';
+
+    const reply = await call(listSessionsHandler(), makeReq({ db, userId: ME }));
+    expect(reply.statusCode).toBe(200);
+    expect((reply.body as { data: { id: string }[] }).data.map((item) => item.id)).toEqual([
+      active.id,
+    ]);
   });
 
   it('capabilityId 非 UUID → 400（防 SQL uuid cast 报 500）', async () => {
