@@ -2,8 +2,12 @@
 import { describe, expect, it } from 'vitest';
 import { EventType } from '@ag-ui/core';
 import type { CapabilityDefinition } from '@cb/shared';
-import { createTurnRunner, TurnAgentUnavailableError } from '../modules/agent/run-turn.js';
-import { createSession, type SessionRow } from '../modules/session/repo.js';
+import {
+  createTurnRunner,
+  SessionInactiveError,
+  TurnAgentUnavailableError,
+} from '../modules/agent/run-turn.js';
+import { archiveSession, createSession, type SessionRow } from '../modules/session/repo.js';
 import { createSessionEventBus, type PublishedStreamEvent } from '../platform/infra/event-bus.js';
 import {
   FakeDb,
@@ -142,6 +146,21 @@ describe('run-turn 成功路径', () => {
     const secondHistory = handle.calls[1]?.history ?? [];
     // 历史 = 第一轮的 user + assistant（不含第二轮自己的 user 消息）。
     expect(secondHistory.map((m) => m.role)).toEqual(['user', 'assistant']);
+  });
+});
+
+describe('run-turn 与归档串行化', () => {
+  it('归档先拿到会话锁后，持有旧 SessionRow 的发送请求也不能再创建轮次', async () => {
+    const { db, runner, session } = await setup();
+    await archiveSession(db, session.id, session.ownerUserId);
+
+    await expect(
+      runner.startTurn({ session, definition: DEFINITION, text: '迟到的消息', log: silentLog }),
+    ).rejects.toBeInstanceOf(SessionInactiveError);
+    expect(db.turns.size).toBe(0);
+    expect(
+      db.queries.filter((query) => query.includes("status = 'active' FOR UPDATE")),
+    ).toHaveLength(2);
   });
 });
 

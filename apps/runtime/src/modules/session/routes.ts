@@ -2,6 +2,8 @@
 //   POST /runtime/sessions                开会话
 //   GET  /runtime/sessions                我的会话列表
 //   GET  /runtime/sessions/:id            会话详情（消息 + 产物 + 能力摘要）
+//   PATCH /runtime/sessions/:id           会话改名
+//   DELETE /runtime/sessions/:id          软归档
 //   POST /runtime/sessions/:id/messages   发消息（落 user 消息后异步生成，立即返回）
 //   POST /runtime/sessions/:id/interrupt  打断当前轮
 //   GET  /runtime/sessions/:id/stream     流式生成事件（SSE，Last-Event-ID 续传）
@@ -10,11 +12,13 @@ import { requireAuth, requireSseAuth } from '../../platform/middleware/auth.js';
 import { registerEndpoints, type EndpointDecl } from '../../platform/http/_helpers.js';
 import { sessionStreamHandler } from '../agent/stream.js';
 import {
+  archiveSessionHandler,
   createSessionHandler,
   getSessionDetailHandler,
   interruptHandler,
   listSessionsHandler,
   sendMessageHandler,
+  updateSessionHandler,
 } from './handlers.js';
 
 export const SESSION_ENDPOINTS: EndpointDecl[] = [
@@ -35,6 +39,18 @@ export const SESSION_ENDPOINTS: EndpointDecl[] = [
     url: '/runtime/sessions/:id',
     preHandlers: [requireAuth()],
     handler: getSessionDetailHandler(),
+  },
+  {
+    method: 'PATCH',
+    url: '/runtime/sessions/:id',
+    preHandlers: [requireAuth()],
+    handler: updateSessionHandler(),
+  },
+  {
+    method: 'DELETE',
+    url: '/runtime/sessions/:id',
+    preHandlers: [requireAuth()],
+    handler: archiveSessionHandler(),
   },
   {
     method: 'POST',

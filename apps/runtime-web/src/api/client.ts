@@ -92,6 +92,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 export const apiGet = <T>(path: string): Promise<T> => request<T>('GET', path);
 export const apiPost = <T>(path: string, body?: unknown): Promise<T> =>
   request<T>('POST', path, body);
+export const apiPatch = <T>(path: string, body: unknown): Promise<T> =>
+  request<T>('PATCH', path, body);
+export const apiDelete = <T>(path: string): Promise<T> => request<T>('DELETE', path);
 
 /** 非包络的原文回读（产物内容端点：带 Content-Type 的裸文本）。 */
 export const apiGetText = async (path: string): Promise<string> =>

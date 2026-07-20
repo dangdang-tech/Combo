@@ -18,6 +18,14 @@ export type MessageStatus = z.infer<typeof MessageStatusSchema>;
 export const CreateSessionBodySchema = z.object({ capabilityId: IdSchema }).strict();
 export type CreateSessionBody = z.infer<typeof CreateSessionBodySchema>;
 
+export const SESSION_TITLE_MAX_LENGTH = 60;
+export const UpdateSessionBodySchema = z
+  .object({
+    title: z.string().trim().min(1).max(SESSION_TITLE_MAX_LENGTH),
+  })
+  .strict();
+export type UpdateSessionBody = z.infer<typeof UpdateSessionBodySchema>;
+
 export const SendMessageBodySchema = z.object({ text: z.string().min(1).max(20_000) }).strict();
 export type SendMessageBody = z.infer<typeof SendMessageBodySchema>;
 

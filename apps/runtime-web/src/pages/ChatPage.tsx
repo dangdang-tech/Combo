@@ -4,15 +4,17 @@
 //   - 有产物后画布渲染产物（多产物顶部 chips 切换），FloatingChat 负责继续微调；
 //   - 恢复：GET /runtime/sessions/:id（详情真源）；实时：/stream SSE（useSessionStream）。
 import { useEffect, useRef, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import type { ArtifactView } from '@cb/shared';
 import { useArtifactContent, useSession } from '../api/runtime.js';
 import { useSessionStream } from '../api/useSessionStream.js';
 import { ArtifactRenderer } from '../components/ArtifactRenderer.js';
 import { FloatingChat } from '../components/FloatingChat.js';
 import { QueryErrorNotice } from '../components/QueryErrorNotice.js';
+import { RunningTimer } from '../components/RunningTimer.js';
 import { SessionSidebar } from '../components/SessionSidebar.js';
 import { TrialIntakeForm } from '../components/TrialIntakeForm.js';
+import { downloadArtifact } from '../components/artifactDownload.js';
 import {
   readRuntimeReturnTo,
   rememberRuntimeReturnTo,
@@ -27,6 +29,9 @@ export function ChatPage() {
   const detail = sessionQ.data;
   const stream = useSessionStream(sessionId, detail?.artifacts);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const [chatDocked, setChatDocked] = useState(true);
+  const [mobileSessionsOpen, setMobileSessionsOpen] = useState(false);
+  const runStartedAtRef = useRef<number | null>(null);
   const [lastSidebarCapability, setLastSidebarCapability] = useState<{
     id: string;
     name: string;
@@ -58,6 +63,9 @@ export function ChatPage() {
   const showIntake = !hasStarted;
   const showGenerating = stream.running && !hasAssistantOutput;
   const canvasState = showIntake ? 'intake' : showGenerating ? 'running' : 'output';
+  if (stream.running && runStartedAtRef.current === null) runStartedAtRef.current = Date.now();
+  if (!stream.running && runStartedAtRef.current !== null) runStartedAtRef.current = null;
+  const runStartedAt = runStartedAtRef.current ?? undefined;
 
   useEffect(() => {
     if (!capability) return;
@@ -68,6 +76,19 @@ export function ChatPage() {
     );
   }, [capability?.id, capability?.name]);
 
+  useEffect(() => {
+    setMobileSessionsOpen(false);
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (!mobileSessionsOpen) return undefined;
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setMobileSessionsOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [mobileSessionsOpen]);
+
   return (
     <div className="rt-app rt-trial-app">
       <SessionSidebar
@@ -75,6 +96,7 @@ export function ChatPage() {
         capabilityId={sidebarCapability?.id}
         capabilityName={sidebarCapability?.name}
         returnTo={returnTo}
+        runningSessionId={stream.running ? sessionId : undefined}
       />
       <div className="rt-trial">
         {sessionQ.isPending ? (
@@ -90,10 +112,39 @@ export function ChatPage() {
                   {capability.name} · {capability.kind}
                 </span>
               </div>
+              <div className="rt-trial__actions">
+                <button
+                  type="button"
+                  className="rt-toolbar-pill rt-mobile-sessions-trigger"
+                  aria-expanded={mobileSessionsOpen}
+                  aria-controls="rt-mobile-session-panel"
+                  onClick={() => setMobileSessionsOpen(true)}
+                >
+                  会话管理
+                </button>
+                {returnTo ? (
+                  <button
+                    type="button"
+                    className="rt-toolbar-pill"
+                    onClick={() => window.location.assign(returnTo)}
+                  >
+                    返回发布流程
+                  </button>
+                ) : (
+                  <Link className="rt-toolbar-pill" to="/market">
+                    返回能力市集
+                  </Link>
+                )}
+              </div>
             </header>
 
             <main className="rt-genui">
-              <div ref={canvasRef} className="rt-genui__canvas" data-state={canvasState}>
+              <div
+                ref={canvasRef}
+                className="rt-genui__canvas"
+                data-state={canvasState}
+                data-chat-docked={chatDocked ? 'true' : 'false'}
+              >
                 {/* 首轮失败时 FloatingChat 尚未挂载（hasStarted=false），错误必须在画布可见，
                     否则用户只看到生成卡一闪回表单、零解释（A7）。 */}
                 {stream.errorMessage && !hasStarted && (
@@ -132,7 +183,7 @@ export function ChatPage() {
                 )}
                 {showGenerating && (
                   <div className="rt-genui__overlay rt-genui__overlay--plain">
-                    <GeneratingCard name={capability.name} />
+                    <GeneratingCard name={capability.name} startedAt={runStartedAt} />
                   </div>
                 )}
                 {hasStarted && !showGenerating && sessionId && (
@@ -143,7 +194,9 @@ export function ChatPage() {
                     messages={messages}
                     streamingText={stream.streamingText}
                     isRunning={stream.running}
+                    runStartedAt={runStartedAt}
                     error={stream.errorMessage}
+                    onDockChange={setChatDocked}
                     onSend={stream.send}
                     onInterrupt={stream.interrupt}
                   />
@@ -153,6 +206,43 @@ export function ChatPage() {
           </>
         )}
       </div>
+      {mobileSessionsOpen && (
+        <div
+          className="rt-mobile-session-layer"
+          onPointerDown={(event) => {
+            if (event.target === event.currentTarget) setMobileSessionsOpen(false);
+          }}
+        >
+          <section
+            id="rt-mobile-session-panel"
+            className="rt-mobile-session-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="rt-mobile-session-title"
+          >
+            <div className="rt-mobile-session-panel__head">
+              <h2 id="rt-mobile-session-title">会话管理</h2>
+              <button
+                type="button"
+                autoFocus
+                aria-label="关闭会话管理"
+                onClick={() => setMobileSessionsOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+            <SessionSidebar
+              activeSessionId={sessionId}
+              capabilityId={sidebarCapability?.id}
+              capabilityName={sidebarCapability?.name}
+              returnTo={returnTo}
+              runningSessionId={stream.running ? sessionId : undefined}
+              instanceId="mobile"
+              onNavigate={() => setMobileSessionsOpen(false)}
+            />
+          </section>
+        </div>
+      )}
     </div>
   );
 }
@@ -160,25 +250,34 @@ export function ChatPage() {
 /** 产物舞台：内容回读（GET /runtime/artifacts/:id/content）+ 按 kind 渲染，占满画布。 */
 function ArtifactStage({ artifact }: { artifact: ArtifactView }) {
   const content = useArtifactContent(artifact);
+  const title = artifact.title ?? '未命名产物';
   return (
     <div className="rt-artifact-stage">
+      <div className="rt-artifact-stage__actions">
+        <button
+          type="button"
+          className="rt-toolbar-pill rt-artifact-download"
+          disabled={content.data === undefined || content.isPending || content.isError}
+          onClick={() => {
+            if (content.data !== undefined) downloadArtifact(title, artifact.kind, content.data);
+          }}
+        >
+          {content.isPending ? '准备下载…' : '下载产物'}
+        </button>
+      </div>
       {content.isPending ? (
         <div className="rt-empty">产物加载中…</div>
       ) : content.isError ? (
         <div className="rt-empty rt-empty--error">产物内容加载失败，稍后重试。</div>
       ) : (
-        <ArtifactRenderer
-          kind={artifact.kind}
-          title={artifact.title ?? '未命名产物'}
-          content={content.data}
-        />
+        <ArtifactRenderer kind={artifact.kind} title={title} content={content.data} />
       )}
     </div>
   );
 }
 
 /** 第一轮生成进度卡（装饰性固定步骤，真实进展看画布上出现的产物与聊天流）。 */
-function GeneratingCard({ name }: { name: string }) {
+function GeneratingCard({ name, startedAt }: { name: string; startedAt?: number }) {
   const steps = [
     { key: 'load', label: `读取「${name}」的能力定义`, status: 'completed' },
     { key: 'draft', label: '生成第一版产物', status: 'running' },
@@ -186,7 +285,10 @@ function GeneratingCard({ name }: { name: string }) {
   ];
   return (
     <section className="rt-generating-card" aria-label="正在生成">
-      <h2>正在生成 · {name}…</h2>
+      <div className="rt-generating-card__head">
+        <h2>正在生成 · {name}…</h2>
+        <RunningTimer active startedAt={startedAt} className="rt-running-timer" />
+      </div>
       <p>第一版产物正在路上，完成后会直接出现在这块画布上。</p>
       <div className="rt-generating-card__steps">
         {steps.map((row) => (

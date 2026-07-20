@@ -6,6 +6,7 @@ import {
   CreateSessionBodySchema,
   ErrorCode,
   SendMessageBodySchema,
+  UpdateSessionBodySchema,
   type CapabilityInputField,
   type Envelope,
   type MessageView,
@@ -15,14 +16,18 @@ import {
 import { sendError } from '../../platform/http/_helpers.js';
 import { loadCapability, readCapabilitySummary } from '../capability/loader.js';
 import { sendLoadFailure } from '../capability/handlers.js';
+import { SessionInactiveError } from '../agent/run-turn.js';
 import { listArtifacts } from '../artifact/repo.js';
 import {
+  archiveSession,
   createSession,
   getMessages,
   getSession,
   listSessions,
+  SessionBusyError,
   toSessionView,
   type SessionRow,
+  updateSessionTitle,
 } from './repo.js';
 
 /** owner-scoped 取会话，失败即回信封；成功返回行。 */
@@ -117,6 +122,60 @@ export function listSessionsHandler(): RouteHandlerMethod {
 
 // ───────────────────────────── GET /runtime/sessions/:id ─────────────────────────────
 
+export function updateSessionHandler(): RouteHandlerMethod {
+  return async function (req: FastifyRequest, reply: FastifyReply) {
+    const session = await requireOwnedSession(req, reply);
+    if (!session) return reply;
+    const parsed = UpdateSessionBodySchema.safeParse(req.body);
+    if (!parsed.success) return sendError(req, reply, ErrorCode.VALIDATION_FAILED);
+
+    try {
+      const updated = await updateSessionTitle(
+        req.server.infra.db,
+        session.id,
+        session.ownerUserId,
+        parsed.data.title,
+      );
+      if (!updated) return sendError(req, reply, ErrorCode.NOT_FOUND);
+      const body: Envelope<SessionView> = {
+        data: toSessionView(updated),
+        meta: { traceId: req.id },
+      };
+      reply.code(200).send(body);
+      return reply;
+    } catch (err) {
+      req.log.error({ err, traceId: req.id }, 'update session failed');
+      return sendError(req, reply, ErrorCode.INTERNAL);
+    }
+  };
+}
+
+export function archiveSessionHandler(): RouteHandlerMethod {
+  return async function (req: FastifyRequest, reply: FastifyReply) {
+    const session = await requireOwnedSession(req, reply);
+    if (!session) return reply;
+
+    try {
+      const archived = await archiveSession(req.server.infra.db, session.id, session.ownerUserId);
+      if (!archived) return sendError(req, reply, ErrorCode.NOT_FOUND);
+      const body: Envelope<SessionView> = {
+        data: toSessionView(archived),
+        meta: { traceId: req.id },
+      };
+      reply.code(200).send(body);
+      return reply;
+    } catch (err) {
+      if (err instanceof SessionBusyError) {
+        return sendError(req, reply, ErrorCode.SESSION_BUSY, {
+          userMessage: '这条会话仍在生成，停止或等待完成后再归档。',
+        });
+      }
+      req.log.error({ err, traceId: req.id }, 'archive session failed');
+      return sendError(req, reply, ErrorCode.INTERNAL);
+    }
+  };
+}
+
 export function getSessionDetailHandler(): RouteHandlerMethod {
   return async function (req: FastifyRequest, reply: FastifyReply) {
     const session = await requireOwnedSession(req, reply);
@@ -206,6 +265,11 @@ export function sendMessageHandler(): RouteHandlerMethod {
         log: req.log,
       });
     } catch (err) {
+      if (err instanceof SessionInactiveError) {
+        return sendError(req, reply, ErrorCode.STATE_CONFLICT, {
+          userMessage: '这条会话已经归档，请新建会话后再发送。',
+        });
+      }
       req.log.error({ err, traceId: req.id }, 'start turn failed');
       return sendError(req, reply, ErrorCode.INTERNAL);
     }

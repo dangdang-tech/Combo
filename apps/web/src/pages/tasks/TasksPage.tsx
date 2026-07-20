@@ -289,7 +289,7 @@ function TaskRow({
           </div>
         ) : task.status === 'succeeded' ? (
           <Link className="cb-task-action" to={`/capabilities?taskId=${task.id}`}>
-            <span>查看能力项</span>
+            <span>查看并试用能力</span>
             <span aria-hidden="true">→</span>
           </Link>
         ) : (

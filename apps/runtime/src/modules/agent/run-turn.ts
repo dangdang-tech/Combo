@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import { EventType } from '@ag-ui/core';
 import type { CapabilityDefinition } from '@cb/shared';
-import type { RuntimeDb } from '../../platform/infra/db.js';
+import { withTransaction, type RuntimeDb } from '../../platform/infra/db.js';
 import type { RuntimeObjectStore } from '../../platform/infra/object-store.js';
 import type { SessionEventBus } from '../../platform/infra/event-bus.js';
 import type { InterruptBus } from '../../platform/infra/redis-interrupt-bus.js';
@@ -10,6 +10,7 @@ import type { SessionEventLog } from './event-log.js';
 import {
   appendTurnMessage,
   getMessages,
+  lockActiveSession,
   type MessageRecord,
   type SessionRow,
 } from '../session/repo.js';
@@ -41,6 +42,13 @@ export class TurnAgentUnavailableError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'TurnAgentUnavailableError';
+  }
+}
+
+export class SessionInactiveError extends Error {
+  constructor() {
+    super('session is no longer active');
+    this.name = 'SessionInactiveError';
   }
 }
 
@@ -338,16 +346,20 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
     async startTurn(input) {
       const sessionId = input.session.id;
       const runId = randomUUID();
-      await createTurn(deps.db, { id: runId, sessionId });
       let userMessage: MessageRecord;
       try {
-        userMessage = await appendTurnMessage(deps.db, {
-          sessionId,
-          turnId: runId,
-          idx: 0,
-          role: 'user',
-          content: [{ type: 'text', text: input.text }],
-          status: 'completed',
+        userMessage = await withTransaction(deps.db, async (tx) => {
+          const active = await lockActiveSession(tx, sessionId, input.session.ownerUserId);
+          if (!active) throw new SessionInactiveError();
+          await createTurn(tx, { id: runId, sessionId });
+          return appendTurnMessage(tx, {
+            sessionId,
+            turnId: runId,
+            idx: 0,
+            role: 'user',
+            content: [{ type: 'text', text: input.text }],
+            status: 'completed',
+          });
         });
       } catch (err) {
         await finishTurnCas(deps.db, {

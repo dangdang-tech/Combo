@@ -44,6 +44,18 @@ export function IconCapabilities(props: SVGProps<SVGSVGElement>): ReactElement {
   );
 }
 
+/** 市集：店铺遮棚 + 展示台。 */
+export function IconMarket(props: SVGProps<SVGSVGElement>): ReactElement {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 10v10h16V10" />
+      <path d="M3 10l2-6h14l2 6" />
+      <path d="M8 20v-6h8v6" />
+      <path d="M3 10c0 1.1.9 2 2 2s2-.9 2-2c0 1.1.9 2 2 2s2-.9 2-2c0 1.1.9 2 2 2s2-.9 2-2c0 1.1.9 2 2 2s2-.9 2-2" />
+    </svg>
+  );
+}
+
 /** 收起 / 展开开关：双箭头（朝向由调用方旋转）。 */
 export function IconChevrons(props: SVGProps<SVGSVGElement>): ReactElement {
   return (
