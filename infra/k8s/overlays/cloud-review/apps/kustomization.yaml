@@ -18,6 +18,7 @@ configMapGenerator:
     files:
       - default.conf.template=review-nginx.conf
       - bootstrap.html=review-bootstrap.html
+      - enter.html=review-access.html
 generatorOptions:
   disableNameSuffixHash: true
 images:

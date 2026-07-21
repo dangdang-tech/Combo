@@ -16,7 +16,7 @@ if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
   exit 64
 fi
 
-for command_name in kubectl rsync sed; do
+for command_name in base64 grep kubectl mktemp rsync sed tr wc; do
   command -v "$command_name" >/dev/null 2>&1 || {
     echo "[cloud-review] 缺少命令：$command_name" >&2
     exit 69
@@ -43,13 +43,28 @@ for secret_name in combo-preview-env combo-preview-bootstrap combo-preview-ghcr-
     exit 78
   }
 done
-for key in DEV_SESSION_SECRET htpasswd; do
+for key in DEV_SESSION_SECRET REVIEW_ACCESS_TOKEN; do
   value="$(kubectl -n "$NAMESPACE" get secret combo-preview-bootstrap -o "jsonpath={.data.$key}")"
   test -n "$value" || {
     echo "[cloud-review] combo-preview-bootstrap 缺少非空键：$key" >&2
     exit 78
   }
 done
+review_access_token_file="$(mktemp)"
+cleanup_review_access_token() {
+  test ! -f "$review_access_token_file" || rm -f "$review_access_token_file"
+}
+trap cleanup_review_access_token EXIT
+kubectl -n "$NAMESPACE" get secret combo-preview-bootstrap \
+  -o 'jsonpath={.data.REVIEW_ACCESS_TOKEN}' | base64 -d > "$review_access_token_file"
+review_access_token_bytes="$(wc -c < "$review_access_token_file" | tr -d '[:space:]')"
+if test "$review_access_token_bytes" != 64 || ! LC_ALL=C grep -Eq '^[0-9a-f]{64}$' "$review_access_token_file"; then
+  echo "[cloud-review] combo-preview-bootstrap/REVIEW_ACCESS_TOKEN 必须是无换行的 64 位小写十六进制字符" >&2
+  exit 78
+fi
+cleanup_review_access_token
+trap - EXIT
+unset review_access_token_bytes review_access_token_file
 
 echo "[cloud-review] 1/3 部署并等待独立基础设施"
 kubectl -n "$NAMESPACE" delete job minio-init --ignore-not-found
@@ -67,6 +82,9 @@ kubectl -n "$NAMESPACE" wait --for=condition=complete job/migrate --timeout=300s
 
 echo "[cloud-review] 3/3 迁移成功后滚动固定单副本业务面"
 kubectl kustomize --load-restrictor=LoadRestrictionsNone "$WORK_ROOT/overlays/cloud-review/apps" | kubectl apply -f -
+# ConfigMap 与 Secret 使用稳定名称；即使同一 SHA 下只轮换访问凭据，也要显式重启 Web，
+# 避免 Nginx 进程继续持有旧的 envsubst 结果。
+kubectl -n "$NAMESPACE" rollout restart deployment/web
 for deployment in api worker consumer sweeper runtime web; do
   kubectl -n "$NAMESPACE" rollout status "deployment/$deployment" --timeout=300s
 done

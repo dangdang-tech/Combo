@@ -147,8 +147,7 @@ jobs:
       - name: Public smoke
         env:
           REVIEW_BASE_URL: ${{ inputs.public_base_url || vars.CLOUD_REVIEW_BASE_URL }}
-          REVIEW_BASIC_USER: ${{ secrets.CLOUD_REVIEW_BASIC_USER }}
-          REVIEW_BASIC_PASSWORD: ${{ secrets.CLOUD_REVIEW_BASIC_PASSWORD }}
+          REVIEW_ACCESS_TOKEN: ${{ secrets.CLOUD_REVIEW_ACCESS_TOKEN }}
         run: bash scripts/cloud-review-smoke.sh
 
       - name: Result

@@ -29,6 +29,11 @@ spec:
               value: api.combo-preview.svc.cluster.local
             - name: RUNTIME_UPSTREAM_HOST
               value: runtime.combo-preview.svc.cluster.local
+            - name: REVIEW_ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-bootstrap
+                  key: REVIEW_ACCESS_TOKEN
           readinessProbe:
             httpGet:
               path: /__review/healthz
@@ -49,8 +54,9 @@ spec:
               mountPath: /usr/share/nginx/html/__review/bootstrap.html
               subPath: bootstrap.html
               readOnly: true
-            - name: review-basic-auth
-              mountPath: /etc/nginx/review-auth
+            - name: review-access-page
+              mountPath: /usr/share/nginx/html/__review/enter.html
+              subPath: enter.html
               readOnly: true
       volumes:
         - name: review-nginx
@@ -65,9 +71,9 @@ spec:
             items:
               - key: bootstrap.html
                 path: bootstrap.html
-        - name: review-basic-auth
-          secret:
-            secretName: combo-preview-bootstrap
+        - name: review-access-page
+          configMap:
+            name: combo-preview-web-review
             items:
-              - key: htpasswd
-                path: .htpasswd
+              - key: enter.html
+                path: enter.html

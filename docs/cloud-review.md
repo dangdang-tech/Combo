@@ -12,9 +12,9 @@ Cloud Review 是团队共享的真实体验环境：代码在 GitHub Actions 构
 - NodePort：Web `30081`、MinIO API / console `30901` / `30902`，与生产 `30080` / `30900` 不冲突。
 - 业务副本：API、Worker、Consumer、Sweeper、Runtime、Web 各 1 个，并显式设置 CPU / memory requests 与 limits。
 
-Cloud Review 的 Web 入口整体受 Basic Auth 保护。`dev-login` 只在非 production 模式启用，并与页面一起位于这道保护之后；用户需先打开 `/__review/bootstrap`，点击“进入测试页面”显式创建测试身份。签名密钥来自专属 `combo-preview-bootstrap`，不得复制生产 Secret。
+Cloud Review 的 Web 入口整体受独立 Cookie 访问闸保护。用户从 `/__review/enter#<access-token>` 进入，邀请 token 只在浏览器 fragment 中出现，页面通过同源 HTTPS 换取 `HttpOnly + Secure + SameSite=Strict` Cookie，随即从地址栏清除 token。`dev-login` 只在非 production 模式启用，并位于这道保护之后；`/__review/bootstrap` 会自动创建隔离的预览身份并进入目标页面，失败时才显示重试操作。访问 token 与会话签名密钥都来自专属 `combo-preview-bootstrap`，不得复制生产 Secret。
 
-本机导入助手是唯一的路由级例外：script、bin、upload 三类 `/api/v1/(import/)connect/*` 通道不要求 Review Basic Auth，因为 `curl | sh` 和下载后的助手不会携带它们。script / upload 仍由应用层 pairing code / PairAuth 校验；创建配对码、查询状态等网页 API 没有放行，继续受全站保护。
+本机导入助手是唯一的路由级例外：script、bin、upload 三类 `/api/v1/(import/)connect/*` 通道不要求 Review Cookie，因为 `curl | sh` 和下载后的助手不会携带它。script / upload 仍由应用层 pairing code / PairAuth 校验；创建配对码、查询状态等网页 API 没有放行，继续受全站保护。
 
 ## 一次性云端前置
 
@@ -31,14 +31,14 @@ Cloud Review 的 Web 入口整体受 Basic Auth 保护。`dev-login` 只在非 p
      --from-env-file=/opt/combo-preview/secrets/app.env
    ```
 
-3. 生成独立的 dev session 密钥与 Basic Auth 文件，再创建 bootstrap Secret：
+3. 生成独立的 dev session 密钥与 Review 访问 token，再创建 bootstrap Secret：
 
    ```sh
-   openssl rand -hex 32 > /opt/combo-preview/secrets/dev-session-secret
-   htpasswd -nbB '<review-user>' '<review-password>' > /opt/combo-preview/secrets/htpasswd
+   printf '%s' "$(openssl rand -hex 32)" > /opt/combo-preview/secrets/dev-session-secret
+   printf '%s' "$(openssl rand -hex 32)" > /opt/combo-preview/secrets/review-access-token
    kubectl -n combo-preview create secret generic combo-preview-bootstrap \
      --from-file=DEV_SESSION_SECRET=/opt/combo-preview/secrets/dev-session-secret \
-     --from-file=htpasswd=/opt/combo-preview/secrets/htpasswd
+     --from-file=REVIEW_ACCESS_TOKEN=/opt/combo-preview/secrets/review-access-token
    ```
 
 4. 创建独立 GHCR pull Secret：
@@ -56,12 +56,14 @@ Cloud Review 的 Web 入口整体受 Basic Auth 保护。`dev-login` 只在非 p
 
 创建受保护的 `cloud-review` Environment，启用 required reviewers，并配置：
 
-- Secrets：`CLOUD_REVIEW_SSH_KEY`、`CLOUD_REVIEW_HOST`、`CLOUD_REVIEW_USER`、`CLOUD_REVIEW_BASIC_USER`、`CLOUD_REVIEW_BASIC_PASSWORD`。
+- Secrets：`CLOUD_REVIEW_SSH_KEY`、`CLOUD_REVIEW_HOST`、`CLOUD_REVIEW_USER`、`CLOUD_REVIEW_ACCESS_TOKEN`。
 - Variable：`CLOUD_REVIEW_BASE_URL`，例如 `https://review.buildwithcombo.com`。
 
 `.github/workflows/cloud-review.yml` 会在 `codex/agent-studio-cloud-preview` 分支 push 后自动运行，也支持手动 `workflow_dispatch` 选择其他 ref。三镜像在 GitHub runner 中构建并以完整 commit SHA 推送；只有通过 Environment 审批后，固定槽位才会被覆盖。
 
-Web 镜像构建时同时写入 `VITE_DEPLOY_ENV=preview`、完整 `VITE_BUILD_SHA` 与触发部署的 `VITE_REVIEW_SOURCE`，便于页面和诊断信息明确区分云端评审版本。公网 smoke 把 Basic Auth 凭据写入权限为 `0600` 的临时 netrc，curl 命令行和进程列表里不会出现用户名或密码。
+Web 镜像构建时同时写入 `VITE_DEPLOY_ENV=preview`、完整 `VITE_BUILD_SHA` 与触发部署的 `VITE_REVIEW_SOURCE`，便于页面和诊断信息明确区分云端评审版本。公网 smoke 把 Review token 写入权限为 `0600` 的临时 curl config，只在 HTTPS 请求头中传入，不把它写入命令行参数或日志。
+
+访问 token 轮换时，同时更新 `combo-preview-bootstrap/REVIEW_ACCESS_TOKEN` 与 GitHub Environment Secret `CLOUD_REVIEW_ACCESS_TOKEN`，然后重新执行 Cloud Review workflow。部署脚本会强制重启 Web，使旧 Cookie 立即失效；不要只更新 Secret 而跳过部署。
 
 ## 部署顺序与验证
 
@@ -79,8 +81,7 @@ Web 镜像构建时同时写入 `VITE_DEPLOY_ENV=preview`、完整 `VITE_BUILD_S
 
 ```sh
 REVIEW_BASE_URL=https://review.buildwithcombo.com \
-REVIEW_BASIC_USER='<user>' \
-REVIEW_BASIC_PASSWORD='<password>' \
+REVIEW_ACCESS_TOKEN='<preview-only-token>' \
 bash scripts/cloud-review-smoke.sh
 ```
 
