@@ -175,6 +175,16 @@ export function ImportStepPage(): ReactElement {
   const failCountRef = useRef(0);
   // React state 在同一个事件循环内不会立即刷新；ref 作同步门闩防止双击铸出两个 pair。
   const startingRef = useRef(false);
+  const copyFeedbackTimerRef = useRef<number | null>(null);
+
+  // 页面卸载时清掉复制反馈计时；每次复制都会在 handleCopy 中重新起算 1.8 秒。
+  useEffect(() => {
+    return () => {
+      if (copyFeedbackTimerRef.current !== null) {
+        window.clearTimeout(copyFeedbackTimerRef.current);
+      }
+    };
+  }, []);
 
   /**
    * Pair 是终端上传阶段的恢复锚点：铸码成功就立即写 URL，不等到全部上传完。
@@ -430,6 +440,13 @@ export function ImportStepPage(): ReactElement {
       ?.writeText(shellSafePairCommand(phase.pair.command))
       .catch(() => undefined);
     setCopied(true);
+    if (copyFeedbackTimerRef.current !== null) {
+      window.clearTimeout(copyFeedbackTimerRef.current);
+    }
+    copyFeedbackTimerRef.current = window.setTimeout(() => {
+      setCopied(false);
+      copyFeedbackTimerRef.current = null;
+    }, 1_800);
   }, [phase]);
 
   const handleCancel = useCallback(async (): Promise<void> => {

@@ -104,7 +104,9 @@ describe('ImportStepPage', () => {
     // 命令行优先：「开始导入」是主卡入口，直接点（无需展开）。
     await userEvent.click(screen.getByRole('button', { name: '开始导入 →' }));
     await waitFor(() =>
-      expect(screen.getByText('在你电脑的终端里运行这行命令')).toBeInTheDocument(),
+      expect(
+        screen.getByRole('heading', { name: '复制命令，连接你的本机会话' }),
+      ).toBeInTheDocument(),
     );
     // 不等上传完：铸码后立即把非敏感 pairId 写入 URL，刷新仍可继续轮询。
     expect(screen.getByTestId('path')).toHaveTextContent('/create/import?draftId=d1&pairId=p1');

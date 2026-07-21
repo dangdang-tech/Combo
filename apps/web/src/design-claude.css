@@ -1663,7 +1663,7 @@ body {
 }
 
 .cb-cmdbox {
-  gap: 18px;
+  gap: 24px;
 }
 
 .cb-cmdbox__command {
@@ -1695,15 +1695,22 @@ body {
   background: var(--cb-surface-soft);
 }
 
-.cb-cmdbox__status[data-phase='uploading'],
-.cb-cmdbox__status[data-phase='job_created'] {
+.cb-cmdbox__status[data-phase='uploading'] {
   border-color: var(--cb-feedback-live-border);
   background: var(--cb-feedback-live-bg);
 }
 
-.cb-cmdbox__status[data-phase='uploading'] .cb-cmdbox__phase,
-.cb-cmdbox__status[data-phase='job_created'] .cb-cmdbox__phase {
+.cb-cmdbox__status[data-phase='uploading'] .cb-cmdbox__phase {
   color: var(--cb-feedback-live-fg);
+}
+
+.cb-cmdbox__status[data-phase='job_created'] {
+  border-color: var(--cb-state-success-border);
+  background: var(--cb-state-success-bg);
+}
+
+.cb-cmdbox__status[data-phase='job_created'] .cb-cmdbox__phase {
+  color: var(--cb-state-success-fg);
 }
 
 .cb-cmdbox__phase {
