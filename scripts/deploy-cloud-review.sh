@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 固定单槽 Cloud Review 部署：基础设施就绪 -> 迁移完成 -> 四个业务工作负载 rollout。
+# 固定单槽 Cloud Review 部署：基础设施就绪 -> 迁移完成 -> 六个业务工作负载 rollout。
 set -euo pipefail
 
 SHA="${SHA:?SHA 必填（40 位提交 SHA；三镜像必须已在 GHCR）}"
@@ -65,7 +65,7 @@ kubectl -n "$NAMESPACE" wait --for=condition=complete job/migrate --timeout=300s
 
 echo "[cloud-review] 3/3 迁移成功后滚动固定单副本业务面"
 kubectl kustomize --load-restrictor=LoadRestrictionsNone "$WORK_ROOT/overlays/cloud-review/apps" | kubectl apply -f -
-for deployment in api worker runtime web; do
+for deployment in api worker consumer sweeper runtime web; do
   kubectl -n "$NAMESPACE" rollout status "deployment/$deployment" --timeout=300s
 done
 

@@ -4,6 +4,8 @@ namespace: combo-preview
 resources:
   - ../../../api.yaml
   - ../../../worker.yaml
+  - consumer.yaml
+  - sweeper.yaml
   - ../../../runtime.yaml
   - ../../../web.yaml
 patches:

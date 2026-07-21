@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: consumer
+  labels:
+    app: consumer
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: consumer
+  template:
+    metadata:
+      labels:
+        app: consumer
+    spec:
+      terminationGracePeriodSeconds: 60
+      imagePullSecrets:
+        - name: combo-preview-ghcr-pull
+      containers:
+        - name: consumer
+          image: ghcr.io/dangdang-tech/combo-api:cloud-review
+          env:
+            - name: PROCESS
+              value: consumer
+            - name: NODE_ENV
+              value: production
+            - name: REDIS_HOT_URL
+              value: redis://redis-hot:6379/0
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef: { name: combo-preview-env, key: POSTGRES_USER }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: combo-preview-env, key: POSTGRES_PASSWORD }
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef: { name: combo-preview-env, key: POSTGRES_DB }
+            - name: DATABASE_URL
+              value: postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)
+            - name: OTEL_SERVICE_NAME
+              value: cb-authoring-consumer
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: deployment.environment=cloud-review
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

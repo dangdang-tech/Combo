@@ -10,7 +10,7 @@ Cloud Review 是团队共享的真实体验环境：代码在 GitHub Actions 构
 - Secret：`combo-preview-env`、`combo-preview-bootstrap`、`combo-preview-ghcr-pull`。
 - PVC：`combo-preview-postgres-data-postgres-0`、`combo-preview-redis-queue-data-redis-queue-0`、`combo-preview-minio-data-minio-0`。
 - NodePort：Web `30081`、MinIO API / console `30901` / `30902`，与生产 `30080` / `30900` 不冲突。
-- 业务副本：API、Worker、Runtime、Web 各 1 个，并显式设置 CPU / memory requests 与 limits。
+- 业务副本：API、Worker、Consumer、Sweeper、Runtime、Web 各 1 个，并显式设置 CPU / memory requests 与 limits。
 
 Cloud Review 的 Web 入口整体受 Basic Auth 保护。`dev-login` 只在非 production 模式启用，并与页面一起位于这道保护之后；用户需先打开 `/__review/bootstrap`，点击“进入测试页面”显式创建测试身份。签名密钥来自专属 `combo-preview-bootstrap`，不得复制生产 Secret。
 
@@ -70,7 +70,7 @@ Web 镜像构建时同时写入 `VITE_DEPLOY_ENV=preview`、完整 `VITE_BUILD_S
 1. 创建 namespace，验证三个专属 Secret 存在且 bootstrap 键非空。
 2. 部署并等待 PostgreSQL、两个 Redis、MinIO 与建桶 Job。
 3. 删除并重建 migration Job，等待数据库迁移成功。
-4. 只有迁移成功后才更新 API、Worker、Runtime、Web，并等待四个 rollout。
+4. 只有迁移成功后才更新 API、Worker、Consumer、Sweeper、Runtime、Web，并等待六个 rollout。
 5. GitHub runner 从公网运行 `scripts/cloud-review-smoke.sh`，验证匿名访问被拦、授权页面、bootstrap 会话、`/ready` 和 `/try/`。
 
 各阶段 overlay 复用仓库根部的生产资源文件，因此渲染命令显式使用 Kustomize 的 `LoadRestrictionsNone`；输入仍只来自本次 checkout 后同步到 `/opt/combo-preview/infra/k8s` 的受版本控制目录，不读取 Secret 文件。

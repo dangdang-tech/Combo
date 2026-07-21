@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sweeper
+  labels:
+    app: sweeper
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: sweeper
+  template:
+    metadata:
+      labels:
+        app: sweeper
+    spec:
+      terminationGracePeriodSeconds: 60
+      imagePullSecrets:
+        - name: combo-preview-ghcr-pull
+      containers:
+        - name: sweeper
+          image: ghcr.io/dangdang-tech/combo-api:cloud-review
+          env:
+            - name: PROCESS
+              value: sweeper
+            - name: NODE_ENV
+              value: production
+            - name: REDIS_QUEUE_URL
+              value: redis://redis-queue:6379/0
+            - name: REDIS_HOT_URL
+              value: redis://redis-hot:6379/0
+            - name: S3_ENDPOINT
+              value: http://minio:9000
+            - name: S3_REGION
+              value: us-east-1
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef: { name: combo-preview-env, key: POSTGRES_USER }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: combo-preview-env, key: POSTGRES_PASSWORD }
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef: { name: combo-preview-env, key: POSTGRES_DB }
+            - name: DATABASE_URL
+              value: postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: { name: combo-preview-env, key: S3_ACCESS_KEY }
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef: { name: combo-preview-env, key: S3_SECRET_KEY }
+            - name: OTEL_SERVICE_NAME
+              value: cb-authoring-sweeper
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: deployment.environment=cloud-review
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
