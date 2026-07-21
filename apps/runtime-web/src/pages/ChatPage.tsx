@@ -25,10 +25,11 @@ import type {
 import { createProductionSession, useSession } from '../api/runtime.js';
 import { useAguiSession } from '../api/useAguiSession.js';
 import { useStudioState, useStudioTestRun } from '../api/useStudioSession.js';
-import { ArtifactRenderer } from '../components/ArtifactRenderer.js';
+import { ArtifactRenderer, type ComboElementSelection } from '../components/ArtifactRenderer.js';
 import { ChatThread } from '../components/ChatThread.js';
 import { DesignAgentPanel } from '../components/DesignAgentPanel.js';
 import { SessionSidebar } from '../components/SessionSidebar.js';
+import { StudioInspector } from '../components/StudioInspector.js';
 
 function latestVersion(artifact: RuntimeArtifact | null) {
   return (
@@ -901,6 +902,11 @@ export function ChatPage() {
   const [studioView, setStudioView] = useState<'preview' | 'test'>('preview');
   const [isEditingTestInput, setIsEditingTestInput] = useState(false);
   const [mobilePane, setMobilePane] = useState<'agent' | 'preview'>('agent');
+  const [inspectionEnabled, setInspectionEnabled] = useState(false);
+  const [studioElements, setStudioElements] = useState<ComboElementSelection[]>([]);
+  const [selectedStudioElement, setSelectedStudioElement] = useState<ComboElementSelection | null>(
+    null,
+  );
   const startedSlugRef = useRef<string | undefined>(undefined);
   const autoBootstrapRef = useRef<string | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -948,7 +954,9 @@ export function ChatPage() {
     : storedTestMatchesCurrentRevision
       ? studioState?.latestTest?.testSessionId
       : undefined;
-  const latestTestSessionQ = useSession(latestTestSessionId);
+  const reusableTestSessionId =
+    studioTest.testSessionId ?? studioState?.latestTest?.testSessionId ?? undefined;
+  const latestTestSessionQ = useSession(reusableTestSessionId);
   const currentTestIsRunning = localTestMatchesCurrentRevision && studioTest.isRunning;
   const currentTestError = localTestMatchesCurrentRevision ? studioTest.error : null;
 
@@ -979,8 +987,17 @@ export function ChatPage() {
   useEffect(() => {
     setPreviewVersionNumber(null);
     setStudioView('preview');
+    setInspectionEnabled(false);
+    setStudioElements([]);
+    setSelectedStudioElement(null);
     autoBootstrapRef.current = null;
   }, [sessionId]);
+
+  useEffect(() => {
+    setInspectionEnabled(false);
+    setStudioElements([]);
+    setSelectedStudioElement(null);
+  }, [previewVersion?.artifactKey, previewVersion?.version]);
 
   useEffect(() => {
     if (!sessionId || !currentRevision) return;
@@ -1095,6 +1112,7 @@ export function ChatPage() {
     if (localTestMatchesCurrentRevision && studioTest.outputText.trim()) {
       return studioTest.outputText.trim();
     }
+    if (!storedTestMatchesCurrentRevision) return '';
     const messages = latestTestSessionQ.data?.messages ?? [];
     return (
       [...messages]
@@ -1102,20 +1120,42 @@ export function ChatPage() {
         .find((message) => message.role === 'assistant')
         ?.text.trim() ?? ''
     );
-  }, [latestTestSessionQ.data?.messages, localTestMatchesCurrentRevision, studioTest.outputText]);
+  }, [
+    latestTestSessionQ.data?.messages,
+    localTestMatchesCurrentRevision,
+    storedTestMatchesCurrentRevision,
+    studioTest.outputText,
+  ]);
   const latestTestPrompt = useMemo(() => {
     if (localTestMatchesCurrentRevision && studioTest.prompt.trim()) {
       return studioTest.prompt.trim();
     }
+    if (!storedTestMatchesCurrentRevision) return '';
     const messages = latestTestSessionQ.data?.messages ?? [];
     return messages.find((message) => message.role === 'user')?.text.trim() ?? '';
-  }, [latestTestSessionQ.data?.messages, localTestMatchesCurrentRevision, studioTest.prompt]);
+  }, [
+    latestTestSessionQ.data?.messages,
+    localTestMatchesCurrentRevision,
+    storedTestMatchesCurrentRevision,
+    studioTest.prompt,
+  ]);
+  const reusableTestPrompt = useMemo(() => {
+    const localPrompt = studioTest.prompt.trim();
+    if (localPrompt) return localPrompt;
+    const messages = latestTestSessionQ.data?.messages ?? [];
+    return messages.find((message) => message.role === 'user')?.text.trim() ?? '';
+  }, [latestTestSessionQ.data?.messages, studioTest.prompt]);
   const latestTestArtifact = useMemo(() => {
+    if (!localTestMatchesCurrentRevision && !storedTestMatchesCurrentRevision) return undefined;
     const artifacts = latestTestSessionQ.data?.artifacts ?? [];
     const key = selectPrimaryArtifactKey(artifacts);
     const artifact = key ? (artifacts.find((item) => item.artifactKey === key) ?? null) : null;
     return latestVersion(artifact);
-  }, [latestTestSessionQ.data?.artifacts]);
+  }, [
+    latestTestSessionQ.data?.artifacts,
+    localTestMatchesCurrentRevision,
+    storedTestMatchesCurrentRevision,
+  ]);
 
   if (slug && !sessionId) {
     return (
@@ -1189,6 +1229,7 @@ export function ChatPage() {
   const sendStudioMessage = (text: string): boolean => {
     const started = agui.send(text, undefined, 'design');
     if (!started) return false;
+    setInspectionEnabled(false);
     setPreviewVersionNumber(null);
     setStudioView('preview');
     setMobilePane('preview');
@@ -1207,10 +1248,31 @@ export function ChatPage() {
     if (!currentRevision || !canStartCurrentTest) return false;
     const started = studioTest.run(currentRevision.id, prompt);
     if (!started) return false;
+    setInspectionEnabled(false);
     setIsEditingTestInput(false);
     setStudioView('test');
     setMobilePane('preview');
     return true;
+  };
+
+  const acceptStudioManifest = (elements: ComboElementSelection[]): void => {
+    const keys = new Set<string>();
+    const uniqueElements = elements.filter((element) => {
+      if (keys.has(element.key)) return false;
+      keys.add(element.key);
+      return true;
+    });
+    setStudioElements(uniqueElements);
+    setSelectedStudioElement((current) => {
+      if (!current) return null;
+      return uniqueElements.find((element) => element.key === current.key) ?? null;
+    });
+  };
+
+  const selectStudioElement = (element: ComboElementSelection): void => {
+    setSelectedStudioElement(element);
+    setInspectionEnabled(true);
+    setStudioView('preview');
   };
 
   return (
@@ -1340,6 +1402,7 @@ export function ChatPage() {
                       aria-selected={studioView === 'test'}
                       disabled={!currentRevision}
                       onClick={() => {
+                        setInspectionEnabled(false);
                         setPreviewVersionNumber(null);
                         setStudioView('test');
                       }}
@@ -1371,28 +1434,40 @@ export function ChatPage() {
                       </span>
                     )}
                     {studioView === 'preview' && (
-                      <div
-                        className="rt-design-preview__devices"
-                        role="group"
-                        aria-label="预览尺寸"
-                      >
+                      <>
                         <button
                           type="button"
-                          aria-pressed={previewSize === 'desktop'}
-                          onClick={() => setPreviewSize('desktop')}
+                          className="rt-design-preview__inspect"
+                          aria-pressed={inspectionEnabled}
+                          disabled={!showArtifact || !previewVersion}
+                          onClick={() => setInspectionEnabled((current) => !current)}
                         >
-                          <span aria-hidden="true">▣</span>
-                          桌面
+                          <span aria-hidden="true">⌖</span>
+                          {inspectionEnabled ? '退出点选' : '选择元素'}
                         </button>
-                        <button
-                          type="button"
-                          aria-pressed={previewSize === 'mobile'}
-                          onClick={() => setPreviewSize('mobile')}
+                        <div
+                          className="rt-design-preview__devices"
+                          role="group"
+                          aria-label="预览尺寸"
                         >
-                          <span aria-hidden="true">▯</span>
-                          手机
-                        </button>
-                      </div>
+                          <button
+                            type="button"
+                            aria-pressed={previewSize === 'desktop'}
+                            onClick={() => setPreviewSize('desktop')}
+                          >
+                            <span aria-hidden="true">▣</span>
+                            桌面
+                          </button>
+                          <button
+                            type="button"
+                            aria-pressed={previewSize === 'mobile'}
+                            onClick={() => setPreviewSize('mobile')}
+                          >
+                            <span aria-hidden="true">▯</span>
+                            手机
+                          </button>
+                        </div>
+                      </>
                     )}
                   </div>
                 </header>
@@ -1463,54 +1538,97 @@ export function ChatPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="rt-design-preview__surface" data-size={previewSize}>
-                    {showArtifact && previewVersion ? (
-                      <div className="rt-design-preview__viewport">
-                        <div className="rt-artifact-stage">
-                          <ArtifactRenderer
-                            key={`${previewVersion.artifactKey}-${previewVersion.version}`}
-                            artifact={previewVersion}
-                            onRunRequest={
-                              canRunPreview
-                                ? ({ prompt }) => {
-                                    startStudioTest(prompt);
-                                  }
-                                : undefined
-                            }
+                  <div
+                    className="rt-design-preview__workbench"
+                    data-inspector-active={inspectionEnabled || Boolean(selectedStudioElement)}
+                  >
+                    <div className="rt-design-preview__surface" data-size={previewSize}>
+                      {showArtifact && previewVersion ? (
+                        <div className="rt-design-preview__viewport">
+                          <div className="rt-artifact-stage">
+                            <ArtifactRenderer
+                              key={`${previewVersion.artifactKey}-${previewVersion.version}`}
+                              artifact={previewVersion}
+                              inspectionEnabled={inspectionEnabled}
+                              selectedElementKey={selectedStudioElement?.key}
+                              onElementSelect={selectStudioElement}
+                              onElementManifest={acceptStudioManifest}
+                              onRunRequest={
+                                canRunPreview
+                                  ? ({ prompt }) => {
+                                      startStudioTest(prompt);
+                                    }
+                                  : undefined
+                              }
+                            />
+                          </div>
+                        </div>
+                      ) : showInitialGenerating ? (
+                        <div className="rt-genui__stage rt-genui__stage--center">
+                          <TrialGeneratingCard
+                            capability={capability}
+                            process={agui.trialProcess}
                           />
                         </div>
-                      </div>
-                    ) : showInitialGenerating ? (
-                      <div className="rt-genui__stage rt-genui__stage--center">
-                        <TrialGeneratingCard capability={capability} process={agui.trialProcess} />
-                      </div>
-                    ) : (
-                      <div className="rt-design-preview__empty">
-                        <span aria-hidden="true">✦</span>
-                        <h2>正在恢复首版 Miniapp</h2>
-                        <p>Design Agent 会直接生成首版，你不需要先填写另一张表单。</p>
-                        <button type="button" onClick={() => setMobilePane('agent')}>
-                          查看生成状态
-                        </button>
-                      </div>
-                    )}
-                    {agui.isRunning && hasRealArtifact && (
-                      <div className="rt-design-preview__updating">
-                        <span aria-hidden="true" />
-                        正在生成 UI R{(currentRevision?.revisionNo ?? 0) + 1}；当前版本保持可用
-                      </div>
-                    )}
-                    {currentRevision && !isViewingHistory && !agui.isRunning && (
-                      <div className="rt-design-preview__loop-status">
-                        <span>
-                          UI R{currentRevision.revisionNo} 已自动保存
-                          {currentRevision.verified ? ' · 真实任务已通过' : ' · 修改后待运行'}
-                        </span>
-                        <button type="button" onClick={() => setStudioView('test')}>
-                          {currentRevision.verified ? '再次运行' : '运行真实任务'}
-                        </button>
-                      </div>
-                    )}
+                      ) : (
+                        <div className="rt-design-preview__empty">
+                          <span aria-hidden="true">✦</span>
+                          <h2>正在恢复首版 Miniapp</h2>
+                          <p>Design Agent 会直接生成首版，你不需要先填写另一张表单。</p>
+                          <button type="button" onClick={() => setMobilePane('agent')}>
+                            查看生成状态
+                          </button>
+                        </div>
+                      )}
+                      {agui.isRunning && hasRealArtifact && (
+                        <div className="rt-design-preview__updating">
+                          <span aria-hidden="true" />
+                          正在生成 UI R{(currentRevision?.revisionNo ?? 0) + 1}；当前版本保持可用
+                        </div>
+                      )}
+                      {currentRevision && !isViewingHistory && !agui.isRunning && (
+                        <div className="rt-design-preview__loop-status">
+                          <span>
+                            UI R{currentRevision.revisionNo} 已自动保存
+                            {currentRevision.verified ? ' · 真实任务已通过' : ' · 修改后待运行'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (reusableTestPrompt) {
+                                startStudioTest(reusableTestPrompt);
+                              } else {
+                                setStudioView('test');
+                              }
+                            }}
+                          >
+                            {reusableTestPrompt
+                              ? currentRevision.verified
+                                ? '用同案例再跑一次'
+                                : '用上次案例重跑'
+                              : '运行真实任务'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <StudioInspector
+                      elements={studioElements}
+                      selectedElement={selectedStudioElement}
+                      inspectionEnabled={inspectionEnabled}
+                      revisionNo={selectedStudioRevision?.revisionNo}
+                      verified={Boolean(selectedStudioRevision?.verified)}
+                      readOnly={isViewingHistory}
+                      isRunning={agui.isRunning || isBootstrapping}
+                      isTestRunning={studioTest.isRunning}
+                      reusableTestPrompt={reusableTestPrompt}
+                      onToggleInspection={() => setInspectionEnabled((current) => !current)}
+                      onSelectElement={selectStudioElement}
+                      onClearSelection={() => setSelectedStudioElement(null)}
+                      onApplyEdit={sendStudioMessage}
+                      onRerunTest={() =>
+                        reusableTestPrompt ? startStudioTest(reusableTestPrompt) : false
+                      }
+                    />
                   </div>
                 )}
               </section>

@@ -6,18 +6,205 @@ export interface ComboRunRequest {
   prompt: string;
 }
 
+export interface ComboElementSelection {
+  key: string;
+  label: string;
+  role: string | null;
+  text: string;
+  tagName: string;
+}
+
 export interface ArtifactRendererProps {
   artifact: ArtifactVersion;
   onRunRequest?: (request: ComboRunRequest) => void;
+  inspectionEnabled?: boolean;
+  selectedElementKey?: string | null;
+  onElementSelect?: (element: ComboElementSelection) => void;
+  onElementManifest?: (elements: ComboElementSelection[]) => void;
 }
 
 const MAX_COMBO_RUN_PROMPT_LENGTH = 12_000;
+const MAX_COMBO_ELEMENT_KEY_LENGTH = 120;
+const MAX_COMBO_ELEMENT_LABEL_LENGTH = 160;
+const MAX_COMBO_ELEMENT_TEXT_LENGTH = 240;
+const MAX_COMBO_ELEMENT_MANIFEST_LENGTH = 80;
+
+const STUDIO_INSPECTION_BRIDGE = `
+<style id="combo-studio-inspection-style">
+  [data-combo-key].combo-studio-hovered {
+    outline: 2px dashed #b8563f !important;
+    outline-offset: 3px !important;
+  }
+  [data-combo-key].combo-studio-selected {
+    outline: 2px solid #b8563f !important;
+    outline-offset: 3px !important;
+    box-shadow: 0 0 0 5px rgba(184, 86, 63, 0.14) !important;
+  }
+  html.combo-studio-inspection-enabled,
+  html.combo-studio-inspection-enabled [data-combo-key] {
+    cursor: crosshair !important;
+  }
+</style>
+<script>
+(() => {
+  if (window.__comboStudioInspectionV1) return;
+  Object.defineProperty(window, '__comboStudioInspectionV1', { value: true });
+
+  let enabled = false;
+  let selectedKey = null;
+  let hoveredElement = null;
+  let manifestFrame = null;
+  const MAX_ELEMENTS = 80;
+
+  const clean = (value, maxLength) =>
+    String(value == null ? '' : value).replace(/\\s+/g, ' ').trim().slice(0, maxLength);
+
+  const roleFor = (element) => {
+    const explicitRole = clean(element.getAttribute('role'), 60);
+    if (explicitRole) return explicitRole;
+    const tagName = element.tagName.toLowerCase();
+    if (tagName === 'button') return 'button';
+    if (tagName === 'a') return 'link';
+    if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') return 'input';
+    if (/^h[1-6]$/.test(tagName)) return 'heading';
+    return null;
+  };
+
+  const describe = (element) => {
+    const key = clean(element.getAttribute('data-combo-key'), 120);
+    if (!key) return null;
+    const text = clean(element.innerText || element.textContent, 240);
+    const label = clean(
+      element.getAttribute('data-combo-label') ||
+        element.getAttribute('aria-label') ||
+        element.getAttribute('title') ||
+        text ||
+        key,
+      160,
+    );
+    return {
+      key,
+      label: label || key,
+      role: roleFor(element),
+      text,
+      tagName: element.tagName.toLowerCase().slice(0, 32),
+    };
+  };
+
+  const post = (payload) => window.parent.postMessage(payload, '*');
+
+  const publishManifest = () => {
+    const elements = Array.from(document.querySelectorAll('[data-combo-key]'))
+      .slice(0, MAX_ELEMENTS)
+      .map(describe)
+      .filter(Boolean);
+    post({ type: 'combo:element-manifest', version: 1, elements });
+  };
+
+  const scheduleManifest = () => {
+    if (manifestFrame !== null) return;
+    manifestFrame = window.requestAnimationFrame(() => {
+      manifestFrame = null;
+      publishManifest();
+      syncSelectedElement();
+    });
+  };
+
+  const syncSelectedElement = () => {
+    document.querySelectorAll('.combo-studio-selected').forEach((element) => {
+      element.classList.remove('combo-studio-selected');
+    });
+    if (!selectedKey) return;
+    Array.from(document.querySelectorAll('[data-combo-key]')).find(
+      (element) => element.getAttribute('data-combo-key') === selectedKey,
+    )?.classList.add('combo-studio-selected');
+  };
+
+  const clearHover = () => {
+    hoveredElement?.classList.remove('combo-studio-hovered');
+    hoveredElement = null;
+  };
+
+  window.addEventListener('message', (event) => {
+    if (event.source !== window.parent || !event.data || typeof event.data !== 'object') return;
+    if (event.data.type !== 'combo:inspection-state' || event.data.version !== 1) return;
+    enabled = event.data.enabled === true;
+    selectedKey =
+      typeof event.data.selectedElementKey === 'string'
+        ? clean(event.data.selectedElementKey, 120)
+        : null;
+    document.documentElement.classList.toggle('combo-studio-inspection-enabled', enabled);
+    if (!enabled) clearHover();
+    syncSelectedElement();
+    publishManifest();
+  });
+
+  document.addEventListener(
+    'pointerover',
+    (event) => {
+      if (!enabled || !(event.target instanceof Element)) return;
+      const candidate = event.target.closest('[data-combo-key]');
+      if (!candidate || candidate === hoveredElement) return;
+      clearHover();
+      hoveredElement = candidate;
+      hoveredElement.classList.add('combo-studio-hovered');
+    },
+    true,
+  );
+
+  document.addEventListener(
+    'pointerout',
+    (event) => {
+      if (!enabled || !(event.target instanceof Element)) return;
+      const candidate = event.target.closest('[data-combo-key]');
+      if (candidate && candidate === hoveredElement) clearHover();
+    },
+    true,
+  );
+
+  document.addEventListener(
+    'click',
+    (event) => {
+      if (!enabled || !(event.target instanceof Element)) return;
+      const candidate = event.target.closest('[data-combo-key]');
+      if (!candidate) return;
+      const element = describe(candidate);
+      if (!element) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      selectedKey = element.key;
+      syncSelectedElement();
+      post({ type: 'combo:element-select', version: 1, element });
+    },
+    true,
+  );
+
+  const ready = () => {
+    publishManifest();
+    post({ type: 'combo:inspection-ready', version: 1 });
+    if (document.body) {
+      new MutationObserver(scheduleManifest).observe(document.body, {
+        childList: true,
+        subtree: true,
+      });
+    }
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', ready, { once: true });
+  } else {
+    ready();
+  }
+})();
+</script>
+`;
 
 /** 按 kind 渲染一个 artifact 版本。html 走【沙箱 iframe】（allow-scripts、无 same-origin，隔离父页）。 */
-export function ArtifactRenderer({ artifact, onRunRequest }: ArtifactRendererProps) {
+export function ArtifactRenderer(props: ArtifactRendererProps) {
+  const { artifact } = props;
   switch (artifact.kind) {
     case 'html':
-      return <HtmlView artifact={artifact} onRunRequest={onRunRequest} />;
+      return <HtmlView {...props} />;
     case 'markdown':
       return <MarkdownView content={artifact.content} />;
     case 'code':
@@ -29,23 +216,65 @@ export function ArtifactRenderer({ artifact, onRunRequest }: ArtifactRendererPro
   }
 }
 
-function HtmlView({ artifact, onRunRequest }: ArtifactRendererProps) {
+function HtmlView({
+  artifact,
+  onRunRequest,
+  inspectionEnabled = false,
+  selectedElementKey = null,
+  onElementSelect,
+  onElementManifest,
+}: ArtifactRendererProps) {
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const bridgeEnabled = Boolean(onElementSelect || onElementManifest);
+  const srcDoc = useMemo(
+    () => (bridgeEnabled ? injectStudioInspectionBridge(artifact.content) : artifact.content),
+    [artifact.content, bridgeEnabled],
+  );
+
+  const syncInspectionState = (): void => {
+    if (!bridgeEnabled) return;
+    frameRef.current?.contentWindow?.postMessage(
+      {
+        type: 'combo:inspection-state',
+        version: 1,
+        enabled: inspectionEnabled,
+        selectedElementKey,
+      },
+      '*',
+    );
+  };
 
   useEffect(() => {
-    if (!onRunRequest) return;
+    if (!onRunRequest && !onElementSelect && !onElementManifest) return;
 
     const handleMessage = (event: MessageEvent<unknown>): void => {
       if (event.source !== frameRef.current?.contentWindow) return;
-      if (!isComboRunMessage(event.data)) return;
-      const prompt = event.data.prompt.trim();
-      if (!prompt || prompt.length > MAX_COMBO_RUN_PROMPT_LENGTH) return;
-      onRunRequest({ prompt });
+      if (onRunRequest && isComboRunMessage(event.data)) {
+        const prompt = event.data.prompt.trim();
+        if (!prompt || prompt.length > MAX_COMBO_RUN_PROMPT_LENGTH) return;
+        onRunRequest({ prompt });
+        return;
+      }
+      if (isComboInspectionReadyMessage(event.data)) {
+        syncInspectionState();
+        return;
+      }
+      if (onElementSelect && isComboElementSelectMessage(event.data)) {
+        onElementSelect(event.data.element);
+        return;
+      }
+      if (onElementManifest && isComboElementManifestMessage(event.data)) {
+        onElementManifest(event.data.elements);
+      }
     };
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [onRunRequest]);
+  }, [inspectionEnabled, onElementManifest, onElementSelect, onRunRequest, selectedElementKey]);
+
+  useEffect(() => {
+    syncInspectionState();
+  }, [bridgeEnabled, inspectionEnabled, selectedElementKey]);
 
   return (
     <iframe
@@ -53,9 +282,18 @@ function HtmlView({ artifact, onRunRequest }: ArtifactRendererProps) {
       className="rt-artifact__frame"
       title={artifact.title}
       sandbox="allow-scripts allow-popups allow-forms"
-      srcDoc={artifact.content}
+      srcDoc={srcDoc}
+      onLoad={syncInspectionState}
     />
   );
+}
+
+function injectStudioInspectionBridge(content: string): string {
+  const closingBody = content.match(/<\/body\s*>/i);
+  if (!closingBody || closingBody.index === undefined)
+    return `${content}${STUDIO_INSPECTION_BRIDGE}`;
+  const index = closingBody.index;
+  return `${content.slice(0, index)}${STUDIO_INSPECTION_BRIDGE}${content.slice(index)}`;
 }
 
 function isComboRunMessage(
@@ -67,6 +305,62 @@ function isComboRunMessage(
     candidate.type === 'combo:run' &&
     candidate.version === 1 &&
     typeof candidate.prompt === 'string'
+  );
+}
+
+function isComboInspectionReadyMessage(
+  value: unknown,
+): value is { type: 'combo:inspection-ready'; version: 1 } {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as { type?: unknown; version?: unknown };
+  return candidate.type === 'combo:inspection-ready' && candidate.version === 1;
+}
+
+function isComboElementSelection(value: unknown): value is ComboElementSelection {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.key === 'string' &&
+    candidate.key.trim().length > 0 &&
+    candidate.key.length <= MAX_COMBO_ELEMENT_KEY_LENGTH &&
+    typeof candidate.label === 'string' &&
+    candidate.label.trim().length > 0 &&
+    candidate.label.length <= MAX_COMBO_ELEMENT_LABEL_LENGTH &&
+    (candidate.role === null ||
+      (typeof candidate.role === 'string' && candidate.role.length <= 60)) &&
+    typeof candidate.text === 'string' &&
+    candidate.text.length <= MAX_COMBO_ELEMENT_TEXT_LENGTH &&
+    typeof candidate.tagName === 'string' &&
+    candidate.tagName.length > 0 &&
+    candidate.tagName.length <= 32
+  );
+}
+
+function isComboElementSelectMessage(
+  value: unknown,
+): value is { type: 'combo:element-select'; version: 1; element: ComboElementSelection } {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as { type?: unknown; version?: unknown; element?: unknown };
+  return (
+    candidate.type === 'combo:element-select' &&
+    candidate.version === 1 &&
+    isComboElementSelection(candidate.element)
+  );
+}
+
+function isComboElementManifestMessage(value: unknown): value is {
+  type: 'combo:element-manifest';
+  version: 1;
+  elements: ComboElementSelection[];
+} {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as { type?: unknown; version?: unknown; elements?: unknown };
+  return (
+    candidate.type === 'combo:element-manifest' &&
+    candidate.version === 1 &&
+    Array.isArray(candidate.elements) &&
+    candidate.elements.length <= MAX_COMBO_ELEMENT_MANIFEST_LENGTH &&
+    candidate.elements.every(isComboElementSelection)
   );
 }
 

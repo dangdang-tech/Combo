@@ -52,4 +52,110 @@ describe('ArtifactRenderer Runtime bridge', () => {
 
     expect(onRunRequest).not.toHaveBeenCalled();
   });
+
+  it('injects the Studio inspection bridge only for editable previews', () => {
+    const { rerender } = render(<ArtifactRenderer artifact={htmlArtifact()} />);
+    let frame = screen.getByTitle('每日待办 Miniapp') as HTMLIFrameElement;
+
+    expect(frame.srcdoc).not.toContain('combo:element-select');
+
+    rerender(
+      <ArtifactRenderer artifact={htmlArtifact()} inspectionEnabled onElementSelect={vi.fn()} />,
+    );
+    frame = screen.getByTitle('每日待办 Miniapp') as HTMLIFrameElement;
+
+    expect(frame.srcdoc).toContain('combo:element-select');
+    expect(frame.srcdoc).toContain('<button>运行</button>');
+  });
+
+  it('accepts validated element selections and manifests only from the rendered iframe', () => {
+    const onElementSelect = vi.fn();
+    const onElementManifest = vi.fn();
+    render(
+      <ArtifactRenderer
+        artifact={htmlArtifact()}
+        inspectionEnabled
+        onElementSelect={onElementSelect}
+        onElementManifest={onElementManifest}
+      />,
+    );
+    const frame = screen.getByTitle('每日待办 Miniapp') as HTMLIFrameElement;
+    const element = {
+      key: 'result-main',
+      label: '今日安排结果',
+      role: 'region',
+      text: '3 项任务已经排好',
+      tagName: 'section',
+    };
+
+    fireEvent(
+      window,
+      new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'combo:element-select', version: 1, element },
+      }),
+    );
+    fireEvent(
+      window,
+      new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'combo:element-manifest', version: 1, elements: [element] },
+      }),
+    );
+
+    expect(onElementSelect).toHaveBeenCalledWith(element);
+    expect(onElementManifest).toHaveBeenCalledWith([element]);
+
+    fireEvent(
+      window,
+      new MessageEvent('message', {
+        source: window,
+        data: { type: 'combo:element-select', version: 1, element },
+      }),
+    );
+    fireEvent(
+      window,
+      new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: {
+          type: 'combo:element-select',
+          version: 1,
+          element: { ...element, key: '', text: 'x'.repeat(241) },
+        },
+      }),
+    );
+
+    expect(onElementSelect).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends inspection state to the iframe when the bridge is ready', () => {
+    render(
+      <ArtifactRenderer
+        artifact={htmlArtifact()}
+        inspectionEnabled
+        selectedElementKey="run-primary"
+        onElementSelect={vi.fn()}
+      />,
+    );
+    const frame = screen.getByTitle('每日待办 Miniapp') as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow as Window, 'postMessage');
+
+    fireEvent(
+      window,
+      new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'combo:inspection-ready', version: 1 },
+      }),
+    );
+
+    expect(postMessage).toHaveBeenCalledWith(
+      {
+        type: 'combo:inspection-state',
+        version: 1,
+        enabled: true,
+        selectedElementKey: 'run-primary',
+      },
+      '*',
+    );
+  });
 });
