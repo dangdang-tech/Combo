@@ -4,6 +4,7 @@
 // packages/skill-package（见飞书《Agora 创作者中心 · 后端仓库结构规范》）。
 import { z } from 'zod';
 import {
+  InputFieldSchema,
   InputSchemaSchema,
   OutputSpecSchema,
   BoundariesSchema,
@@ -95,6 +96,12 @@ export function toRuntimeView(args: ToRuntimeViewArgs): SkillPackageRuntimeView 
 // ───────────────────────── 公开能力视图（下发浏览器的安全子集）─────────────────────────
 // 去掉 instructions（系统提示词，绝不出服务端）与 manifestHash（内部完整性凭据，无需暴露）。
 //   附带 slug / description(goal) / starterPrompts，供试用前端渲染输入表单与引导提示。
+// 输入字段的 derivedFrom 是创作态内部血缘标记，对外无产品价值，也避免把内部 instructions 概念下发。
+export const PublicInputFieldSchema = InputFieldSchema.omit({ derivedFrom: true });
+export type PublicInputField = z.infer<typeof PublicInputFieldSchema>;
+export const PublicInputSchemaSchema = z.object({ fields: z.array(PublicInputFieldSchema) });
+export type PublicInputSchema = z.infer<typeof PublicInputSchemaSchema>;
+
 export const PublicCapabilityViewSchema = z.object({
   capabilityId: z.string(),
   slug: z.string(),
@@ -103,7 +110,7 @@ export const PublicCapabilityViewSchema = z.object({
   name: z.string(),
   tagline: z.string(),
   description: z.string(),
-  inputs: InputSchemaSchema,
+  inputs: PublicInputSchemaSchema,
   output: OutputSpecSchema,
   boundaries: BoundariesSchema,
   starterPrompts: z.array(z.string()),
@@ -127,7 +134,9 @@ export function toPublicView(args: ToPublicViewArgs): PublicCapabilityView {
     name: manifest.name,
     tagline: manifest.tagline,
     description: manifest.goal,
-    inputs: manifest.inputs,
+    inputs: {
+      fields: manifest.inputs.fields.map(({ derivedFrom: _derivedFrom, ...field }) => field),
+    },
     output: manifest.output,
     boundaries: manifest.boundaries,
     starterPrompts: manifest.starter_prompts,

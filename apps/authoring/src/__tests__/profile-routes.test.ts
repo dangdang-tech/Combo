@@ -4,6 +4,7 @@
 import { describe, it, expect } from 'vitest';
 import type { RouteHandlerMethod } from 'fastify';
 import {
+  getCreatorProfileBySlugHandler,
   getCreatorProfileHandler,
   getDensityHandler,
   getHeatmapHandler,
@@ -174,6 +175,32 @@ describe('GET /creators/:id/profile（主聚合）', () => {
     expect(body.data.heatmap).toBeNull(); // 失败分区
     expect(body.data.network).toBeNull();
     expect(body.data.sectionErrors.map((e) => e.section).sort()).toEqual(['heatmap', 'network']);
+    assertNoCode(body);
+  });
+});
+
+describe('GET /creators/by-slug/:slug/profile（公开创作者主页）', () => {
+  it('slug 命中 profile → 复用主聚合，匿名 200', async () => {
+    const db = new ProfileFakeDb();
+    const creatorId = seedProfile(db, { slug: 'gw61jgf0fij4', display_name: '真实创作者' });
+    seedPublishedCapability(db, creatorId, { name: '文档与代码一致性核查' });
+    const ctx = makeReqReply({ params: { slug: 'gw61jgf0fij4' }, db });
+    await call(getCreatorProfileBySlugHandler(), ctx);
+    expect(ctx.sent.code).toBe(200);
+    const body = ctx.sent.body as { data: { creatorId: string; hero: { displayName: string } } };
+    expect(body.data.creatorId).toBe(creatorId);
+    expect(body.data.hero.displayName).toBe('真实创作者');
+    assertNoCode(body);
+  });
+
+  it('slug 不存在 → 404，不把 slug 当公开主页伪造', async () => {
+    const db = new ProfileFakeDb();
+    const ctx = makeReqReply({ params: { slug: 'missing' }, db });
+    await call(getCreatorProfileBySlugHandler(), ctx);
+    expect(ctx.sent.code).toBe(404);
+    const body = ctx.sent.body as { error: { userMessage: string; action: string } };
+    expect(body.error.action).toBe('change_input');
+    expect(body.error.userMessage).toContain('没找到');
     assertNoCode(body);
   });
 });

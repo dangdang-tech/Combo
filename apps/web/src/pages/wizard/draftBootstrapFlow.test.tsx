@@ -161,6 +161,10 @@ describe('草稿 bootstrap 端到端贯穿（P0-2，PRD 2 步）', () => {
       expect(pairCall).toBeTruthy();
     });
     await waitFor(() => expect(MockFetchEventSource.last).toBeTruthy());
+    // 助手返回 jobId 后立即落 URL 恢复锚点，同时保留 bootstrap 出的 draftId；刷新可恢复同一 job。
+    expect(screen.getByTestId('path')).toHaveTextContent(
+      '/create/import?draftId=draft-real&jobId=job1',
+    );
 
     // ③ SSE 导入完成 → 取快照 → 自动进入能力页（带 snapshotId + draftId）。
     act(() => conn().open());

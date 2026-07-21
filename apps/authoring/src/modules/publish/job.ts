@@ -243,6 +243,7 @@ async function publishOneItem(
   const input: BatchItemPublishInput = item.input;
 
   let versionId = input.versionId ?? item.versionId ?? null;
+  let capabilityId = item.capabilityId ?? null;
   const candidateId = item.candidateId ?? input.candidateId ?? null;
 
   // ① 候选起源项（§5.3 一次性自动整理、批量发布）：只要本项【仍有 candidateId】就必须经 create→structure 编排，
@@ -341,6 +342,7 @@ async function publishOneItem(
     }
     // c) 整理就绪：回填 versionId（manifest 软字段已补齐落库、结构化 ready），续走版本发布（下方 ② 路径）。
     versionId = outcome.versionId;
+    capabilityId = outcome.capabilityId;
   }
 
   // 既无 candidateId 又无 versionId = 内部不一致（建批 refine 已挡，此处防御）→ 该 item failed（去上一步选）。
@@ -368,6 +370,7 @@ async function publishOneItem(
     fenceToken: ctx.fenceToken,
     state: 'publishing',
     versionId,
+    ...(capabilityId ? { capabilityId } : {}),
   });
   if (!advanced) {
     // 已被接管 / 已终态：不处理本项（剩余由新 attempt 续跑；已生成不丢）。
@@ -417,6 +420,7 @@ async function publishOneItem(
     //   但 fence 丢失/进程崩在 finalize 之前 → 重跑再发同版命中 ALREADY_PUBLISHED。此版【确已由本批发布】，
     //   绝不当失败标 failed（违「已生成不丢」），而是终态 published（模板 B 防重确保不双计）。
     if (err instanceof PublishError && err.code === ErrorCode.ALREADY_PUBLISHED) {
+      const publishedCapabilityId = capabilityId ?? item.capabilityId ?? undefined;
       const fin = await finalizeBatchItemTx(db, {
         itemId: item.id,
         jobId: job.id,
@@ -424,13 +428,14 @@ async function publishOneItem(
         state: 'published',
         error: null,
         versionId,
-        ...(item.capabilityId ? { capabilityId: item.capabilityId } : {}),
+        ...(publishedCapabilityId ? { capabilityId: publishedCapabilityId } : {}),
       });
       if (fin.moved) {
         await appendItemFrame(ctx, {
           ...item,
           state: 'published',
           versionId,
+          ...(publishedCapabilityId ? { capabilityId: publishedCapabilityId } : {}),
           error: null,
         });
       }

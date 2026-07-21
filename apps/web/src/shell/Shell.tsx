@@ -1,10 +1,10 @@
-// 导航外壳 Shell（F-04，D14：左侧固定侧栏 + 顶部面包屑栏 + 主内容区，全流程恒定结构）。
+// 导航外壳 Shell（F-04，D14：左侧固定侧栏 + 主内容区；上传向导额外保留步骤顶栏）。
 //
 // 侧栏（开工总纲 §2.1/§2.2）：
-//   顶部 — Agora 品牌字标 + 收起/展开开关
+//   顶部 — Combo 品牌字标 + 收起/展开开关
 //   中段 — 两组导航（创作 / 我的），可收起为纯图标态（收起后只剩图标 + hover tooltip）
 //   底部 — 当前账号常驻区（头像 + 姓名 · 职位，如 Wayne · CGO）
-// 顶栏（§2.2）：面包屑（如「Creator Builder / 上传能力」）+ 右上角账号头像（+ 视角开关占位）。
+// 上传向导顶栏（§2.2）：面包屑（如「Combo Builder / 上传能力」）+ 右上角账号头像。
 // 子页经 <Outlet> 渲染；五步上传流程任何一步都不改外壳结构（批注 D14）。
 import type { ReactElement } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
@@ -14,17 +14,17 @@ import { useCollapse } from './useCollapse.js';
 import { useAccount, avatarInitial, type ShellAccount } from './account.js';
 import { IconChevrons } from './icons.js';
 import { TopbarActionSlot } from './topbarSlot.js';
+import { ComboMark, ComboWordmark } from './brand.js';
+import { CloudReviewBar } from './CloudReviewBar.js';
 
 export function Shell(): ReactElement {
   const location = useLocation();
-  const { mode, toggle: toggleView } = useViewMode();
+  const { mode } = useViewMode();
   const { collapsed, toggle: toggleCollapse } = useCollapse();
   const account = useAccount();
   const crumbs = breadcrumbFor(location.pathname);
-  // 顶栏居中字标的页名（Figma：AGORA · CREATOR · 工作台）。/creator 只有根 crumb，特判为「工作台」。
-  const pageTitle = crumbs.length > 1 ? (crumbs[crumbs.length - 1]?.label ?? '工作台') : '工作台';
-  // 顶栏两形态（Figma 实测）：工作台 / 个人主页等 = 居中字标 + 视角开关；上传五步 = 左面包屑「上传能力 / Creator
-  //   Builder」+ 右上头像。isWizard 据 /create 前缀判别；向导区段名取面包屑第二段（命中「上传能力」）。
+  // 上传五步页保留左面包屑「上传能力 / Combo Builder」+ 右上头像；
+  // 工作台等普通页不再渲染顶部横栏，内容直接从主区顶部开始。
   const isWizard = location.pathname === '/create' || location.pathname.startsWith('/create/');
   const wizardSection = crumbs[1]?.label ?? '上传能力';
 
@@ -38,12 +38,10 @@ export function Shell(): ReactElement {
       {/* 左侧栏：恒定结构（D14）。收起时整体收窄为纯图标态。 */}
       <aside className="cb-shell__sidebar" aria-label="侧边导航">
         <div className="cb-shell__brand">
-          {/* Agora 品牌字标（收起态隐去文字，仅留首字母徽标）。 */}
-          <Link to="/creator" className="cb-shell__brand-link" aria-label="Agora 创作者中心 首页">
-            <span className="cb-shell__brand-mark" aria-hidden="true">
-              A
-            </span>
-            <span className="cb-shell__brand-word">Agora</span>
+          {/* Combo 品牌字标（收起态隐去文字，仅留 C 图标）。 */}
+          <Link to="/creator" className="cb-shell__brand-link" aria-label="Combo 创作者中心 首页">
+            <ComboMark className="cb-shell__brand-mark" />
+            <ComboWordmark className="cb-shell__brand-word" />
           </Link>
           <button
             type="button"
@@ -90,49 +88,28 @@ export function Shell(): ReactElement {
         </div>
       </aside>
 
-      {/* 主区：顶栏面包屑 + 视角开关 + 右上头像 + 内容 Outlet。 */}
+      {/* 主区：普通页仅内容；上传向导页额外带面包屑栏。 */}
       <div className="cb-shell__main">
-        <header className="cb-shell__topbar">
-          {isWizard ? (
-            /* 向导顶栏左侧面包屑（Figma STEP：上传能力 / Creator Builder）。 */
+        <CloudReviewBar />
+        {isWizard && (
+          <header className="cb-shell__topbar">
+            {/* 向导顶栏左侧面包屑（Figma STEP：上传能力 / Combo Builder）。 */}
             <p className="cb-shell__crumbs">
               <span className="cb-shell__crumb-page">{wizardSection}</span>
               <span className="cb-shell__crumb-sep" aria-hidden="true">
                 /
               </span>
-              <span className="cb-shell__crumb-root">Creator Builder</span>
+              <span className="cb-shell__crumb-root">{crumbs[0]?.label ?? 'Combo Builder'}</span>
             </p>
-          ) : (
-            <span className="cb-shell__topbar-spacer" aria-hidden="true" />
-          )}
 
-          {/* 工作台 / 个人主页：居中字标（Figma：AGORA · CREATOR · 当前页）。向导页不显字标（改用左面包屑）。 */}
-          {!isWizard && (
-            <p className="cb-shell__eyebrow" aria-label={`当前页面：${pageTitle}`}>
-              {`AGORA · CREATOR · ${pageTitle}`}
-            </p>
-          )}
-
-          {isWizard ? (
-            /* 向导顶栏右上：「保存草稿」+ 真实账号头像同处一条栏（Figma STEP 顶栏右侧）。
-               保存草稿由更深的 WizardShell 经插槽上抬注册，此处只渲染（无注册时为空）。 */
+            {/* 向导顶栏右上：「保存草稿」+ 真实账号头像同处一条栏（Figma STEP 顶栏右侧）。
+                保存草稿由更深的 WizardShell 经插槽上抬注册，此处只渲染（无注册时为空）。 */}
             <div className="cb-shell__topbar-right">
               <TopbarActionSlot />
               <AccountAvatar account={account} className="cb-shell__topbar-avatar" />
             </div>
-          ) : (
-            /* 双视角开关占位（D14）：本期只切前端视角态，不动鉴权/路由。 */
-            <button
-              type="button"
-              className="cb-shell__viewtoggle"
-              onClick={toggleView}
-              aria-pressed={mode === 'consumer'}
-              title="切换创作者 / 消费者视角（占位）"
-            >
-              {mode === 'creator' ? '创作者视角' : '消费者视角'}
-            </button>
-          )}
-        </header>
+          </header>
+        )}
 
         <main className="cb-shell__content">
           <Outlet />
@@ -145,6 +122,20 @@ export function Shell(): ReactElement {
 /** 单条侧栏导航项：展开显图标+文字；收起仅图标，文字降级为 title tooltip（外壳首页-05）。 */
 function NavItemLink({ item, collapsed }: { item: NavItem; collapsed: boolean }): ReactElement {
   const Icon = item.icon;
+  if (item.disabled) {
+    return (
+      <li>
+        <span
+          className="cb-shell__navlink cb-shell__navlink--disabled"
+          aria-disabled="true"
+          title={collapsed ? item.label : '暂未开放'}
+        >
+          <Icon className="cb-shell__navicon" />
+          <span className="cb-shell__navlabel">{item.label}</span>
+        </span>
+      </li>
+    );
+  }
   return (
     <li>
       <NavLink

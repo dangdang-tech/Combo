@@ -16,6 +16,12 @@ interface OidcEndpoints {
   tokenEndpoint: string;
 }
 
+/**
+ * Logto discovery 在容器网络内可能需要数秒；2s 会把仍在正常响应的上游误判为不可达。
+ * 8s 仍有明确上限，同时覆盖当前 full-compose 实测约 4.6s 的冷请求。
+ */
+const OIDC_DISCOVERY_TIMEOUT_MS = 8_000;
+
 function normalizeIssuer(issuer: string): string {
   return issuer.replace(/\/$/, '');
 }
@@ -28,7 +34,10 @@ function discoveryUrl(env: Env): string {
  * 拉 discovery 取 authorize/token 端点（带超时，依赖宕机快速失败、不裸挂）。
  *   - null：上游不可达 / 超时 / 非 2xx / 缺关键字段（调用方据此走 escalate / 失败重定向）。
  */
-async function fetchOidcEndpoints(env: Env, timeoutMs = 2_000): Promise<OidcEndpoints | null> {
+async function fetchOidcEndpoints(
+  env: Env,
+  timeoutMs = OIDC_DISCOVERY_TIMEOUT_MS,
+): Promise<OidcEndpoints | null> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {

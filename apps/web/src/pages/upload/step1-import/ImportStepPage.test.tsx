@@ -113,6 +113,54 @@ describe('ImportStepPage', () => {
     expect(pairCall?.headers['X-Idempotency-Scope']).toBe('import.connect.pair');
   });
 
+  it('本机助手拿到 jobId → URL 同时保留 draftId + jobId；按该 URL 重新挂载恢复同一条 SSE', async () => {
+    mock = installFetchMock([
+      {
+        status: 200,
+        json: {
+          data: {
+            pairId: 'p1',
+            pairingCode: '123456',
+            command: 'cmd',
+            curlOneLiner: 'curl -fsSL agora.app/import | sh',
+            expiresAt: '2026-06-17T01:00:00Z',
+          },
+        },
+      },
+      {
+        status: 200,
+        json: {
+          data: {
+            pairId: 'p1',
+            phase: 'job_created',
+            jobId: 'job-from-helper',
+            eventsUrl: '/api/v1/jobs/job-from-helper/events',
+          },
+        },
+      },
+    ]);
+
+    const first = renderPage('/create/import?draftId=d1', 'd1');
+    await userEvent.click(screen.getByRole('button', { name: '开始导入 →' }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('path')).toHaveTextContent(
+        '/create/import?draftId=d1&jobId=job-from-helper',
+      ),
+    );
+    await waitFor(() =>
+      expect(MockFetchEventSource.last?.url).toContain('/jobs/job-from-helper/events'),
+    );
+
+    // 模拟刷新：React 内存态全部丢掉，只用地址栏的 draftId + jobId 重新挂载。
+    first.unmount();
+    MockFetchEventSource.reset();
+    renderPage('/create/import?draftId=d1&jobId=job-from-helper', 'd1');
+    await waitFor(() =>
+      expect(MockFetchEventSource.last?.url).toContain('/jobs/job-from-helper/events'),
+    );
+  });
+
   it('深链 ?jobId= → SSE 加载（进度量化文案）→ done → 自动进入能力页（带 snapshotId）', async () => {
     mock = installFetchMock([
       // fetchSnapshot
@@ -276,12 +324,13 @@ describe('ImportStepPage', () => {
 
   it('加载态点「取消导入」 → 调取消端点 → 回空态', async () => {
     mock = installFetchMock({ status: 204 });
-    renderPage('/create/import?jobId=job1');
+    renderPage('/create/import?draftId=d1&jobId=job1', 'd1');
     act(() => conn().open());
     act(() => conn().emit('progress', { percent: 10, phrase: '10%' }, { id: '1-0' }));
     await userEvent.click(screen.getByRole('button', { name: '取消导入' }));
     // 回空态：命令行导入主卡（主路径）再次可见。
     await waitFor(() => expect(screen.getByText('命令行导入（本机直读）')).toBeInTheDocument());
+    expect(screen.getByTestId('path')).toHaveTextContent('/create/import?draftId=d1');
     const cancelCall = mock.calls.find((c) => c.url.includes('/cancel'));
     expect(cancelCall?.headers['X-Idempotency-Scope']).toBe('job.cancel');
   });

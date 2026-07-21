@@ -21,6 +21,7 @@ import {
   ErrorCode,
   SUBTASK_SEQUENCES,
   redactBatch,
+  mergeReports,
   DEFAULT_RULESET,
   SSE_ROUTES,
   type ImportSource,
@@ -173,11 +174,45 @@ function sourceHintFromKey(key: string): Exclude<ImportSource, 'mixed'> | undefi
   return undefined;
 }
 
-/** 去敏后的段（content/title 已抹敏，contentHash 按去敏后内容重算——契约去重键，§6.2）。 */
+/** 去敏后的紧凑段（content/title 已抹敏；contentHash 按截断前完整去敏正文重算，避免长公共前缀误去重）。 */
 interface RedactedSegment extends Omit<ParsedSegment, 'contentHash' | 'content' | 'title'> {
   contentHash: string;
   content: string;
   title: string;
+}
+
+/**
+ * 下游能力提取只消费每段前 2000 字符；去敏后立刻压成这个上限，避免完整会话正文跨分片常驻内存，
+ * 也避免下一阶段 readSnapshotSegments 再把数 GB 全文一次性读回 worker。
+ */
+export const IMPORT_SEGMENT_CONTENT_MAX_CHARS = 2_000;
+
+/**
+ * 截取并强制物化为独立字符串。
+ *
+ * 不能直接返回 `input.slice(0, maxChars)`：V8 可能把它表示成 SlicedString，让这个短结果继续引用整段
+ * 多 MB 会话的 backing store；累计上千段后仍会 OOM。逐 code-unit 重建会生成新的顺序字符串，不使用
+ * Buffer/TextEncoder（不引入 external memory，也不改变孤立 surrogate）。若截断点正好劈开代理对，则少取
+ * 一个 code unit，避免制造损坏的 Unicode。
+ */
+export function materializeImportText(input: string, maxChars: number): string {
+  const limit = Number.isFinite(maxChars) ? Math.max(0, Math.trunc(maxChars)) : 0;
+  let end = Math.min(input.length, limit);
+  if (
+    end > 0 &&
+    end < input.length &&
+    input.charCodeAt(end - 1) >= 0xd800 &&
+    input.charCodeAt(end - 1) <= 0xdbff &&
+    input.charCodeAt(end) >= 0xdc00 &&
+    input.charCodeAt(end) <= 0xdfff
+  ) {
+    end -= 1;
+  }
+  if (end === 0) return '';
+  const codeUnits = new Array<number>(end);
+  for (let i = 0; i < end; i++) codeUnits[i] = input.charCodeAt(i);
+  // end 最多 2000（正文）或 80 左右（标题），远低于函数参数上限；fromCharCode 直接产出独立字符串。
+  return String.fromCharCode(...codeUnits);
 }
 
 /** ISO → 'YYYY-MM-DD'（快照 time_span_from/to 用 date 列；UTC 取，避免跑测机时区漂移）。 */
@@ -186,52 +221,53 @@ function isoToDate(iso: string): string {
 }
 
 /**
- * 解析 + 去敏 + 快照内去重（redact/segment 子任务核心）。纯计算，不写库。
- *   - parseSessions(B-18)：原文 JSONL → 段（含原始 content/title）。
- *   - 逐段 redact(B-17) content+title → 重算 content_hash（去敏后内容，§6.2 去重键）。
- *   - 按去敏后 hash 再次快照内去重（导入-22：去敏后判重；解析层已按原文去过一轮，这里兜去敏后撞重）。
- *   - 重算统计四格（去重后真实值，导入-14）。
+ * 单分片解析 + 去敏 + 跨分片快照内去重（redact/segment 子任务核心）。纯计算，不写库。
+ *
+ * 仅返回当前分片的去敏紧凑段（正文最多 2000 字符）；下一分片读取前，完整原文与完整解析段即可释放。
+ * 跨分片只保留紧凑段和两组 hash：
+ *   - rawContentHashes：复现 parseSessions 原本的整批原文去重，重复原文不重复计入去敏报告；
+ *   - redactedContentHashes：按去敏后正文做最终快照内去重（导入-22）。
  */
-function parseRedactDedup(inputs: RawSessionInput[]): {
+function parseRedactChunk(
+  inputs: RawSessionInput[],
+  rawContentHashes: Set<string>,
+  redactedContentHashes: Set<string>,
+): {
   segments: RedactedSegment[];
   report: RedactionReportView;
-  stats: {
-    segmentCount: number;
-    messageCount: number;
-    projectCount: number;
-    timeFrom: string | null;
-    timeTo: string | null;
-    sources: Exclude<ImportSource, 'mixed'>[];
-  };
 } {
   const parsed = parseSessions(inputs);
+  // parseSessions 只看当前分片；这里补上跨分片的原文 hash 去重，保持旧整批解析口径。
+  const uniqueRawSegments = parsed.segments.filter((segment) => {
+    if (rawContentHashes.has(segment.contentHash)) return false;
+    rawContentHashes.add(segment.contentHash);
+    return true;
+  });
   // 批量去敏：把所有段的 content+title 拼进一个数组（title 单独一项，便于按序回填）。
   const toRedact: string[] = [];
-  for (const s of parsed.segments) {
+  for (const s of uniqueRawSegments) {
     toRedact.push(s.content);
     toRedact.push(s.title);
   }
   const { texts, report } = redactBatch(toRedact, { ruleset: DEFAULT_RULESET });
 
-  const seen = new Set<string>();
   const out: RedactedSegment[] = [];
-  let messageCount = 0;
-  const projects = new Set<string>();
-  const sources = new Set<Exclude<ImportSource, 'mixed'>>();
-  let minTime: string | null = null;
-  let maxTime: string | null = null;
 
-  parsed.segments.forEach((s, i) => {
+  uniqueRawSegments.forEach((s, i) => {
     // raw 层 stripNul 只能处理真实 0x00；JSON 字符串里的 "\\u0000" 会在 JSON.parse 后
     // 才变成 JS NUL。落库字段在这里再清一次，并按清洗后正文算 hash，避免 PG text 22021。
-    const content = stripNul(texts[i * 2] ?? s.content);
+    const fullContent = stripNul(texts[i * 2] ?? s.content);
     const redactedTitle = stripNul(texts[i * 2 + 1] ?? s.title);
     // 标题为空（去敏后偶发）回退原解析标题；标题本身已是去敏后文本，绝不含明文 PII。
-    const title = redactedTitle.length > 0 ? redactedTitle : stripNul(s.title);
+    const selectedTitle = redactedTitle.length > 0 ? redactedTitle : stripNul(s.title);
+    // deriveTitle/redact 无命中时可能返回引用超长 user message 的短 SlicedString；标题也必须强制物化。
+    const title = materializeImportText(selectedTitle, selectedTitle.length);
     const project = s.project ? stripNul(s.project) : undefined;
-    const contentHash = computeContentHash(content); // 去敏后内容重算（§6.2 去重键）
-    if (seen.has(contentHash)) return; // 去敏后撞重 → 跳过（统计不算重，导入-22）
-    seen.add(contentHash);
+    // 去重必须按完整去敏正文：若先截断再 hash，长公共前缀相同但尾部不同的会话会被误判重复。
+    const contentHash = computeContentHash(fullContent);
+    if (redactedContentHashes.has(contentHash)) return; // 跨分片去敏后撞重 → 跳过（统计不算重，导入-22）
+    redactedContentHashes.add(contentHash);
+    const content = materializeImportText(fullContent, IMPORT_SEGMENT_CONTENT_MAX_CHARS);
     const { project: _unsafeProject, ...segmentBase } = s;
     out.push({
       ...segmentBase,
@@ -240,27 +276,9 @@ function parseRedactDedup(inputs: RawSessionInput[]): {
       contentHash,
       ...(project && project.length > 0 ? { project } : {}),
     });
-    messageCount += s.messageCount;
-    sources.add(s.source);
-    if (project && project.length > 0) projects.add(project);
-    if (s.happenedAt) {
-      if (minTime === null || s.happenedAt < minTime) minTime = s.happenedAt;
-      if (maxTime === null || s.happenedAt > maxTime) maxTime = s.happenedAt;
-    }
   });
 
-  return {
-    segments: out,
-    report,
-    stats: {
-      segmentCount: out.length,
-      messageCount,
-      projectCount: projects.size,
-      timeFrom: minTime ? isoToDate(minTime) : null,
-      timeTo: maxTime ? isoToDate(maxTime) : null,
-      sources: [...sources],
-    },
-  };
+  return { segments: out, report };
 }
 
 /** 段级来源 → 快照级来源（命中两家 = mixed；单家则该家）。 */
@@ -290,16 +308,23 @@ export function createImportHandler(deps: ImportHandlerDeps): JobHandler {
       await ctx.reportSubtask('credential', 'done');
       await ctx.reportProgress({ percent: 5, phrase: '已连接，开始拉取原文…' });
 
-      // ② 拉取会话索引：逐个 getObject 拉回原文（量化文案：已拉 X/Y，导入-07/10）。
-      //   打包模式（命令行助手路径，subject.bundle==='sentinel'）：每个 key 是含多个整文件的分片，
-      //   getObjectText 后用 splitBundlePart 拆回每个文件原文；非打包（直传路径）：每个 key 就是一个文件。
+      // ②~④ 有界内存流水线：每个 key 严格按 fetch → parse/redact → compact 处理完才取下一个。
+      //   绝不把全部 raw inputs / 完整去敏 segments 堆在内存；跨分片只保留 hash、聚合报告与 ≤2000 字的紧凑段。
+      //   打包模式（命令行助手路径，subject.bundle==='gzip'）：一个 key 是含多个整文件的 gzip 分片；
+      //   非打包（浏览器直传路径）：一个 key 就是一个文件。
       await ctx.reportSubtask('fetch_index', 'running');
       const bundled = subject.bundle === 'gzip';
       const unit = bundled ? '个分片' : '个文件';
       const batchHint = source === 'claude' || source === 'codex' ? source : undefined;
-      const inputs: RawSessionInput[] = [];
+      await ctx.reportSubtask('redact', 'running');
+      const rawContentHashes = new Set<string>();
+      const redactedContentHashes = new Set<string>();
+      // 跨分片只累计紧凑段（每段正文最多 2000 字符）；绝不累计 raw input / 完整去敏正文。
+      const segments: RedactedSegment[] = [];
+      let redactionReport = mergeReports([], DEFAULT_RULESET.version);
+
       for (let i = 0; i < rawKeys.length; i++) {
-        if (ctx.isCancelled()) return { result: null }; // 安全点：取消即停（已落段保留）。
+        if (ctx.isCancelled()) return { result: null }; // 尚未建快照，取消可直接退出且不留空产物。
         const key = rawKeys[i]!;
         // 一个 key 产出一个或多个文件原文：打包分片(gzip)解压后按 sentinel 拆回多文件，非打包就是单文件文本。
         let rawFiles: string[];
@@ -313,42 +338,72 @@ export function createImportHandler(deps: ImportHandlerDeps): JobHandler {
           // 在最早的文本入口剥掉 NUL(0x00)：Postgres text/jsonb 存不了 0x00（落库报 22021
           //   「invalid byte sequence for encoding UTF8: 0x00」→ 整 job 失败 → 网页「服务开小差了」）。
           //   某些会话（含二进制/图片等垃圾数据）会混进 0x00；它不是合法文本内容，去掉无损。
-          //   在此处剥，让下游 parse/hash/去敏/落库都拿到干净文本（content_hash 也据干净文本算，与落库一致）。
+          //   在此处剥，让下游 parse/hash/去敏都拿到干净文本；持久化正文会在去敏后另行压紧到 2000 字。
           rawFiles = rawFiles.map(stripNul);
         } catch {
           // S3 拉取失败 / gz 解压失败：依赖不可用（人话「系统正在恢复」，可重试，绝不裸 ECONNRESET）。
           await ctx.reportSubtask('fetch_index', 'failed');
+          await ctx.reportSubtask('redact', 'failed');
           throw codedError(ErrorCode.DEPENDENCY_UNAVAILABLE, 'failed to fetch raw object from S3');
         }
-        for (const raw of rawFiles) {
+
+        // inputs/完整 segments 仅在当前循环体存活；下一次 getObject 前，本分片原文与完整段正文均已压紧并可回收。
+        const inputs: RawSessionInput[] = rawFiles.map((raw) => {
           // 来源识别：路径标记优先（可信时），否则退批级非 mixed 来源作提示，最终按内容嗅探定夺。
           //   浏览器选 .codex 子目录 / 助手路径 key 常不含标记 → 必须按内容定，否则 Codex 误判 claude → 零段（BUG）。
           const detected = detectSessionSource(raw, sourceHintFromKey(key) ?? batchHint);
-          inputs.push({ source: detected, raw, sessionRef: key });
-        }
+          return { source: detected, raw, sessionRef: key };
+        });
+        const chunk = parseRedactChunk(inputs, rawContentHashes, redactedContentHashes);
+        redactionReport = mergeReports([redactionReport, chunk.report], DEFAULT_RULESET.version);
+        for (const segment of chunk.segments) segments.push(segment); // 避免极端单片 spread 参数上限。
+
         await ctx.reportProgress({
-          percent: 5 + Math.round((15 * (i + 1)) / rawKeys.length),
-          phrase: `正在拉取原文… 已拉取 ${i + 1} / ${rawKeys.length} ${unit}`,
+          percent: 5 + Math.round((40 * (i + 1)) / rawKeys.length),
+          phrase: `正在逐批导入并抹掉隐私… 已处理 ${i + 1} / ${rawKeys.length} ${unit}`,
           done: i + 1,
           total: rawKeys.length,
           unit,
         });
       }
       await ctx.reportSubtask('fetch_index', 'done');
-
-      // ③ 解析 + 去敏（redact 子任务，B-17/B-18 在此落地，验收文案「导入消息并抹掉隐私信息」）。
-      await ctx.reportSubtask('redact', 'running');
-      await ctx.reportProgress({ percent: 25, phrase: '正在导入消息并抹掉隐私信息…' });
-      const { segments, report, stats } = parseRedactDedup(inputs);
       await ctx.reportSubtask('redact', 'done');
 
-      // ④ 切分成段落（去重 + 统计已在 ③ 算好；这里点亮 + 空结果拦截，不生成空完成态，导入-20）。
+      // ④ 切分成段落：紧凑段全局按时间排序，保持旧整批解析的写入/展示顺序；汇总真实统计。
       await ctx.reportSubtask('segment', 'running');
       if (segments.length === 0) {
         await ctx.reportSubtask('segment', 'failed');
         // 空结果（本机无历史 / 全是坏会话）：终态 failed + IMPORT_NO_CONTENT（runner 归一人话信封 + error 帧）。
         throw codedError(ErrorCode.IMPORT_NO_CONTENT, 'parsed zero segments');
       }
+      segments.sort((a, b) => {
+        if (a.happenedAt === b.happenedAt) return 0;
+        if (a.happenedAt === null) return 1;
+        if (b.happenedAt === null) return -1;
+        return a.happenedAt < b.happenedAt ? 1 : -1;
+      });
+      const projects = new Set<string>();
+      const sources = new Set<Exclude<ImportSource, 'mixed'>>();
+      let messageCount = 0;
+      let minTime: string | null = null;
+      let maxTime: string | null = null;
+      for (const segment of segments) {
+        messageCount += segment.messageCount;
+        sources.add(segment.source);
+        if (segment.project) projects.add(segment.project);
+        if (segment.happenedAt) {
+          if (minTime === null || segment.happenedAt < minTime) minTime = segment.happenedAt;
+          if (maxTime === null || segment.happenedAt > maxTime) maxTime = segment.happenedAt;
+        }
+      }
+      const stats = {
+        segmentCount: segments.length,
+        messageCount,
+        projectCount: projects.size,
+        timeFrom: minTime ? isoToDate(minTime) : null,
+        timeTo: maxTime ? isoToDate(maxTime) : null,
+        sources: [...sources],
+      };
       await ctx.reportProgress({
         percent: 50,
         phrase: `切分完成 · 共 ${stats.segmentCount} 段会话 · ${stats.messageCount} 条消息`,
@@ -358,7 +413,8 @@ export function createImportHandler(deps: ImportHandlerDeps): JobHandler {
       });
       await ctx.reportSubtask('segment', 'done');
 
-      // ⑤ 生成原始数据：建快照（新快照，旧保留）→ 边写段边 item-appended（已生成不丢）→ 血缘归并 → 同事务发通知。
+      // ⑤ 生成原始数据：仍沿用旧生命周期——全量处理完成后只建一次快照，再逐段受保护写入。
+      //   因此同 job 重试不会引入“提前建立的零统计 partial snapshot”这一新生命周期。
       await ctx.reportSubtask('snapshot', 'running');
       const snapshotId = await insertSnapshotProtected(db, {
         jobId: job.id,
@@ -371,44 +427,44 @@ export function createImportHandler(deps: ImportHandlerDeps): JobHandler {
         projectCount: stats.projectCount,
         timeFrom: stats.timeFrom,
         timeTo: stats.timeTo,
-        redactionReport: report,
-        rulesetVersion: report.rulesetVersion,
+        redactionReport,
+        rulesetVersion: redactionReport.rulesetVersion,
       });
       if (!snapshotId) {
         // 建快照被 fence out（取消/接管换 fence）：干净退出（runner 据 isCancelled/fence-out 兜，不报错）。
         return { result: null };
       }
 
-      // 逐段受保护写入 + 边写边 item-appended（导入-09 落库卡逐条浮现，永不裸转圈、已生成不丢）。
+      // 逐段受保护写入 + 边写边 item-appended（段正文已压紧，不会在写库/下游读侧重新引入全量内存峰值）。
       let written = 0;
-      const briefs: ImportedSegmentBrief[] = []; // 收尾 finalProgress.items 用（同事务落终态不丢已生成，Codex P0-3）。
+      const briefs: ImportedSegmentBrief[] = [];
       for (let i = 0; i < segments.length; i++) {
-        if (ctx.isCancelled()) break; // 取消：停在安全点，已写段保留（导入-35）。
-        const s = segments[i]!;
-        const res = await insertSegmentProtected(db, {
+        if (ctx.isCancelled()) break;
+        const segment = segments[i]!;
+        const inserted = await insertSegmentProtected(db, {
           snapshotId,
           fenceToken: job.fenceToken,
-          contentHash: s.contentHash,
-          source: s.source,
-          title: s.title,
-          dateLabel: s.dateLabel,
-          happenedAt: s.happenedAt,
-          project: s.project ?? null,
-          messageCount: s.messageCount,
-          content: s.content,
+          contentHash: segment.contentHash,
+          source: segment.source,
+          title: segment.title,
+          dateLabel: segment.dateLabel,
+          happenedAt: segment.happenedAt,
+          project: segment.project ?? null,
+          messageCount: segment.messageCount,
+          content: segment.content,
         });
-        if (res.reason === 'fenced_out') break; // 被接管：停，已写段保留。
-        if (res.inserted && res.segmentId) {
-          written++;
+        if (inserted.reason === 'fenced_out') break;
+        if (inserted.inserted && inserted.segmentId) {
+          written += 1;
           const brief: ImportedSegmentBrief = {
-            segmentId: res.segmentId,
-            dateLabel: s.dateLabel,
-            title: s.title,
-            messageCount: s.messageCount,
+            segmentId: inserted.segmentId,
+            dateLabel: segment.dateLabel,
+            title: segment.title,
+            messageCount: segment.messageCount,
             status: 'imported',
           };
           briefs.push(brief);
-          await ctx.appendItem(brief); // 受保护持久化 + item-appended 帧（runner 内带 fence）。
+          await ctx.appendItem(brief);
         }
         await ctx.reportProgress({
           percent: 50 + Math.round((45 * (i + 1)) / segments.length),

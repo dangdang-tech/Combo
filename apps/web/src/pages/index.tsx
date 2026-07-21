@@ -5,7 +5,7 @@
 import { useState, type ReactElement } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Placeholder } from './Placeholder.js';
-import { AUTH_LOGIN_PATH } from '../shell/auth.js';
+import { AUTH_LOGIN_PATH, loginUrl } from '../shell/auth.js';
 
 // F-07 三页真实实现（我的能力 / 数据分析 / 收益）——各自独立文件 + 组件测试。
 export { CapabilitiesPage } from './capabilities/CapabilitiesPage.js';
@@ -55,7 +55,13 @@ export function NotFoundPage(): ReactElement {
 }
 
 export function resolveLocalReturnTo(value: string | null, origin: string): string {
-  if (!value?.startsWith('/') || value.startsWith('//') || value.includes('\\')) return '/creator';
+  if (
+    !value?.startsWith('/') ||
+    value.length > 512 ||
+    value.startsWith('//') ||
+    value.includes('\\')
+  )
+    return '/creator';
   try {
     const target = new URL(value, origin);
     if (target.origin !== origin) return '/creator';
@@ -114,7 +120,7 @@ export function LoginPage(): ReactElement {
             </button>
           )}
           <a
-            href={AUTH_LOGIN_PATH}
+            href={loginUrl(returnTo)}
             className={`cb-public__action${import.meta.env.DEV ? ' cb-public__action--ghost' : ''}`}
           >
             使用正式账号登录

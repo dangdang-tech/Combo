@@ -28,7 +28,7 @@ function SocialStat({ label, value }: { label: string; value: number }): ReactEl
 export function HeroSection({ hero }: HeroSectionProps): ReactElement {
   return (
     <section className="cb-profile-section cb-profile-hero" aria-label="身份区">
-      {/* 封面横幅（Figma 1152:65）：暖米渐变 + 底部砖红细线，头像跨线压在其上。 */}
+      {/* 封面横幅（Figma 1152:65）：冷纸渐变 + 底部砖红细线，头像跨线压在其上。 */}
       <div className="cb-profile-hero__cover" aria-hidden="true" />
       {/* 身份主体：左头像+昵称/标签/简介，右三社交计数（同行右对齐，Figma 顶部编排）。 */}
       <div className="cb-profile-hero__body">

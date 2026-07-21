@@ -147,6 +147,8 @@ export interface PublishGateArgs {
   /** 冻结进 manifest_hash 的 manifest（前置闸已读，事务内据 versionId 守门写）。 */
   manifest: Manifest;
   ownerUserId: string;
+  /** 创作者账号（用于首次公开主页名片 displayName/slug；账号本身仍是发布署名真源）。 */
+  ownerAccount: string;
   cover: CoverInput;
   tiers: TierInput[];
   visibility: Visibility;
@@ -169,6 +171,31 @@ export interface PublishGateResult {
   publishedVersionId: string;
   supersededVersionId?: string;
   manifestHash: string;
+}
+
+/** 公开主页 slug：优先使用账号的 slug-safe 形态，异常账号回退到稳定 userId 前缀。 */
+export function profileSlugForAccount(account: string, ownerUserId: string): string {
+  const normalized = account
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  if (normalized.length > 0) return normalized;
+  return `creator-${ownerUserId.replace(/[^a-z0-9]/gi, '').slice(0, 12).toLowerCase()}`;
+}
+
+async function ensureCreatorProfileInTx(tx: Tx, args: PublishGateArgs): Promise<void> {
+  await tx.query(
+    `INSERT INTO creator_profiles (user_id, slug, display_name, identity_tags, bio)
+     VALUES ($1, $2, $3, $4, '')
+     ON CONFLICT (user_id) DO NOTHING`,
+    [
+      args.ownerUserId,
+      profileSlugForAccount(args.ownerAccount, args.ownerUserId),
+      args.ownerAccount,
+      ['创作者'],
+    ],
+  );
 }
 
 /**
@@ -282,6 +309,9 @@ export async function publishGateInTx(
       `UPDATE capabilities SET current_version_id = $2, updated_at = now() WHERE id = $1`,
       [args.capabilityId, args.versionId],
     );
+
+    // 公开创作者主页基行：真实发布能力后，同事务确保 /creators/:id/profile 和 /c/:slug 有公开名片真源。
+    await ensureCreatorProfileInTx(tx, args);
 
     // ⑦ 同事务 outbox 两条（§1.2 步7 / §5.1）。lifecycle + notify 各一，event_id 幂等。
     const publishedPayload: CapabilityPublishedPayload = {

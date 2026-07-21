@@ -8,6 +8,40 @@ interface LinkedSessions {
   consume?: RuntimeSessionListItem;
 }
 
+type EmptyMarketMode = 'guide' | 'examples';
+
+interface ExampleCapability {
+  name: string;
+  typeLabel: string;
+  audience: string;
+  outcome: string;
+  context: string;
+}
+
+const exampleCapabilities: ExampleCapability[] = [
+  {
+    name: '真实长会话能力提取评审',
+    typeLabel: '产品 / 流程',
+    audience: '正在把私有经验产品化的创作者',
+    outcome: '判断候选能力是否独特、利他、可运行',
+    context: '来自创作者对真实 session 聚类质量、泛任务过滤和发布边界的连续讨论',
+  },
+  {
+    name: 'Figma 到前端的品牌刷新',
+    typeLabel: '设计 / 前端',
+    audience: '需要把新品牌落进已有产品界面的团队',
+    outcome: '输出页面结构、状态、组件和实现要点',
+    context: '来自 Combo 品牌、侧边栏、加载态和上传流程设计调整记录',
+  },
+  {
+    name: '云端真实环境测试闭环',
+    typeLabel: '工程 / QA',
+    audience: '需要验证 Docker、登录、导入、发布和 runtime 的开发者',
+    outcome: '给出可复跑的测试证据、阻塞项和修复建议',
+    context: '来自独立 Cloud Review 环境、真实导入内容与真实 snapshot 的连续验收任务',
+  },
+];
+
 function groupSessionsBySlug(items: RuntimeSessionListItem[]): Map<string, LinkedSessions> {
   const grouped = new Map<string, LinkedSessions>();
   for (const item of items) {
@@ -27,6 +61,7 @@ export function MarketPage() {
   const navigate = useNavigate();
   const caps = useCapabilities();
   const sessions = useSessions();
+  const [emptyMode, setEmptyMode] = useState<EmptyMarketMode>('guide');
   const [pendingSlug, setPendingSlug] = useState<string | null>(null);
   const [errorSlug, setErrorSlug] = useState<string | null>(null);
   const sessionsBySlug = useMemo(
@@ -81,7 +116,7 @@ export function MarketPage() {
         {caps.isLoading && <div className="rt-empty">加载中…</div>}
         {caps.isError && <div className="rt-empty rt-empty--error">能力列表加载失败，请刷新。</div>}
         {caps.data && caps.data.items.length === 0 && (
-          <div className="rt-empty">还没有已发布的能力。先在创作者中心发布一个吧。</div>
+          <EmptyMarket mode={emptyMode} onModeChange={setEmptyMode} />
         )}
         <div className="rt-card-grid">
           {caps.data?.items.map((c) => {
@@ -98,11 +133,7 @@ export function MarketPage() {
                 <div className="rt-card__meta">
                   <span className="rt-card__byline">{c.byline}</span>
                   <span>
-                    {linked?.consume
-                      ? '已有正式会话'
-                      : linked?.trial
-                        ? '已有试用会话'
-                        : '尚未运行'}
+                    {linked?.consume ? '已有正式会话' : linked?.trial ? '已有试用会话' : '尚未运行'}
                   </span>
                 </div>
                 <div className="rt-card__foot">
@@ -132,6 +163,99 @@ export function MarketPage() {
           })}
         </div>
       </section>
+    </div>
+  );
+}
+
+interface EmptyMarketProps {
+  mode: EmptyMarketMode;
+  onModeChange: (mode: EmptyMarketMode) => void;
+}
+
+function EmptyMarket({ mode, onModeChange }: EmptyMarketProps) {
+  return (
+    <div className="rt-market-empty">
+      <div className="rt-market-empty__intro">
+        <div className="rt-market-empty__kicker">当前没有公开发布的能力</div>
+        <h3 className="rt-market-empty__title">市集还在等第一个真实能力上架</h3>
+        <p className="rt-market-empty__copy">
+          能力只会在创作者确认发布后出现在这里。未发布的候选、原始 session
+          和证据不会进入外部用户视角。
+        </p>
+        <div className="rt-market-empty__actions" aria-label="空市集操作">
+          <a className="rt-btn rt-btn--accent" href="/create/import">
+            去发布第一个能力
+          </a>
+          <button
+            type="button"
+            className="rt-btn"
+            aria-pressed={mode === 'examples'}
+            onClick={() => onModeChange('examples')}
+          >
+            查看示例能力
+          </button>
+          <button
+            type="button"
+            className="rt-btn"
+            aria-pressed={mode === 'guide'}
+            onClick={() => onModeChange('guide')}
+          >
+            了解如何发布
+          </button>
+        </div>
+      </div>
+
+      {mode === 'examples' ? (
+        <div className="rt-market-empty__examples" aria-label="示例能力">
+          {exampleCapabilities.map((item) => (
+            <article className="rt-example-card" key={item.name}>
+              <div className="rt-example-card__head">
+                <span className="rt-card__type">{item.typeLabel}</span>
+                <span className="rt-example-card__badge">示例，不可运行</span>
+              </div>
+              <h4 className="rt-example-card__title">{item.name}</h4>
+              <dl className="rt-example-card__facts">
+                <div>
+                  <dt>帮助谁</dt>
+                  <dd>{item.audience}</dd>
+                </div>
+                <div>
+                  <dt>交付什么</dt>
+                  <dd>{item.outcome}</dd>
+                </div>
+                <div>
+                  <dt>为什么独特</dt>
+                  <dd>{item.context}</dd>
+                </div>
+              </dl>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <ol className="rt-market-empty__steps" aria-label="发布流程">
+          <li>
+            <span className="rt-market-empty__step-index">1</span>
+            <div>
+              <strong>导入真实会话</strong>
+              <p>从创作者自己的长 session 开始，保留足够上下文让系统识别独特经验。</p>
+            </div>
+          </li>
+          <li>
+            <span className="rt-market-empty__step-index">2</span>
+            <div>
+              <strong>筛掉泛任务</strong>
+              <p>只留下和创作者 context 强相关、能帮助他人的候选能力。</p>
+            </div>
+          </li>
+          <li>
+            <span className="rt-market-empty__step-index">3</span>
+            <div>
+              <strong>确认后发布</strong>
+              <p>创作者发布后，外部用户才能在市集开聊；未发布内容不会展示。</p>
+            </div>
+          </li>
+        </ol>
+      )}
     </div>
   );
 }

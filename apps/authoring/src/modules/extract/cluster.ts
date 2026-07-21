@@ -70,6 +70,17 @@ export interface NamedCandidate extends ScoredCandidate {
   degradedNaming: boolean;
 }
 
+export const DEFAULT_PUBLISHABLE_CANDIDATE_LIMIT = 12;
+
+export interface CandidatePublishQuality {
+  creatorContext: number;
+  externalValue: number;
+  evidenceStrength: number;
+  oneOffPenalty: number;
+  score: number;
+  reasons: string[];
+}
+
 /** 短期 session-mock 萃取：单个有效 session 产出一个能力项的命名结果。 */
 export interface SessionCapabilitySummary {
   name: string;
@@ -238,8 +249,10 @@ export function clusterSegments(
 
 /** 历史 snapshot 可能已含 Codex 平台噪声；萃取前再做一层防线，避免脏段生成候选。 */
 function isExtractableSegment(segment: ExtractSegment): boolean {
+  if (segment.title && isBlockedCapabilityLabel(segment.title)) return false;
   if (isPlatformPromptText(segment.title)) return false;
   const firstContentLine = stripRolePrefix(firstNonEmptyLine(segment.content));
+  if (firstContentLine && isBlockedCapabilityLabel(firstContentLine)) return false;
   if (isPlatformPromptText(firstContentLine)) return false;
   return firstContentLine.length > 0;
 }
@@ -252,9 +265,11 @@ function titleLabelOf(title: string | null): string | null {
 
 /** session-mock 入口前置过滤：跳过平台噪声、标题生成提示、文件清单和过短寒暄。 */
 export function isEffectiveSessionForMock(segment: ExtractSegment): boolean {
+  if (segment.title && isBlockedCapabilityLabel(segment.title)) return false;
   if (isPlatformPromptText(segment.title)) return false;
   const title = stripRolePrefix(firstNonEmptyLine(segment.title));
   const firstContentLine = stripRolePrefix(firstNonEmptyLine(segment.content));
+  if (firstContentLine && isBlockedCapabilityLabel(firstContentLine)) return false;
   if (isPlatformPromptText(firstContentLine)) return false;
   if (isShortGreeting(title) || isShortGreeting(firstContentLine)) return false;
   const text = meaningfulSessionText(segment);
@@ -561,6 +576,230 @@ export function scoreCandidates(
       (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0),
   );
   return scored;
+}
+
+/**
+ * 进入发布准备前的质量门槛。
+ *
+ * 这里先只筛「值得准备 trial capability」的候选：当前 schema 还没有 needs_review/discard_suggested
+ * 这类候选状态，所以低质量候选暂不落库、不做试用草稿，避免真实长 session 生成几十个泛任务并拖垮 job。
+ */
+export function selectPublishableCandidates(
+  candidates: ScoredCandidate[],
+  opts: {
+    maxCandidates?: number;
+    minReusability?: number;
+    minCoherence?: number;
+    lowCoherenceBlock?: number;
+    minPublishQuality?: number;
+    minCreatorContext?: number;
+    minExternalValue?: number;
+    minEvidenceBackedReusability?: number;
+  } = {},
+): ScoredCandidate[] {
+  const maxCandidates = opts.maxCandidates ?? DEFAULT_PUBLISHABLE_CANDIDATE_LIMIT;
+  const minReusability = opts.minReusability ?? 0.35;
+  const minCoherence = opts.minCoherence ?? 0.45;
+  const lowCoherenceBlock = opts.lowCoherenceBlock ?? 0.3;
+  const minPublishQuality = opts.minPublishQuality ?? 0.32;
+  const minCreatorContext = opts.minCreatorContext ?? 0.25;
+  const minExternalValue = opts.minExternalValue ?? 0.25;
+  const minEvidenceBackedReusability = opts.minEvidenceBackedReusability ?? 0.18;
+
+  return candidates
+    .filter((cand) => {
+      // 单段候选默认不进入发布准备：真实回放中它们主要是一次性杂务，缺少稳定证据。
+      if (cand.segmentCount < 2) return false;
+
+      // 极低内聚大簇必须先拆分或人工整理，不能直接 ready。
+      if (cand.splitSuggested && cand.scopeCoherence < lowCoherenceBlock) return false;
+
+      // 小簇需要更清晰的范围；大簇若低内聚也不能靠频次硬顶上去。
+      if (cand.scopeCoherence < minCoherence) return false;
+
+      const quality = assessCandidatePublishQuality(cand);
+      if (quality.creatorContext < minCreatorContext) return false;
+      if (quality.externalValue < minExternalValue) return false;
+      if (quality.score < minPublishQuality) return false;
+
+      // 真实长历史里，持续维护/审查类工作流可能因为频次归一被超大噪声簇压低 reusability。
+      // 只在证据强、范围清晰、质量分足够时放宽，避免从“候选爆炸”滑到“候选归零”。
+      const evidenceBackedWorkflow =
+        cand.segmentCount >= 8 &&
+        cand.scopeCoherence >= minCoherence &&
+        quality.evidenceStrength >= 1 &&
+        cand.reusability >= minEvidenceBackedReusability;
+      if (cand.reusability < minReusability && !evidenceBackedWorkflow) return false;
+
+      return true;
+    })
+    .slice(0, Math.max(0, maxCandidates));
+}
+
+const CREATOR_CONTEXT_TERMS = [
+  'figma',
+  'github',
+  'yc',
+  'gmv',
+  'llm',
+  'agent',
+  'codex',
+  'claude',
+  'automation',
+  'react',
+  'typescript',
+  'docker',
+  'awesome-weread',
+  'ai-product-radar',
+  'memory-to-agent',
+  'worker',
+  '飞书',
+  '文档',
+  '代码',
+  '重构',
+  '依赖',
+  '设计',
+  '品牌',
+  '融资',
+  '增长',
+  '运营',
+  '产品',
+  '用户',
+  '规范',
+  '测试',
+  '回归',
+  '发布',
+  '上传',
+  '萃取',
+  '候选',
+  '链路',
+  '日志',
+  '质量',
+  '迁移',
+  '工作流',
+  '方法论',
+  '判断',
+  '复盘',
+  '策略',
+];
+
+const EXTERNAL_VALUE_TERMS = [
+  '评审',
+  '审查',
+  '核查',
+  '核对',
+  '诊断',
+  '排障',
+  '定位',
+  '修复',
+  '优化',
+  '迁移',
+  '生成',
+  '整理',
+  '测试',
+  '计划',
+  '方案',
+  '报告',
+  '分析',
+  '设计',
+  '落地',
+  '交付',
+  '验证',
+  '构建',
+  '发布',
+  '复盘',
+  '拷打',
+  '对抗',
+  '一致性',
+  '审核',
+  '还原',
+  'audit',
+  'review',
+  'check',
+  'maintenance',
+  'maintain',
+  'repair',
+  'fix',
+  'debug',
+  'triage',
+  'consistency',
+  'documentation',
+  'document',
+  'workflow',
+  'migration',
+  'docs',
+];
+
+const ONE_OFF_QUERY_PATTERNS = [
+  /今天/,
+  /当前/,
+  /现在/,
+  /最新/,
+  /一般.*多少/,
+  /多少.*百分比/,
+  /给多少/,
+  /服务费比例/,
+  /看看今天/,
+  /找找有没有/,
+  /\btoday\b/i,
+  /\btrending\b/i,
+];
+
+export function assessCandidatePublishQuality(cand: ScoredCandidate): CandidatePublishQuality {
+  const text = candidateQualityText(cand);
+  const lower = text.toLowerCase();
+  const contextHits = countTermHits(lower, CREATOR_CONTEXT_TERMS);
+  const externalHits = countTermHits(lower, EXTERNAL_VALUE_TERMS);
+  const distinctProjects = new Set(
+    cand.segments.map((s) => s.project?.trim()).filter((p): p is string => Boolean(p)),
+  ).size;
+  const methodSignals = countTermHits(lower, ['流程', '标准', '框架', '清单', '模版', '模板']);
+
+  const creatorContext = round3(
+    clamp01(contextHits / 4 + Math.min(0.25, distinctProjects * 0.08) + methodSignals * 0.08),
+  );
+  const externalValue = round3(clamp01(externalHits / 3));
+  const evidenceStrength = round3(
+    clamp01(
+      cand.segmentCount >= 5
+        ? 1
+        : cand.segmentCount >= 3
+          ? 0.65
+          : cand.segmentCount >= 2
+            ? 0.35
+            : 0,
+    ),
+  );
+  const oneOffPenalty = round3(
+    ONE_OFF_QUERY_PATTERNS.some((pattern) => pattern.test(text)) ? 0.35 : 0,
+  );
+  const score = round3(
+    clamp01(0.4 * externalValue + 0.35 * creatorContext + 0.25 * evidenceStrength - oneOffPenalty),
+  );
+  const reasons: string[] = [];
+  if (contextHits > 0) reasons.push(`context_hits:${contextHits}`);
+  if (externalHits > 0) reasons.push(`external_hits:${externalHits}`);
+  if (distinctProjects > 0) reasons.push(`projects:${distinctProjects}`);
+  if (methodSignals > 0) reasons.push(`method_signals:${methodSignals}`);
+  if (oneOffPenalty > 0) reasons.push('one_off_query_penalty');
+  return { creatorContext, externalValue, evidenceStrength, oneOffPenalty, score, reasons };
+}
+
+function candidateQualityText(cand: ScoredCandidate): string {
+  return [
+    cand.slug,
+    cand.clusterLabel,
+    cand.scope.domain ?? '',
+    ...cand.segments.flatMap((s) => [s.title ?? '', s.project ?? '']),
+  ].join('\n');
+}
+
+function countTermHits(text: string, terms: readonly string[]): number {
+  let hits = 0;
+  for (const term of terms) {
+    if (text.includes(term.toLowerCase())) hits++;
+  }
+  return hits;
 }
 
 /** 适用范围画像（来自证据，非 LLM；语言/项目域/输入类型推断）。 */

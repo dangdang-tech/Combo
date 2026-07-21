@@ -11,9 +11,11 @@ export const HEATMAP_WINDOW_DAYS: Record<'half_year' | 'year', number> = {
 };
 
 /** 取某 ISO 时刻的 YYYY-MM-DD（按 UTC 日界；happened_at 已是 timestamptz）。 */
-export function isoDay(iso: string): string {
+export function isoDay(iso: string | Date): string {
+  // node-postgres 会把 timestamptz 读成 Date；假 PG/测试夹具里常是 ISO 字符串。
+  const text = iso instanceof Date ? iso.toISOString() : iso;
   // 取前 10 位（YYYY-MM-DD）；happened_at 形如 2026-06-15T08:00:00.000Z。
-  return iso.slice(0, 10);
+  return text.slice(0, 10);
 }
 
 /** 给 today 与窗口算 [start, end]（YYYY-MM-DD，end=今天）。 */
@@ -48,7 +50,7 @@ export function bucketLevel(count: number, maxCount: number): HeatmapCell['level
  *   - 窗口外的 happened_at 被过滤（不计入；start..end 闭区间）。
  */
 export function aggregateHeatmap(input: {
-  happenedAt: (string | null)[];
+  happenedAt: (string | Date | null)[];
   today: Date;
   range: 'half_year' | 'year';
   enabled: boolean;

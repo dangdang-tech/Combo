@@ -16,6 +16,7 @@ import {
 } from './create-capability.js';
 import {
   readDraftVersionForCandidate,
+  readCurrentPublishedVersionForCandidateSignature,
   readEvidenceForCandidate,
   readCandidateForCreate,
   readVersion,
@@ -80,6 +81,37 @@ export async function prepareCandidateDraft(
           if (err instanceof CreateCapabilityFencedError) return { kind: 'fencedOut' };
           return { kind: 'failed', error: createCapabilityErrorBody(err, args.traceId), missingFields: null };
         }
+      }
+    } else {
+      const published = await readCurrentPublishedVersionForCandidateSignature(db, {
+        candidateId: args.candidateId,
+        ownerUserId: args.ownerUserId,
+      });
+      if (published) {
+        if (args.onVersionPreparedInTx) {
+          try {
+            await withTransaction(txPool, async (tx) => {
+              const ok = await args.onVersionPreparedInTx!(tx, {
+                versionId: published.id,
+                capabilityId: published.capabilityId,
+              });
+              if (!ok) throw new CreateCapabilityFencedError();
+            });
+          } catch (err) {
+            if (err instanceof CreateCapabilityFencedError) return { kind: 'fencedOut' };
+            return {
+              kind: 'failed',
+              error: createCapabilityErrorBody(err, args.traceId),
+              missingFields: null,
+            };
+          }
+        }
+        return {
+          kind: 'ready',
+          versionId: published.id,
+          capabilityId: published.capabilityId,
+          slug: published.slug,
+        };
       }
     }
   }

@@ -359,6 +359,8 @@ services:
       OTEL_SERVICE_NAME: cb-authoring-worker
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       OTEL_RESOURCE_ATTRIBUTES: deployment.environment=compose
+    # 长驻队列进程：OOM / 异常退出后必须自恢复，否则已入队的导入任务会永久无人消费。
+    restart: unless-stopped
 
   # consumer 受保序约束不可多实例（启动拿 advisory lock/lease 防误 scale，70 §3.1）；不要 deploy.replicas > 1。
   consumer:
@@ -380,6 +382,8 @@ services:
       OTEL_SERVICE_NAME: cb-authoring-consumer
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       OTEL_RESOURCE_ATTRIBUTES: deployment.environment=compose
+    # 单活由进程内 advisory lock/lease 保证；restart 只负责异常退出后恢复同一实例。
+    restart: unless-stopped
 
   # sweeper 固定单实例（启动拿 redis_hot 锁单活，70 §6.1）。
   sweeper:
@@ -388,6 +392,8 @@ services:
       dockerfile: infra/Dockerfile.api
     depends_on:
       postgres:
+        condition: service_healthy
+      redis_queue:
         condition: service_healthy
       redis_hot:
         condition: service_healthy
@@ -399,6 +405,8 @@ services:
       NODE_ENV: production
       PROCESS: sweeper
       DATABASE_URL: postgres://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:?}
+      # job 对账会将过期 running / 停滞 queued 任务重新投递到 BullMQ。
+      REDIS_QUEUE_URL: redis://redis_queue:6379/0
       REDIS_HOT_URL: redis://redis_hot:6379/0
       S3_ENDPOINT: http://minio:9000
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:?}
@@ -407,6 +415,8 @@ services:
       OTEL_SERVICE_NAME: cb-authoring-sweeper
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       OTEL_RESOURCE_ATTRIBUTES: deployment.environment=compose
+    # 单活由 redis_hot 锁保证；容器退出后由 Compose 拉起，继续补投和对账。
+    restart: unless-stopped
 
   # 试用端 runtime（消费链路）：消费已发布契约，pi 执行层，AG-UI 流式对话 + 类 Claude Artifacts 产物。
   #   只依赖 postgres（只读已发布投影 + 读写自有 rt_chat_* 表）与 Logto JWT 公钥校验；不需 redis/minio。

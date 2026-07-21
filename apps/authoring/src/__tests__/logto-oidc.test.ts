@@ -1,14 +1,21 @@
 // 10 · Logto OIDC 流纯函数自检（B-08，10-auth §3.1/§3.2）：PKCE / returnTo 白名单 / nonce 取值 / 501 占位。
 //   纯函数无依赖（不碰网络）：PKCE S256 确定性、returnTo open-redirect 防护、id_token nonce 解析、notImplemented 信封。
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import {
+  buildAuthorizeUrl,
   pkceChallengeS256,
   randomToken,
   sanitizeReturnTo,
   readNonceFromIdToken,
 } from '../platform/infra/logto-oidc.js';
+import type { Env } from '../platform/config/env.js';
 import { notImplemented } from '../platform/http/_helpers.js';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe('PKCE S256 (10-auth §3.1)', () => {
   it('同一 verifier 产出确定 challenge（base64url，无填充）', () => {
@@ -42,6 +49,67 @@ describe('sanitizeReturnTo open-redirect 防护 (10-auth §3.1)', () => {
   it('缺省 / 超长 → 降级 /creator', () => {
     expect(sanitizeReturnTo(undefined)).toBe('/creator');
     expect(sanitizeReturnTo('/' + 'a'.repeat(600))).toBe('/creator');
+  });
+});
+
+describe('buildAuthorizeUrl discovery', () => {
+  it('容器冷请求 4.6s 仍能完成 discovery，并构造完整 PKCE 授权 URL', async () => {
+    vi.useFakeTimers();
+    const request = vi.fn((_url: string | URL, init?: RequestInit) => {
+      return new Promise<Response>((resolve, reject) => {
+        const responseTimer = setTimeout(() => {
+          resolve({
+            ok: true,
+            json: async () => ({
+              authorization_endpoint: 'https://login.example/oidc/auth',
+              token_endpoint: 'https://login.example/oidc/token',
+            }),
+          } as Response);
+        }, 4_600);
+        init?.signal?.addEventListener('abort', () => {
+          clearTimeout(responseTimer);
+          reject(new Error('aborted'));
+        });
+      });
+    });
+    vi.stubGlobal('fetch', request);
+
+    const env = {
+      LOGTO_ISSUER: 'https://login.example/oidc/',
+      LOGTO_APP_ID: 'combo-web',
+      LOGTO_REDIRECT_URI: 'https://buildwithcombo.com/api/v1/auth/callback',
+      LOGTO_AUDIENCE: 'https://api.buildwithcombo.com',
+    } as Env;
+    const pending = buildAuthorizeUrl({
+      env,
+      state: 'state-1',
+      nonce: 'nonce-1',
+      codeChallenge: 'challenge-1',
+      prompt: 'login',
+    });
+
+    await vi.advanceTimersByTimeAsync(4_600);
+    const authorizeUrl = await pending;
+
+    expect(request).toHaveBeenCalledWith(
+      'https://login.example/oidc/.well-known/openid-configuration',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(authorizeUrl).not.toBeNull();
+    const url = new URL(authorizeUrl!);
+    expect(url.origin + url.pathname).toBe('https://login.example/oidc/auth');
+    expect(Object.fromEntries(url.searchParams)).toMatchObject({
+      client_id: 'combo-web',
+      redirect_uri: 'https://buildwithcombo.com/api/v1/auth/callback',
+      response_type: 'code',
+      scope: 'openid profile email roles',
+      resource: 'https://api.buildwithcombo.com',
+      state: 'state-1',
+      nonce: 'nonce-1',
+      code_challenge: 'challenge-1',
+      code_challenge_method: 'S256',
+      prompt: 'login',
+    });
   });
 });
 

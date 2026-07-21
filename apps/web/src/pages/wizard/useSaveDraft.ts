@@ -1,7 +1,8 @@
 // 顶栏「保存草稿」hook（F-09 / F-12 / F-15）——每步可存草稿退出（开工总纲 §5.0）。
 //
 // 各步存草稿语义（契约 40 §1.1(b)，与 00 §8.4 drafts 落点模型一致）——区分两类，绝不臆造端点：
-//   - STEP③ select：调 patchSelection 显式持久化 `drafts.selection` + `current_step='select'`（端点 G）。
+//   - STEP③ select / 两步流程的 capabilities：调 patchSelection 显式持久化
+//     `drafts.selection` + `current_step='select'`（端点 G）。
 //     这是本期前端唯一「主动写草稿」端点；选择切换本身纯前端不写库（§1.1(a)）。需有 draftId（草稿已存在）才可写。
 //   - 其它步（import/extract/structure/publish）：本期无独立「存草稿」写端点；草稿只在各步**建产物时**由后端
 //     同事务回填 `current_step` + 落点引用（§1.1(b)「进入下一步提交也持久化」，00 §8.4 落点列）。因此：
@@ -49,7 +50,7 @@ export interface UseSaveDraftResult extends SaveDraftState {
 }
 
 /**
- * 「保存草稿」逻辑。本期具体写端点仅 STEP③ selection（其余步草稿随建产物回填，见文件头说明）。
+ * 「保存草稿」逻辑。本期具体写端点仅 selection；折叠后的 capabilities 页承接同一选择语义。
  * 复用同一 idempotencyKey 重复保存安全（PATCH 最后写赢，40 §4.G；已生成不丢硬规则③）。
  */
 export function useSaveDraft(): UseSaveDraftResult {
@@ -60,8 +61,8 @@ export function useSaveDraft(): UseSaveDraftResult {
 
   const save = useCallback(
     async (selection?: SelectionDraft | null): Promise<boolean> => {
-      // 非 select 步：本期无独立存草稿写端点（§1.1(b)）。
-      if (currentStep !== 'select') {
+      // 非选择步：本期无独立存草稿写端点（§1.1(b)）。
+      if (currentStep !== 'select' && currentStep !== 'capabilities') {
         // 已有 draftId（后端某步建产物时已落 drafts 行）→ 退出即「真已落库」的草稿，诚实成功。
         if (draftId) {
           setState({ saving: false, error: null });
@@ -71,7 +72,7 @@ export function useSaveDraft(): UseSaveDraftResult {
         setState({ saving: false, error: noDraftYetError() });
         return false;
       }
-      // STEP③ select：持久化 selection（端点 G，真落库）。
+      // STEP③ select / 两步 capabilities：持久化 selection（端点 G，真落库）。
       const sel = selection !== undefined ? selection : ctxSelection;
       // 缺 draftId：select 步无草稿行可写（同非 select 无 draftId），不谎报成功、给真话退路。
       if (!draftId) {

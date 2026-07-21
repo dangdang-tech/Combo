@@ -101,7 +101,7 @@ function runningJob(db: ExtractFakeDb, over: Partial<LeasedJob> = {}): LeasedJob
   return job;
 }
 
-/** 种入一个 snapshot 的段集（默认 8 段；session-mock 全量提取取前 5 个有效 session）。 */
+/** 种入一个 snapshot 的段集（默认 8 段；真实全量提取应聚成 2 个工作流簇）。 */
 function seedSegments(db: ExtractFakeDb, snapshotId: string): void {
   // 簇 A：proj-alpha，6 段（高频）。
   for (let i = 0; i < 6; i++) {
@@ -109,8 +109,8 @@ function seedSegments(db: ExtractFakeDb, snapshotId: string): void {
       id: `seg-a-${i}`,
       snapshot_id: snapshotId,
       project: 'alpha',
-      title: '重构模块',
-      content: 'refactor module dependency 重构 依赖 分析',
+      title: '代码依赖审查',
+      content: '代码 依赖 重构 审查 分析 修复 交付 回归',
     });
     db.segments.set(s.id, s);
   }
@@ -120,8 +120,8 @@ function seedSegments(db: ExtractFakeDb, snapshotId: string): void {
       id: `seg-b-${i}`,
       snapshot_id: snapshotId,
       project: 'beta',
-      title: '写测试',
-      content: 'write unit test 写 单元 测试 覆盖',
+      title: '测试覆盖评审',
+      content: '代码 单元 测试 覆盖 评审 验证 交付',
     });
     db.segments.set(s.id, s);
   }
@@ -171,14 +171,15 @@ describe('extract handler — 正常链路（B-22）', () => {
     expect(firstRunning[0]).toBe('analyze');
     expect(firstRunning[firstRunning.length - 1]).toBe('rank');
 
-    // 逐个浮现：session-mock 每个有效 session 生成一个候选，最多 5 个。
-    expect(cap.items).toHaveLength(5);
+    // 逐个浮现：真实聚类后，alpha/beta 两个工作流簇各生成一个候选。
+    expect(cap.items).toHaveLength(2);
     expect(cap.items.every((it) => it.isNew === true)).toBe(true);
     expect(cap.items.every((it) => it.status === 'ready')).toBe(true);
 
-    // 候选 + 证据落库：每个候选只挂自身 session 作为 evidence。
+    // 候选 + 证据落库：每个候选挂载其簇内全部 session evidence。
     expect(db.candidates.size).toBe(cap.items.length);
-    expect(db.evidence.size).toBe(5);
+    expect(db.evidence.size).toBe(8);
+    expect([...db.candidates.values()].map((c) => c.segment_count).sort()).toEqual([2, 6]);
 
     // 计数：done/total 量化（提取-07/08），完成时 done==total。
     const last = cap.progress[cap.progress.length - 1]!;
@@ -219,6 +220,34 @@ describe('extract handler — 正常链路（B-22）', () => {
     }
   });
 
+  it('发布准备前筛掉单段泛任务：大量一次性 session 不应拖慢 trial capability 预准备', async () => {
+    const { db, handler } = setup();
+    seedSegments(db, 'snap-1');
+    for (let i = 0; i < 20; i++) {
+      const s = seg({
+        id: `one-off-${i}`,
+        snapshot_id: 'snap-1',
+        project: `one-off-project-${i}`,
+        title: `aa${i} bb${i}`,
+        content: `aa${i} bb${i} cc${i} dd${i}`,
+        message_count: 20,
+      });
+      db.segments.set(s.id, s);
+    }
+
+    const job = runningJob(db);
+    const cap = makeCtx(job);
+    const res = await handler.run(job, cap.ctx);
+
+    expect(cap.items).toHaveLength(2);
+    expect(db.candidates.size).toBe(2);
+    expect([...db.candidates.values()].map((c) => c.segment_count).sort()).toEqual([2, 6]);
+    expect(
+      cap.progress.some((p) => p.phrase.includes('已筛选出 2 / 22 个可发布候选')),
+    ).toBe(true);
+    expect((res.result as { candidateCount: number }).candidateCount).toBe(2);
+  });
+
   it('置信分布摘要可派生（高X中Y低Z，提取-12）：ready 候选 confidence 三档之和 = ready 数', async () => {
     const { db, handler } = setup();
     seedSegments(db, 'snap-1');
@@ -230,7 +259,7 @@ describe('extract handler — 正常链路（B-22）', () => {
     const med = ready.filter((c) => c.confidence === 'med').length;
     const low = ready.filter((c) => c.confidence === 'low').length;
     expect(high + med + low).toBe(ready.length);
-    // session-mock 默认候选为 med，不出现全 low。
+    // 真实聚类默认候选应至少有一个 med/high，不出现全 low。
     expect(high + med).toBeGreaterThanOrEqual(1);
   });
 
@@ -240,11 +269,14 @@ describe('extract handler — 正常链路（B-22）', () => {
     gw.default = { degraded: true }; // 所有命名降级
     const job = runningJob(db);
     const res = await handler.run(job, makeCtx(job).ctx);
-    // 仍完成、候选仍落库（名用能力口径兜底）。
-    expect((res.result as { candidateCount: number }).candidateCount).toBe(5);
+    // 仍完成、候选仍落库（名用聚类兜底）。
+    expect((res.result as { candidateCount: number }).candidateCount).toBe(2);
     expect([...db.candidates.values()].every((c) => c.status === 'ready')).toBe(true);
     expect([...db.candidates.values()].every((c) => (c.name ?? '').length > 0)).toBe(true);
-    expect([...db.candidates.values()].every((c) => c.name !== '重构模块')).toBe(true);
+    expect([...db.candidates.values()].map((c) => c.name).sort()).toEqual([
+      '代码依赖审查',
+      '测试覆盖评审',
+    ]);
     // done.result.degraded 诚实标 true（LLM 降级地完成，§10），但不算失败、不裸码。
     expect((res.result as { degraded: boolean }).degraded).toBe(true);
   });
@@ -285,8 +317,8 @@ describe('extract handler — 正常链路（B-22）', () => {
     const res = await handler.run(job, makeCtx(job).ctx);
 
     const names = [...db.candidates.values()].map((c) => c.name ?? '');
-    expect((res.result as { candidateCount: number }).candidateCount).toBe(3);
-    expect(names).toEqual(['文档质量评审', '文档质量评审', '文档质量评审']);
+    expect((res.result as { candidateCount: number }).candidateCount).toBe(1);
+    expect(names).toEqual(['生产链路排障']);
     expect(names.join('\n')).not.toContain('environment_context');
     expect(names.join('\n')).not.toContain('AGENTS.md');
     expect((res.result as { degraded: boolean }).degraded).toBe(true);
@@ -318,7 +350,7 @@ describe('extract handler — 正常链路（B-22）', () => {
     await expect(handler.run(job, makeCtx(job).ctx)).rejects.toBeTruthy();
     // 候选已落（各自单候选事务已 COMMIT，已浮现不丢），但收尾事务（complete job + outbox）抛错 ROLLBACK：
     //   job 未落 completed、outbox 无行、发生过回滚（绝不吞失败、不另起事务，Codex P0-3）。
-    expect(db.candidates.size).toBe(5);
+    expect(db.candidates.size).toBe(2);
     expect(db.jobs.get(job.id)!.status).toBe('running');
     expect(tx.outbox).toHaveLength(0);
     expect(tx.rolledBack.length).toBeGreaterThanOrEqual(1);
@@ -393,7 +425,7 @@ describe('extract handler — 单候选原子落库（Codex#4：证据/回填失
     const job = runningJob(db);
     await handler.run(job, makeCtx(job).ctx);
     const ready = [...db.candidates.values()].filter((c) => c.status === 'ready');
-    expect(ready).toHaveLength(5);
+    expect(ready).toHaveLength(2);
     for (const c of ready) {
       const ev = [...db.evidence.values()].filter((e) => e.candidate_id === c.id);
       expect(c.segment_count).toBe(ev.length); // 频次条段数 == 下钻条数，绝不漂
@@ -401,11 +433,11 @@ describe('extract handler — 单候选原子落库（Codex#4：证据/回填失
   });
 });
 
-describe('extract handler — LLM 降级不阻塞（session-mock）', () => {
-  it('某次命名 LLM 抛错 → 该 session 用能力兜底名 ready，整体 degraded 但不出 failed', async () => {
+describe('extract handler — LLM 单候选失败不阻塞', () => {
+  it('某次命名 LLM 抛错 → 该簇落 failed，其余簇继续 ready，整体 completed', async () => {
     const { db, gw, handler } = setup();
     seedSegments(db, 'snap-1');
-    // 第一次 complete 抛错（第一个 session 命名失败），其余正常。
+    // 第一次 complete 抛错（第一个簇命名失败），其余正常。
     gw.responses = [{ throwIt: true }];
     const job = runningJob(db);
     const cap = makeCtx(job);
@@ -413,17 +445,18 @@ describe('extract handler — LLM 降级不阻塞（session-mock）', () => {
 
     const failed = [...db.candidates.values()].filter((c) => c.status === 'failed');
     const ready = [...db.candidates.values()].filter((c) => c.status === 'ready');
-    expect(failed).toHaveLength(0);
-    expect(ready).toHaveLength(5);
-    expect(ready.some((c) => c.name === '任务流程整理')).toBe(true);
+    expect(failed).toHaveLength(1);
+    expect(ready).toHaveLength(1);
+    expect(failed[0]!.error).toBeTruthy();
     // job 整体仍 completed（单候选失败不影响 job 状态，提取边界）。
     expect(db.jobs.get(job.id)!.status).toBe('completed');
     const r = res.result as { failedCount: number; readyCount: number; degraded: boolean };
-    expect(r.failedCount).toBe(0);
+    expect(r.failedCount).toBe(1);
     expect(r.readyCount).toBe(ready.length);
-    expect(r.degraded).toBe(true);
-    expect(cap.items).toHaveLength(5);
-    expect(cap.items.every((it) => it.status === 'ready')).toBe(true);
+    expect(r.degraded).toBe(false);
+    expect(cap.items).toHaveLength(2);
+    expect(cap.items.some((it) => it.status === 'failed')).toBe(true);
+    expect(cap.items.some((it) => it.status === 'ready')).toBe(true);
   });
 });
 
@@ -464,7 +497,7 @@ describe('extract handler — sweeper 接管重跑收尾合并不丢候选（Cod
     const cap1 = makeCtx(job1);
     const res1 = await handler.run(job1, cap1.ctx);
     const attempt1Count = (res1.result as { candidateCount: number }).candidateCount;
-    expect(attempt1Count).toBe(5);
+    expect(attempt1Count).toBe(2);
     const candIdsAfter1 = new Set([...db.candidates.keys()]);
     expect(candIdsAfter1.size).toBe(attempt1Count);
     const outboxAfter1 = tx.outbox.length;

@@ -6,6 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import { optionalAuth } from '../../platform/middleware/auth.js';
 import { registerEndpoints, type EndpointDecl } from '../../platform/http/_helpers.js';
 import {
+  getCreatorProfileBySlugHandler,
   getCreatorProfileHandler,
   getDensityHandler,
   getHeatmapHandler,
@@ -14,6 +15,13 @@ import {
 } from './handlers.js';
 
 export const PROFILE_ENDPOINTS: EndpointDecl[] = [
+  // 公开创作者主页 /c/:slug 使用 by-slug 读路径；只读、可匿名，返回同一 CreatorProfile 结构。
+  {
+    method: 'GET',
+    url: '/creators/by-slug/:slug/profile',
+    preHandlers: [optionalAuth()],
+    handler: getCreatorProfileBySlugHandler(),
+  },
   // 公开主页（B-33 全六分区 P0，optionalAuth：公开只读、访客同视图，主页-13）。viewerId 仅切 Hero.viewerIsFollowing。
   {
     method: 'GET',

@@ -28,6 +28,8 @@ export interface NavItem {
   group: NavGroupKey;
   /** 纯图标态用的图标（收起后只剩它 + tooltip，外壳首页-05）。 */
   icon: ComponentType<SVGProps<SVGSVGElement>>;
+  /** 暂未开放的功能入口：侧栏置灰且不可点击。 */
+  disabled?: boolean;
 }
 
 /** 分组小标题（展开态显示；收起态以分隔线区分，外壳首页-03/04）。 */
@@ -38,12 +40,12 @@ export const NAV_GROUPS: { key: NavGroupKey; label: string }[] = [
 
 /** 创作者侧栏主导航（恒定结构，开工总纲 §2.1）。顺序即展示顺序。 */
 export const CREATOR_NAV: NavItem[] = [
-  { path: '/creator', label: '工作台', group: 'create', icon: IconWorkbench },
+  { path: '/creator', label: '工作台', group: 'create', icon: IconWorkbench, disabled: true },
   { path: '/capabilities', label: '我的能力', group: 'create', icon: IconCapabilities },
   { path: '/create', label: '上传能力', group: 'create', icon: IconUpload },
-  { path: '/analytics', label: '数据分析', group: 'create', icon: IconAnalytics },
-  { path: '/earnings', label: '收益', group: 'create', icon: IconEarnings },
-  { path: '/profile', label: '个人主页', group: 'mine', icon: IconProfile },
+  { path: '/analytics', label: '数据分析', group: 'create', icon: IconAnalytics, disabled: true },
+  { path: '/earnings', label: '收益', group: 'create', icon: IconEarnings, disabled: true },
+  { path: '/profile', label: '个人主页', group: 'mine', icon: IconProfile, disabled: true },
 ];
 
 /** 上传子路由（PRD 2 步：上传 → 能力页）。不进侧栏。step 放宽为 string（'capabilities' 非 DraftStep 枚举值）。
@@ -53,8 +55,8 @@ export const CREATE_STEPS: { step: string; path: string; label: string }[] = [
   { step: 'capabilities', path: '/create/capabilities', label: '能力' },
 ];
 
-/** 面包屑根（开工总纲 §2.2：如「上传能力 / Creator Builder」恒以产品域为根）。 */
-export const BREADCRUMB_ROOT = { path: '/creator', label: 'Creator Builder' } as const;
+/** 面包屑根（开工总纲 §2.2：如「上传能力 / Combo Builder」恒以产品域为根）。 */
+export const BREADCRUMB_ROOT = { path: '/creator', label: 'Combo Builder' } as const;
 
 export interface Crumb {
   path: string;
@@ -63,7 +65,7 @@ export interface Crumb {
 
 /**
  * 面包屑：把当前 pathname 拆成可点段（产品域根 → 区段 → 子步）。
- * 例：/create/capabilities → 「Creator Builder / 上传能力 / 能力」（外壳首页-06）。
+ * 例：/create/capabilities → 「Combo Builder / 上传能力 / 能力」（外壳首页-06）。
  * 末段为当前页（不可点），其余可点回跳。2 步流程下最多再追加 1 个子步（import/capabilities）。
  */
 export function breadcrumbFor(pathname: string): Crumb[] {

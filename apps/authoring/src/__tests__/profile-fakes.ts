@@ -43,6 +43,7 @@ export interface FakeVersion {
   id: string;
   capability_id: string;
   manifest: Record<string, unknown>;
+  source_candidate_id: string | null;
 }
 export interface FakePublication {
   capability_id: string;
@@ -123,6 +124,12 @@ export class ProfileFakeDb implements Queryable {
       if (this.throwOnSources.has(src)) throw new Error(`injected ${src} failure`);
     };
 
+    // —— readProfileOwnerIdBySlug ——
+    if (sql.includes('SELECT user_id FROM creator_profiles WHERE slug = $1')) {
+      const p = [...this.profiles.values()].find((row) => row.slug === params[0]);
+      return ok<R>(p ? ([{ user_id: p.user_id }] as R[]) : []);
+    }
+
     // —— readProfileBase ——
     if (sql.includes('FROM creator_profiles') && sql.includes('WHERE user_id = $1')) {
       failIf('base');
@@ -168,13 +175,23 @@ export class ProfileFakeDb implements Queryable {
         .map(({ c, pub }) => {
           const cv = this.versions.get(pub.current_version_id);
           const manifest = cv?.manifest ?? {};
-          // owner 隔离（与 SQL 一致）：段级血缘只算挂在本创作者自有快照上的候选段。
-          const { supporting, recent, prior } = this.segLineageFor(c.slug, creatorId, midpoint);
+          // owner 隔离（与 SQL 一致）：段级血缘只算当前展示版 source_candidate_id 直连的候选段。
+          const { supporting, recent, prior } = this.segLineageFor(
+            cv?.source_candidate_id ?? null,
+            creatorId,
+            midpoint,
+          );
           return {
             capability_id: c.id,
             current_version_id: pub.current_version_id,
             slug: c.slug,
             name: (manifest['name'] as string | undefined) ?? null,
+            source_snapshot_id: cv?.source_candidate_id
+              ? (this.candidates.get(cv.source_candidate_id)?.snapshot_id ?? null)
+              : null,
+            source_candidate_slug: cv?.source_candidate_id
+              ? (this.candidates.get(cv.source_candidate_id)?.slug ?? null)
+              : null,
             review_status: pub.review_status,
             cover_url: (manifest['cover_url'] as string | undefined) ?? null,
             tags: c.tags,
@@ -207,10 +224,10 @@ export class ProfileFakeDb implements Queryable {
       return ok<R>(rows as R[]);
     }
 
-    // —— readSnapshotHits（DISTINCT snapshot × capability，按 slug 归集）——
+    // —— readSnapshotHits（DISTINCT snapshot × capability，按 current version source_candidate_id 归集）——
     if (
       sql.includes('SELECT DISTINCT cc.snapshot_id') &&
-      sql.includes('JOIN capability_candidates cc ON cc.slug = c.slug')
+      sql.includes('JOIN capability_candidates cc ON cc.id = cv.source_candidate_id')
     ) {
       failIf('hits');
       const creatorId = params[0] as string;
@@ -222,19 +239,20 @@ export class ProfileFakeDb implements Queryable {
         if (!pub || (pub.review_status !== 'alpha_pending' && pub.review_status !== 'published')) {
           continue;
         }
-        for (const cand of this.candidates.values()) {
-          if (cand.slug !== c.slug) continue;
-          // owner 隔离（与 SQL `JOIN raw_snapshots rs ... AND rs.owner_user_id = $1` 一致）：
-          //   候选所属快照必须本创作者自有，否则同 slug 跨创作者会串入别人的共现命中（数据越权）。
-          if (!this.breakOwnerScope) {
-            const candSnap = this.snapshots.get(cand.snapshot_id);
-            if (!candSnap || candSnap.owner_user_id !== creatorId) continue;
-          }
-          const key = `${cand.snapshot_id}|${c.id}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          out.push({ snapshot_id: cand.snapshot_id, capability_id: c.id });
+        const cv = this.versions.get(pub.current_version_id);
+        if (!cv?.source_candidate_id) continue;
+        const cand = this.candidates.get(cv.source_candidate_id);
+        if (!cand) continue;
+        // owner 隔离（与 SQL `JOIN raw_snapshots rs ... AND rs.owner_user_id = $1` 一致）：
+        //   候选所属快照必须本创作者自有，否则会串入别人的共现命中（数据越权）。
+        if (!this.breakOwnerScope) {
+          const candSnap = this.snapshots.get(cand.snapshot_id);
+          if (!candSnap || candSnap.owner_user_id !== creatorId) continue;
         }
+        const key = `${cand.snapshot_id}|${c.id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ snapshot_id: cand.snapshot_id, capability_id: c.id });
       }
       return ok<R>(out as R[]);
     }
@@ -243,26 +261,25 @@ export class ProfileFakeDb implements Queryable {
   }
 
   /**
-   * 段级血缘：按 slug 取候选 → 证据 → distinct 段；近/前半窗按 happened_at vs midpoint（与 SQL FILTER 对齐）。
+   * 段级血缘：按 source_candidate_id 取候选 → 证据 → distinct 段；近/前半窗按 happened_at vs midpoint（与 SQL FILTER 对齐）。
    *   owner 隔离（与 SQL `JOIN raw_snapshots rs ... AND rs.owner_user_id = $1` 一致）：候选所属快照必须本创作者自有，
-   *   否则同 slug 跨创作者会把别人的段计入（数据越权）。
+   *   否则跨创作者会把别人的段计入（数据越权）。
    */
   private segLineageFor(
-    slug: string,
+    candidateId: string | null,
     ownerId: string,
     midpoint: string,
   ): { supporting: number; recent: number; prior: number } {
-    const candIds = [...this.candidates.values()]
-      .filter((c) => {
-        if (c.slug !== slug) return false;
-        if (this.breakOwnerScope) return true; // 反向破坏：退回全局 slug 归集（串入他人段）。
-        const snap = this.snapshots.get(c.snapshot_id);
-        return !!snap && snap.owner_user_id === ownerId;
-      })
-      .map((c) => c.id);
+    if (!candidateId) return { supporting: 0, recent: 0, prior: 0 };
+    const cand = this.candidates.get(candidateId);
+    if (!cand) return { supporting: 0, recent: 0, prior: 0 };
+    if (!this.breakOwnerScope) {
+      const snap = this.snapshots.get(cand.snapshot_id);
+      if (!snap || snap.owner_user_id !== ownerId) return { supporting: 0, recent: 0, prior: 0 };
+    }
     const segIds = new Set<string>();
     for (const ev of this.evidence) {
-      if (candIds.includes(ev.candidate_id)) segIds.add(ev.segment_id);
+      if (ev.candidate_id === candidateId) segIds.add(ev.segment_id);
     }
     let recent = 0;
     let prior = 0;
@@ -306,6 +323,7 @@ export function seedPublishedCapability(
     tags?: string[];
     createdAt?: string;
     slug?: string;
+    sourceCandidateId?: string | null;
   },
 ): { capabilityId: string; versionId: string; slug: string } {
   const capabilityId = genId('cap');
@@ -321,7 +339,12 @@ export function seedPublishedCapability(
   });
   const manifest: Record<string, unknown> = { name: opts?.name ?? '需求炼金师' };
   if (opts?.coverUrl !== undefined && opts.coverUrl !== null) manifest['cover_url'] = opts.coverUrl;
-  db.versions.set(versionId, { id: versionId, capability_id: capabilityId, manifest });
+  db.versions.set(versionId, {
+    id: versionId,
+    capability_id: capabilityId,
+    manifest,
+    source_candidate_id: opts?.sourceCandidateId ?? null,
+  });
   db.publications.set(capabilityId, {
     capability_id: capabilityId,
     current_version_id: versionId,
@@ -349,7 +372,7 @@ export function seedSupport(
   creatorId: string,
   slug: string,
   happenedAts: (string | null)[],
-): { snapshotId: string; segmentIds: string[] } {
+): { snapshotId: string; candidateId: string; segmentIds: string[] } {
   const snapshotId = genId('snap');
   db.snapshots.set(snapshotId, { id: snapshotId, owner_user_id: creatorId });
   const candId = genId('cand');
@@ -361,7 +384,14 @@ export function seedSupport(
     db.evidence.push({ candidate_id: candId, segment_id: segId });
     segmentIds.push(segId);
   }
-  return { snapshotId, segmentIds };
+  for (const cap of db.capabilities.values()) {
+    if (cap.creator_user_id !== creatorId || cap.slug !== slug) continue;
+    const pub = db.publications.get(cap.id);
+    if (!pub) continue;
+    const version = db.versions.get(pub.current_version_id);
+    if (version) version.source_candidate_id = candId;
+  }
+  return { snapshotId, candidateId: candId, segmentIds };
 }
 
 /**
@@ -374,6 +404,13 @@ export function seedCooccurrence(db: ProfileFakeDb, creatorId: string, slugs: st
   for (const slug of slugs) {
     const candId = genId('cand');
     db.candidates.set(candId, { id: candId, slug, snapshot_id: snapshotId });
+    for (const cap of db.capabilities.values()) {
+      if (cap.creator_user_id !== creatorId || cap.slug !== slug) continue;
+      const pub = db.publications.get(cap.id);
+      if (!pub) continue;
+      const version = db.versions.get(pub.current_version_id);
+      if (version) version.source_candidate_id = candId;
+    }
     const segId = genId('seg');
     db.segments.set(segId, {
       id: segId,

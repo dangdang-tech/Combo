@@ -9,6 +9,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { installFetchMock, type FetchMock } from './test/mockFetch.js';
 import { App } from './App.js';
+import { makeProfile } from './pages/profile/fixtures.js';
 
 let fm: FetchMock | undefined;
 afterEach(() => {
@@ -52,17 +53,38 @@ describe('App 路由分组 × /me 探针（BUG-010：公开/登录/404 不发 me
   });
 
   it('/a/:slug（公开能力页）：未登录不发 GET /api/v1/me，渲染裸壳公开页', async () => {
-    // 公开页本期是诚实占位（不拉数据），关键是绝不被 AuthProvider 拖去发 /me。
-    fm = installFetchMock({ status: 401, json: { error: { userMessage: 'x' } } });
+    fm = installFetchMock({
+      status: 200,
+      json: {
+        capabilityId: 'cap-1',
+        slug: 'some-slug',
+        version: '0.1.0',
+        status: 'published',
+        name: '公开能力',
+        tagline: '公开能力卖点',
+        description: '公开能力说明',
+        inputs: { fields: [] },
+        output: { type: 'text' },
+        boundaries: { riskLevel: 'low', redLines: [] },
+        starterPrompts: [],
+      },
+    });
     renderAppAt('/a/some-slug');
-    expect(await screen.findByText('公开能力页即将上线')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '公开能力' })).toBeInTheDocument();
     expect(meWasFetched()).toBe(false);
   });
 
   it('/c/:slug（公开创作者主页）：未登录不发 GET /api/v1/me，渲染裸壳公开页', async () => {
-    fm = installFetchMock({ status: 401, json: { error: { userMessage: 'x' } } });
+    fm = installFetchMock({
+      status: 200,
+      json: {
+        data: makeProfile({ slug: 'some-slug' }),
+        meta: { traceId: 'tr-public-creator' },
+      },
+    });
     renderAppAt('/c/some-slug');
-    expect(await screen.findByText('公开创作者主页即将上线')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Wayne' })).toBeInTheDocument();
+    expect(fm.calls.map((c) => c.url)).toContain('/api/v1/creators/by-slug/some-slug/profile');
     expect(meWasFetched()).toBe(false);
   });
 

@@ -77,6 +77,7 @@ export async function publishOne(
     slug: row.slug,
     manifest: row.manifest,
     ownerUserId: args.ownerUserId,
+    ownerAccount: row.account,
     cover: args.cover,
     tiers: args.tiers,
     visibility: args.visibility,

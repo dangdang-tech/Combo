@@ -87,6 +87,15 @@ function makeReply(): { reply: FastifyReply; sent: Sent } {
   return { reply, sent };
 }
 
+function expectFailureRedirect(redirectUrl: string | undefined, returnTo: string): URL {
+  expect(redirectUrl).toBeTruthy();
+  const url = new URL(redirectUrl!, 'http://combo.local');
+  expect(url.pathname).toBe('/login');
+  expect(url.searchParams.get('failureId')).toMatch(/^[A-Za-z0-9_-]+$/);
+  expect(url.searchParams.get('returnTo')).toBe(returnTo);
+  return url;
+}
+
 function makeReq(
   opts: {
     query?: Record<string, unknown>;
@@ -169,16 +178,17 @@ describe('GET /auth/login (10-auth §3.1)', () => {
     expect(tx.returnTo).toBe('/creator');
   });
 
-  it('discovery 不可达（authorize URL 拉不到）→ 仍 302 降级回 /login，不裸返 JSON 错', async () => {
+  it('discovery 不可达 → 302 failureId 且保留已校验 returnTo，不裸返 JSON 错', async () => {
     buildAuthorizeUrlMock.mockResolvedValue(null);
-    const req = makeReq();
+    const returnTo = '/create/capabilities?snapshotId=s1&draftId=d1';
+    const req = makeReq({ query: { returnTo } });
     const { reply, sent } = makeReply();
     await (loginHandler() as never as (r: FastifyRequest, rep: FastifyReply) => Promise<unknown>)(
       req,
       reply,
     );
     expect(sent.redirectCode).toBe(302);
-    expect(sent.redirectUrl).toBe('/login');
+    expectFailureRedirect(sent.redirectUrl, returnTo);
     expect(sent.code).toBeUndefined(); // 不是 JSON 错误响应
     expect(sent.cookies[AUTH_TX_COOKIE]).toBeUndefined(); // 没换到 URL 不落 tx
   });
@@ -200,7 +210,7 @@ describe('GET /auth/callback (10-auth §3.2)', () => {
     state: 'state-abc',
     nonce: 'nonce-xyz',
     codeVerifier: 'verifier-123',
-    returnTo: '/creator',
+    returnTo: '/create/capabilities?snapshotId=s1&draftId=d1',
   };
 
   it('成功：校 state→换 token→验 id_token(aud=APP_ID,nonce)→验 access_token(aud=AUDIENCE)→provision→种 cb_session→302 回 returnTo', async () => {
@@ -247,7 +257,7 @@ describe('GET /auth/callback (10-auth §3.2)', () => {
     // 清 auth_tx + 302 回 returnTo。
     expect(sent.cleared.has(AUTH_TX_COOKIE)).toBe(true);
     expect(sent.redirectCode).toBe(302);
-    expect(sent.redirectUrl).toBe('/creator');
+    expect(sent.redirectUrl).toBe(goodTx.returnTo);
     // provision 用 sub。
     expect(provisionMock).toHaveBeenCalledWith(
       expect.anything(),
@@ -269,7 +279,7 @@ describe('GET /auth/callback (10-auth §3.2)', () => {
       callbackHandler() as never as (r: FastifyRequest, rep: FastifyReply) => Promise<unknown>
     )(req, reply);
     expect(verifyIdMock).toHaveBeenCalledWith('id.jwt.token', expect.anything());
-    expect(sent.redirectUrl).toMatch(/^\/login\?failureId=/);
+    expectFailureRedirect(sent.redirectUrl, goodTx.returnTo);
     expect(sent.cookies[SESSION_COOKIE]).toBeUndefined(); // id_token 不过 → 不种会话
     expect(verifyMock).not.toHaveBeenCalled(); // id_token 没过就不进 access_token 验签
   });
@@ -281,7 +291,7 @@ describe('GET /auth/callback (10-auth §3.2)', () => {
       callbackHandler() as never as (r: FastifyRequest, rep: FastifyReply) => Promise<unknown>
     )(req, reply);
     expect(sent.redirectCode).toBe(302);
-    expect(sent.redirectUrl).toMatch(/^\/login\?failureId=/);
+    expectFailureRedirect(sent.redirectUrl, goodTx.returnTo);
     // 绝不带内部 code（AUTH_STATE_MISMATCH 等）/ 状态码。
     expect(sent.redirectUrl).not.toMatch(/AUTH_|code=|\b[1-5]\d{2}\b/);
     expect(exchangeCodeForTokenMock).not.toHaveBeenCalled(); // state 没过不换 token
@@ -293,7 +303,7 @@ describe('GET /auth/callback (10-auth §3.2)', () => {
     await (
       callbackHandler() as never as (r: FastifyRequest, rep: FastifyReply) => Promise<unknown>
     )(req, reply);
-    expect(sent.redirectUrl).toMatch(/^\/login\?failureId=/);
+    expectFailureRedirect(sent.redirectUrl, '/creator');
   });
 
   it('Logto 取消授权（error=access_denied）→ failureId 重定向（不透传 OIDC error）', async () => {
@@ -302,7 +312,7 @@ describe('GET /auth/callback (10-auth §3.2)', () => {
     await (
       callbackHandler() as never as (r: FastifyRequest, rep: FastifyReply) => Promise<unknown>
     )(req, reply);
-    expect(sent.redirectUrl).toMatch(/^\/login\?failureId=/);
+    expectFailureRedirect(sent.redirectUrl, goodTx.returnTo);
     expect(sent.redirectUrl).not.toContain('access_denied');
     expect(sent.redirectUrl).not.toContain('cancelled');
   });
@@ -314,7 +324,7 @@ describe('GET /auth/callback (10-auth §3.2)', () => {
     await (
       callbackHandler() as never as (r: FastifyRequest, rep: FastifyReply) => Promise<unknown>
     )(req, reply);
-    expect(sent.redirectUrl).toMatch(/^\/login\?failureId=/);
+    expectFailureRedirect(sent.redirectUrl, goodTx.returnTo);
     expect(sent.cookies[SESSION_COOKIE]).toBeUndefined(); // 没种会话
   });
 
@@ -325,7 +335,7 @@ describe('GET /auth/callback (10-auth §3.2)', () => {
     await (
       callbackHandler() as never as (r: FastifyRequest, rep: FastifyReply) => Promise<unknown>
     )(req, reply);
-    expect(sent.redirectUrl).toMatch(/^\/login\?failureId=/);
+    expectFailureRedirect(sent.redirectUrl, goodTx.returnTo);
     expect(sent.redirectUrl).not.toMatch(/\b[1-5]\d{2}\b/);
   });
 
@@ -346,7 +356,7 @@ describe('GET /auth/callback (10-auth §3.2)', () => {
     await (
       callbackHandler() as never as (r: FastifyRequest, rep: FastifyReply) => Promise<unknown>
     )(req, reply);
-    expect(sent.redirectUrl).toMatch(/^\/login\?failureId=/);
+    expectFailureRedirect(sent.redirectUrl, goodTx.returnTo);
     expect(sent.cookies[SESSION_COOKIE]).toBeUndefined();
     expect(verifyMock).not.toHaveBeenCalled(); // nonce 没过不进 access_token 验签
   });
@@ -367,7 +377,7 @@ describe('GET /auth/callback (10-auth §3.2)', () => {
     await (
       callbackHandler() as never as (r: FastifyRequest, rep: FastifyReply) => Promise<unknown>
     )(req, reply);
-    expect(sent.redirectUrl).toMatch(/^\/login\?failureId=/);
+    expectFailureRedirect(sent.redirectUrl, goodTx.returnTo);
     expect(sent.cookies[SESSION_COOKIE]).toBeUndefined();
   });
 });

@@ -103,6 +103,27 @@ export const RuntimeArtifactSchema = z.object({
 });
 export type RuntimeArtifact = z.infer<typeof RuntimeArtifactSchema>;
 
+/**
+ * Pick the artifact that represents the user's primary deliverable.
+ *
+ * `main` is the durable cross-run convention. Older agents did not always use
+ * it, so an HTML artifact is the safest visual fallback; otherwise preserve
+ * the historical "latest artifact" behavior.
+ */
+export function selectPrimaryArtifactKey(
+  artifacts: ReadonlyArray<Pick<RuntimeArtifact, 'artifactKey' | 'kind'>>,
+): string | null {
+  const explicitMain = artifacts.find((artifact) => artifact.artifactKey === 'main');
+  if (explicitMain) return explicitMain.artifactKey;
+
+  for (let index = artifacts.length - 1; index >= 0; index -= 1) {
+    const artifact = artifacts[index];
+    if (artifact?.kind === 'html') return artifact.artifactKey;
+  }
+
+  return artifacts.at(-1)?.artifactKey ?? null;
+}
+
 // 会话元信息。
 export const RuntimeSessionMetaSchema = z.object({
   id: z.string(),
@@ -195,6 +216,22 @@ export const TrialChainSchema = z.object({
   sessions: z.array(RuntimeSessionListItemSchema),
 });
 export type TrialChain = z.infer<typeof TrialChainSchema>;
+
+/**
+ * 创作流程恢复某一 draft version 的试用记录。
+ * versionId 是 authoring 的不可变版本主键；sessionId 只在 runtime 回流时用于精确核对该次试用。
+ */
+export const LatestTrialSessionQuerySchema = z.object({
+  versionId: z.string().uuid(),
+  sessionId: z.string().uuid().optional(),
+});
+export type LatestTrialSessionQuery = z.infer<typeof LatestTrialSessionQuerySchema>;
+
+export const LatestTrialSessionResultSchema = z.object({
+  session: RuntimeSessionMetaSchema.nullable(),
+  verified: z.boolean(),
+});
+export type LatestTrialSessionResult = z.infer<typeof LatestTrialSessionResultSchema>;
 
 export const RunInputSchema = z.object({
   contentParts: z.array(RunContentPartSchema).min(1),

@@ -21,7 +21,7 @@
 
 /** 脚本注入参数（服务端据请求算/反查）。 */
 export interface ConnectScriptParams {
-  base: string; // 形如 https://agora.app
+  base: string; // 形如 https://buildwithcombo.com
   pairId: string; // 由 ?code 反查，供上传定位 import_pairings 行（Codex#3-r2）
   pairingCode: string; // 一次性配对码（助手凭它换上传权；走 Authorization: Bearer）
 }
@@ -38,7 +38,7 @@ function shq(s: string): string {
  */
 export function renderConnectScript(p: ConnectScriptParams): string {
   return `#!/bin/sh
-# Agora 本机助手（引导器）— 下载本机助手程序，由它在本机读取你的对话历史后，把原文【完整上传】到云端，
+# Combo 本机助手（引导器）— 下载本机助手程序，由它在本机读取你的对话历史后，把原文【完整上传】到云端，
 #   再由云端解析、抹掉手机号/密钥这类隐私信息后用于后续步骤。
 set -u
 
@@ -47,7 +47,7 @@ PAIR_ID=${shq(p.pairId)}
 CODE=${shq(p.pairingCode)}
 SOURCE='mixed'
 
-log() { printf '[Agora] %s\\n' "$1" >&2; }
+log() { printf '[Combo] %s\\n' "$1" >&2; }
 
 # 0. 没有 curl 就用不了命令行方式（Windows / 极简环境）——给人话出口，引导回网页。
 if ! command -v curl >/dev/null 2>&1; then
@@ -131,7 +131,7 @@ exec "\${BIN_PATH}"
  */
 export function renderExpiredScript(): string {
   return `#!/bin/sh
-printf '[Agora] %s\\n' '配对码已失效，请回到网页重新生成连接命令。' >&2
+printf '[Combo] %s\\n' '配对码已失效，请回到网页重新生成连接命令。' >&2
 exit 1
 `;
 }

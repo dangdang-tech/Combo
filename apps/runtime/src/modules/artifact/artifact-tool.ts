@@ -6,6 +6,7 @@ import type { AgentTool, AgentToolResult } from '@earendil-works/pi-agent-core';
 import type { Pool } from 'pg';
 import type { ArtifactKind, ArtifactRef, RuntimeArtifact } from '@cb/shared';
 import { getArtifact, upsertArtifact } from './repo.js';
+import { normalizeStructuredArtifactContent } from './safety.js';
 
 const ArtifactParams = Type.Object({
   artifactKey: Type.String({
@@ -59,13 +60,15 @@ export function createArtifactTool(
       const language = params.language ?? null;
       // StringEnum 的 Static 退化为 string；工具层已按 schema 校验 ∈ 四值，这里收窄回 ArtifactKind。
       const kind = params.kind as ArtifactKind;
+      const content =
+        kind === 'structured' ? normalizeStructuredArtifactContent(params.content) : params.content;
       const { version } = await upsertArtifact(ctx.pool, {
         sessionId: ctx.sessionId,
         artifactKey: params.artifactKey,
         kind,
         title: params.title,
         language,
-        content: params.content,
+        content,
       });
 
       // 记入本回合 artifact 引用（同 key 覆盖为最新版本）。

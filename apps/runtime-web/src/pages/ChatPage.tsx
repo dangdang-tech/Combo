@@ -11,9 +11,10 @@ import {
 } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
+import { selectPrimaryArtifactKey } from '@cb/shared';
 import type {
-  InputField,
   PublicCapabilityView,
+  PublicInputField,
   RuntimeArtifact,
   RuntimeMessage,
   RuntimeSessionList,
@@ -21,13 +22,11 @@ import type {
   RuntimeSessionMeta,
   TrialProcessState,
 } from '@cb/shared';
-import { createProductionSession, createTrialSession, useSession } from '../api/runtime.js';
+import { createProductionSession, useSession } from '../api/runtime.js';
 import { useAguiSession } from '../api/useAguiSession.js';
 import { ArtifactRenderer } from '../components/ArtifactRenderer.js';
 import { ChatThread } from '../components/ChatThread.js';
 import { SessionSidebar } from '../components/SessionSidebar.js';
-
-type PreviewMode = 'creator' | 'consumer';
 
 function latestVersion(artifact: RuntimeArtifact | null) {
   return (
@@ -62,7 +61,20 @@ function safeReturnTo(value: string | null): string {
   return value && value.startsWith('/') && !value.startsWith('//') ? value : '/create/capabilities';
 }
 
-function fieldValue(values: Record<string, string>, field: InputField): string {
+function trialOutcomeReturnTo(
+  returnTo: string,
+  outcome: 'tested' | 'failed',
+  capabilityId: string,
+  sessionId: string,
+): string {
+  const target = new URL(returnTo, 'http://combo.local');
+  target.searchParams.delete(outcome === 'tested' ? 'failed' : 'tested');
+  target.searchParams.set(outcome, capabilityId);
+  target.searchParams.set('session', sessionId);
+  return `${target.pathname}${target.search}${target.hash}`;
+}
+
+function fieldValue(values: Record<string, string>, field: PublicInputField): string {
   return values[field.key]?.trim() ?? '';
 }
 
@@ -72,7 +84,7 @@ function includesAny(value: string, needles: string[]): boolean {
 
 function defaultFieldValue(
   capability: PublicCapabilityView,
-  field: InputField,
+  field: PublicInputField,
   index: number,
 ): string {
   const name = `${field.key} ${field.label}`.toLowerCase();
@@ -131,7 +143,7 @@ function defaultExtra(capability: PublicCapabilityView): string {
 }
 
 function buildTrialPrompt(
-  fields: InputField[],
+  fields: PublicInputField[],
   values: Record<string, string>,
   extra: string,
 ): string {
@@ -264,7 +276,7 @@ function TrialGeneratingCard({
   process: TrialProcessState | null;
 }) {
   const rows = process?.steps.slice(0, 4) ?? [
-    { key: 'read_experience', label: `读取 @${capability.slug} 经验体`, status: 'completed' },
+    { key: 'read_experience', label: '读取能力上下文', status: 'completed' },
     { key: 'draft_output', label: '生成第一版产物', status: 'running' },
     { key: 'check_boundaries', label: '校验能力边界与输出格式', status: 'pending' },
     { key: 'compose_artifact', label: '整理产物结构', status: 'pending' },
@@ -273,7 +285,7 @@ function TrialGeneratingCard({
   return (
     <section className="rt-generating-card" aria-label="正在生成">
       <h2>正在生成 · {capability.name}...</h2>
-      <p>按 @{capability.slug} 的经验体生成第一版产物，用进度短语标记关键步骤。</p>
+      <p>正在根据这项能力和本次输入生成第一版产物。</p>
       <div className="rt-generating-card__steps">
         {rows.map((row) => (
           <div key={row.key} className="rt-generating-card__step" data-status={row.status}>
@@ -295,41 +307,6 @@ function TrialGeneratingCard({
         </div>
       </div>
     </section>
-  );
-}
-
-function CreatorInspector({
-  capability,
-  onClose,
-}: {
-  capability: PublicCapabilityView;
-  onClose: () => void;
-}) {
-  return (
-    <aside className="rt-inspector" aria-label="创作者调试面板">
-      <div className="rt-inspector__bar">
-        <span>创作者面板</span>
-        <button type="button" className="rt-icon-btn" onClick={onClose}>
-          收起
-        </button>
-      </div>
-      <div className="rt-inspector__tabs" role="tablist" aria-label="创作者信息">
-        <button type="button" className="rt-inspector__tab is-active">
-          经验体
-        </button>
-        <button type="button" className="rt-inspector__tab">
-          规格说明
-        </button>
-        <button type="button" className="rt-inspector__tab">
-          记忆
-        </button>
-      </div>
-      <div className="rt-inspector__body">
-        <p>当前模板字段：{capability.inputs.fields.length} 个</p>
-        <p>引用要求：参考案例可选；不确定引用必须标注为模拟。</p>
-        <p>输出类型：{capability.output.type}</p>
-      </div>
-    </aside>
   );
 }
 
@@ -845,8 +822,6 @@ export function ChatPage() {
   const qc = useQueryClient();
 
   const [createFailed, setCreateFailed] = useState(false);
-  const [mode, setMode] = useState<PreviewMode>('creator');
-  const [inspectorOpen, setInspectorOpen] = useState(false);
   const [productionPending, setProductionPending] = useState(false);
   const [productionError, setProductionError] = useState<string | null>(null);
   const startedSlugRef = useRef<string | undefined>(undefined);
@@ -855,7 +830,7 @@ export function ChatPage() {
   useEffect(() => {
     if (!slug || startedSlugRef.current === slug) return;
     startedSlugRef.current = slug;
-    createTrialSession(slug)
+    createProductionSession(slug)
       .then((data) => {
         const item = toSessionListItem(data.session, data.capability);
         qc.setQueryData<RuntimeSessionList>(['sessions'], (current) =>
@@ -876,30 +851,43 @@ export function ChatPage() {
   const capability = detail?.capability;
   const agui = useAguiSession(sessionId, detail);
 
-  useEffect(() => {
-    if (detail?.session.mode !== 'consume') return;
-    setMode('consumer');
-    setInspectorOpen(false);
-  }, [detail?.session.mode]);
-
-  const activeArtifact = agui.activeKey
-    ? (agui.artifacts.find((a) => a.artifactKey === agui.activeKey) ?? null)
-    : (agui.artifacts.at(-1) ?? null);
+  const selectedArtifactKey = agui.activeKey ?? selectPrimaryArtifactKey(agui.artifacts);
+  const activeArtifact = selectedArtifactKey
+    ? (agui.artifacts.find((artifact) => artifact.artifactKey === selectedArtifactKey) ?? null)
+    : null;
   const activeVersion = latestVersion(activeArtifact);
   const hasStarted = agui.messages.length > 0;
   const hasPriorMessages = (detail?.messages.length ?? 0) > 0;
-  const hasRealArtifact = Boolean(activeVersion && activeArtifact?.artifactKey !== 'mock-full-html');
+  const hasPersistedAssistantOutput = (detail?.messages ?? []).some(
+    (message) =>
+      message.role === 'assistant' &&
+      message.runId !== null &&
+      (message.text.trim().length > 0 || message.artifacts.length > 0),
+  );
+  const hasRealArtifact = Boolean(
+    activeVersion && activeArtifact?.artifactKey !== 'mock-full-html',
+  );
 
   const activeSession = detail ? toSessionListItem(detail.session, detail.capability) : undefined;
   const sessionMode = detail?.session.mode ?? 'trial';
   const isTrialSession = sessionMode === 'trial';
   const isDraftTrial = isTrialSession && capability?.status === 'draft';
-  const effectiveMode: PreviewMode = isTrialSession ? mode : 'consumer';
   const publishReturnTo = safeReturnTo(searchParams.get('returnTo'));
+  const canConfirmDraftTrial = isDraftTrial && hasPersistedAssistantOutput && !agui.isRunning;
 
   const backToPublish = useCallback(() => {
-    window.location.assign(publishReturnTo);
-  }, [publishReturnTo]);
+    if (!capability || !sessionId) return;
+    window.location.assign(
+      trialOutcomeReturnTo(publishReturnTo, 'tested', capability.capabilityId, sessionId),
+    );
+  }, [capability, publishReturnTo, sessionId]);
+
+  const rejectDraftTrial = useCallback(() => {
+    if (!capability || !sessionId) return;
+    window.location.assign(
+      trialOutcomeReturnTo(publishReturnTo, 'failed', capability.capabilityId, sessionId),
+    );
+  }, [capability, publishReturnTo, sessionId]);
 
   const enterProduction = useCallback(async () => {
     if (!capability || capability.status === 'draft' || productionPending) return;
@@ -954,14 +942,14 @@ export function ChatPage() {
   }
 
   const toolbarTitle = hasStarted ? (activeArtifact?.title ?? capability.name) : capability.name;
-  const toolbarVersion = hasStarted && activeArtifact ? activeArtifact.latestVersion : capability.version;
+  const toolbarVersion =
+    hasStarted && activeArtifact ? activeArtifact.latestVersion : capability.version;
   const showInitialGenerating = agui.isRunning && !hasPriorMessages;
   const showArtifact = hasStarted && hasRealArtifact && !showInitialGenerating;
-  const showInspectorPanel = isTrialSession && effectiveMode === 'creator' && inspectorOpen && !agui.isRunning;
-  const showCompanionChat = hasStarted && !showInitialGenerating && !showInspectorPanel;
+  const showCompanionChat = hasStarted && !showInitialGenerating;
 
   return (
-    <div className="rt-app rt-trial-app" data-view={effectiveMode} data-mode={sessionMode}>
+    <div className="rt-app rt-trial-app" data-mode={sessionMode}>
       <SessionSidebar
         activeSession={activeSession}
         activeSessionId={sessionId}
@@ -975,25 +963,38 @@ export function ChatPage() {
             <span className={`rt-mode-chip rt-mode-chip--${sessionMode}`}>
               {isTrialSession ? (isDraftTrial ? '草稿试用' : '试用') : '正式使用'}
             </span>
-            <span className="rt-source-pill">
-              @{capability.slug} · 守则 {capability.inputs.fields.length} · 案例{' '}
-              {capability.starterPrompts.length}
-            </span>
           </div>
-          <div className="rt-trial__tools">
-            <button type="button">TIMELINE</button>
-            <button type="button">EXPORT</button>
-            <button type="button">SHARE</button>
-            <button type="button">FULL</button>
-            {isTrialSession && hasStarted && isDraftTrial ? (
-              <button
-                type="button"
-                className="rt-toolbar-pill rt-toolbar-pill--accent"
-                onClick={backToPublish}
-              >
-                满意，回到发布
-              </button>
-            ) : isTrialSession && hasStarted ? (
+          {isDraftTrial && hasStarted ? (
+            <div className="rt-trial__actions">
+              {canConfirmDraftTrial ? (
+                <>
+                  <button type="button" className="rt-toolbar-pill" onClick={rejectDraftTrial}>
+                    不符合预期，换一个
+                  </button>
+                  <button
+                    type="button"
+                    className="rt-toolbar-pill rt-toolbar-pill--accent"
+                    onClick={backToPublish}
+                  >
+                    满意，继续发布
+                  </button>
+                </>
+              ) : agui.isRunning ? (
+                <button type="button" className="rt-toolbar-pill rt-toolbar-pill--accent" disabled>
+                  正在生成结果…
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="rt-toolbar-pill"
+                  onClick={() => window.location.assign(publishReturnTo)}
+                >
+                  返回创作流程
+                </button>
+              )}
+            </div>
+          ) : isTrialSession && hasStarted ? (
+            <div className="rt-trial__actions">
               <button
                 type="button"
                 className="rt-toolbar-pill rt-toolbar-pill--accent"
@@ -1002,37 +1003,8 @@ export function ChatPage() {
               >
                 {productionPending ? '创建中…' : '满意，进入正式使用'}
               </button>
-            ) : null}
-            {isTrialSession && (
-              <>
-                <div className="rt-segment" role="group" aria-label="预览身份">
-                  <button
-                    type="button"
-                    className={mode === 'creator' ? 'is-active' : ''}
-                    onClick={() => setMode('creator')}
-                  >
-                    创作者
-                  </button>
-                  <button
-                    type="button"
-                    className={mode === 'consumer' ? 'is-active' : ''}
-                    onClick={() => setMode('consumer')}
-                  >
-                    消费者
-                  </button>
-                </div>
-                {effectiveMode === 'creator' && (
-                  <button
-                    type="button"
-                    className="rt-toolbar-pill"
-                    onClick={() => setInspectorOpen((v) => !v)}
-                  >
-                    {showInspectorPanel ? '回到对话' : '经验体'}
-                  </button>
-                )}
-              </>
-            )}
-          </div>
+            </div>
+          ) : null}
         </header>
 
         <main className="rt-genui">
@@ -1050,7 +1022,7 @@ export function ChatPage() {
               <div className="rt-empty">暂无产物</div>
             ) : null}
             {!hasStarted && !agui.isRunning && (
-              <div className="rt-genui__overlay">
+              <div className="rt-genui__stage rt-genui__stage--intake">
                 <TrialIntakeForm
                   capability={capability}
                   disabled={agui.isRunning}
@@ -1059,7 +1031,7 @@ export function ChatPage() {
               </div>
             )}
             {showInitialGenerating && (
-              <div className="rt-genui__overlay rt-genui__overlay--plain">
+              <div className="rt-genui__stage rt-genui__stage--center">
                 <TrialGeneratingCard capability={capability} process={agui.trialProcess} />
               </div>
             )}
@@ -1075,9 +1047,6 @@ export function ChatPage() {
                 onInterrupt={agui.interrupt}
                 onOpenArtifact={(ref) => agui.setActiveKey(ref.artifactKey)}
               />
-            )}
-            {showInspectorPanel && (
-              <CreatorInspector capability={capability} onClose={() => setInspectorOpen(false)} />
             )}
           </div>
         </main>

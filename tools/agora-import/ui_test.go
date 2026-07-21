@@ -29,6 +29,24 @@ func TestReporterSelection(t *testing.T) {
 	}
 }
 
+func TestReporterBrandingUsesComboOnly(t *testing.T) {
+	var plain, tty bytes.Buffer
+	(&plainReporter{w: &plain}).scanStart()
+	(&ttyReporter{w: &tty, color: false}).scanStart()
+
+	for name, out := range map[string]string{
+		"plain": plain.String(),
+		"tty":   tty.String(),
+	} {
+		if !strings.Contains(out, "Combo") {
+			t.Fatalf("%s 输出应包含 Combo 品牌，实得：%q", name, out)
+		}
+		if strings.Contains(out, "Agora") {
+			t.Fatalf("%s 输出不应包含 Agora 旧品牌，实得：%q", name, out)
+		}
+	}
+}
+
 // TestTTYUploadBar：上传进度条就地刷新（\r）、有方块条、百分比、分片计数、清行尾、不丢「N 路并发」头。
 func TestTTYUploadBar(t *testing.T) {
 	var buf bytes.Buffer

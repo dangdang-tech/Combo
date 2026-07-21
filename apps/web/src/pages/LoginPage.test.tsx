@@ -16,6 +16,23 @@ describe('LoginPage local review login', () => {
     expect(resolveLocalReturnTo('/\\evil.example', 'http://localhost')).toBe('/creator');
     expect(resolveLocalReturnTo('//evil.example', 'http://localhost')).toBe('/creator');
     expect(resolveLocalReturnTo('https://evil.example', 'http://localhost')).toBe('/creator');
+    expect(resolveLocalReturnTo('/' + 'a'.repeat(512), 'http://localhost')).toBe('/creator');
+  });
+
+  it('正式账号重试继续携带失败前的 returnTo', () => {
+    const returnTo = '/create/capabilities?snapshotId=s1&draftId=d1';
+    render(
+      <MemoryRouter
+        initialEntries={[`/login?failureId=opaque-1&returnTo=${encodeURIComponent(returnTo)}`]}
+      >
+        <LoginPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('link', { name: '使用正式账号登录' })).toHaveAttribute(
+      'href',
+      `/api/v1/auth/login?returnTo=${encodeURIComponent(returnTo)}`,
+    );
   });
 
   it('development login posts to the guarded real endpoint and shows a useful failure', async () => {

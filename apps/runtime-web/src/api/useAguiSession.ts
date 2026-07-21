@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { EventType } from '@ag-ui/core';
 import { useQueryClient } from '@tanstack/react-query';
-import type {
-  ArtifactRef,
-  CreateRunResult,
-  LockedElement,
-  RuntimeArtifact,
-  SessionDetail,
-  TrialProcessState,
+import {
+  selectPrimaryArtifactKey,
+  type ArtifactRef,
+  type CreateRunResult,
+  type LockedElement,
+  type RuntimeArtifact,
+  type SessionDetail,
+  type TrialProcessState,
 } from '@cb/shared';
 import { apiPost } from './client.js';
 import { clientTraceHeaders, reportClientEvent } from './telemetry.js';
@@ -44,7 +45,11 @@ function readArtifacts(state: ArtifactState): {
   active: string | null;
 } {
   const map = state.artifacts ?? {};
-  return { list: Object.values(map), active: state.activeArtifactKey ?? null };
+  const list = Object.values(map);
+  return {
+    list,
+    active: selectPrimaryArtifactKey(list) ?? state.activeArtifactKey ?? null,
+  };
 }
 
 function ptrDecode(seg: string): string {
@@ -79,10 +84,6 @@ function applyStateDelta(state: ArtifactState, delta: unknown): ArtifactState {
   return next;
 }
 
-function lastArtifactKey(artifacts: RuntimeArtifact[]): string | null {
-  return artifacts.at(-1)?.artifactKey ?? null;
-}
-
 export function useAguiSession(
   sessionId: string | undefined,
   detail: SessionDetail | undefined,
@@ -111,9 +112,10 @@ export function useAguiSession(
     sourceRef.current = null;
     activeRunRef.current = null;
     const artifactMap = Object.fromEntries(detail.artifacts.map((a) => [a.artifactKey, a]));
+    const primaryArtifactKey = selectPrimaryArtifactKey(detail.artifacts);
     stateRef.current = {
       artifacts: artifactMap,
-      activeArtifactKey: lastArtifactKey(detail.artifacts),
+      activeArtifactKey: primaryArtifactKey,
     };
     setMessages(
       detail.messages.map((m) => ({
@@ -124,7 +126,7 @@ export function useAguiSession(
       })),
     );
     setArtifacts(detail.artifacts);
-    setActiveKeyState(lastArtifactKey(detail.artifacts));
+    setActiveKeyState(primaryArtifactKey);
     setTrialProcess(null);
     setIsRunning(false);
     setError(null);

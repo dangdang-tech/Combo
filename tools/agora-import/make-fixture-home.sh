@@ -8,16 +8,16 @@ source_home=${SOURCE_HOME:-${HOME:-}}
 
 case "${limit}" in
   ''|*[!0-9]*)
-    printf '[Agora] AGORA_FIXTURE_LIMIT must be a positive integer.\n' >&2
+    printf '[Combo] AGORA_FIXTURE_LIMIT must be a positive integer.\n' >&2
     exit 1
     ;;
 esac
 if [ "${limit}" -lt 1 ]; then
-  printf '[Agora] AGORA_FIXTURE_LIMIT must be at least 1.\n' >&2
+  printf '[Combo] AGORA_FIXTURE_LIMIT must be at least 1.\n' >&2
   exit 1
 fi
 if [ -z "${source_home}" ] || [ ! -d "${source_home}" ]; then
-  printf '[Agora] SOURCE_HOME/HOME is not a readable directory.\n' >&2
+  printf '[Combo] SOURCE_HOME/HOME is not a readable directory.\n' >&2
   exit 1
 fi
 
@@ -79,16 +79,16 @@ case "\$0" in
 esac
 export HOME="\${here}"
 export AGORA_SESSION_LIMIT="\${AGORA_SESSION_LIMIT:-${limit}}"
-PS1="(agora-fake-home) \${PS1:-\$ }"
+PS1="(combo-fake-home) \${PS1:-\$ }"
 export PS1
-printf '[Agora] Fake HOME is %s\\n' "\${HOME}" >&2
-printf '[Agora] Paste the web connect command here; type exit when done.\\n' >&2
+printf '[Combo] Fake HOME is %s\\n' "\${HOME}" >&2
+printf '[Combo] Paste the web connect command here; type exit when done.\\n' >&2
 exec /bin/sh -i
 EOF
 
 cat >"${fixture_home}/run-agora-import.sh" <<EOF
 #!/bin/sh
-# Run one pasted Agora web connect command with HOME set to this fixture directory.
+# Run one pasted Combo web connect command with HOME set to this fixture directory.
 set -eu
 case "\$0" in
   */*) here=\$(cd "\$(dirname "\$0")" && pwd -P) ;;
@@ -96,11 +96,11 @@ case "\$0" in
 esac
 export HOME="\${here}"
 export AGORA_SESSION_LIMIT="\${AGORA_SESSION_LIMIT:-${limit}}"
-printf '[Agora] Fake HOME is %s\\n' "\${HOME}" >&2
-printf '[Agora] Paste the web connect command, then press Enter:\\n' >&2
+printf '[Combo] Fake HOME is %s\\n' "\${HOME}" >&2
+printf '[Combo] Paste the web connect command, then press Enter:\\n' >&2
 IFS= read -r cmd
 if [ -z "\${cmd}" ]; then
-  printf '[Agora] Empty command; nothing ran.\\n' >&2
+  printf '[Combo] Empty command; nothing ran.\\n' >&2
   exit 1
 fi
 exec /bin/sh -c "\${cmd}"
@@ -113,9 +113,9 @@ quote() {
   printf "'"
 }
 
-printf '[Agora] Created isolated HOME with %s session file(s): %s\n' "${count}" "${fixture_home}" >&2
+printf '[Combo] Created isolated HOME with %s session file(s): %s\n' "${count}" "${fixture_home}" >&2
 if [ "${count}" -eq 0 ]; then
-  printf '[Agora] No non-empty .jsonl sessions were found under %s/.claude/projects or %s/.codex/sessions.\n' "${source_home}" "${source_home}" >&2
+  printf '[Combo] No non-empty .jsonl sessions were found under %s/.claude/projects or %s/.codex/sessions.\n' "${source_home}" "${source_home}" >&2
   exit 1
 fi
 

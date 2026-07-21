@@ -3,15 +3,16 @@
 // 三态（结构坍缩：提取过程态不占独立路由，是本页的第一个阶段）：
 //   1. extracting（过程态）：带 ?snapshotId= 进入 → 若无 extractJobId 先 createExtractJob 触发 → 订阅 job SSE，
 //      复用 step2-extract 的 ExtractLoading（圆环进度 + 指标 + 已发现列表）。job 终态 → 拉候选进 ready。
-//   2. ready：候选渲染成 PRD 单列能力行（名称 + 分类标签 + 一句话描述 + 来源 session 段数[信任背书] +
-//      复选框[默认全选] + 「试用」真实入口 + 发布状态槽）。底部「一键发布」（≥1 选中即可点）。
-//   3. publishing → done：一键发布 → createPublishBatch（每项仅 candidateId + idempotencyKey；封面/档位/可见性走后端默认
+//   2. ready：按真实 reusability 稳定排序，默认把第一项作为主 Agent；用户先进入真实 runtime 试用，
+//      回流经 session 校验后再发布。其它候选收在渐进式备选区，避免首屏要求用户做批量选择。
+//   3. publishing → done：单 Agent 发布 → createPublishBatch（仅一个已试用 versionId + idempotencyKey；封面/档位/可见性走后端默认
 //      glyph/free/public）→ 订阅批次 job SSE，mergeBatchState 合并逐项态 → 卡片状态槽反映 发布中 / 已发布 / 失败；
 //      完成后给已发布数 + 每个已发布能力的市集链接（/a/{slug}）。
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import {
   SSE_ROUTES,
+  type CandidateTrialCapability,
   type CandidateView,
   type DonePayload,
   type ExtractDoneResult,
@@ -28,7 +29,8 @@ import {
   fetchCandidates,
   jobEventsUrl,
   nameText,
-  categoryText,
+  typeText,
+  confidenceText,
   segmentText,
 } from '../step2-extract/index.js';
 import {
@@ -41,7 +43,9 @@ import {
 import {
   createCapabilityForTrial,
   createRuntimeTrialSession,
+  fetchLatestRuntimeTrialSession,
   openRuntimeTrial,
+  resolveTrialAuthenticationError,
   startStructureForTrial,
 } from './trialApi.js';
 
@@ -58,14 +62,13 @@ interface TrialLaunchState {
   error?: string;
 }
 
-/** 逐项发布状态槽人话（决策⑤ 无连坐）。 */
-const ITEM_STATUS_LABEL: Record<PublishBatchItemView['state'], string> = {
-  pending: '发布中…',
-  structuring: '发布中…',
-  publishing: '发布中…',
-  published: '已发布',
-  failed: '失败',
-};
+type TrialVerificationState =
+  | { kind: 'idle' }
+  | { kind: 'checking'; candidateId: string }
+  | { kind: 'available'; candidateId: string; sessionId: string; version: string }
+  | { kind: 'verified'; candidateId: string; sessionId: string; version: string }
+  | { kind: 'recovery_error'; candidateId: string; message: string }
+  | { kind: 'failed'; candidateId: string; message: string };
 
 const TRIAL_PHASE_LABEL: Record<TrialLaunchPhase, string> = {
   creating: '准备试用…',
@@ -73,6 +76,8 @@ const TRIAL_PHASE_LABEL: Record<TrialLaunchPhase, string> = {
   opening: '打开试用…',
   error: '重试试用 →',
 };
+
+const EXTRACT_IDEMPOTENCY_VERSION = 'full-cluster-v2';
 
 function fallbackError(userMessage: string): ApiError {
   return new ApiError({ error: { userMessage, retriable: true, action: 'retry', traceId: '' } });
@@ -106,6 +111,10 @@ function capabilitiesReturnTo(input: {
   snapshotId?: string;
   extractJobId?: string;
   batchId?: string;
+  candidateId?: string;
+  trialVersionId?: string;
+  trialVersion?: string;
+  preserveTrialResult?: boolean;
 }): string {
   const params = new URLSearchParams(input.search);
   if (input.snapshotId && !params.has('snapshotId')) params.set('snapshotId', input.snapshotId);
@@ -114,8 +123,27 @@ function capabilitiesReturnTo(input: {
     params.set('extractJobId', input.extractJobId);
   }
   if (input.batchId && !params.has('batchId')) params.set('batchId', input.batchId);
+  if (input.candidateId) params.set('candidateId', input.candidateId);
+  if (input.trialVersionId) params.set('trialVersionId', input.trialVersionId);
+  if (input.trialVersion) params.set('trialVersion', input.trialVersion);
+  if (!input.preserveTrialResult) {
+    params.delete('tested');
+    params.delete('failed');
+    params.delete('session');
+  }
   const query = params.toString();
   return `${input.pathname}${query ? `?${query}` : ''}${input.hash}`;
+}
+
+function candidateRank(a: CandidateView, b: CandidateView): number {
+  const aScore = a.reusability ?? -1;
+  const bScore = b.reusability ?? -1;
+  if (aScore !== bScore) return bScore - aScore;
+  const aSegments = a.segmentCount ?? -1;
+  const bSegments = b.segmentCount ?? -1;
+  if (aSegments !== bSegments) return bSegments - aSegments;
+  const slug = a.slug.localeCompare(b.slug);
+  return slug || a.id.localeCompare(b.id);
 }
 
 /** SSE 加载子组件：订阅萃取 job 流；done → 上抛 jobId 拉候选；失败上抛。key 控重订阅。 */
@@ -144,23 +172,43 @@ function ExtractJobStream({
 }
 
 export function CapabilitiesStepPage(): ReactElement {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
-  const { draftId: ctxDraftId, snapshotId: ctxSnapshotId } = useWizard();
+  const {
+    draftId: ctxDraftId,
+    snapshotId: ctxSnapshotId,
+    extractJobId: ctxExtractJobId,
+    batchId: ctxBatchId,
+    setExtractJobId,
+    setBatchId,
+    versionId: ctxVersionId,
+    capabilityId: ctxCapabilityId,
+    setVersionId,
+    setCapabilityId,
+    selection: draftSelection,
+    setSelection,
+  } = useWizard();
 
   // 来源优先级：URL ?snapshotId= / ?extractJobId=（上传自动带入或深链）→ 向导上下文回填。
   const snapshotId = searchParams.get('snapshotId') ?? ctxSnapshotId ?? undefined;
   const urlExtractJobId = searchParams.get('extractJobId') ?? undefined;
   const urlBatchId = searchParams.get('batchId') ?? undefined;
+  const extractJobId = urlExtractJobId ?? ctxExtractJobId ?? undefined;
+  const batchId = urlBatchId ?? ctxBatchId ?? undefined;
   const draftId = ctxDraftId ?? searchParams.get('draftId') ?? undefined;
+  const requestedCandidateId = searchParams.get('candidateId') ?? undefined;
+  const testedCapabilityId = searchParams.get('tested') ?? undefined;
+  const failedCapabilityId = searchParams.get('failed') ?? undefined;
+  const returnedSessionId = searchParams.get('session') ?? undefined;
+  const returnedTrialVersionId = searchParams.get('trialVersionId') ?? undefined;
+  const returnedTrialVersion = searchParams.get('trialVersion') ?? undefined;
 
   // 有 extractJobId → 直接连该流；否则触发新萃取。
   const [phase, setPhase] = useState<Phase>(
-    urlExtractJobId ? { kind: 'extracting', jobId: urlExtractJobId } : { kind: 'triggering' },
+    extractJobId ? { kind: 'extracting', jobId: extractJobId } : { kind: 'triggering' },
   );
   const [candidates, setCandidates] = useState<CandidateView[]>([]);
   const [doneResult, setDoneResult] = useState<ExtractDoneResult | undefined>();
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
   const failCountRef = useRef(0);
@@ -170,6 +218,11 @@ export function CapabilitiesStepPage(): ReactElement {
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<ApiError | null>(null);
   const [trialLaunch, setTrialLaunch] = useState<TrialLaunchState | null>(null);
+  const [trialVerification, setTrialVerification] = useState<TrialVerificationState>({
+    kind: 'idle',
+  });
+  const [trialRecoveryAttempt, setTrialRecoveryAttempt] = useState(0);
+  const [showAlternatives, setShowAlternatives] = useState(false);
   const batchKeyRef = useRef<string>(newKey());
   const itemKeysRef = useRef<Map<string, string>>(new Map());
 
@@ -177,12 +230,12 @@ export function CapabilitiesStepPage(): ReactElement {
   //   绝不重新触发一次发布（否则同候选被重复建版重复发布 → 市集重复上架，回归 BUG）。批 SSE 订阅其 jobId 恢复逐项态。
   const resumedBatchRef = useRef(false);
   useEffect(() => {
-    if (!urlBatchId || resumedBatchRef.current) return;
+    if (!batchId || resumedBatchRef.current) return;
     resumedBatchRef.current = true;
     let active = true;
     void (async () => {
       try {
-        const view = await fetchPublishBatch(urlBatchId);
+        const view = await fetchPublishBatch(batchId);
         if (active) setBatchView(view);
       } catch {
         // 拉批失败不致命：退回普通 ready 态（用户可重新发布，幂等键仍防重）。
@@ -191,12 +244,19 @@ export function CapabilitiesStepPage(): ReactElement {
     return () => {
       active = false;
     };
-  }, [urlBatchId]);
+  }, [batchId]);
 
-  // 触发幂等键带萃取策略版本：同一 snapshot 切到新版 session-mock 后要重新跑，不回放旧聚类结果。
+  useEffect(() => {
+    if (!extractJobId || phase.kind !== 'triggering') return;
+    setPhase({ kind: 'extracting', jobId: extractJobId });
+  }, [extractJobId, phase.kind]);
+
+  // 触发幂等键带萃取策略版本：同一 snapshot 切到新版真实聚类策略后要重新跑，不回放旧结果。
   const triggerKey = useMemo(
     () =>
-      snapshotId ? `extract:session-mock-v1:${draftId ?? 'nodraft'}:${snapshotId}` : undefined,
+      snapshotId
+        ? `extract:${EXTRACT_IDEMPOTENCY_VERSION}:${draftId ?? 'nodraft'}:${snapshotId}`
+        : undefined,
     [snapshotId, draftId],
   );
 
@@ -212,6 +272,15 @@ export function CapabilitiesStepPage(): ReactElement {
       try {
         const accepted = await createExtractJob(snapshotId, triggerKey, draftId ? { draftId } : {});
         if (!active) return;
+        setExtractJobId(accepted.jobId);
+        setSearchParams(
+          (current) => {
+            const next = new URLSearchParams(current);
+            if (!next.has('extractJobId')) next.set('extractJobId', accepted.jobId);
+            return next;
+          },
+          { replace: true },
+        );
         setPhase({ kind: 'extracting', jobId: accepted.jobId });
       } catch (e) {
         if (!active) return;
@@ -221,9 +290,9 @@ export function CapabilitiesStepPage(): ReactElement {
     return () => {
       active = false;
     };
-  }, [phase.kind, snapshotId, triggerKey, draftId, attempt]);
+  }, [phase.kind, snapshotId, triggerKey, draftId, attempt, setExtractJobId, setSearchParams]);
 
-  // SSE done → 拉全量候选 → 默认全选（ready 项）→ ready 态。
+  // SSE done → 拉全量候选；ready 渲染层再按真实 reusability 稳定排序。
   const handleJobDone = useCallback((doneJobId: string, done: DonePayload | undefined): void => {
     setDoneResult(doneResultOf(done));
     void (async () => {
@@ -231,10 +300,6 @@ export function CapabilitiesStepPage(): ReactElement {
         const res = await fetchCandidates(doneJobId, { limit: 50 });
         failCountRef.current = 0;
         setCandidates(res.candidates);
-        // 默认全选（仅 ready 可发布；失败项不入选）。
-        setSelectedIds(
-          new Set(res.candidates.filter((c) => c.status === 'ready').map((c) => c.id)),
-        );
         setPhase({ kind: 'ready' });
       } catch (e) {
         setError(e instanceof ApiError ? e : fallbackError('候选加载失败，请稍后重试。'));
@@ -251,50 +316,328 @@ export function CapabilitiesStepPage(): ReactElement {
     setAttempt((a) => a + 1);
   }, []);
 
-  const handleToggle = useCallback((candidateId: string): void => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(candidateId)) next.delete(candidateId);
-      else next.add(candidateId);
-      return next;
-    });
-  }, []);
+  const readyCandidates = useMemo(
+    () => candidates.filter((candidate) => candidate.status === 'ready').sort(candidateRank),
+    [candidates],
+  );
+  const failedCandidates = useMemo(
+    () => candidates.filter((candidate) => candidate.status === 'failed'),
+    [candidates],
+  );
+  const selectedCandidateId =
+    draftSelection?.mode === 'single' ? draftSelection.candidateId : undefined;
+  const activeCandidate =
+    readyCandidates.find((candidate) => candidate.id === requestedCandidateId) ??
+    readyCandidates.find((candidate) => candidate.id === selectedCandidateId) ??
+    readyCandidates[0];
+  const activeCandidateId = activeCandidate?.id;
+  const alternativeCandidates = activeCandidate
+    ? readyCandidates.filter((candidate) => candidate.id !== activeCandidate.id)
+    : [];
 
-  const handleToggleAll = useCallback((): void => {
-    setSelectedIds((prev) => {
-      const readyIds = candidates.filter((c) => c.status === 'ready').map((c) => c.id);
-      if (readyIds.length === 0) return prev;
-      const allSelected = readyIds.every((id) => prev.has(id));
-      return allSelected ? new Set() : new Set(readyIds);
-    });
-  }, [candidates]);
+  // 已保存草稿中的 candidate + capability + version 是恢复真源，优先级高于候选接口的“最新 draft”。
+  // 这同时覆盖两个边界：同候选后来出现新 draft 时不篡改旧草稿，以及发布后候选接口不再返回 draft 时
+  // 仍能精确恢复刚刚试用过的 published version。
+  const persistedDraftTrialTarget = useMemo<CandidateTrialCapability | undefined>(() => {
+    if (
+      !activeCandidate ||
+      selectedCandidateId !== activeCandidate.id ||
+      !ctxCapabilityId ||
+      !ctxVersionId
+    ) {
+      return undefined;
+    }
+    return {
+      capabilityId: ctxCapabilityId,
+      versionId: ctxVersionId,
+      slug: activeCandidate.slug,
+    };
+  }, [activeCandidate, ctxCapabilityId, ctxVersionId, selectedCandidateId]);
+  const activeTrialCapability = useMemo<CandidateTrialCapability | undefined>(() => {
+    const candidateTarget = activeCandidate?.trialCapability;
+    if (!persistedDraftTrialTarget) return candidateTarget;
+    // 后端候选目标与草稿精确引用一致时保留原对象，避免幂等回填 Context 后触发无意义二次恢复。
+    if (
+      candidateTarget?.capabilityId === persistedDraftTrialTarget.capabilityId &&
+      candidateTarget.versionId === persistedDraftTrialTarget.versionId
+    ) {
+      return candidateTarget;
+    }
+    return persistedDraftTrialTarget;
+  }, [activeCandidate?.trialCapability, persistedDraftTrialTarget]);
+  const persistedDraftTrialTargetRef = useRef(persistedDraftTrialTarget);
+  persistedDraftTrialTargetRef.current = persistedDraftTrialTarget;
 
-  // —— 一键发布：每项仅 candidateId + idempotencyKey（封面/档位/可见性走后端默认）——
+  // 主结果就是当前创作选择：写入 Wizard 状态后，既能被顶栏“保存草稿”持久化，
+  // 也能沿用既有续传契约；这里不私自增加新的自动保存请求。
+  useEffect(() => {
+    if (phase.kind !== 'ready') return;
+    setSelection(activeCandidateId ? { mode: 'single', candidateId: activeCandidateId } : null);
+  }, [activeCandidateId, phase.kind, setSelection]);
+
+  const handleChooseCandidate = useCallback(
+    (candidateId: string): void => {
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.set('candidateId', candidateId);
+          next.delete('tested');
+          next.delete('failed');
+          next.delete('session');
+          next.delete('trialVersionId');
+          next.delete('trialVersion');
+          return next;
+        },
+        { replace: true },
+      );
+      setTrialLaunch(null);
+      setTrialVerification({ kind: 'idle' });
+      setShowAlternatives(false);
+      setVersionId(undefined);
+      setCapabilityId(undefined);
+    },
+    [setCapabilityId, setSearchParams, setVersionId],
+  );
+
+  // URL 只负责把刚完成的 session 带回；持久真源是 Runtime 的 latest-session。
+  // 无回流 URL（刷新、关闭标签、从草稿重进）也按当前 candidate/version 恢复最近试用；服务端 verified
+  // 已同时核对 owner、版本/manifest、completed run 与有效 assistant 输出，Web 再核对轻量 session 身份。
+  useEffect(() => {
+    if (phase.kind !== 'ready' || !activeCandidate) {
+      setTrialVerification({ kind: 'idle' });
+      return;
+    }
+
+    const trialCapability = activeTrialCapability;
+    if (failedCapabilityId) {
+      if (trialCapability?.capabilityId === failedCapabilityId) {
+        setTrialVerification({
+          kind: 'failed',
+          candidateId: activeCandidate.id,
+          message: '这个结果不符合预期，可以换一个已准备好的 Agent。',
+        });
+        setShowAlternatives(true);
+      } else {
+        setTrialVerification({
+          kind: 'failed',
+          candidateId: activeCandidate.id,
+          message: '这次反馈与当前 Agent 不匹配，请重新试用。',
+        });
+      }
+      return;
+    }
+    if (!trialCapability) {
+      setTrialVerification({ kind: 'idle' });
+      return;
+    }
+    if (testedCapabilityId && trialCapability.capabilityId !== testedCapabilityId) {
+      setTrialVerification({
+        kind: 'failed',
+        candidateId: activeCandidate.id,
+        message: '这次试用与当前 Agent 不匹配，请重新试用。',
+      });
+      return;
+    }
+    if (returnedTrialVersionId && trialCapability.versionId !== returnedTrialVersionId) {
+      setTrialVerification({
+        kind: 'failed',
+        candidateId: activeCandidate.id,
+        message: '这次试用版本与当前 Agent 不匹配，请重新试用。',
+      });
+      return;
+    }
+
+    let active = true;
+    setTrialVerification({ kind: 'checking', candidateId: activeCandidate.id });
+    void (async () => {
+      try {
+        const result = await fetchLatestRuntimeTrialSession({
+          capabilityId: trialCapability.capabilityId,
+          versionId: trialCapability.versionId,
+          ...(returnedSessionId ? { sessionId: returnedSessionId } : {}),
+        });
+        if (!active) return;
+        const session = result.session;
+        if (!session) {
+          setTrialVerification(
+            returnedSessionId
+              ? {
+                  kind: 'failed',
+                  candidateId: activeCandidate.id,
+                  message: '没有找到这次试用记录，请重新试用。',
+                }
+              : { kind: 'idle' },
+          );
+          return;
+        }
+        const matches =
+          (!returnedSessionId || session.id === returnedSessionId) &&
+          session.mode === 'trial' &&
+          session.capabilityId === trialCapability.capabilityId &&
+          (!returnedTrialVersion || session.version === returnedTrialVersion);
+        if (!matches) {
+          setTrialVerification(
+            returnedSessionId
+              ? {
+                  kind: 'failed',
+                  candidateId: activeCandidate.id,
+                  message: '这次试用与当前 Agent 不匹配，请重新试用。',
+                }
+              : { kind: 'idle' },
+          );
+          return;
+        }
+        if (
+          draftId &&
+          !persistedDraftTrialTargetRef.current &&
+          activeCandidate.trialCapability?.capabilityId === trialCapability.capabilityId &&
+          activeCandidate.trialCapability.versionId === trialCapability.versionId
+        ) {
+          const ensured = await createCapabilityForTrial(activeCandidate.id, draftId);
+          if (!active) return;
+          if (
+            ensured.capabilityId !== trialCapability.capabilityId ||
+            ensured.versionId !== trialCapability.versionId
+          ) {
+            setTrialVerification({
+              kind: 'failed',
+              candidateId: activeCandidate.id,
+              message: '草稿中的 Agent 版本已经变化，请重新试用。',
+            });
+            return;
+          }
+          setCapabilityId(ensured.capabilityId);
+          setVersionId(ensured.versionId);
+        }
+        setTrialVerification(
+          result.verified
+            ? {
+                kind: 'verified',
+                candidateId: activeCandidate.id,
+                sessionId: session.id,
+                version: session.version,
+              }
+            : {
+                kind: 'available',
+                candidateId: activeCandidate.id,
+                sessionId: session.id,
+                version: session.version,
+              },
+        );
+      } catch (verificationError) {
+        if (!active) return;
+        const authResolution = await resolveTrialAuthenticationError(
+          verificationError,
+          capabilitiesReturnTo({
+            pathname: location.pathname,
+            search: location.search,
+            hash: location.hash,
+            draftId,
+            snapshotId,
+            extractJobId,
+            batchId,
+            candidateId: activeCandidate.id,
+            trialVersionId: returnedTrialVersionId,
+            trialVersion: returnedTrialVersion,
+            preserveTrialResult: Boolean(returnedSessionId),
+          }),
+        );
+        if (!active || authResolution.kind === 'redirected') return;
+        setTrialVerification(
+          returnedSessionId
+            ? {
+                kind: 'failed',
+                candidateId: activeCandidate.id,
+                message: errorMessage(authResolution.error, '暂时无法确认试用结果，请重试。'),
+              }
+            : {
+                kind: 'recovery_error',
+                candidateId: activeCandidate.id,
+                message: errorMessage(authResolution.error, '暂时无法恢复上次试用，请重新连接。'),
+              },
+        );
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [
+    activeCandidate,
+    activeTrialCapability,
+    batchId,
+    draftId,
+    extractJobId,
+    failedCapabilityId,
+    location.hash,
+    location.pathname,
+    location.search,
+    phase.kind,
+    returnedSessionId,
+    returnedTrialVersion,
+    returnedTrialVersionId,
+    setCapabilityId,
+    setVersionId,
+    snapshotId,
+    testedCapabilityId,
+    trialRecoveryAttempt,
+  ]);
+
+  const trialVerified =
+    trialVerification.kind === 'verified' && trialVerification.candidateId === activeCandidate?.id;
+  const persistedTrial =
+    (trialVerification.kind === 'verified' || trialVerification.kind === 'available') &&
+    trialVerification.candidateId === activeCandidate?.id
+      ? trialVerification
+      : undefined;
+
+  // —— 单 Agent 发布：只发刚刚试用并校验过的 draft version，绝不重新挑版本/重复结构化。——
   const handlePublish = useCallback((): void => {
-    if (publishing || batchView) return;
-    const selected = candidates.filter((c) => c.status === 'ready' && selectedIds.has(c.id));
-    if (selected.length === 0) return;
+    const trialCapability = activeTrialCapability;
+    if (publishing || batchView || !trialVerified || !activeCandidate || !trialCapability) return;
+    const candidate = activeCandidate;
+    const versionId = trialCapability.versionId;
     setPublishing(true);
     setPublishError(null);
     void (async () => {
       try {
+        const key = itemKeysRef.current.get(candidate.id) ?? newKey();
+        itemKeysRef.current.set(candidate.id, key);
         const body: CreatePublishBatchBody = {
-          items: selected.map((c) => {
-            const key = itemKeysRef.current.get(c.id) ?? newKey();
-            itemKeysRef.current.set(c.id, key);
-            return { candidateId: c.id, idempotencyKey: key };
-          }),
+          items: [
+            {
+              versionId,
+              idempotencyKey: key,
+            },
+          ],
           ...(draftId ? { draftId } : {}),
         };
         const view = await createPublishBatch(body, batchKeyRef.current);
         setBatchView(view);
+        setBatchId(view.batchId);
+        setSearchParams(
+          (current) => {
+            const next = new URLSearchParams(current);
+            next.set('batchId', view.batchId);
+            return next;
+          },
+          { replace: true },
+        );
       } catch (e) {
         setPublishError(e instanceof ApiError ? e : fallbackError('没能开始发布，请重试。'));
       } finally {
         setPublishing(false);
       }
     })();
-  }, [publishing, batchView, candidates, selectedIds, draftId]);
+  }, [
+    publishing,
+    batchView,
+    trialVerified,
+    activeCandidate,
+    activeTrialCapability,
+    draftId,
+    setBatchId,
+    setSearchParams,
+  ]);
 
   // 重订阅批次流：先置 null 断开旧订阅，再拉回最新批（新对象触发 useSSE 重连）——用于批流出错重连 / 单项重试后续读。
   const refreshBatch = useCallback((batchId: string): void => {
@@ -339,14 +682,32 @@ export function CapabilitiesStepPage(): ReactElement {
     (candidate: CandidateView): void => {
       if (trialLaunch && trialLaunch.phase !== 'error') return;
       const candidateName = nameText(candidate.name);
-      const trialCapability = candidate.trialCapability;
+      const trialCapability =
+        candidate.id === activeCandidateId ? activeTrialCapability : candidate.trialCapability;
       if (trialCapability) {
         setTrialLaunch({ candidateId: candidate.id, candidateName, phase: 'opening' });
         void (async () => {
+          let capabilityId = trialCapability.capabilityId;
+          let versionId = trialCapability.versionId;
           try {
+            // 预生成能力也要经过一次带 draftId 的幂等 ensure：后端据此把 selection/version/capability
+            // 原子回填到草稿，关闭标签后仍能从工作台恢复精确 candidate/version。
+            if (
+              draftId &&
+              candidate.id === activeCandidateId &&
+              !persistedDraftTrialTargetRef.current &&
+              candidate.trialCapability?.capabilityId === trialCapability.capabilityId &&
+              candidate.trialCapability.versionId === trialCapability.versionId
+            ) {
+              const ensured = await createCapabilityForTrial(candidate.id, draftId);
+              capabilityId = ensured.capabilityId;
+              versionId = ensured.versionId;
+              setCapabilityId(ensured.capabilityId);
+              setVersionId(ensured.versionId);
+            }
             const created = await createRuntimeTrialSession({
-              capabilityId: trialCapability.capabilityId,
-              versionId: trialCapability.versionId,
+              capabilityId,
+              versionId,
               title: `${candidateName} 试用`,
             });
             const returnTo = encodeURIComponent(
@@ -356,18 +717,36 @@ export function CapabilitiesStepPage(): ReactElement {
                 hash: location.hash,
                 draftId,
                 snapshotId,
-                extractJobId: urlExtractJobId,
-                batchId: urlBatchId,
+                extractJobId,
+                batchId,
+                candidateId: candidate.id,
+                trialVersionId: versionId,
+                trialVersion: created.capability.version,
               }),
             );
             openRuntimeTrial(`/try/session/${created.session.id}?returnTo=${returnTo}`);
           } catch (e) {
+            const authResolution = await resolveTrialAuthenticationError(
+              e,
+              capabilitiesReturnTo({
+                pathname: location.pathname,
+                search: location.search,
+                hash: location.hash,
+                draftId,
+                snapshotId,
+                extractJobId,
+                batchId,
+                candidateId: candidate.id,
+                trialVersionId: versionId,
+              }),
+            );
+            if (authResolution.kind === 'redirected') return;
             setTrialLaunch((current) =>
               current?.candidateId === candidate.id
                 ? {
                     ...current,
                     phase: 'error',
-                    error: errorMessage(e, '没能打开试用，请稍后重试。'),
+                    error: errorMessage(authResolution.error, '没能打开试用，请稍后重试。'),
                   }
                 : current,
             );
@@ -379,7 +758,9 @@ export function CapabilitiesStepPage(): ReactElement {
       setTrialLaunch({ candidateId: candidate.id, candidateName, phase: 'creating' });
       void (async () => {
         try {
-          const created = await createCapabilityForTrial(candidate.id);
+          const created = await createCapabilityForTrial(candidate.id, draftId);
+          setCapabilityId(created.capabilityId);
+          setVersionId(created.versionId);
           setTrialLaunch((current) =>
             current?.candidateId === candidate.id
               ? {
@@ -417,13 +798,51 @@ export function CapabilitiesStepPage(): ReactElement {
     },
     [
       draftId,
+      activeCandidateId,
+      activeTrialCapability,
       location.hash,
       location.pathname,
       location.search,
       snapshotId,
       trialLaunch,
-      urlBatchId,
-      urlExtractJobId,
+      batchId,
+      extractJobId,
+      setCapabilityId,
+      setVersionId,
+    ],
+  );
+
+  const handleContinueTrial = useCallback(
+    (candidate: CandidateView, sessionId: string, version: string): void => {
+      const trialCapability =
+        candidate.id === activeCandidateId ? activeTrialCapability : candidate.trialCapability;
+      if (!trialCapability) return;
+      const returnTo = encodeURIComponent(
+        capabilitiesReturnTo({
+          pathname: location.pathname,
+          search: location.search,
+          hash: location.hash,
+          draftId,
+          snapshotId,
+          extractJobId,
+          batchId,
+          candidateId: candidate.id,
+          trialVersionId: trialCapability.versionId,
+          trialVersion: version,
+        }),
+      );
+      openRuntimeTrial(`/try/session/${encodeURIComponent(sessionId)}?returnTo=${returnTo}`);
+    },
+    [
+      activeCandidateId,
+      activeTrialCapability,
+      batchId,
+      draftId,
+      extractJobId,
+      location.hash,
+      location.pathname,
+      location.search,
+      snapshotId,
     ],
   );
 
@@ -462,8 +881,7 @@ export function CapabilitiesStepPage(): ReactElement {
           ? {
               ...current,
               phase: 'error',
-              error:
-                trialSse.done?.error?.error.userMessage ?? '生成试用能力失败，请稍后重试。',
+              error: trialSse.done?.error?.error.userMessage ?? '生成试用能力失败，请稍后重试。',
             }
           : current,
       );
@@ -488,18 +906,36 @@ export function CapabilitiesStepPage(): ReactElement {
             hash: location.hash,
             draftId,
             snapshotId,
-            extractJobId: urlExtractJobId,
-            batchId: urlBatchId,
+            extractJobId,
+            batchId,
+            candidateId,
+            trialVersionId: versionId,
+            trialVersion: created.capability.version,
           }),
         );
         openRuntimeTrial(`/try/session/${created.session.id}?returnTo=${returnTo}`);
       } catch (e) {
+        const authResolution = await resolveTrialAuthenticationError(
+          e,
+          capabilitiesReturnTo({
+            pathname: location.pathname,
+            search: location.search,
+            hash: location.hash,
+            draftId,
+            snapshotId,
+            extractJobId,
+            batchId,
+            candidateId,
+            trialVersionId: versionId,
+          }),
+        );
+        if (authResolution.kind === 'redirected') return;
         setTrialLaunch((current) =>
           current?.candidateId === candidateId
             ? {
                 ...current,
                 phase: 'error',
-                error: errorMessage(e, '没能打开试用，请稍后重试。'),
+                error: errorMessage(authResolution.error, '没能打开试用，请稍后重试。'),
               }
             : current,
         );
@@ -515,8 +951,8 @@ export function CapabilitiesStepPage(): ReactElement {
     trialSse.done,
     trialSse.error,
     trialSse.status,
-    urlBatchId,
-    urlExtractJobId,
+    batchId,
+    extractJobId,
   ]);
 
   const merged = useMemo(() => {
@@ -531,17 +967,28 @@ export function CapabilitiesStepPage(): ReactElement {
     return mergeBatchState(batchView.items, snapshotItems, appended, batchView.total);
   }, [batchView, batchSse.progress, batchSse.items]);
 
-  // candidateId → 批次逐项态（卡片状态槽据它渲染 发布中 / 已发布 / 失败）。
+  // 单项发布走 versionId；兼容旧批次 candidateId，并统一映射回候选用于结果态展示。
   const itemByCandidate = useMemo(() => {
     const m = new Map<string, PublishBatchItemView>();
-    if (merged) for (const it of merged.items) if (it.candidateId) m.set(it.candidateId, it);
+    if (merged) {
+      for (const item of merged.items) {
+        if (item.candidateId) {
+          m.set(item.candidateId, item);
+          continue;
+        }
+        if (!item.versionId) continue;
+        const candidate = candidates.find((entry) => {
+          const trialCapability =
+            entry.id === activeCandidateId ? activeTrialCapability : entry.trialCapability;
+          return trialCapability?.versionId === item.versionId;
+        });
+        if (candidate) m.set(candidate.id, item);
+      }
+    }
     return m;
-  }, [merged]);
+  }, [activeCandidateId, activeTrialCapability, candidates, merged]);
 
-  const readyCount = candidates.filter((c) => c.status === 'ready').length;
-  const selectedCount = candidates.filter(
-    (c) => c.status === 'ready' && selectedIds.has(c.id),
-  ).length;
+  const readyCount = readyCandidates.length;
   const allDone = merged ? merged.processedCount >= merged.total && merged.total > 0 : false;
 
   // —— 渲染 ——
@@ -576,181 +1023,332 @@ export function CapabilitiesStepPage(): ReactElement {
 
   const analyzed = doneResult?.analyzedSegments;
   const identified = doneResult?.candidateCount ?? candidates.length;
-  const allReadySelected = readyCount > 0 && selectedCount === readyCount;
+  const primaryItem = activeCandidate ? itemByCandidate.get(activeCandidate.id) : undefined;
+  const trialForPrimary =
+    activeCandidate && trialLaunch?.candidateId === activeCandidate.id ? trialLaunch : null;
+  const trialBusy = Boolean(trialLaunch && trialLaunch.phase !== 'error');
+  const published = primaryItem?.state === 'published';
+  const trialBadge = published ? '已发布' : trialVerified ? '已试用' : '可试用';
+  const trialStepDone = trialVerified || Boolean(primaryItem);
+  const publishStepDone = published;
 
   return (
-    <section className="cb-capabilities" aria-label="从对话历史提取出的能力">
+    <section className="cb-capabilities cb-agent-result" aria-label="Agent 创作结果">
       <header className="cb-capabilities__header">
-        <p className="cb-capabilities__eyebrow">第二步 · 能力</p>
-        <h1 className="cb-capabilities__title">你的能力，挑选后一键发布</h1>
+        <p className="cb-capabilities__eyebrow">导入完成 · 提取完成</p>
+        <h1 className="cb-capabilities__title">第一个 Agent 已经准备好了</h1>
         <p className="cb-capabilities__lead">
-          我们从 sessions 里提取了这些能力，每条都能发成一个市集
-          mini-app。点任意一项可直接打开「试用」跑一遍，确认后勾选、一键发布。
+          我们已经按复用性替你排好顺序。先用一个真实任务跑一遍，满意后直接发布。
         </p>
+        <dl className="cb-agent-result__summary" aria-label="提取摘要">
+          {typeof analyzed === 'number' && (
+            <div>
+              <dt>已分析</dt>
+              <dd>{analyzed.toLocaleString('en-US')} 段</dd>
+            </div>
+          )}
+          <div>
+            <dt>识别结果</dt>
+            <dd>{identified} 项</dd>
+          </div>
+          <div>
+            <dt>当前路径</dt>
+            <dd>
+              {published
+                ? '发布完成'
+                : trialVerified
+                  ? '等待发布'
+                  : persistedTrial
+                    ? '继续试用'
+                    : '等待试用'}
+            </dd>
+          </div>
+        </dl>
       </header>
 
-      {candidates.length === 0 ? (
+      <ol className="cb-agent-result__flow" aria-label="创作进度">
+        <li data-state="done" aria-label="已完成：导入会话">
+          <span>1</span>导入会话
+        </li>
+        <li data-state="done" aria-label="已完成：提取能力">
+          <span>2</span>提取能力
+        </li>
+        <li
+          data-state={trialStepDone ? 'done' : 'active'}
+          aria-current={trialStepDone ? undefined : 'step'}
+          aria-label={trialStepDone ? '已完成：真实试用' : '当前步骤：真实试用'}
+        >
+          <span>3</span>真实试用
+        </li>
+        <li
+          data-state={publishStepDone ? 'done' : trialStepDone ? 'active' : 'pending'}
+          aria-current={!publishStepDone && trialStepDone ? 'step' : undefined}
+          aria-label={
+            publishStepDone
+              ? '已完成：发布 Agent'
+              : trialStepDone
+                ? '当前步骤：发布 Agent'
+                : '待进行：发布 Agent'
+          }
+        >
+          <span>4</span>发布 Agent
+        </li>
+      </ol>
+
+      {readyCount === 0 ? (
         <p className="cb-capabilities__empty">
           没识别出可复用的能力。可以回上一步换个目录再导入，或多积累一些对话历史后再来。
         </p>
-      ) : (
+      ) : activeCandidate ? (
         <>
-          <div className="cb-capabilities__toolbar">
-            <span className="cb-capabilities__selected">
-              已选 <strong>{selectedCount}</strong> / {readyCount} 项
-              {typeof analyzed === 'number' && (
-                <span className="cb-capabilities__analyzed">
-                  · 已分析 {analyzed.toLocaleString('en-US')} 段 session
+          <article
+            className="cb-agent-primary"
+            data-trial={trialVerification.kind}
+            data-publish={primaryItem?.state ?? 'idle'}
+          >
+            <div className="cb-agent-primary__rank" aria-label="优先结果">
+              <span>优先结果</span>
+              <strong>01</strong>
+              <small>共 {readyCount} 项</small>
+            </div>
+
+            <div className="cb-agent-primary__body">
+              <header className="cb-agent-primary__head">
+                <div>
+                  <div className="cb-agent-primary__kicker">
+                    <span>{typeText(activeCandidate.type)}</span>
+                    <span>{confidenceText(activeCandidate.confidence)}</span>
+                  </div>
+                  <h2>{nameText(activeCandidate.name)}</h2>
+                  {activeCandidate.intent && <p>{activeCandidate.intent}</p>}
+                </div>
+                <span
+                  className="cb-agent-primary__ready"
+                  data-state={published ? 'published' : trialVerified ? 'tested' : 'ready'}
+                >
+                  {trialBadge}
                 </span>
+              </header>
+
+              <div className="cb-agent-primary__evidence" aria-label="排序依据">
+                <div>
+                  <span>来源证据</span>
+                  <strong>{segmentText(activeCandidate.segmentCount)} session</strong>
+                </div>
+                {activeCandidate.reusability !== null && (
+                  <div>
+                    <span>复用强度</span>
+                    <strong>{Math.round(activeCandidate.reusability * 100)}%</strong>
+                  </div>
+                )}
+                <div>
+                  <span>发布方式</span>
+                  <strong>试用后单项发布</strong>
+                </div>
+              </div>
+
+              {trialVerification.kind === 'checking' && (
+                <p className="cb-agent-primary__notice" data-tone="live" role="status">
+                  正在核对这次真实试用结果…
+                </p>
               )}
-              <span className="cb-capabilities__analyzed"> · 识别出 {identified} 项</span>
-            </span>
-            {readyCount > 0 && (
+              {trialVerified && (
+                <p className="cb-agent-primary__notice" data-tone="success" role="status">
+                  上次试用已保存。你可以继续调整，确认满意后再发布。
+                </p>
+              )}
+              {trialVerification.kind === 'available' &&
+                trialVerification.candidateId === activeCandidate.id && (
+                  <p className="cb-agent-primary__notice" data-tone="live" role="status">
+                    上次试用还没有完成，可以从保存的位置继续。
+                  </p>
+                )}
+              {trialVerification.kind === 'failed' &&
+                trialVerification.candidateId === activeCandidate.id && (
+                  <p className="cb-agent-primary__notice" data-tone="error" role="alert">
+                    {trialVerification.message}
+                  </p>
+                )}
+              {trialVerification.kind === 'recovery_error' &&
+                trialVerification.candidateId === activeCandidate.id && (
+                  <p className="cb-agent-primary__notice" data-tone="error" role="alert">
+                    {trialVerification.message}
+                  </p>
+                )}
+              {trialForPrimary?.phase === 'error' && trialForPrimary.error && (
+                <p className="cb-agent-primary__notice" data-tone="error" role="alert">
+                  {trialForPrimary.error}
+                </p>
+              )}
+              {publishError && (
+                <ErrorState
+                  error={publishError}
+                  onRetry={() => {
+                    setPublishError(null);
+                    handlePublish();
+                  }}
+                />
+              )}
+              {batchView && batchSse.status === 'error' && (
+                <ErrorState
+                  error={batchSse.error ?? fallbackError('发布进度连接中断了，重试一下。')}
+                  onRetry={handleBatchRetry}
+                />
+              )}
+
+              <div className="cb-agent-primary__actions">
+                {published ? (
+                  <Link className="cb-btn cb-btn--primary" to={`/a/${activeCandidate.slug}`}>
+                    打开已发布的 Agent →
+                  </Link>
+                ) : primaryItem?.state === 'failed' ? (
+                  <button
+                    type="button"
+                    className="cb-btn cb-btn--primary"
+                    onClick={() => handleRetryItem(primaryItem.itemId)}
+                  >
+                    重新发布
+                  </button>
+                ) : primaryItem ? (
+                  <button type="button" className="cb-btn cb-btn--primary" disabled>
+                    发布中…
+                  </button>
+                ) : trialVerified ? (
+                  <button
+                    type="button"
+                    className="cb-btn cb-btn--primary"
+                    onClick={handlePublish}
+                    disabled={publishing}
+                  >
+                    {publishing ? '正在提交…' : '发布这个 Agent →'}
+                  </button>
+                ) : persistedTrial ? (
+                  <button
+                    type="button"
+                    className="cb-btn cb-btn--primary"
+                    onClick={() =>
+                      handleContinueTrial(
+                        activeCandidate,
+                        persistedTrial.sessionId,
+                        persistedTrial.version,
+                      )
+                    }
+                  >
+                    继续试用这个 Agent →
+                  </button>
+                ) : trialVerification.kind === 'recovery_error' ? (
+                  <button
+                    type="button"
+                    className="cb-btn cb-btn--primary"
+                    onClick={() => setTrialRecoveryAttempt((attempt) => attempt + 1)}
+                  >
+                    重新恢复试用记录 →
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="cb-btn cb-btn--primary"
+                    onClick={() => handleTrial(activeCandidate)}
+                    disabled={trialBusy || trialVerification.kind === 'checking'}
+                  >
+                    {trialForPrimary
+                      ? TRIAL_PHASE_LABEL[trialForPrimary.phase]
+                      : trialVerification.kind === 'failed'
+                        ? '重新试用这个 Agent →'
+                        : '用真实任务试一次 →'}
+                  </button>
+                )}
+
+                {persistedTrial && (trialVerified || Boolean(primaryItem)) && (
+                  <button
+                    type="button"
+                    className="cb-btn"
+                    onClick={() =>
+                      handleContinueTrial(
+                        activeCandidate,
+                        persistedTrial.sessionId,
+                        persistedTrial.version,
+                      )
+                    }
+                  >
+                    继续试用
+                  </button>
+                )}
+
+                {trialVerified && !primaryItem && alternativeCandidates.length > 0 && (
+                  <button
+                    type="button"
+                    className="cb-agent-primary__secondary"
+                    onClick={() => setShowAlternatives(true)}
+                  >
+                    不符合预期，换一个
+                  </button>
+                )}
+              </div>
+
+              {merged && primaryItem && (
+                <p className="cb-capabilities__progress" role="status" aria-live="polite">
+                  {allDone
+                    ? primaryItem.state === 'published'
+                      ? '已提交发布。'
+                      : '这次发布未完成，可以就地重试。'
+                    : '正在发布刚刚试用过的版本，请稍候…'}
+                </p>
+              )}
+            </div>
+          </article>
+
+          {alternativeCandidates.length > 0 && (
+            <section className="cb-agent-alternatives" aria-label="其它提取结果">
               <button
                 type="button"
-                className="cb-link cb-capabilities__select-all"
-                onClick={handleToggleAll}
+                className="cb-agent-alternatives__toggle"
+                aria-expanded={showAlternatives}
+                onClick={() => setShowAlternatives((value) => !value)}
               >
-                {allReadySelected ? '取消全选' : '全选'}
+                <span>
+                  {showAlternatives
+                    ? '收起其它结果'
+                    : `查看其它 ${alternativeCandidates.length} 个结果`}
+                </span>
+                <span aria-hidden="true">{showAlternatives ? '−' : '+'}</span>
               </button>
-            )}
-          </div>
-
-          <ul className="cb-capabilities__list" aria-label="能力卡列表">
-            {candidates.map((c) => {
-              const failed = c.status === 'failed';
-              const checked = selectedIds.has(c.id);
-              const item = itemByCandidate.get(c.id);
-              const trialForCard = trialLaunch?.candidateId === c.id ? trialLaunch : null;
-              const trialDisabled = Boolean(trialLaunch && trialLaunch.phase !== 'error');
-              return (
-                <li
-                  key={c.id}
-                  className="cb-cap-card"
-                  data-status={c.status}
-                  data-selected={checked ? 'true' : 'false'}
-                >
-                  <div className="cb-cap-card__select">
-                    {!failed ? (
-                      <input
-                        type="checkbox"
-                        className="cb-cap-card__checkbox"
-                        checked={checked}
-                        onChange={() => handleToggle(c.id)}
-                        aria-label={`选择能力「${nameText(c.name)}」`}
-                      />
-                    ) : (
-                      <span className="cb-cap-card__failed-mark" aria-hidden="true">
-                        !
+              {showAlternatives && (
+                <ul className="cb-agent-alternatives__list" aria-label="备选 Agent 列表">
+                  {alternativeCandidates.map((candidate, index) => (
+                    <li key={candidate.id}>
+                      <span className="cb-agent-alternatives__rank">
+                        {String(index + 2).padStart(2, '0')}
                       </span>
-                    )}
-                  </div>
-
-                  <div className="cb-cap-card__body">
-                    <div className="cb-cap-card__head">
-                      <span className="cb-cap-card__name">{nameText(c.name)}</span>
-                      <span className="cb-cap-card__type">{categoryText(c)}</span>
-                    </div>
-                    {c.intent && <p className="cb-cap-card__intent">{c.intent}</p>}
-                    <p className="cb-cap-card__segments">
-                      来自 {segmentText(c.segmentCount)} session
-                    </p>
-                    {failed && (
-                      <p className="cb-cap-card__fail">
-                        {c.error?.userMessage ?? '这一项没能识别出来。'}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="cb-cap-card__actions">
-                    {!failed && item?.state !== 'published' && (
-                      <button
-                        type="button"
-                        className="cb-cap-card__trial"
-                        onClick={() => handleTrial(c)}
-                        disabled={trialDisabled}
-                        aria-disabled={trialDisabled}
-                      >
-                        {trialForCard ? TRIAL_PHASE_LABEL[trialForCard.phase] : '试用 →'}
+                      <span className="cb-agent-alternatives__copy">
+                        <strong>{nameText(candidate.name)}</strong>
+                        <small>
+                          {typeText(candidate.type)} · {segmentText(candidate.segmentCount)}证据
+                          {candidate.reusability !== null
+                            ? ` · 复用强度 ${Math.round(candidate.reusability * 100)}%`
+                            : ''}
+                        </small>
+                      </span>
+                      <button type="button" onClick={() => handleChooseCandidate(candidate.id)}>
+                        改用这个 →
                       </button>
-                    )}
-
-                    {trialForCard?.phase === 'error' && trialForCard.error && (
-                      <span className="cb-cap-card__status-msg">{trialForCard.error}</span>
-                    )}
-
-                    {item && (
-                      <div className="cb-cap-card__status" data-state={item.state}>
-                        <span className="cb-cap-card__status-label">
-                          {ITEM_STATUS_LABEL[item.state]}
-                        </span>
-                        {item.state === 'published' && (
-                          <Link className="cb-cap-card__market" to={`/a/${c.slug}`}>
-                            市集链接
-                          </Link>
-                        )}
-                        {item.state === 'failed' && item.error && (
-                          <span className="cb-cap-card__status-msg">{item.error.userMessage}</span>
-                        )}
-                        {item.state === 'failed' && (
-                          <button
-                            type="button"
-                            className="cb-cap-card__retry"
-                            onClick={() => handleRetryItem(item.itemId)}
-                          >
-                            重试
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </>
-      )}
-
-      {/* 底部动作区：一键发布 / 发布进度 / 完成汇总。 */}
-      {readyCount > 0 && (
-        <footer className="cb-capabilities__foot">
-          {publishError && (
-            <ErrorState
-              error={publishError}
-              onRetry={() => {
-                setPublishError(null);
-                handlePublish();
-              }}
-            />
+                    </li>
+                  ))}
+                  {failedCandidates.map((candidate) => (
+                    <li key={candidate.id} data-status="failed">
+                      <span className="cb-agent-alternatives__rank">!</span>
+                      <span className="cb-agent-alternatives__copy">
+                        <strong>{nameText(candidate.name)}</strong>
+                        <small>{candidate.error?.userMessage ?? '这一项没能准备完成。'}</small>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
           )}
-
-          {batchView && batchSse.status === 'error' ? (
-            // 批流硬错：不永久停在「发布中」——给人话错误 + 重连入口（重订阅同批 job 流恢复逐项态）。
-            <ErrorState
-              error={batchSse.error ?? fallbackError('发布进度连接中断了，重试一下。')}
-              onRetry={handleBatchRetry}
-            />
-          ) : !batchView ? (
-            <button
-              type="button"
-              className="cb-btn cb-btn--primary cb-capabilities__publish"
-              onClick={handlePublish}
-              disabled={selectedCount === 0 || publishing}
-              aria-disabled={selectedCount === 0 || publishing}
-            >
-              {publishing ? '处理中…' : `一键发布到市集 · ${selectedCount} 项`}
-            </button>
-          ) : merged ? (
-            <p className="cb-capabilities__progress" role="status" aria-live="polite">
-              {allDone
-                ? `已发布 ${merged.publishedCount} / ${merged.total} 个能力${
-                    merged.failedCount > 0 ? `（失败 ${merged.failedCount}）` : ''
-                  }。点各卡「市集链接」查看。`
-                : `正在逐个发布：已处理 ${merged.processedCount} / ${merged.total}（成功 ${merged.publishedCount} · 失败 ${merged.failedCount}）`}
-            </p>
-          ) : null}
-        </footer>
-      )}
+        </>
+      ) : null}
     </section>
   );
 }

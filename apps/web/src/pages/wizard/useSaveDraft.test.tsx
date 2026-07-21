@@ -38,7 +38,11 @@ function Probe({ initialSelection }: { initialSelection?: SelectionDraft }) {
   );
 }
 
-function setup(step: DraftStep, draftId: string | undefined, initialSelection?: SelectionDraft) {
+function setup(
+  step: DraftStep | 'capabilities',
+  draftId: string | undefined,
+  initialSelection?: SelectionDraft,
+) {
   return render(
     <WizardProvider initialStep={step} initialDraftId={draftId}>
       <Probe {...(initialSelection ? { initialSelection } : {})} />
@@ -61,6 +65,18 @@ describe('useSaveDraft', () => {
       ).toBe(true);
     });
     expect(mock.calls[0]!.headers['X-Idempotency-Scope']).toBe('draft.selection.patch');
+  });
+
+  it('两步流程 capabilities + 主 Agent → 沿用 selection 端点真保存', async () => {
+    mock = installFetchMock({ status: 200, json: { data: {} } });
+    setup('capabilities', 'd1', { mode: 'single', candidateId: 'c1' });
+    await userEvent.click(screen.getByText('预置选择'));
+    await userEvent.click(screen.getByText('保存'));
+    await waitFor(() =>
+      expect(
+        mock.calls.some((c) => c.url === '/api/v1/drafts/d1/selection' && c.method === 'PATCH'),
+      ).toBe(true),
+    );
   });
 
   it('非 select 步 + 有 draftId（后端建产物已落 drafts 行）→ 不打后端、诚实成功退出', async () => {

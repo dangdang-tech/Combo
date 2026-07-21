@@ -597,6 +597,85 @@ export async function readDraftVersionForCandidate(
   };
 }
 
+/**
+ * 按候选“主题签名”读取本人已发布的当前版本。
+ *
+ * 签名口径：same owner + same snapshot_id + same candidate slug。
+ * 用途：同一真实 snapshot 重跑 extract 会产生新的 candidateId，但 candidate.slug 表示同一主题；
+ * 一键发布时应复用已有 published capability，而不是再创建一张近重复市集卡。
+ */
+export async function readCurrentPublishedVersionForCandidateSignature(
+  db: Queryable,
+  args: { candidateId: string; ownerUserId: string },
+): Promise<VersionRow | null> {
+  const res = await db.query<{
+    id: string;
+    capability_id: string;
+    slug: string;
+    version: string;
+    status: string;
+    manifest: Manifest;
+    structure_state: Partial<StructureState>;
+    source_candidate_id: string | null;
+    creator_user_id: string;
+    updated_at: string;
+  }>(
+    `WITH target AS (
+       SELECT snapshot_id, slug
+         FROM capability_candidates
+        WHERE id = $1 AND owner_user_id = $2
+     )
+     SELECT v.id, v.capability_id, c.slug, v.version, v.status,
+            v.manifest, v.structure_state, v.source_candidate_id,
+            c.creator_user_id, v.updated_at
+       FROM target t
+       JOIN capability_candidates cc
+         ON cc.owner_user_id = $2
+        AND cc.snapshot_id = t.snapshot_id
+        AND cc.slug = t.slug
+       JOIN capability_versions v
+         ON v.source_candidate_id = cc.id
+       JOIN capabilities c
+         ON c.id = v.capability_id
+      WHERE c.creator_user_id = $2
+        AND c.status = 'active'
+        AND c.current_version_id = v.id
+        AND v.status = 'published'
+      ORDER BY v.updated_at DESC
+      LIMIT 1`,
+    [args.candidateId, args.ownerUserId],
+  );
+  const r = res.rows[0];
+  if (!r) return null;
+  if (
+    !r.id ||
+    !r.capability_id ||
+    !r.slug ||
+    !r.version ||
+    r.status !== 'published' ||
+    !r.creator_user_id
+  ) {
+    return null;
+  }
+  return {
+    id: r.id,
+    capabilityId: r.capability_id,
+    slug: r.slug,
+    version: r.version,
+    status: r.status,
+    manifest: r.manifest,
+    structureState: r.structure_state ?? {},
+    sourceCandidateId: r.source_candidate_id,
+    creatorUserId: r.creator_user_id,
+    updatedAt:
+      typeof r.updated_at === 'string'
+        ? r.updated_at
+        : r.updated_at
+          ? new Date(r.updated_at).toISOString()
+          : new Date(0).toISOString(),
+  };
+}
+
 // ===========================================================================
 // B-24 建能力体 draft 版本（三分支，单 PG 事务，§4.A）
 // ===========================================================================

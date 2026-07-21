@@ -5,6 +5,7 @@ import { EventEncoder } from '@ag-ui/encoder';
 import {
   CreateSessionBodySchema,
   CreateTrialChainSessionBodySchema,
+  LatestTrialSessionQuerySchema,
   RunInputSchema,
   TRACE_ID_HEADER,
   TRACEPARENT_HEADER,
@@ -18,7 +19,10 @@ import { requireCreatorIdentity, resolveRuntimeOwnerId } from '../../platform/ht
 import { startAguiStream } from '../agent/agui-emitter.js';
 import { runAgui } from '../agent/agui-run.js';
 import { composeSystemPrompt } from '../agent/compose-prompt.js';
-import { getDraftCapabilityForTrial, getPublishedCapability } from '../capability/loader.js';
+import {
+  getCreatorCapabilityVersionForTrial,
+  getPublishedCapability,
+} from '../capability/loader.js';
 import { getArtifacts } from '../artifact/repo.js';
 import { createRun, getRun, listRunEvents, setRunStatus, appendRunEvent } from '../run/repo.js';
 import { createEventLogEmitter } from '../run/event-log-emitter.js';
@@ -27,12 +31,15 @@ import {
   archiveSession,
   createSession,
   findEmptyTrialSession,
+  findTrialSessionForVersion,
   getMessages,
   getMessagesPage,
   getSessionRow,
   listSessions,
   updateSessionTitle,
+  type SessionRow,
 } from './repo.js';
+import { resolveSessionDetailAccess } from './detail-access.js';
 
 /** 从 AG-UI RunAgentInput.messages 取最新一条 user 消息的文本（服务端只认这条做新输入，其余以本地转录为真源）。 */
 function latestUserText(
@@ -103,6 +110,28 @@ function effectiveArtifacts(
   return messagesLength === 0 && artifacts.length === 0 ? [mockFullHtmlArtifact()] : artifacts;
 }
 
+async function buildSessionDetail(ctx: RuntimeContext, row: SessionRow): Promise<SessionDetail> {
+  const [messages, artifacts] = await Promise.all([
+    getMessages(ctx.pool, row.id),
+    getArtifacts(ctx.pool, row.id),
+  ]);
+  return {
+    session: {
+      id: row.id,
+      capabilityId: row.capabilityId,
+      slug: row.slug,
+      version: row.version,
+      mode: row.mode,
+      title: row.title,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    },
+    capability: row.publicView,
+    messages,
+    artifacts: effectiveArtifacts(messages.length, artifacts),
+  };
+}
+
 function runInputToText(input: unknown): string {
   const parsed = RunInputSchema.safeParse(input);
   if (!parsed.success) return '';
@@ -150,7 +179,7 @@ export async function registerSessionRoutes(
     reuseEmpty?: boolean;
   }) {
     const loaded = input.versionId
-      ? await getDraftCapabilityForTrial(ctx.pool, {
+      ? await getCreatorCapabilityVersionForTrial(ctx.pool, {
           capabilityId: input.slugOrId,
           versionId: input.versionId,
           creatorUserId: input.ownerId,
@@ -163,6 +192,7 @@ export async function registerSessionRoutes(
         ownerId: input.ownerId,
         capabilityId: loaded.view.capabilityId,
         version: loaded.view.version,
+        manifestHash: loaded.view.manifestHash,
       });
       if (existing) return { session: existing, capability: loaded.publicView };
     }
@@ -206,12 +236,10 @@ export async function registerSessionRoutes(
       const identity = await requireCreatorIdentity(req, reply, ctx.pool, ctx.env);
       if (!identity) return reply;
       const parsed = CreateTrialChainSessionBodySchema.safeParse(req.body ?? {});
-      if (!parsed.success) return badRequest(reply, req.id);
+      if (!parsed.success || !parsed.data.versionId) return badRequest(reply, req.id);
       const created = await createRuntimeSession({
         ownerId: identity.userId,
-        slugOrId: parsed.data.versionId
-          ? req.params.capabilityId
-          : parsed.data.slugOrId ?? req.params.capabilityId,
+        slugOrId: req.params.capabilityId,
         versionId: parsed.data.versionId,
         title: parsed.data.title,
         mode: 'trial',
@@ -244,32 +272,59 @@ export async function registerSessionRoutes(
     },
   );
 
+  // GET /runtime/trial-chains/:capabilityId/latest-session — 创作流程恢复当前 exact version 的试用断点。
+  // versionId 先走 creator-scoped exact version owner/完整性校验，再按冻结的 manifest hash 查 Runtime Session；
+  // URL 回流可附 sessionId 精确核对，普通续传则恢复最近更新的试用 Session。
+  app.get<{
+    Params: { capabilityId: string };
+    Querystring: { versionId?: string; sessionId?: string };
+  }>('/runtime/trial-chains/:capabilityId/latest-session', async (req, reply) => {
+    const identity = await requireCreatorIdentity(req, reply, ctx.pool, ctx.env);
+    if (!identity) return reply;
+    const parsed = LatestTrialSessionQuerySchema.safeParse(req.query);
+    if (!parsed.success) return badRequest(reply, req.id);
+
+    const loaded = await getCreatorCapabilityVersionForTrial(ctx.pool, {
+      capabilityId: req.params.capabilityId,
+      versionId: parsed.data.versionId,
+      creatorUserId: identity.userId,
+    });
+    if (!loaded) return notFound(reply, req.id);
+
+    const found = await findTrialSessionForVersion(ctx.pool, {
+      ownerId: identity.userId,
+      capabilityId: loaded.view.capabilityId,
+      version: loaded.view.version,
+      manifestHash: loaded.view.manifestHash,
+      ...(parsed.data.sessionId ? { sessionId: parsed.data.sessionId } : {}),
+    });
+    if (!found) return reply.send({ session: null, verified: false });
+
+    return reply.send({
+      session: {
+        id: found.row.id,
+        capabilityId: found.row.capabilityId,
+        slug: found.row.slug,
+        version: found.row.version,
+        mode: found.row.mode,
+        title: found.row.title,
+        createdAt: found.row.createdAt,
+        updatedAt: found.row.updatedAt,
+      },
+      verified: found.verified,
+    });
+  });
+
   // GET /runtime/sessions/:id — 会话详情（能力公开视图 + 历史消息 + 产物）
   app.get<{ Params: { id: string } }>('/runtime/sessions/:id', async (req, reply) => {
-    const ownerId = await resolveRuntimeOwnerId(req, reply, ctx.pool, ctx.env);
-    const row = await getSessionRow(ctx.pool, req.params.id, ownerId);
+    const access = await resolveSessionDetailAccess(req, reply, ctx.pool, ctx.env, req.params.id);
+    if (access.kind === 'not_found') return notFound(reply, req.id);
+    if (access.kind === 'replied') return reply;
+
+    const row = await getSessionRow(ctx.pool, req.params.id, access.ownerId);
     if (!row) return notFound(reply, req.id);
 
-    const [messages, artifacts] = await Promise.all([
-      getMessages(ctx.pool, row.id),
-      getArtifacts(ctx.pool, row.id),
-    ]);
-    const detail: SessionDetail = {
-      session: {
-        id: row.id,
-        capabilityId: row.capabilityId,
-        slug: row.slug,
-        version: row.version,
-        mode: row.mode,
-        title: row.title,
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt,
-      },
-      capability: row.publicView,
-      messages,
-      artifacts: effectiveArtifacts(messages.length, artifacts),
-    };
-    return reply.send(detail);
+    return reply.send(await buildSessionDetail(ctx, row));
   });
 
   // GET /runtime/sessions/:id/messages — 历史 detail 分页。

@@ -3,7 +3,11 @@
 import { gzipSync } from 'node:zlib';
 import { describe, it, expect } from 'vitest';
 import type { SubtaskStatus } from '@cb/shared';
-import { createImportHandler } from '../modules/import/job.js';
+import {
+  createImportHandler,
+  IMPORT_SEGMENT_CONTENT_MAX_CHARS,
+  materializeImportText,
+} from '../modules/import/job.js';
 import { BUNDLE_SENTINEL, computeContentHash } from '../modules/import/session-parse.js';
 import type { JobContext, LeasedJob } from '../platform/jobs/types.js';
 import { ImportFakeDb, FakeObjectStore, FakeTxPool, type JobRowF } from './import-fakes.js';
@@ -178,6 +182,18 @@ function setup(objects: Record<string, string>) {
 }
 
 describe('import handler — 正常链路', () => {
+  it('短文本物化不经 Buffer，截断点不会劈开 Unicode 代理对', () => {
+    const prefix = 'x'.repeat(IMPORT_SEGMENT_CONTENT_MAX_CHARS - 1);
+    const input = `${prefix}😀尾部`;
+    const compact = materializeImportText(input, IMPORT_SEGMENT_CONTENT_MAX_CHARS);
+    // emoji 占两个 UTF-16 code units，边界落在二者中间时宁可少一位，也不制造孤立 surrogate/替换字符。
+    expect(compact).toBe(prefix);
+    expect(compact).not.toContain('\ufffd');
+    // 不经过 UTF-8 编解码：输入里原有的孤立 surrogate 按 JS code unit 原样保留。
+    expect(materializeImportText(`a\ud800b`, 3)).toBe(`a\ud800b`);
+    expect(materializeImportText('abc', -1)).toBe('');
+  });
+
   it('五项子任务依次点亮 done + 边写段边 item-appended + 建快照', async () => {
     const raw = claudeSession([
       { role: 'user', text: '帮我重构这个模块' },
@@ -278,6 +294,136 @@ describe('import handler — 正常链路', () => {
     expect(snap.segment_count).toBe(2);
     const sources = [...db.segments.values()].map((s) => s.source).sort();
     expect(sources).toEqual(['claude', 'codex']);
+  });
+
+  it('238 个 gzip 分片逐片压紧：取下一片前上一片已完成 compact，常驻正文 ≤2000；长公共前缀不同尾部不误去重', async () => {
+    const partCount = 238;
+    const commonPrefix = '共同前缀'.repeat(600); // 远长于 2000 字符，所有持久化正文都会拥有相同前 2000 字。
+    const keys = Array.from({ length: partCount }, (_, i) => `raw/u1/pair-large/part-${i}`);
+    const db = new ImportFakeDb();
+    const store = new FakeObjectStore(new Map());
+    for (let i = 0; i < keys.length; i++) {
+      const file = claudeSession([
+        { role: 'user', text: `${commonPrefix}\n这是完整正文尾部的唯一编号 ${i}` },
+      ]);
+      const bundle = `${BUNDLE_SENTINEL}\n${file}\n`;
+      store.rawBytes.set(keys[i]!, gzipSync(Buffer.from(bundle, 'utf-8')));
+    }
+
+    const job = leased(db, {
+      subjectRef: {
+        uploadId: 'pair-large',
+        source: 'mixed',
+        rawS3Keys: keys,
+        bundle: 'gzip',
+      },
+    });
+    const cap = makeCtx(job, db);
+    const processedBeforeFetch: number[] = [];
+    const getObject = store.getObject.bind(store);
+    store.getObject = async (bucket: string, key: string): Promise<Uint8Array> => {
+      processedBeforeFetch.push(
+        cap.progress.filter((p) => p.phrase.startsWith('正在逐批导入并抹掉隐私')).length,
+      );
+      return getObject(bucket, key);
+    };
+    const handler = createImportHandler({
+      db,
+      txPool: new FakeTxPool(db.jobs, db.snapshots),
+      objectStore: store,
+    });
+
+    await handler.run(job, cap.ctx);
+
+    // 第 N 片开始 fetch 时，前 N-1 片都已完成 parse/redact/compact 进度；不是先 fetch 全量再处理。
+    expect(processedBeforeFetch).toEqual(Array.from({ length: partCount }, (_, i) => i));
+    expect(db.segments.size).toBe(partCount);
+    const landed = [...db.segments.values()];
+    expect(landed.every((s) => s.content.length <= IMPORT_SEGMENT_CONTENT_MAX_CHARS)).toBe(true);
+    // 持久化内容前 2000 字完全相同，但 hash 按完整去敏正文计算，所以 238 个不同尾部不会误去重。
+    expect(new Set(landed.map((s) => s.content)).size).toBe(1);
+    expect(new Set(landed.map((s) => s.content_hash)).size).toBe(partCount);
+    const snap = [...db.snapshots.values()][0]!;
+    expect(snap.segment_count).toBe(partCount);
+    expect(snap.message_count).toBe(partCount);
+    expect(snap.project_count).toBe(1);
+  });
+
+  it('跨 gzip 分片真重复按完整原文 hash 去重，重复原文不重复累计去敏报告', async () => {
+    const file = claudeSession([{ role: 'user', text: '手机号 13812345678 的同一会话' }]);
+    const bundle = gzipSync(Buffer.from(`${BUNDLE_SENTINEL}\n${file}\n`, 'utf-8'));
+    const db = new ImportFakeDb();
+    const store = new FakeObjectStore(new Map());
+    store.rawBytes.set('raw/u1/pair-dup/part-0', bundle);
+    store.rawBytes.set('raw/u1/pair-dup/part-1', bundle);
+    const handler = createImportHandler({
+      db,
+      txPool: new FakeTxPool(db.jobs, db.snapshots),
+      objectStore: store,
+    });
+    const job = leased(db, {
+      subjectRef: {
+        uploadId: 'pair-dup',
+        source: 'mixed',
+        rawS3Keys: ['raw/u1/pair-dup/part-0', 'raw/u1/pair-dup/part-1'],
+        bundle: 'gzip',
+      },
+    });
+
+    await handler.run(job, makeCtx(job, db).ctx);
+
+    expect(db.segments.size).toBe(1);
+    const report = [...db.snapshots.values()][0]!.redaction_report as {
+      totalRedactions: number;
+      byCategory: Array<{ category: string; count: number }>;
+    };
+    // 唯一会话的正文与标题各命中 1 次；第二个重复分片不应再加成 4。
+    expect(report.totalRedactions).toBe(2);
+    expect(report.byCategory.find((x) => x.category === 'phone')?.count).toBe(2);
+  });
+
+  it('先去敏再截断：手机号跨 2000 字边界也不泄露，跨片 report 精确相加且空初值不重复计数', async () => {
+    const prefix = 'x'.repeat(1_984); // 标准正文带 `user: ` 前缀后，手机号跨过 2000 字边界。
+    const db = new ImportFakeDb();
+    const store = new FakeObjectStore(new Map());
+    const keys = ['raw/u1/pair-redact/part-0', 'raw/u1/pair-redact/part-1'];
+    keys.forEach((key, i) => {
+      const file = claudeSession([
+        { role: 'user', text: `${prefix} 手机号 13812345678 唯一尾部 ${i}` },
+      ]);
+      store.rawBytes.set(key, gzipSync(Buffer.from(`${BUNDLE_SENTINEL}\n${file}\n`, 'utf-8')));
+    });
+    const handler = createImportHandler({
+      db,
+      txPool: new FakeTxPool(db.jobs, db.snapshots),
+      objectStore: store,
+    });
+    const job = leased(db, {
+      subjectRef: {
+        uploadId: 'pair-redact',
+        source: 'mixed',
+        rawS3Keys: keys,
+        bundle: 'gzip',
+      },
+    });
+
+    await handler.run(job, makeCtx(job, db).ctx);
+
+    expect(db.segments.size).toBe(2);
+    expect(
+      [...db.segments.values()].every(
+        (s) => s.content.length <= IMPORT_SEGMENT_CONTENT_MAX_CHARS && !s.content.includes('1381'),
+      ),
+    ).toBe(true);
+    const snap = [...db.snapshots.values()][0]!;
+    const report = snap.redaction_report as {
+      totalRedactions: number;
+      byCategory: Array<{ category: string; count: number }>;
+    };
+    expect(report.totalRedactions).toBe(2); // 空报告初值是加法单位元，两个分片各 1 次，不会翻倍。
+    expect(report.byCategory.find((x) => x.category === 'phone')?.count).toBe(2);
+    expect(snap.segment_count).toBe(2);
+    expect(snap.message_count).toBe(2);
   });
 
   it('同事务落 completed + 发 import 完成通知（Codex P0-3：业务状态+job结果+outbox 同一 PG 事务）', async () => {

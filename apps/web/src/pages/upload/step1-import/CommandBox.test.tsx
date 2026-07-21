@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { PairResult, PairStatusView } from '@cb/shared';
-import { CommandBox } from './CommandBox.js';
+import { CommandBox, shellSafePairCommand } from './CommandBox.js';
 
 function pair(over: Partial<PairResult> = {}): PairResult {
   return {
@@ -24,7 +24,7 @@ function status(
 }
 
 describe('CommandBox', () => {
-  it('展示真命令（pair.command，展示=复制）+ 「复制命令」按钮', () => {
+  it('展示 shell-safe 真命令（query URL 加引号）+ 「复制命令」按钮', () => {
     render(
       <CommandBox
         pair={pair()}
@@ -34,9 +34,25 @@ describe('CommandBox', () => {
       />,
     );
     expect(
-      screen.getByText('curl -fsSL https://x/import/connect/script?code=123456 | sh'),
+      screen.getByText("curl -fsSL 'https://x/import/connect/script?code=123456' | sh"),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '复制命令' })).toBeInTheDocument();
+  });
+
+  it('shellSafePairCommand 只处理未加引号的 query URL，避免 zsh nomatch', () => {
+    expect(
+      shellSafePairCommand(
+        'curl -fsSL http://localhost/api/v1/import/connect/script?code=837201 | sh',
+      ),
+    ).toBe("curl -fsSL 'http://localhost/api/v1/import/connect/script?code=837201' | sh");
+    expect(
+      shellSafePairCommand(
+        "curl -fsSL 'http://localhost/api/v1/import/connect/script?code=837201' | sh",
+      ),
+    ).toBe("curl -fsSL 'http://localhost/api/v1/import/connect/script?code=837201' | sh");
+    expect(shellSafePairCommand('curl -fsSL http://localhost/health | sh')).toBe(
+      'curl -fsSL http://localhost/health | sh',
+    );
   });
 
   it('点「复制命令」触发 onCopy；copied=true 显「已复制」', async () => {

@@ -14,7 +14,12 @@ import type { Manifest } from '@cb/shared';
 import { asTxPool } from '../platform/events/db-tx.js';
 import { createPublishBatchHandler } from '../modules/publish/job.js';
 import { createPublishBatchTx, readBatch, readBatchItems } from '../modules/publish/batch-repo.js';
-import { PublishBatchFakeDb, seedUser, genId } from './publish-batch-fakes.js';
+import {
+  PublishBatchFakeDb,
+  seedUser,
+  seedCapabilityVersion,
+  genId,
+} from './publish-batch-fakes.js';
 import { StreamingFakeGateway } from './structure-fakes.js';
 import { initialManifest } from '../modules/structure/manifest.js';
 import type { QueryResultLike } from '../platform/jobs/types.js';
@@ -45,6 +50,7 @@ class BatchRestructureFakeDb extends PublishBatchFakeDb {
     {
       id: string;
       owner_user_id: string;
+      snapshot_id?: string;
       name?: string | null;
       intent?: string | null;
       slug?: string;
@@ -58,6 +64,64 @@ class BatchRestructureFakeDb extends PublishBatchFakeDb {
     sql: string,
     params: unknown[] = [],
   ): Promise<QueryResultLike<R>> {
+    // readCurrentPublishedVersionForCandidateSignature（同 snapshot + candidate slug 复用已发布能力，避免重复上架）。
+    if (
+      sql.includes('WITH target AS') &&
+      sql.includes('cc.snapshot_id = t.snapshot_id') &&
+      sql.includes("v.status = 'published'")
+    ) {
+      const candidateId = params[0] as string;
+      const ownerUserId = params[1] as string;
+      const target = this.candidates.get(candidateId);
+      if (!target || target.owner_user_id !== ownerUserId) return ok<R>([]);
+      const snapshotId = target.snapshot_id ?? 'snapshot-1';
+      const candidateSlug = target.slug ?? target.id;
+      const matchingCandidateIds = new Set(
+        [...this.candidates.values()]
+          .filter((c) => {
+            const cSnapshotId = c.snapshot_id ?? 'snapshot-1';
+            const cSlug = c.slug ?? c.id;
+            return (
+              c.owner_user_id === ownerUserId &&
+              cSnapshotId === snapshotId &&
+              cSlug === candidateSlug
+            );
+          })
+          .map((c) => c.id),
+      );
+      const row = [...this.versions.values()].find((v) => {
+        const cap = this.capabilities.get(v.capability_id);
+        const sourceCandidateId = this.versionSourceCandidate.get(v.id);
+        return (
+          cap?.creator_user_id === ownerUserId &&
+          cap.current_version_id === v.id &&
+          v.status === 'published' &&
+          sourceCandidateId !== undefined &&
+          matchingCandidateIds.has(sourceCandidateId)
+        );
+      });
+      const cap = row ? this.capabilities.get(row.capability_id) : null;
+      const sourceCandidateId = row ? this.versionSourceCandidate.get(row.id) ?? null : null;
+      return ok<R>(
+        row && cap
+          ? ([
+              {
+                id: row.id,
+                capability_id: row.capability_id,
+                slug: cap.slug,
+                version: row.version,
+                status: row.status,
+                manifest: row.manifest,
+                structure_state: {},
+                source_candidate_id: sourceCandidateId,
+                creator_user_id: cap.creator_user_id,
+                updated_at: new Date(row.updated_at ?? 0).toISOString(),
+              },
+            ] as R[])
+          : [],
+      );
+    }
+
     // readDraftVersionForCandidate（上传页先试用创建过 draft version，再一键发布需复用）。
     if (
       sql.includes('FROM capability_versions v') &&
@@ -382,6 +446,49 @@ describe('publish_batch handler · 批量重试再结构化（P0-1，Codex r3）
     expect(rows[0]!.state).toBe('published');
     expect(rows[0]!.versionId).toBe(versionId);
     expect(db.versions.get(versionId)!.status).toBe('published');
+  });
+
+  it('同一 snapshot 同一候选 slug 已有 published 能力 → 新 candidateId 一键发布复用旧能力，不再新建重复市集卡', async () => {
+    const db = new BatchRestructureFakeDb();
+    const owner = seedUser(db, 'WAYNE');
+    const oldCandidateId = genId('cand-old');
+    const newCandidateId = genId('cand-new');
+    const snapshotId = 'snapshot-real-1';
+    db.candidates.set(oldCandidateId, {
+      id: oldCandidateId,
+      owner_user_id: owner,
+      snapshot_id: snapshotId,
+      slug: 'goal',
+    });
+    db.candidates.set(newCandidateId, {
+      id: newCandidateId,
+      owner_user_id: owner,
+      snapshot_id: snapshotId,
+      slug: 'goal',
+    });
+    const old = seedCapabilityVersion(db, owner, {
+      status: 'published',
+      isCurrent: true,
+      slug: 'cap-old-goal',
+    });
+    db.versionSourceCandidate.set(old.versionId, oldCandidateId);
+    const versionsBefore = db.versions.size;
+
+    const { batchId, jobId } = await setupBatch(db, owner, [
+      { candidateId: newCandidateId, idempotencyKey: 'k-repeat-goal', visibility: 'public' },
+    ]);
+
+    await handler(db).run(leased(jobId, 1), makeCtx(jobId, 1).ctx);
+
+    expect(db.versions.size).toBe(versionsBefore);
+    expect(db.manifestWritesCount).toBe(0);
+
+    const rows = await readBatchItems(db, batchId);
+    expect(rows[0]!.state).toBe('published');
+    expect(rows[0]!.versionId).toBe(old.versionId);
+    expect(rows[0]!.capabilityId).toBe(old.capabilityId);
+    expect(db.versions.get(old.versionId)!.status).toBe('published');
+    expect(db.capabilities.get(old.capabilityId)!.current_version_id).toBe(old.versionId);
   });
 
   it('反向破坏守门：未结构化 candidate 版本【绝不被直发】——发布的版本 manifest 必已结构化 ready（跳过 structure 直发即测红）', async () => {

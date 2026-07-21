@@ -59,6 +59,15 @@ interface SessionDbRow {
   updated_at: Date;
 }
 
+interface TrialSessionDbRow extends SessionDbRow {
+  trial_verified: boolean;
+}
+
+export interface TrialSessionLookup {
+  row: SessionRow;
+  verified: boolean;
+}
+
 function toRow(r: SessionDbRow): SessionRow {
   return {
     id: r.id,
@@ -116,10 +125,10 @@ export async function createSession(
   return toMeta(toRow(row));
 }
 
-/** 查找同 owner/capability 下尚未产生消息的 trial 空会话；用于 /try 默认入口刷新复用。 */
+/** 查找同 owner/capability/version/manifest 下尚未产生消息的 trial 空会话；用于刷新复用。 */
 export async function findEmptyTrialSession(
   pool: Pool,
-  input: { ownerId: string; capabilityId: string; version: string },
+  input: { ownerId: string; capabilityId: string; version: string; manifestHash: string },
 ): Promise<RuntimeSessionMeta | null> {
   const res = await pool.query<SessionDbRow>(
     `SELECT *
@@ -127,15 +136,73 @@ export async function findEmptyTrialSession(
       WHERE s.owner_id = $1
         AND s.capability_id = $2
         AND s.version = $3
+        AND s.manifest_hash = $4
         AND s.mode = 'trial'
         AND s.status = 'active'
         AND NOT EXISTS (SELECT 1 FROM rt_chat_messages m WHERE m.session_id = s.id)
       ORDER BY s.updated_at DESC
       LIMIT 1`,
-    [input.ownerId, input.capabilityId, input.version],
+    [input.ownerId, input.capabilityId, input.version, input.manifestHash],
   );
   const row = res.rows[0];
   return row ? toMeta(toRow(row)) : null;
+}
+
+/**
+ * 恢复创作流程中某个不可变版本 manifest 对应的试用 Session。
+ *
+ * - owner + capability + 语义版本 + manifest hash 四重守门，避免旧版本或他人的 Session 被复用；
+ * - 有 sessionId 时只核对回流的那一条；无 sessionId 时恢复最近更新的 Session，保留最新工作位置；
+ * - verified 只描述选中的这条 Session，且必须同时存在 completed run 与该 run 落下的有效 assistant 输出。
+ */
+export async function findTrialSessionForVersion(
+  pool: Pool,
+  input: {
+    ownerId: string;
+    capabilityId: string;
+    version: string;
+    manifestHash: string;
+    sessionId?: string;
+  },
+): Promise<TrialSessionLookup | null> {
+  const params: unknown[] = [input.ownerId, input.capabilityId, input.version, input.manifestHash];
+  let sessionFilter = '';
+  if (input.sessionId) {
+    params.push(input.sessionId);
+    sessionFilter = `AND s.id = $${params.length}`;
+  }
+
+  const res = await pool.query<TrialSessionDbRow>(
+    `SELECT s.*,
+            EXISTS (
+              SELECT 1
+                FROM rt_chat_messages m
+                JOIN rt_chat_runs r
+                  ON r.id = m.run_id
+                 AND r.session_id = s.id
+                 AND r.owner_id = s.owner_id
+               WHERE m.session_id = s.id
+                 AND m.role = 'assistant'
+                 AND r.status = 'completed'
+                 AND (
+                   btrim(m.text) <> ''
+                   OR jsonb_array_length(COALESCE(m.artifacts, '[]'::jsonb)) > 0
+                 )
+            ) AS trial_verified
+       FROM rt_chat_sessions s
+      WHERE s.owner_id = $1
+        AND s.capability_id = $2
+        AND s.version = $3
+        AND s.manifest_hash = $4
+        AND s.mode = 'trial'
+        AND s.status = 'active'
+        ${sessionFilter}
+      ORDER BY s.updated_at DESC, s.id DESC
+      LIMIT 1`,
+    params,
+  );
+  const row = res.rows[0];
+  return row ? { row: toRow(row), verified: row.trial_verified } : null;
 }
 
 /** owner-scoped 取会话内部行（含 instructions/transcript），不存在或非本人 → null。 */
@@ -145,11 +212,32 @@ export async function getSessionRow(
   ownerId: string,
 ): Promise<SessionRow | null> {
   const res = await pool.query<SessionDbRow>(
-    `SELECT * FROM rt_chat_sessions WHERE id = $1 AND owner_id = $2 LIMIT 1`,
+    `SELECT *
+       FROM rt_chat_sessions
+      WHERE id = $1
+        AND owner_id = $2
+        AND status = 'active'
+      LIMIT 1`,
     [id, ownerId],
   );
   const row = res.rows[0];
   return row ? toRow(row) : null;
+}
+
+/**
+ * 只读会话的不可变访问模式，用于详情路由在 owner-scoped 查询前选择鉴权策略。
+ * 不返回 owner / capability / 内容，且归档会话按不存在处理。
+ */
+export async function getSessionMode(pool: Pool, id: string): Promise<RuntimeSessionMode | null> {
+  const res = await pool.query<{ mode: RuntimeSessionMode }>(
+    `SELECT mode
+       FROM rt_chat_sessions
+      WHERE id = $1
+        AND status = 'active'
+      LIMIT 1`,
+    [id],
+  );
+  return res.rows[0]?.mode ?? null;
 }
 
 export async function getSessionMeta(

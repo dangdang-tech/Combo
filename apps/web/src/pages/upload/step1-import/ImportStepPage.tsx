@@ -18,7 +18,7 @@ import { findDraftById, useWizard, useBootstrapDraft } from '../../wizard/index.
 import { ImportEmptyState } from './ImportEmptyState.js';
 import { BrowserUploadProgress } from './BrowserUploadProgress.js';
 import { useBrowserImport } from './useBrowserImport.js';
-import { CommandBox } from './CommandBox.js';
+import { CommandBox, shellSafePairCommand } from './CommandBox.js';
 import { ImportLoading } from './ImportLoading.js';
 import { ImportComplete } from './ImportComplete.js';
 import { usePairPolling } from './usePairPolling.js';
@@ -154,6 +154,30 @@ export function ImportStepPage(): ReactElement {
   // SSE 整体失败次数（两次失败 → markStepError，开工总纲 §八②）。
   const failCountRef = useRef(0);
 
+  /**
+   * Job 是导入处理中态的恢复锚点：拿到后立即写进当前 URL，并保留同一条草稿的 draftId。
+   * 这样刷新页面、浏览器重开或 SSE 重新挂载时，initialPhase 都会恢复同一个 job，而不是退回空态重导。
+   */
+  const enterLoadingJob = useCallback(
+    (jobId: string): void => {
+      const next = new URLSearchParams(searchParams);
+      next.set('jobId', jobId);
+      next.delete('snapshotId');
+      if (activeDraftId) next.set('draftId', activeDraftId);
+      setSearchParams(next, { replace: true });
+      setPhase({ kind: 'loading', jobId });
+    },
+    [activeDraftId, searchParams, setSearchParams],
+  );
+
+  /** 主动取消后不再把已取消 job 当作刷新恢复目标；draftId 仍保留。 */
+  const clearJobRecoveryAnchor = useCallback((): void => {
+    if (!searchParams.has('jobId')) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('jobId');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   // 配对轮询（仅 pairing 态有 pairId）。
   const pairId = phase.kind === 'pairing' ? phase.pair.pairId : undefined;
   const poll = usePairPolling(pairId);
@@ -161,16 +185,16 @@ export function ImportStepPage(): ReactElement {
   // 浏览器直传编排（BUG-013 主路径）：选文件 → presign → 分批 PUT → 建 Job → 拿 jobId 转 SSE 加载态。
   //   拿到 jobId 即进现有 loading 链路复用（jobId → SSE → 完成态）。
   const browserImport = useBrowserImport({
-    onJobId: (jobId) => setPhase({ kind: 'loading', jobId }),
+    onJobId: enterLoadingJob,
     ...(activeDraftId ? { draftId: activeDraftId } : {}),
   });
 
-  // 配对拿到 jobId → 进加载态。
+  // 配对拿到 jobId → URL 落恢复锚点（保留 draftId）→ 进加载态。
   useEffect(() => {
     if (phase.kind === 'pairing' && poll.jobId) {
-      setPhase({ kind: 'loading', jobId: poll.jobId });
+      enterLoadingJob(poll.jobId);
     }
-  }, [phase, poll.jobId]);
+  }, [phase, poll.jobId, enterLoadingJob]);
 
   // 取完成态快照（snapshotId 来自 SSE done 或深链 ?snapshotId=）。
   const loadComplete = useCallback(
@@ -289,7 +313,9 @@ export function ImportStepPage(): ReactElement {
 
   const handleCopy = useCallback((): void => {
     if (phase.kind !== 'pairing') return;
-    void navigator.clipboard?.writeText(phase.pair.command).catch(() => undefined);
+    void navigator.clipboard
+      ?.writeText(shellSafePairCommand(phase.pair.command))
+      .catch(() => undefined);
     setCopied(true);
   }, [phase]);
 
@@ -299,13 +325,14 @@ export function ImportStepPage(): ReactElement {
     setCancelling(true);
     try {
       await cancelImportJob(jobId);
+      clearJobRecoveryAnchor();
       setPhase({ kind: 'empty' }); // 取消后回可重新发起导入态（已完成段后端保留，导入-12）。
     } catch {
       // 取消失败：留在加载态、不阻断（worker 仍可能自然完成）。
     } finally {
       setCancelling(false);
     }
-  }, [phase]);
+  }, [phase, clearJobRecoveryAnchor]);
 
   const handleRetry = useCallback((): void => {
     // 不重置 failCount：重试后若再失败即「两次失败」→ markStepError（开工总纲 §八②两次失败错误态）。

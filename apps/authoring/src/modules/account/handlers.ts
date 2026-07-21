@@ -108,7 +108,8 @@ function readAuthTx(req: FastifyRequest): AuthTx | null {
         state: parsed.state,
         nonce: parsed.nonce,
         codeVerifier: parsed.codeVerifier,
-        returnTo: parsed.returnTo,
+        // Cookie 虽由服务端写入，仍在重定向边界再次收口，避免畸形/超长值绕过 open redirect 防护。
+        returnTo: sanitizeReturnTo(parsed.returnTo),
       };
     }
     return null;
@@ -126,15 +127,18 @@ function redirectFailure(
   req: FastifyRequest,
   reply: FastifyReply,
   internalCode: (typeof ErrorCode)[keyof typeof ErrorCode],
+  returnTo?: string,
 ): FastifyReply {
   const failureId = randomToken(12);
+  const safeReturnTo = sanitizeReturnTo(returnTo);
   // 内部 code + traceId + failureId 落日志（对外只出 opaque failureId）。
   req.log.warn(
     { code: internalCode, traceId: req.id, failureId },
-    'auth callback failed (opaque failureId to client)',
+    'auth flow failed (opaque failureId to client)',
   );
   reply.clearCookie(AUTH_TX_COOKIE, clearCookieOpts(req));
-  reply.redirect(`${LOGIN_PATH}?failureId=${encodeURIComponent(failureId)}`, 302);
+  const query = new URLSearchParams({ failureId, returnTo: safeReturnTo });
+  reply.redirect(`${LOGIN_PATH}?${query.toString()}`, 302);
   return reply;
 }
 
@@ -167,12 +171,7 @@ export function loginHandler(): RouteHandlerMethod {
     });
     // 上游不可达（discovery 拉不到）：不裸返 JSON 错、不暴露内部错；按失败重定向语义回登录页。
     if (!authorizeUrl) {
-      req.log.warn(
-        { code: ErrorCode.AUTH_UPSTREAM_UNAVAILABLE, traceId: req.id },
-        'auth login: discovery unreachable',
-      );
-      reply.redirect(LOGIN_PATH, 302);
-      return reply;
+      return redirectFailure(req, reply, ErrorCode.AUTH_UPSTREAM_UNAVAILABLE, returnTo);
     }
 
     const tx: AuthTx = { state, nonce, codeVerifier, returnTo };
@@ -204,24 +203,26 @@ export function callbackHandler(): RouteHandlerMethod {
       error_description?: string;
     };
 
+    // 先读 tx：无论后续在哪个分支失败，都尽量保留登录前已校验过的站内 returnTo。
+    const tx = readAuthTx(req);
+
     // 1) Logto 侧错误（用户取消授权等）：失败重定向（不透传 OIDC 原始 error/description）。
     if (q.error) {
-      return redirectFailure(req, reply, ErrorCode.AUTH_CONSENT_DENIED);
+      return redirectFailure(req, reply, ErrorCode.AUTH_CONSENT_DENIED, tx?.returnTo);
     }
 
-    const tx = readAuthTx(req);
     // 2) state 校验（CSRF）：auth_tx 缺失/过期 或 state 不匹配 → AUTH_STATE_MISMATCH。
     if (!tx || !q.state || q.state !== tx.state || !q.code) {
-      return redirectFailure(req, reply, ErrorCode.AUTH_STATE_MISMATCH);
+      return redirectFailure(req, reply, ErrorCode.AUTH_STATE_MISMATCH, tx?.returnTo);
     }
 
     // 3) code + code_verifier 换 token。
     const exchanged = await exchangeCodeForToken(env, q.code, tx.codeVerifier);
     if (exchanged.kind === 'upstream_unavailable') {
-      return redirectFailure(req, reply, ErrorCode.AUTH_UPSTREAM_UNAVAILABLE);
+      return redirectFailure(req, reply, ErrorCode.AUTH_UPSTREAM_UNAVAILABLE, tx.returnTo);
     }
     if (exchanged.kind === 'failed') {
-      return redirectFailure(req, reply, ErrorCode.AUTH_CALLBACK_FAILED);
+      return redirectFailure(req, reply, ErrorCode.AUTH_CALLBACK_FAILED, tx.returnTo);
     }
 
     // 4) 验 id_token（若有）：JWKS + iss + aud(=LOGTO_APP_ID) + exp（verifyLogtoIdToken）+ nonce 比对（§3.2 步 3）。
@@ -230,14 +231,14 @@ export function callbackHandler(): RouteHandlerMethod {
     if (exchanged.idToken) {
       const idVerify = await verifyLogtoIdToken(exchanged.idToken, env);
       if (idVerify.kind === 'upstream_unavailable') {
-        return redirectFailure(req, reply, ErrorCode.AUTH_UPSTREAM_UNAVAILABLE);
+        return redirectFailure(req, reply, ErrorCode.AUTH_UPSTREAM_UNAVAILABLE, tx.returnTo);
       }
       if (idVerify.kind === 'invalid') {
-        return redirectFailure(req, reply, ErrorCode.AUTH_CALLBACK_FAILED);
+        return redirectFailure(req, reply, ErrorCode.AUTH_CALLBACK_FAILED, tx.returnTo);
       }
       const idNonce = readNonceFromIdToken(exchanged.idToken);
       if (idNonce !== tx.nonce) {
-        return redirectFailure(req, reply, ErrorCode.AUTH_CALLBACK_FAILED);
+        return redirectFailure(req, reply, ErrorCode.AUTH_CALLBACK_FAILED, tx.returnTo);
       }
     }
 
@@ -245,10 +246,10 @@ export function callbackHandler(): RouteHandlerMethod {
     //    用与受保护路由中间件同一套验签，保证种进 cookie 的 token 后续能被认（aud 口径一致）。
     const accessVerify = await verifyLogtoJwt(exchanged.accessToken, env);
     if (accessVerify.kind === 'upstream_unavailable') {
-      return redirectFailure(req, reply, ErrorCode.AUTH_UPSTREAM_UNAVAILABLE);
+      return redirectFailure(req, reply, ErrorCode.AUTH_UPSTREAM_UNAVAILABLE, tx.returnTo);
     }
     if (accessVerify.kind === 'invalid') {
-      return redirectFailure(req, reply, ErrorCode.AUTH_CALLBACK_FAILED);
+      return redirectFailure(req, reply, ErrorCode.AUTH_CALLBACK_FAILED, tx.returnTo);
     }
 
     // 6) 首登 upsert provision（按 logto_user_id=sub 查/建 users，§7）。
@@ -261,7 +262,7 @@ export function callbackHandler(): RouteHandlerMethod {
       });
     } catch {
       // provision DB 异常：不裸露（脊柱 §11.B），按上游不可达语义失败重定向（可重试）。
-      return redirectFailure(req, reply, ErrorCode.AUTH_UPSTREAM_UNAVAILABLE);
+      return redirectFailure(req, reply, ErrorCode.AUTH_UPSTREAM_UNAVAILABLE, tx.returnTo);
     }
 
     // 7) 种 cb_session（承载 access_token JWT），清 auth_tx，302 回站内 returnTo。

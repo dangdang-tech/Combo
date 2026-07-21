@@ -5,7 +5,12 @@ import type { ArtifactKind, OutputType, SkillPackageRuntimeView } from '@cb/shar
 
 /** output.type + instructions → 推荐 artifact 形态。 */
 function recommendedKind(view: SkillPackageRuntimeView): ArtifactKind {
-  if (/kind\s*=\s*html|完整\s*HTML|Full\s*HTML|GenUI/i.test(view.instructions)) return 'html';
+  if (
+    /kind\s*=\s*html|完整\s*HTML|自包含\s*HTML|单文件\s*HTML|HTML\s*(?:页面|网页|卡片)|Full\s*HTML|GenUI/i.test(
+      view.instructions,
+    )
+  )
+    return 'html';
   const outputType = view.output.type;
   switch (outputType) {
     case 'text':
@@ -20,7 +25,11 @@ function recommendedKind(view: SkillPackageRuntimeView): ArtifactKind {
 }
 
 /** output.type → 产出形态人话指引。 */
-function outputGuidance(outputType: OutputType): string {
+function outputGuidance(view: SkillPackageRuntimeView): string {
+  if (recommendedKind(view) === 'html') {
+    return '一个可直接在沙箱中预览的完整自包含 HTML 页面，这是用户需要的主交付物。';
+  }
+  const outputType: OutputType = view.output.type;
   switch (outputType) {
     case 'text':
       return '一篇成文的文本成品（报告 / 文章 / 文案）。';
@@ -49,6 +58,17 @@ function boundariesBlock(view: SkillPackageRuntimeView): string {
   return `风险级别：${riskLevel}\n红线（越过即拒答并简要说明原因）：\n${lines}`;
 }
 
+function runtimeTruthBlock(now = new Date()): string {
+  const today = now.toISOString().slice(0, 10);
+  return [
+    '# 真实性与证据边界',
+    `当前运行日期：${today}。如果产物需要 generatedAt / 生成日期，只能使用这个日期，不要凭记忆或上下文猜日期。`,
+    '只依据用户本次消息、会话中已给出的材料、以及能力包公开描述作答。',
+    '如果用户提供的是“摘录 / 片段 / summary / 部分代码”，禁止把片段外事实写成确定结论；必须标成“证据不足 / 需查看完整材料后确认”。',
+    '输出应区分：已由材料直接证明的问题、材料暗示但需补证的风险、以及建议补测项。',
+  ].join('\n');
+}
+
 /** 产物协议：约束模型「成品进 artifact、正文只放说明」，并按 output.type 选 kind。 */
 function artifactProtocol(view: SkillPackageRuntimeView): string {
   const kind = recommendedKind(view);
@@ -58,14 +78,14 @@ function artifactProtocol(view: SkillPackageRuntimeView): string {
     '必须调用 upsert_artifact 工具把成品写成 artifact，而不是把成品全文堆进聊天正文。',
     '',
     '- 聊天正文只放：简短说明、思路、给用户的提示与追问；成品本体进 artifact。',
-    '- artifactKey：同一份成品反复修改时复用同一个 key（产生新版本，类似版本演进）；不同成品用不同 key。常用 "main"。',
+    '- artifactKey：主交付物必须使用 "main"；核查清单、原始数据等辅助产物使用其他 key。同一份产物反复修改时复用同一个 key，产生新版本。',
     '- kind 选择：',
     '  - html：可交互/可视化网页，会被放进【沙箱 iframe】预览。必须产出【完整自包含 HTML 文档】',
     '    （含 <!doctype html>、<html>、内联 <style>/<script>）；可用公共 CDN，禁止外链需要鉴权的私有资源。',
     '  - markdown：富文本文档（报告/文章/说明）。',
     '  - code：单文件代码产物（用 language 标注语言，如 ts/python/sql）。',
-    '  - structured：结构化数据产物（评分卡/清单/字段表），content 用 JSON 字符串。',
-    `- 本能力 output.type=${view.output.type} → 优先用 kind=${kind}。`,
+    '  - structured：结构化数据产物（评分卡/清单/字段表），content 用 JSON 字符串；若有 meta.generatedAt，必须使用平台注入的当前运行日期；若材料是摘录，meta 或正文中必须标注证据范围。',
+    `- 主交付物优先用 kind=${kind}（manifest output.type=${view.output.type} 只表示结构化语义，不得覆盖指令中明确的 HTML / GenUI 交付要求）。`,
     '- 产出后用一两句话说明你做了什么、可以怎么用，并主动邀请用户继续迭代；不要在正文重复 artifact 全文。',
   ].join('\n');
 }
@@ -87,10 +107,12 @@ export function composeSystemPrompt(view: SkillPackageRuntimeView): string {
     '（若用户首条消息附带了结构化输入，已并入其消息正文。）',
     '',
     '# 期望产出',
-    outputGuidance(view.output.type),
+    outputGuidance(view),
     '',
     '# 边界',
     boundariesBlock(view),
+    '',
+    runtimeTruthBlock(),
     '',
     artifactProtocol(view),
   ].join('\n');

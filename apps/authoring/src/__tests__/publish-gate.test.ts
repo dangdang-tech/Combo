@@ -20,6 +20,7 @@ import {
   publishGateInTx,
   readVersionForPublish,
   publishStateError,
+  profileSlugForAccount,
 } from '../modules/publish/repo.js';
 import { publishOne } from '../modules/publish/publish-one.js';
 import { PublishError } from '../modules/publish/repo.js';
@@ -49,12 +50,14 @@ function gateArgs(
 ) {
   const v = db.versions.get(seeded.versionId)!;
   const cap = db.capabilities.get(seeded.capabilityId)!;
+  const ownerAccount = db.users.get(owner)!.account;
   return {
     versionId: seeded.versionId,
     capabilityId: seeded.capabilityId,
     slug: cap.slug,
     manifest: v.manifest,
     ownerUserId: owner,
+    ownerAccount,
     cover: stdCover,
     tiers: stdTiers,
     visibility: 'public' as const,
@@ -161,6 +164,13 @@ describe('publishGateInTx 成功路径（§1.2 首发）', () => {
     expect(r.shareToken).toBe(pub.share_token);
     // capabilities.current_version_id 滚动指向本版。
     expect(db.capabilities.get(seeded.capabilityId)!.current_version_id).toBe(seeded.versionId);
+    // 公开创作者主页基行同事务创建，后续 /creators/:id/profile 和 /c/:slug 有真实数据源。
+    expect(db.profiles.get(owner)).toMatchObject({
+      user_id: owner,
+      slug: profileSlugForAccount('WAYNE', owner),
+      display_name: 'WAYNE',
+      identity_tags: ['创作者'],
+    });
     // outbox 同事务双事件（lifecycle + notify）。
     expect(db.outbox.map((o) => o.topic).sort()).toEqual([
       'capability.published',
@@ -427,7 +437,7 @@ describe('发布门原子性（中途失败整体回滚，§1.2）', () => {
     const db = new PublishFakeDb();
     const owner = seedUser(db);
     const seeded = seedCapabilityVersion(db, owner);
-    // 第 5 条写后抛（②promote ③tiers ④(skip,无旧版) ⑤publications ⑥capabilities → 第5条 capabilities 写后）。
+    // 第 5 条写后抛（②promote ③tiers ④publication ⑤capabilities ⑥profile 前后均在同事务内）。
     db.throwAfterWrites = 5;
 
     await expect(publishGateInTx(asTxPool(db), gateArgs(db, owner, seeded))).rejects.toThrow();
@@ -436,6 +446,7 @@ describe('发布门原子性（中途失败整体回滚，§1.2）', () => {
     expect(db.versions.get(seeded.versionId)!.status).toBe('draft');
     expect(db.versions.get(seeded.versionId)!.manifest_hash).toBeNull();
     expect(db.publications.size).toBe(0);
+    expect(db.profiles.size).toBe(0);
     expect(db.tiers).toHaveLength(0);
     expect(db.outbox).toHaveLength(0);
     expect(db.queries.filter((q) => q.sql === 'ROLLBACK')).toHaveLength(1);

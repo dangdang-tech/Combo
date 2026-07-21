@@ -1,4 +1,4 @@
-// agora-import — Agora 本机对话历史上传器（B-21 引导脚本下载并 exec 之）。
+// agora-import — Combo 本机对话历史上传器（为兼容既有下载协议，内部二进制名仍保留 agora-import）。
 //
 // 职责（重活全在此二进制，替代纯 shell 的脆弱并发/取消）：
 //
