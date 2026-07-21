@@ -5,4 +5,5 @@ import type { Env } from '../platform/config/env.js';
 export interface RuntimeContext {
   env: Env;
   pool: Pool;
+  runControls: Map<string, AbortController>;
 }

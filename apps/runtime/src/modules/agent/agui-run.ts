@@ -31,6 +31,15 @@ export interface RunAguiInput {
   /** 已折叠结构化输入后的有效用户文本（取自 RunAgentInput 最新一条 user 消息）。 */
   userText: string;
   intent?: RunIntent;
+  /**
+   * Runs after the turn and artifact references are durable, but before
+   * RUN_FINISHED is emitted. Studio uses this boundary to finalize exactly one
+   * UI Revision per successful design turn or one verification per test.
+   */
+  afterSave?: (result: {
+    artifacts: readonly ArtifactRef[];
+    assistantText: string;
+  }) => Promise<void>;
   emitter: AguiEmitter;
   log: TurnLogger;
 }
@@ -226,6 +235,7 @@ export async function runAgui(input: RunAguiInput): Promise<RunAguiResult> {
       assistant: { id: assistantId, text: assistantText, artifacts: collected },
       transcript,
     });
+    await input.afterSave?.({ artifacts: collected, assistantText });
   } catch (err) {
     log.error(err, 'runAgui: saveTurn failed');
     emitStage(currentStage, 'failed');

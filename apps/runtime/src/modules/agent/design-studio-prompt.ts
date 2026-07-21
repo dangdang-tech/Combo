@@ -12,6 +12,9 @@ const DESIGN_STUDIO_RULES = `
 - 页面必须是响应式的，保证基本键盘操作、可读对比度和清晰焦点。
 - 不要要求用户打开本地文件，不要依赖需要私有鉴权的外部资源。
 - structured / markdown / code 可用作辅助产物，但不能取代 main HTML 页面。
+- 这不是 Landing Page。页面必须围绕当前能力的真实 inputs、主操作、运行状态和 output 组织成可使用的工具界面。
+- 主要区块与可编辑元素使用稳定且语义化的 data-combo-key（例如 input-goal、run-primary、result-main），后续修改保持 key 不变。
+- 未收到真实 Runtime 结果时不得伪造“生成成功”或虚构结果；可以展示清楚的待运行、空状态和示例输入。
 - 聊天正文只用简短说明本次真正改了什么；页面本体必须通过 upsert_artifact 工具更新。
 `.trim();
 

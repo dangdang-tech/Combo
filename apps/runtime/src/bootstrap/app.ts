@@ -20,6 +20,7 @@ import { getPool } from '../platform/infra/db.js';
 import { registerHealthRoutes } from '../platform/http/health.js';
 import { registerCapabilityRoutes } from '../modules/capability/routes.js';
 import { registerSessionRoutes } from '../modules/session/routes.js';
+import { registerStudioRoutes } from '../modules/studio/routes.js';
 import type { RuntimeContext } from './context.js';
 import {
   currentTraceId,
@@ -53,7 +54,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     trustProxy: true,
   });
 
-  const ctx: RuntimeContext = { env, pool: getPool(env) };
+  const ctx: RuntimeContext = { env, pool: getPool(env), runControls: new Map() };
 
   await app.register(cors, {
     origin: env.CORS_ORIGIN ? env.CORS_ORIGIN.split(',').map((s) => s.trim()) : true,
@@ -106,6 +107,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
       await registerClientEventRoutes(scoped);
       await registerCapabilityRoutes(scoped, ctx);
       await registerSessionRoutes(scoped, ctx);
+      await registerStudioRoutes(scoped, ctx);
     },
     { prefix: API_PREFIX },
   );

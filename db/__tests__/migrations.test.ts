@@ -99,4 +99,14 @@ describe('migrations', () => {
       'CREATE OR REPLACE FUNCTION gen_uuid_v7()',
     );
   });
+
+  it('keeps Studio revisions separate from real capability tests', () => {
+    const sql = allSql();
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS rt_studio_revisions');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS rt_studio_tests');
+    expect(sql).toContain('uq_rt_studio_revision_run');
+    expect(sql).toContain('uq_rt_studio_test_session');
+    expect(sql).toContain("run.input ->> 'intent' = 'design'");
+    expect(sql).toContain("run.status = 'completed'");
+  });
 });

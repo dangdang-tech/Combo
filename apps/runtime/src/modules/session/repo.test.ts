@@ -66,6 +66,10 @@ describe('findTrialSessionForVersion', () => {
     expect(captured?.sql).toContain(`s.mode = 'trial'`);
     expect(captured?.sql).toContain(`r.status = 'completed'`);
     expect(captured?.sql).toContain(`r.owner_id = s.owner_id`);
+    expect(captured?.sql).toContain(`COALESCE(r.input ->> 'intent', 'capability') <> 'design'`);
+    expect(captured?.sql).toContain('rt_studio_revisions');
+    expect(captured?.sql).toContain('rt_studio_tests');
+    expect(captured?.sql).toContain(`sr_source.status = 'completed'`);
     expect(captured?.sql).toContain(`ORDER BY s.updated_at DESC, s.id DESC`);
     expect(captured?.sql).not.toContain(`ORDER BY trial_verified DESC`);
     expect(captured?.params).toEqual(['creator-1', 'cap-1', '0.1.0', 'manifest-1']);
@@ -93,8 +97,29 @@ describe('findTrialSessionForVersion', () => {
       sessionId: 'session-1',
     });
 
-    expect(captured?.sql).toContain(`s.id = $5`);
+    expect(captured?.sql).toContain(`child.test_session_id = $5`);
+    expect(captured?.sql).toContain(`$5::uuid`);
     expect(captured?.params).toEqual(['creator-1', 'cap-1', '0.1.0', 'manifest-1', 'session-1']);
+  });
+
+  it('keeps Studio test child sessions out of reusable trial lookups', async () => {
+    let capturedSql = '';
+    const pool = {
+      query: async (sql: string) => {
+        capturedSql = sql;
+        return { rows: [] };
+      },
+    } as unknown as Pool;
+
+    await findEmptyTrialSession(pool, {
+      ownerId: 'creator-1',
+      capabilityId: 'cap-1',
+      version: '0.1.0',
+      manifestHash: 'manifest-1',
+    });
+
+    expect(capturedSql).toContain('rt_studio_tests child');
+    expect(capturedSql).toContain('rt_chat_runs r');
   });
 });
 

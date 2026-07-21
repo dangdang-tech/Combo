@@ -27,6 +27,9 @@ export type RunStageStatus = z.infer<typeof RunStageStatusSchema>;
 export const RunIntentSchema = z.enum(['capability', 'design']);
 export type RunIntent = z.infer<typeof RunIntentSchema>;
 
+export const StudioTestStatusSchema = z.enum(['running', 'completed', 'failed', 'interrupted']);
+export type StudioTestStatus = z.infer<typeof StudioTestStatusSchema>;
+
 export const RunStageSchema = z.object({
   key: z.string(),
   label: z.string(),
@@ -203,6 +206,45 @@ export const SessionDetailSchema = z.object({
 });
 export type SessionDetail = z.infer<typeof SessionDetailSchema>;
 
+export const StudioRevisionSchema = z.object({
+  id: z.string().uuid(),
+  revisionNo: z.number().int().positive(),
+  artifactKey: z.string(),
+  artifactVersion: z.number().int().positive(),
+  sourceRunId: z.string().uuid().nullable(),
+  summary: z.string(),
+  createdAt: z.string(),
+  verified: z.boolean(),
+});
+export type StudioRevision = z.infer<typeof StudioRevisionSchema>;
+
+export const StudioTestSchema = z.object({
+  id: z.string().uuid(),
+  revisionId: z.string().uuid(),
+  revisionNo: z.number().int().positive(),
+  testSessionId: z.string().uuid(),
+  runId: z.string().uuid(),
+  status: StudioTestStatusSchema,
+  createdAt: z.string(),
+  completedAt: z.string().nullable(),
+});
+export type StudioTest = z.infer<typeof StudioTestSchema>;
+
+export const StudioStateSchema = z.object({
+  sessionId: z.string().uuid(),
+  revisions: z.array(StudioRevisionSchema),
+  currentRevision: StudioRevisionSchema.nullable(),
+  latestTest: StudioTestSchema.nullable(),
+  activeDesignRunId: z.string().uuid().nullable(),
+});
+export type StudioState = z.infer<typeof StudioStateSchema>;
+
+export const CreateStudioTestBodySchema = z.object({
+  revisionId: z.string().uuid(),
+  prompt: z.string().trim().min(1),
+});
+export type CreateStudioTestBody = z.infer<typeof CreateStudioTestBodySchema>;
+
 export const SessionMessagesPageSchema = z.object({
   items: z.array(RuntimeMessageSchema),
   nextCursor: z.string().nullable(),
@@ -252,6 +294,13 @@ export const RuntimeRunSchema = z.object({
   completedAt: z.string().nullable(),
 });
 export type RuntimeRun = z.infer<typeof RuntimeRunSchema>;
+
+export const CreateStudioTestResultSchema = z.object({
+  test: StudioTestSchema,
+  run: RuntimeRunSchema,
+  eventsUrl: z.string(),
+});
+export type CreateStudioTestResult = z.infer<typeof CreateStudioTestResultSchema>;
 
 export const CreateRunResultSchema = z.object({
   run: RuntimeRunSchema,

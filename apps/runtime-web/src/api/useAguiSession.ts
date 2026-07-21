@@ -105,6 +105,7 @@ export function useAguiSession(
     if (!sessionId) return;
     void qc.invalidateQueries({ queryKey: ['session', sessionId] });
     void qc.invalidateQueries({ queryKey: ['sessions'] });
+    void qc.invalidateQueries({ queryKey: ['studio', sessionId] });
   };
 
   useEffect(() => {

@@ -1,11 +1,8 @@
 import type { Pool } from 'pg';
 import { describe, expect, it } from 'vitest';
 import type { Manifest } from '@cb/shared';
-import {
-  CapabilityLoadError,
-  getCreatorCapabilityVersionForTrial,
-  getPublishedCapability,
-} from './loader.js';
+import type { CapabilityLoadError } from './loader.js';
+import { getCreatorCapabilityVersionForTrial, getPublishedCapability } from './loader.js';
 import { manifestHash } from './manifest-hash.js';
 
 const MANIFEST: Manifest = {

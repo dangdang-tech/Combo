@@ -14,6 +14,8 @@ describe('withDesignStudioInstructions', () => {
     expect(prompt).toContain('artifactKey="main"');
     expect(prompt).toContain('kind="html"');
     expect(prompt).toContain('复用同一 artifactKey 产生新版本');
+    expect(prompt).toContain('这不是 Landing Page');
+    expect(prompt).toContain('data-combo-key');
   });
 
   it('only accepts a fresh main HTML artifact as a completed design result', () => {

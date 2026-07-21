@@ -140,6 +140,10 @@ export async function findEmptyTrialSession(
         AND s.mode = 'trial'
         AND s.status = 'active'
         AND NOT EXISTS (SELECT 1 FROM rt_chat_messages m WHERE m.session_id = s.id)
+        AND NOT EXISTS (SELECT 1 FROM rt_chat_runs r WHERE r.session_id = s.id)
+        AND NOT EXISTS (
+          SELECT 1 FROM rt_studio_tests child WHERE child.test_session_id = s.id
+        )
       ORDER BY s.updated_at DESC
       LIMIT 1`,
     [input.ownerId, input.capabilityId, input.version, input.manifestHash],
@@ -169,26 +173,81 @@ export async function findTrialSessionForVersion(
   let sessionFilter = '';
   if (input.sessionId) {
     params.push(input.sessionId);
-    sessionFilter = `AND s.id = $${params.length}`;
+    sessionFilter = `AND s.id = COALESCE(
+      (
+        SELECT child.studio_session_id
+          FROM rt_studio_tests child
+         WHERE child.test_session_id = $${params.length}
+         LIMIT 1
+      ),
+      $${params.length}::uuid
+    )`;
   }
 
   const res = await pool.query<TrialSessionDbRow>(
     `SELECT s.*,
-            EXISTS (
-              SELECT 1
-                FROM rt_chat_messages m
-                JOIN rt_chat_runs r
-                  ON r.id = m.run_id
-                 AND r.session_id = s.id
-                 AND r.owner_id = s.owner_id
-               WHERE m.session_id = s.id
-                 AND m.role = 'assistant'
-                 AND r.status = 'completed'
-                 AND (
-                   btrim(m.text) <> ''
-                   OR jsonb_array_length(COALESCE(m.artifacts, '[]'::jsonb)) > 0
-                 )
-            ) AS trial_verified
+            CASE
+              WHEN EXISTS (
+                SELECT 1
+                  FROM rt_studio_revisions sr
+                  JOIN rt_chat_runs sr_source
+                    ON sr_source.id = sr.source_run_id
+                   AND sr_source.status = 'completed'
+                   AND sr_source.input ->> 'intent' = 'design'
+                 WHERE sr.studio_session_id = s.id
+              )
+              THEN EXISTS (
+                SELECT 1
+                  FROM rt_studio_revisions sr
+                  JOIN rt_chat_runs sr_source
+                    ON sr_source.id = sr.source_run_id
+                   AND sr_source.status = 'completed'
+                   AND sr_source.input ->> 'intent' = 'design'
+                  JOIN rt_studio_tests st
+                    ON st.revision_id = sr.id
+                   AND st.studio_session_id = s.id
+                   AND st.status = 'completed'
+                  JOIN rt_chat_runs r
+                    ON r.id = st.run_id
+                   AND r.session_id = st.test_session_id
+                   AND r.owner_id = s.owner_id
+                   AND r.status = 'completed'
+                  JOIN rt_chat_messages m
+                    ON m.run_id = r.id
+                   AND m.session_id = st.test_session_id
+                   AND m.role = 'assistant'
+                 WHERE sr.studio_session_id = s.id
+                   AND sr.revision_no = (
+                     SELECT MAX(current.revision_no)
+                       FROM rt_studio_revisions current
+                       JOIN rt_chat_runs current_source
+                         ON current_source.id = current.source_run_id
+                        AND current_source.status = 'completed'
+                        AND current_source.input ->> 'intent' = 'design'
+                      WHERE current.studio_session_id = s.id
+                   )
+                   AND (
+                     btrim(m.text) <> ''
+                     OR jsonb_array_length(COALESCE(m.artifacts, '[]'::jsonb)) > 0
+                   )
+              )
+              ELSE EXISTS (
+                SELECT 1
+                  FROM rt_chat_messages m
+                  JOIN rt_chat_runs r
+                    ON r.id = m.run_id
+                   AND r.session_id = s.id
+                   AND r.owner_id = s.owner_id
+                 WHERE m.session_id = s.id
+                   AND m.role = 'assistant'
+                   AND r.status = 'completed'
+                   AND COALESCE(r.input ->> 'intent', 'capability') <> 'design'
+                   AND (
+                     btrim(m.text) <> ''
+                     OR jsonb_array_length(COALESCE(m.artifacts, '[]'::jsonb)) > 0
+                   )
+              )
+            END AS trial_verified
        FROM rt_chat_sessions s
       WHERE s.owner_id = $1
         AND s.capability_id = $2
@@ -196,6 +255,9 @@ export async function findTrialSessionForVersion(
         AND s.manifest_hash = $4
         AND s.mode = 'trial'
         AND s.status = 'active'
+        AND NOT EXISTS (
+          SELECT 1 FROM rt_studio_tests child WHERE child.test_session_id = s.id
+        )
         ${sessionFilter}
       ORDER BY s.updated_at DESC, s.id DESC
       LIMIT 1`,
@@ -281,6 +343,9 @@ export async function listSessions(
       WHERE ${filters.join(' AND ')}
         -- 只列有内容的会话：每次打开/刷新 /try/:slug 都会建一条空会话，过滤掉空壳避免侧栏堆垃圾。
         AND EXISTS (SELECT 1 FROM rt_chat_messages m WHERE m.session_id = s.id)
+        AND NOT EXISTS (
+          SELECT 1 FROM rt_studio_tests child WHERE child.test_session_id = s.id
+        )
       ORDER BY updated_at DESC
       LIMIT 100`,
     params,

@@ -10,6 +10,7 @@ import {
   TRACE_ID_HEADER,
   TRACEPARENT_HEADER,
   UpdateSessionBodySchema,
+  type ArtifactRef,
   type RuntimeArtifact,
   type SessionDetail,
 } from '@cb/shared';
@@ -41,6 +42,11 @@ import {
   type SessionRow,
 } from './repo.js';
 import { resolveSessionDetailAccess } from './detail-access.js';
+import {
+  discardStudioRevisionForRun,
+  finalizeStudioRevision,
+  isStudioTestSession,
+} from '../studio/repo.js';
 
 /** 从 AG-UI RunAgentInput.messages 取最新一条 user 消息的文本（服务端只认这条做新输入，其余以本地转录为真源）。 */
 function latestUserText(
@@ -169,8 +175,6 @@ export async function registerSessionRoutes(
   app: FastifyInstance,
   ctx: RuntimeContext,
 ): Promise<void> {
-  const runControls = new Map<string, AbortController>();
-
   async function createRuntimeSession(input: {
     ownerId: string;
     slugOrId: string;
@@ -363,11 +367,25 @@ export async function registerSessionRoutes(
 
   // POST /runtime/sessions/:id/runs — 运行层：触发一轮 Agent Loop，立即返回 runId。
   app.post<{ Params: { id: string } }>('/runtime/sessions/:id/runs', async (req, reply) => {
-    const ownerId = await resolveRuntimeOwnerId(req, reply, ctx.pool, ctx.env);
-    const row = await getSessionRow(ctx.pool, req.params.id, ownerId);
-    if (!row) return notFound(reply, req.id);
     const parsed = RunInputSchema.safeParse(req.body);
     if (!parsed.success) return badRequest(reply, req.id);
+    const identity =
+      parsed.data.intent === 'design'
+        ? await requireCreatorIdentity(req, reply, ctx.pool, ctx.env)
+        : null;
+    if (parsed.data.intent === 'design' && !identity) return reply;
+    const ownerId =
+      identity?.userId ?? (await resolveRuntimeOwnerId(req, reply, ctx.pool, ctx.env));
+    const row = await getSessionRow(ctx.pool, req.params.id, ownerId);
+    if (!row) return notFound(reply, req.id);
+    if (
+      parsed.data.intent === 'design' &&
+      (row.mode !== 'trial' ||
+        row.publicView.status !== 'draft' ||
+        (await isStudioTestSession(ctx.pool, row.id)))
+    ) {
+      return notFound(reply, req.id);
+    }
     const userText = runInputToText(parsed.data);
     if (!userText) return badRequest(reply, req.id);
     const runSession: SessionRow =
@@ -381,7 +399,7 @@ export async function registerSessionRoutes(
       body: parsed.data,
     });
     const controller = new AbortController();
-    runControls.set(run.id, controller);
+    ctx.runControls.set(run.id, controller);
     const emitter = createEventLogEmitter({
       pool: ctx.pool,
       threadId: row.id,
@@ -396,6 +414,25 @@ export async function registerSessionRoutes(
       runId: run.id,
       userText,
       ...(parsed.data.intent ? { intent: parsed.data.intent } : {}),
+      ...(parsed.data.intent === 'design'
+        ? {
+            afterSave: async (result: {
+              artifacts: readonly ArtifactRef[];
+              assistantText: string;
+            }) => {
+              const page = [...result.artifacts]
+                .reverse()
+                .find((artifact) => artifact.artifactKey === 'main' && artifact.kind === 'html');
+              if (!page) throw new Error('design run completed without a main HTML artifact');
+              await finalizeStudioRevision(ctx.pool, {
+                studioSessionId: row.id,
+                sourceRunId: run.id,
+                artifact: page,
+                summary: result.assistantText || userText,
+              });
+            },
+          }
+        : {}),
       emitter,
       log: req.log,
     })
@@ -406,6 +443,9 @@ export async function registerSessionRoutes(
       })
       .catch(async (err: unknown) => {
         req.log.error(err, 'explicit run crashed');
+        if (parsed.data.intent === 'design') {
+          await discardStudioRevisionForRun(ctx.pool, run.id).catch(() => undefined);
+        }
         await appendRunEvent(ctx.pool, run.id, {
           type: EventType.RUN_ERROR,
           message: '服务异常，请重试。',
@@ -413,7 +453,7 @@ export async function registerSessionRoutes(
         await setRunStatus(ctx.pool, run.id, 'failed', 'run crashed').catch(() => undefined);
       })
       .finally(() => {
-        runControls.delete(run.id);
+        ctx.runControls.delete(run.id);
       });
 
     return reply.code(202).send({
@@ -471,7 +511,7 @@ export async function registerSessionRoutes(
     const ownerId = await resolveRuntimeOwnerId(req, reply, ctx.pool, ctx.env);
     const run = await getRun(ctx.pool, req.params.runId, ownerId);
     if (!run) return notFound(reply, req.id);
-    const controller = runControls.get(run.id);
+    const controller = ctx.runControls.get(run.id);
     await appendRunEvent(ctx.pool, run.id, {
       type: EventType.RUN_ERROR,
       message: '运行已打断。',
