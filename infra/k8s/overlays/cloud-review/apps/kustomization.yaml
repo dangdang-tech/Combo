@@ -1,0 +1,32 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: combo-preview
+resources:
+  - ../../../api.yaml
+  - ../../../worker.yaml
+  - ../../../runtime.yaml
+  - ../../../web.yaml
+patches:
+  - path: api.patch.yaml
+  - path: worker.patch.yaml
+  - path: runtime.patch.yaml
+  - path: web.patch.yaml
+configMapGenerator:
+  - name: combo-preview-web-review
+    files:
+      - default.conf.template=review-nginx.conf
+      - bootstrap.html=review-bootstrap.html
+generatorOptions:
+  disableNameSuffixHash: true
+images:
+  - name: ghcr.io/dangdang-tech/combo-api
+    newTag: cloud-review
+  - name: ghcr.io/dangdang-tech/combo-runtime
+    newTag: cloud-review
+  - name: ghcr.io/dangdang-tech/combo-web
+    newTag: cloud-review
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: combo-cloud-review
+      combo.build/environment: cloud-review
+    includeSelectors: false

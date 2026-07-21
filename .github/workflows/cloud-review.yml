@@ -1,0 +1,155 @@
+name: Cloud Review
+
+on:
+  # 固定 Review 槽只由主体验分支自动更新；其他 ref 通过 workflow_dispatch 显式选择，
+  # 避免任意 codex/* 分支 push 意外覆盖用户正在验收的版本。
+  push:
+    branches: ['codex/agent-studio-cloud-preview']
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 要构建并部署到固定 Cloud Review 槽位的分支或 SHA
+        required: true
+        default: main
+      public_base_url:
+        description: 公网验证 URL；留空使用 Environment variable CLOUD_REVIEW_BASE_URL
+        required: false
+        type: string
+
+concurrency:
+  group: combo-cloud-review-single-slot
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  resolve:
+    name: resolve ref + validate manifests
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.revision.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
+
+      - id: revision
+        name: Resolve immutable image tag
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: v1.31.4
+
+      - name: Render Cloud Review kustomizations
+        run: |
+          kubectl kustomize --load-restrictor=LoadRestrictionsNone infra/k8s/overlays/cloud-review/platform >/dev/null
+          kubectl kustomize --load-restrictor=LoadRestrictionsNone infra/k8s/overlays/cloud-review/migrate >/dev/null
+          kubectl kustomize --load-restrictor=LoadRestrictionsNone infra/k8s/overlays/cloud-review/apps >/dev/null
+          kubectl kustomize --load-restrictor=LoadRestrictionsNone infra/k8s/overlays/cloud-review >/dev/null
+
+      - name: Parse deployment scripts
+        run: bash -n scripts/deploy-cloud-review.sh scripts/cloud-review-smoke.sh
+
+  images:
+    name: build + push ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    needs: resolve
+    strategy:
+      matrix:
+        include:
+          - image: combo-api
+            dockerfile: infra/Dockerfile.api
+          - image: combo-runtime
+            dockerfile: infra/Dockerfile.runtime
+          - image: combo-web
+            dockerfile: infra/Dockerfile.web
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare preview build metadata
+        if: matrix.image == 'combo-web'
+        id: web_build_args
+        env:
+          BUILD_SHA: ${{ needs.resolve.outputs.sha }}
+          REVIEW_SOURCE: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name }}
+        run: |
+          {
+            echo 'value<<EOF'
+            echo 'VITE_DEPLOY_ENV=preview'
+            echo "VITE_BUILD_SHA=$BUILD_SHA"
+            echo "VITE_REVIEW_SOURCE=$REVIEW_SOURCE"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          build-args: ${{ steps.web_build_args.outputs.value }}
+          tags: ghcr.io/dangdang-tech/${{ matrix.image }}:${{ needs.resolve.outputs.sha }}
+          cache-from: type=gha,scope=cloud-review-${{ matrix.image }}
+          cache-to: type=gha,scope=cloud-review-${{ matrix.image }},mode=max
+
+  deploy:
+    name: deploy fixed combo-preview slot
+    runs-on: ubuntu-latest
+    needs: [resolve, images]
+    environment: cloud-review
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.CLOUD_REVIEW_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.CLOUD_REVIEW_HOST }}
+          DEPLOY_USER: ${{ secrets.CLOUD_REVIEW_USER }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/cloud_review_key
+          chmod 600 ~/.ssh/cloud_review_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          {
+            echo 'Host cloud-review-target'
+            echo "  HostName $DEPLOY_HOST"
+            echo "  User $DEPLOY_USER"
+            echo '  IdentityFile ~/.ssh/cloud_review_key'
+            echo '  StrictHostKeyChecking yes'
+          } >> ~/.ssh/config
+
+      - name: Sync review-only manifests and scripts
+        run: |
+          ssh cloud-review-target 'mkdir -p /opt/combo-preview/infra/k8s /opt/combo-preview/scripts'
+          rsync -az --delete infra/k8s/ cloud-review-target:/opt/combo-preview/infra/k8s/
+          rsync -az scripts/deploy-cloud-review.sh scripts/cloud-review-smoke.sh cloud-review-target:/opt/combo-preview/scripts/
+
+      - name: Deploy after migration succeeds
+        env:
+          SHA: ${{ needs.resolve.outputs.sha }}
+        run: ssh cloud-review-target env SHA="$SHA" bash /opt/combo-preview/scripts/deploy-cloud-review.sh
+
+      - name: Public smoke
+        env:
+          REVIEW_BASE_URL: ${{ inputs.public_base_url || vars.CLOUD_REVIEW_BASE_URL }}
+          REVIEW_BASIC_USER: ${{ secrets.CLOUD_REVIEW_BASIC_USER }}
+          REVIEW_BASIC_PASSWORD: ${{ secrets.CLOUD_REVIEW_BASIC_PASSWORD }}
+        run: bash scripts/cloud-review-smoke.sh
+
+      - name: Result
+        run: echo "Cloud Review 已部署 ${{ needs.resolve.outputs.sha }}；固定槽位 combo-preview 公网冒烟通过。"

@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+spec:
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      nodePort: 30081
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    spec:
+      imagePullSecrets:
+        - $patch: replace
+        - name: combo-preview-ghcr-pull
+      containers:
+        - name: web
+          env:
+            - name: API_UPSTREAM_HOST
+              value: api.combo-preview.svc.cluster.local
+            - name: RUNTIME_UPSTREAM_HOST
+              value: runtime.combo-preview.svc.cluster.local
+          readinessProbe:
+            httpGet:
+              path: /__review/healthz
+              port: 80
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: review-nginx
+              mountPath: /etc/nginx/templates/default.conf.template
+              subPath: default.conf.template
+              readOnly: true
+            - name: review-bootstrap-page
+              mountPath: /usr/share/nginx/html/__review/bootstrap.html
+              subPath: bootstrap.html
+              readOnly: true
+            - name: review-basic-auth
+              mountPath: /etc/nginx/review-auth
+              readOnly: true
+      volumes:
+        - name: review-nginx
+          configMap:
+            name: combo-preview-web-review
+            items:
+              - key: default.conf.template
+                path: default.conf.template
+        - name: review-bootstrap-page
+          configMap:
+            name: combo-preview-web-review
+            items:
+              - key: bootstrap.html
+                path: bootstrap.html
+        - name: review-basic-auth
+          secret:
+            secretName: combo-preview-bootstrap
+            items:
+              - key: htpasswd
+                path: .htpasswd

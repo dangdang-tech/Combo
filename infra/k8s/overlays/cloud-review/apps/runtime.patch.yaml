@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runtime
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+    rollingUpdate: null
+  template:
+    spec:
+      imagePullSecrets:
+        - $patch: replace
+        - name: combo-preview-ghcr-pull
+      containers:
+        - name: runtime
+          env:
+            - name: NODE_ENV
+              value: development
+            - name: DEV_LOGIN_ENABLED
+              value: 'true'
+            - name: DEV_SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-bootstrap
+                  key: DEV_SESSION_SECRET
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-env
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-env
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-env
+                  key: POSTGRES_DB
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-env
+                  key: S3_ACCESS_KEY
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-env
+                  key: S3_SECRET_KEY
+            - name: LOGTO_ISSUER
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-env
+                  key: LOGTO_ISSUER
+            - name: LOGTO_JWKS_URI
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-env
+                  key: LOGTO_JWKS_URI
+            - name: LOGTO_AUDIENCE
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-env
+                  key: LOGTO_AUDIENCE
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-env
+                  key: ANTHROPIC_API_KEY
+                  optional: true
+            - name: OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-env
+                  key: OPENROUTER_API_KEY
+                  optional: true
+            - name: RUNTIME_LLM_PROVIDER
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-env
+                  key: RUNTIME_LLM_PROVIDER
+                  optional: true
+            - name: RUNTIME_LLM_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-env
+                  key: RUNTIME_LLM_MODEL
+                  optional: true
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: deployment.environment=cloud-review
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: '1'
+              memory: 768Mi

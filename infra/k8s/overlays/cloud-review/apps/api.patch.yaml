@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    spec:
+      imagePullSecrets:
+        - $patch: replace
+        - name: combo-preview-ghcr-pull
+      containers:
+        - name: api
+          envFrom:
+            - secretRef:
+                name: combo-preview-env
+          env:
+            - name: NODE_ENV
+              value: development
+            - name: DEV_LOGIN_ENABLED
+              value: 'true'
+            - name: DEV_SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-bootstrap
+                  key: DEV_SESSION_SECRET
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-env
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-env
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-env
+                  key: POSTGRES_DB
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: deployment.environment=cloud-review
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: '1'
+              memory: 768Mi

@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    spec:
+      imagePullSecrets:
+        - $patch: replace
+        - name: combo-preview-ghcr-pull
+      containers:
+        - name: worker
+          env:
+            - name: NODE_OPTIONS
+              value: --max-old-space-size=1024
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-env
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-env
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-env
+                  key: POSTGRES_DB
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-env
+                  key: S3_ACCESS_KEY
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-env
+                  key: S3_SECRET_KEY
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-env
+                  key: ANTHROPIC_API_KEY
+                  optional: true
+            - name: LLM_PROVIDER
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-env
+                  key: LLM_PROVIDER
+                  optional: true
+            - name: OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-env
+                  key: OPENROUTER_API_KEY
+                  optional: true
+            - name: LLM_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-env
+                  key: LLM_BASE_URL
+                  optional: true
+            - name: LLM_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: combo-preview-env
+                  key: LLM_MODEL
+                  optional: true
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: deployment.environment=cloud-review
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1500m
+              memory: 1536Mi
