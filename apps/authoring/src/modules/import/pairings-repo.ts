@@ -91,6 +91,7 @@ export async function mintPairing(db: Queryable, input: MintPairingInput): Promi
 /** 状态读返回（网页轮询 GET /connect/pair/:pairId 用，含 owner 供属主校验）。 */
 export interface PairingStatusRow {
   ownerUserId: string;
+  draftId: string | null;
   phase: PairPhase;
   jobId: string | null;
   uploadedParts: number;
@@ -109,6 +110,7 @@ export async function readPairingStatus(
 ): Promise<PairingStatusRow | null> {
   const res = await db.query<{
     owner_user_id: string;
+    draft_id: string | null;
     phase: PairPhase;
     job_id: string | null;
     uploaded_parts: number;
@@ -116,6 +118,7 @@ export async function readPairingStatus(
     expired: boolean;
   }>(
     `SELECT owner_user_id,
+            draft_id,
             phase,
             job_id,
             uploaded_parts,
@@ -134,6 +137,7 @@ export async function readPairingStatus(
   }
   return {
     ownerUserId: row.owner_user_id,
+    draftId: row.draft_id,
     phase,
     jobId: row.job_id,
     uploadedParts: row.uploaded_parts,

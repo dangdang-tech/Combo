@@ -1690,8 +1690,30 @@ body {
   color: var(--cb-machine-fg);
 }
 
-.cb-cmdbox__phase[data-phase='expired'] {
-  color: var(--cb-state-error-fg);
+.cb-cmdbox__status {
+  border-color: var(--cb-border);
+  background: var(--cb-surface-soft);
+}
+
+.cb-cmdbox__status[data-phase='uploading'],
+.cb-cmdbox__status[data-phase='job_created'] {
+  border-color: var(--cb-feedback-live-border);
+  background: var(--cb-feedback-live-bg);
+}
+
+.cb-cmdbox__status[data-phase='uploading'] .cb-cmdbox__phase,
+.cb-cmdbox__status[data-phase='job_created'] .cb-cmdbox__phase {
+  color: var(--cb-feedback-live-fg);
+}
+
+.cb-cmdbox__phase {
+  color: var(--cb-body);
+  font-weight: 500;
+}
+
+.cb-cmdbox__recovery-actions {
+  border-top: 1px solid var(--cb-border);
+  padding-top: 16px;
 }
 
 .cb-bimport-progress {

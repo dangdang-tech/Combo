@@ -7,18 +7,19 @@
 //   3. 配对态 CommandBox：展示一行命令 + usePairPolling 轮询 → 拿 jobId 进加载态。
 //   4. 加载态 ImportLoading：useSSE(job 流) 三层进度 + 落库卡逐条 + 取消；done.result.snapshotId → 完成。
 //   5. 完成态：取快照统计后【自动进入能力页】/create/capabilities（带 snapshotId + draftId；PRD：传完自动进入提取，无需手动点下一步）。
-// 续传（F-15）：URL ?jobId= / ?snapshotId= 深链直进加载态 / 完成态（工作台草稿条可带）。
+// 续传（F-15）：URL ?pairId= / ?jobId= / ?snapshotId= 分别恢复终端上传 / 处理 / 完成态。
 // 退路：整体失败由 useSSE error → StreamLoading 内 ErrorState（重试重连）；两次失败 markStepError('import')。
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { PairResult, SnapshotView, SnapshotSegmentView, DonePayload } from '@cb/shared';
 import { ApiError, useSSE, type UseSSEState } from '../../../api/index.js';
 import { ErrorState, LoadingState } from '../../../components/index.js';
+import { goToLogin } from '../../../shell/auth.js';
 import { findDraftById, useWizard, useBootstrapDraft } from '../../wizard/index.js';
 import { ImportEmptyState } from './ImportEmptyState.js';
 import { BrowserUploadProgress } from './BrowserUploadProgress.js';
 import { useBrowserImport } from './useBrowserImport.js';
-import { CommandBox, shellSafePairCommand } from './CommandBox.js';
+import { CommandBox, PairRecoveryBox, shellSafePairCommand } from './CommandBox.js';
 import { ImportLoading } from './ImportLoading.js';
 import { ImportComplete } from './ImportComplete.js';
 import { usePairPolling } from './usePairPolling.js';
@@ -34,6 +35,7 @@ type Phase =
   | { kind: 'empty' }
   | { kind: 'uploading' } // 浏览器直传中（BUG-013）：presign → 分批 PUT，进度由 useBrowserImport 承载
   | { kind: 'pairing'; pair: PairResult }
+  | { kind: 'pairing-recovery'; pairId: string }
   | { kind: 'loading'; jobId: string }
   | { kind: 'restoring' } // 深链 ?snapshotId=：异步取完成态前的占位
   | { kind: 'complete'; snapshot: SnapshotView; segments: SnapshotSegmentView[] };
@@ -41,6 +43,17 @@ type Phase =
 /** 兜底人话 ApiError（取数失败时，永不裸错）。 */
 function fallbackError(userMessage: string): ApiError {
   return new ApiError({ error: { userMessage, retriable: true, action: 'retry', traceId: '' } });
+}
+
+function pairDraftMismatchError(): ApiError {
+  return new ApiError({
+    error: {
+      userMessage: '这条上传任务属于另一个创作草稿，不会在当前页面继续。',
+      retriable: false,
+      action: 'change_input',
+      traceId: '',
+    },
+  });
 }
 
 /** done.result.snapshotId 安全取（done.result 是 unknown）。 */
@@ -56,6 +69,10 @@ function snapshotIdFromDone(done: DonePayload | undefined): string | undefined {
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/** 只有 draftId 的第二标签页用低频轮询发现后端已回填的 snapshot。 */
+export const DRAFT_COMPLETION_POLL_INTERVAL_MS = 3_000;
+const DRAFT_COMPLETION_POLL_MAX_ATTEMPTS = 400; // 前台约 20 分钟，覆盖大体量终端上传。
 
 /**
  * SSE 加载子组件：订阅导入 job 流并渲染三层加载态。
@@ -119,15 +136,16 @@ export function ImportStepPage(): ReactElement {
     clearStepError,
   } = useWizard();
 
-  // 深链续传：?snapshotId= 直进完成态、?jobId= 直进加载态（工作台草稿条可带）；?draftId= 续传带入。
+  // 深链续传：?snapshotId= 直进完成态、?jobId= 直进加载态、?pairId= 恢复终端上传轮询。
   const urlJobId = searchParams.get('jobId') ?? undefined;
   const urlSnapshotId = searchParams.get('snapshotId') ?? undefined;
+  const urlPairId = searchParams.get('pairId') ?? undefined;
   const urlDraftId = searchParams.get('draftId') ?? undefined;
   const activeDraftId = draftId ?? urlDraftId;
 
-  // 草稿 bootstrap（P0-2，续传基线）：全新进入（无 draftId、无 snapshot/job 深链）即建真实草稿，拿 draftId
+  // 草稿 bootstrap（P0-2，续传基线）：全新进入（无 draftId、无 pair/job/snapshot 深链）即建真实草稿，拿 draftId
   //   贯穿 WizardContext + 续传 URL。续传 / 回看（有任一来源）不建。失败就地 ErrorState + 重试（永不裸错）。
-  const needsBootstrap = !draftId && !urlDraftId && !urlSnapshotId && !urlJobId;
+  const needsBootstrap = !draftId && !urlDraftId && !urlSnapshotId && !urlJobId && !urlPairId;
   const bootstrap = useBootstrapDraft({ needsBootstrap });
 
   // 新建出 draftId 后回写续传 URL（?draftId=）：刷新 / 分享即精确续传基线；replace 不堆历史。
@@ -142,7 +160,9 @@ export function ImportStepPage(): ReactElement {
     ? { kind: 'restoring' }
     : urlJobId
       ? { kind: 'loading', jobId: urlJobId }
-      : { kind: 'empty' };
+      : urlPairId
+        ? { kind: 'pairing-recovery', pairId: urlPairId }
+        : { kind: 'empty' };
 
   const [phase, setPhase] = useState<Phase>(initialPhase);
   const [starting, setStarting] = useState(false);
@@ -153,6 +173,25 @@ export function ImportStepPage(): ReactElement {
   const [attempt, setAttempt] = useState(0);
   // SSE 整体失败次数（两次失败 → markStepError，开工总纲 §八②）。
   const failCountRef = useRef(0);
+  // React state 在同一个事件循环内不会立即刷新；ref 作同步门闩防止双击铸出两个 pair。
+  const startingRef = useRef(false);
+
+  /**
+   * Pair 是终端上传阶段的恢复锚点：铸码成功就立即写 URL，不等到全部上传完。
+   * 只持久化非敏感 pairId；一次性 pairingCode / command 绝不进 URL 或本地存储。
+   */
+  const enterPairing = useCallback(
+    (pair: PairResult): void => {
+      const next = new URLSearchParams(searchParams);
+      next.set('pairId', pair.pairId);
+      next.delete('jobId');
+      next.delete('snapshotId');
+      if (activeDraftId) next.set('draftId', activeDraftId);
+      setSearchParams(next, { replace: true });
+      setPhase({ kind: 'pairing', pair });
+    },
+    [activeDraftId, searchParams, setSearchParams],
+  );
 
   /**
    * Job 是导入处理中态的恢复锚点：拿到后立即写进当前 URL，并保留同一条草稿的 draftId。
@@ -162,6 +201,7 @@ export function ImportStepPage(): ReactElement {
     (jobId: string): void => {
       const next = new URLSearchParams(searchParams);
       next.set('jobId', jobId);
+      next.delete('pairId');
       next.delete('snapshotId');
       if (activeDraftId) next.set('draftId', activeDraftId);
       setSearchParams(next, { replace: true });
@@ -171,16 +211,25 @@ export function ImportStepPage(): ReactElement {
   );
 
   /** 主动取消后不再把已取消 job 当作刷新恢复目标；draftId 仍保留。 */
-  const clearJobRecoveryAnchor = useCallback((): void => {
-    if (!searchParams.has('jobId')) return;
+  const clearImportRecoveryAnchors = useCallback((): void => {
+    if (!searchParams.has('jobId') && !searchParams.has('pairId')) return;
     const next = new URLSearchParams(searchParams);
     next.delete('jobId');
+    next.delete('pairId');
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
-  // 配对轮询（仅 pairing 态有 pairId）。
-  const pairId = phase.kind === 'pairing' ? phase.pair.pairId : undefined;
+  // 配对轮询：新铸码和刷新恢复态都持续追踪同一 pairId。
+  const pairId =
+    phase.kind === 'pairing'
+      ? phase.pair.pairId
+      : phase.kind === 'pairing-recovery'
+        ? phase.pairId
+        : undefined;
   const poll = usePairPolling(pairId);
+  const pairDraftMismatch = Boolean(
+    activeDraftId && poll.status?.draftId && activeDraftId !== poll.status.draftId,
+  );
 
   // 浏览器直传编排（BUG-013 主路径）：选文件 → presign → 分批 PUT → 建 Job → 拿 jobId 转 SSE 加载态。
   //   拿到 jobId 即进现有 loading 链路复用（jobId → SSE → 完成态）。
@@ -189,12 +238,16 @@ export function ImportStepPage(): ReactElement {
     ...(activeDraftId ? { draftId: activeDraftId } : {}),
   });
 
-  // 配对拿到 jobId → URL 落恢复锚点（保留 draftId）→ 进加载态。
+  // 配对拿到 jobId → 先校验 pair 与当前 draft 一致 → URL 从 pairId 原子切到 jobId → 进加载态。
   useEffect(() => {
-    if (phase.kind === 'pairing' && poll.jobId) {
+    if (
+      (phase.kind === 'pairing' || phase.kind === 'pairing-recovery') &&
+      poll.jobId &&
+      !pairDraftMismatch
+    ) {
       enterLoadingJob(poll.jobId);
     }
-  }, [phase, poll.jobId, enterLoadingJob]);
+  }, [phase, poll.jobId, pairDraftMismatch, enterLoadingJob]);
 
   // 取完成态快照（snapshotId 来自 SSE done 或深链 ?snapshotId=）。
   const loadComplete = useCallback(
@@ -222,6 +275,63 @@ export function ImportStepPage(): ReactElement {
     },
     [activeDraftId, navigate, setSnapshotId],
   );
+
+  // 同一 draft 可能在另一标签页发起终端上传，而当前页只有 ?draftId= 。
+  // 后台在导入完成时会事务性回填 drafts.snapshot_id；低频读该真源，让第二标签页也能自动进入提取。
+  useEffect(() => {
+    if (
+      phase.kind !== 'empty' ||
+      !activeDraftId ||
+      ctxSnapshotId ||
+      urlPairId ||
+      urlJobId ||
+      urlSnapshotId
+    ) {
+      return;
+    }
+
+    let active = true;
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const ctrl = new AbortController();
+
+    const tick = async (): Promise<void> => {
+      attempts += 1;
+      try {
+        const latest = await findDraftById(activeDraftId, {
+          signal: ctrl.signal,
+          maxPages: 1,
+        });
+        if (!active) return;
+        if (latest?.snapshotId) {
+          navigateToCapabilities(latest.snapshotId);
+          return;
+        }
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        if (!active) return;
+        // 这是被动发现通道：瞬断不覆盖主页空态，下一拍自动恢复。
+      }
+      if (attempts < DRAFT_COMPLETION_POLL_MAX_ATTEMPTS) {
+        timer = setTimeout(() => void tick(), DRAFT_COMPLETION_POLL_INTERVAL_MS);
+      }
+    };
+
+    timer = setTimeout(() => void tick(), DRAFT_COMPLETION_POLL_INTERVAL_MS);
+    return () => {
+      active = false;
+      ctrl.abort();
+      if (timer) clearTimeout(timer);
+    };
+  }, [
+    phase.kind,
+    activeDraftId,
+    ctxSnapshotId,
+    urlPairId,
+    urlJobId,
+    urlSnapshotId,
+    navigateToCapabilities,
+  ]);
 
   const resolveCompletedSnapshotFromDraft = useCallback(async (): Promise<void> => {
     if (!activeDraftId) {
@@ -277,18 +387,21 @@ export function ImportStepPage(): ReactElement {
 
   // —— 动作 ——
   const handleStart = useCallback(async (): Promise<void> => {
+    if (startingRef.current) return;
+    startingRef.current = true;
     setStarting(true);
     setStartError(null);
     try {
       const pair = await createPair(activeDraftId ? { draftId: activeDraftId } : {});
       setCopied(false);
-      setPhase({ kind: 'pairing', pair });
+      enterPairing(pair);
     } catch (e) {
       setStartError(e instanceof ApiError ? e : fallbackError('生成连接命令失败，请稍后重试。'));
     } finally {
+      startingRef.current = false;
       setStarting(false);
     }
-  }, [activeDraftId]);
+  }, [activeDraftId, enterPairing]);
 
   // 浏览器直传：选了文件/目录或拖拽 → 进上传中态 + 启动编排（BUG-013 主路径）。
   const handleBrowserFiles = useCallback(
@@ -325,14 +438,14 @@ export function ImportStepPage(): ReactElement {
     setCancelling(true);
     try {
       await cancelImportJob(jobId);
-      clearJobRecoveryAnchor();
+      clearImportRecoveryAnchors();
       setPhase({ kind: 'empty' }); // 取消后回可重新发起导入态（已完成段后端保留，导入-12）。
     } catch {
       // 取消失败：留在加载态、不阻断（worker 仍可能自然完成）。
     } finally {
       setCancelling(false);
     }
-  }, [phase, clearJobRecoveryAnchor]);
+  }, [phase, clearImportRecoveryAnchors]);
 
   const handleRetry = useCallback((): void => {
     // 不重置 failCount：重试后若再失败即「两次失败」→ markStepError（开工总纲 §八②两次失败错误态）。
@@ -365,6 +478,26 @@ export function ImportStepPage(): ReactElement {
           else if (phase.kind === 'restoring' && urlSnapshotId) void loadComplete(urlSnapshotId);
         }}
         onChangeInput={() => setStartError(null)}
+      />
+    );
+  }
+
+  if ((phase.kind === 'pairing' || phase.kind === 'pairing-recovery') && pairDraftMismatch) {
+    return <ErrorState error={pairDraftMismatchError()} onChangeInput={() => void handleStart()} />;
+  }
+
+  if (
+    (phase.kind === 'pairing' || phase.kind === 'pairing-recovery') &&
+    poll.error &&
+    !poll.reconnecting
+  ) {
+    return (
+      <ErrorState
+        error={poll.error}
+        onRetry={poll.retry}
+        onChangeInput={() => void handleStart()}
+        onEscalate={() => goToLogin(window.location.pathname + window.location.search)}
+        escalateLabel="重新登录"
       />
     );
   }
@@ -406,6 +539,21 @@ export function ImportStepPage(): ReactElement {
         status={poll.status}
         onCopy={handleCopy}
         copied={copied}
+        onRegenerate={() => void handleStart()}
+        reconnecting={poll.reconnecting}
+        error={poll.error}
+        regenerating={starting}
+      />
+    );
+  }
+
+  if (phase.kind === 'pairing-recovery') {
+    return (
+      <PairRecoveryBox
+        status={poll.status}
+        reconnecting={poll.reconnecting}
+        error={poll.error}
+        regenerating={starting}
         onRegenerate={() => void handleStart()}
       />
     );

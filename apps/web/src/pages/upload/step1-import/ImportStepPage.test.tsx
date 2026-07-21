@@ -5,7 +5,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { WizardProvider, useWizard } from '../../wizard/index.js';
-import { ImportStepPage } from './ImportStepPage.js';
+import { DRAFT_COMPLETION_POLL_INTERVAL_MS, ImportStepPage } from './ImportStepPage.js';
 import { installFetchMock, type FetchMock } from '../../../test/mockFetch.js';
 import { __setFetchEventSourceForTests } from '../../../api/useSSE.js';
 import {
@@ -106,11 +106,89 @@ describe('ImportStepPage', () => {
     await waitFor(() =>
       expect(screen.getByText('在你电脑的终端里运行这行命令')).toBeInTheDocument(),
     );
+    // 不等上传完：铸码后立即把非敏感 pairId 写入 URL，刷新仍可继续轮询。
+    expect(screen.getByTestId('path')).toHaveTextContent('/create/import?draftId=d1&pairId=p1');
     // 铸码用写命令 scope。
     const pairCall = mock.calls.find(
       (c) => c.url.includes('/import/connect/pair') && c.method === 'POST',
     );
     expect(pairCall?.headers['X-Idempotency-Scope']).toBe('import.connect.pair');
+  });
+
+  it('刷新后按 ?pairId= 恢复轮询 → job_created 时原子切换为 jobId 并建 SSE', async () => {
+    mock = installFetchMock([
+      {
+        status: 200,
+        json: {
+          data: {
+            pairId: 'p1',
+            draftId: 'd1',
+            phase: 'job_created',
+            jobId: 'job-after-refresh',
+            eventsUrl: '/api/v1/jobs/job-after-refresh/events',
+            uploadedParts: 304,
+            totalParts: 304,
+          },
+        },
+      },
+    ]);
+
+    renderPage('/create/import?draftId=d1&pairId=p1', 'd1');
+    await waitFor(() =>
+      expect(screen.getByTestId('path')).toHaveTextContent(
+        '/create/import?draftId=d1&jobId=job-after-refresh',
+      ),
+    );
+    expect(screen.getByTestId('path')).not.toHaveTextContent('pairId=');
+    await waitFor(() =>
+      expect(MockFetchEventSource.last?.url).toContain('/jobs/job-after-refresh/events'),
+    );
+  });
+
+  it('?pairId= 属于另一 draft 时不进入其 job，就地给出换任务退路', async () => {
+    mock = installFetchMock([
+      {
+        status: 200,
+        json: {
+          data: {
+            pairId: 'p-other',
+            draftId: 'd-other',
+            phase: 'job_created',
+            jobId: 'job-other',
+            uploadedParts: 5,
+            totalParts: 5,
+          },
+        },
+      },
+    ]);
+
+    renderPage('/create/import?draftId=d1&pairId=p-other', 'd1');
+    expect(await screen.findByText(/这条上传任务属于另一个创作草稿/)).toBeInTheDocument();
+    expect(screen.getByTestId('path')).toHaveTextContent(
+      '/create/import?draftId=d1&pairId=p-other',
+    );
+    expect(MockFetchEventSource.last).toBeFalsy();
+  });
+
+  it('?pairId= 状态已不存在时显示人话退路，不再静默无限轮询', async () => {
+    mock = installFetchMock([
+      {
+        status: 404,
+        json: {
+          error: {
+            userMessage: '这次上传已经结束或不存在，请重新生成命令。',
+            retriable: false,
+            action: 'change_input',
+            traceId: 'trace-pair-gone',
+          },
+        },
+      },
+    ]);
+
+    renderPage('/create/import?draftId=d1&pairId=gone', 'd1');
+    expect(await screen.findByText(/这次上传已经结束或不存在/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '去修改' })).toBeInTheDocument();
+    expect(mock.calls.filter((call) => call.url.includes('/pair/gone'))).toHaveLength(1);
   });
 
   it('本机助手拿到 jobId → URL 同时保留 draftId + jobId；按该 URL 重新挂载恢复同一条 SSE', async () => {
@@ -268,6 +346,39 @@ describe('ImportStepPage', () => {
       ),
     );
     expect(screen.queryByText('已入')).toBeNull();
+  });
+
+  it('同 draft 第二标签页只有 ?draftId= → 后端回填 snapshot 后也会自动进入能力页', async () => {
+    vi.useFakeTimers();
+    try {
+      mock = installFetchMock([
+        {
+          status: 200,
+          json: {
+            data: {
+              id: 'd1',
+              status: 'active',
+              currentStep: 'extract',
+              snapshotId: 'snap-from-other-tab',
+              createdAt: '2026-06-17T00:00:00Z',
+              updatedAt: '2026-06-17T00:10:00Z',
+            },
+          },
+        },
+      ]);
+      renderPage('/create/import?draftId=d1', 'd1');
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DRAFT_COMPLETION_POLL_INTERVAL_MS);
+      });
+
+      expect(screen.getByTestId('path')).toHaveTextContent(
+        '/create/capabilities?snapshotId=snap-from-other-tab&draftId=d1',
+      );
+      expect(mock.calls.filter((call) => call.url.includes('/drafts/d1'))).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('导入 done 缺 snapshotId 时，从 draft 反查 snapshotId 后进入能力页', async () => {

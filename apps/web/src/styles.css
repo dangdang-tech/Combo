@@ -1779,11 +1779,93 @@ body {
   font-size: 14px;
   color: var(--cb-muted);
 }
-.cb-cmdbox__phase[data-phase='expired'] {
-  color: #d4380d;
+.cb-cmdbox__status {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--cb-border);
+  border-radius: 8px;
+  background: var(--cb-surface-raised);
+}
+.cb-cmdbox__status-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.cb-cmdbox__status-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--cb-muted);
+}
+.cb-cmdbox__status[data-phase='uploading'] .cb-cmdbox__status-dot,
+.cb-cmdbox__status[data-phase='job_created'] .cb-cmdbox__status-dot {
+  background: var(--cb-feedback-live);
+}
+.cb-cmdbox__status[data-phase='expired'] {
+  border-color: var(--cb-state-error-border);
+  background: var(--cb-state-error-bg);
+}
+.cb-cmdbox__status[data-phase='expired'] .cb-cmdbox__phase {
+  color: var(--cb-state-error-fg);
+}
+.cb-cmdbox__status[data-phase='expired'] .cb-cmdbox__status-dot {
+  background: var(--cb-state-error-fg);
+}
+.cb-cmdbox__progress {
+  display: block;
+  width: 100%;
+  height: 7px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: var(--cb-border-soft);
+  color: var(--cb-feedback-live);
+  accent-color: var(--cb-feedback-live);
+}
+.cb-cmdbox__progress::-webkit-progress-bar {
+  border-radius: inherit;
+  background: var(--cb-border-soft);
+}
+.cb-cmdbox__progress::-webkit-progress-value {
+  border-radius: inherit;
+  background: var(--cb-feedback-live);
+}
+.cb-cmdbox__progress::-moz-progress-bar {
+  border-radius: inherit;
+  background: var(--cb-feedback-live);
+}
+.cb-cmdbox__connection {
+  margin: 0;
+  color: var(--cb-state-warning-fg);
+  font-size: 12px;
+}
+.cb-cmdbox__recovery-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding-top: 2px;
+}
+.cb-cmdbox__recovery-actions p {
+  margin: 0;
+  max-width: 620px;
+  color: var(--cb-muted);
+  font-size: 13px;
+  line-height: 1.6;
 }
 .cb-cmdbox__regen {
   align-self: flex-start;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 640px) {
+  .cb-cmdbox__recovery-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 /* ======== STEP① 导入：加载态 ======== */

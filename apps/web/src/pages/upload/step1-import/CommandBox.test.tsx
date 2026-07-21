@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { PairResult, PairStatusView } from '@cb/shared';
-import { CommandBox, shellSafePairCommand } from './CommandBox.js';
+import { CommandBox, PairRecoveryBox, shellSafePairCommand } from './CommandBox.js';
 
 function pair(over: Partial<PairResult> = {}): PairResult {
   return {
@@ -91,7 +91,7 @@ describe('CommandBox', () => {
     expect(screen.getByText(/等待你在终端运行/)).toBeInTheDocument();
   });
 
-  it('uploading 态 → 量化文案「已传 X / Y 片」', () => {
+  it('uploading 态 → 数字+百分比+可访问进度条', () => {
     render(
       <CommandBox
         pair={pair()}
@@ -100,7 +100,11 @@ describe('CommandBox', () => {
         onRegenerate={() => undefined}
       />,
     );
-    expect(screen.getByText(/已传 2 \/ 5 片/)).toBeInTheDocument();
+    expect(screen.getByText(/2 \/ 5 片（40%）/)).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: '终端上传进度 2 / 5 片' })).toHaveAttribute(
+      'value',
+      '2',
+    );
   });
 
   it('expired 态 → 「已经过期」+ 「重新生成命令」引导（态非错误）', async () => {
@@ -116,5 +120,31 @@ describe('CommandBox', () => {
     expect(screen.getByText(/已经过期/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: '重新生成命令' }));
     expect(onRegenerate).toHaveBeenCalledOnce();
+  });
+
+  it('刷新恢复态继续显示上传进度，不伪造旧配对命令', () => {
+    render(
+      <PairRecoveryBox
+        status={status('uploading', { uploadedParts: 189, totalParts: 304 })}
+        onRegenerate={() => undefined}
+      />,
+    );
+    expect(screen.getByRole('heading', { name: '终端正在上传' })).toBeInTheDocument();
+    expect(screen.getByText(/189 \/ 304 片（62%）/)).toBeInTheDocument();
+    expect(screen.queryByText(/curl/)).not.toBeInTheDocument();
+  });
+
+  it('刷新后仍在 waiting 态 → 给重新生成命令的安全退路', async () => {
+    const onRegenerate = vi.fn();
+    const { rerender } = render(
+      <PairRecoveryBox status={status('waiting')} onRegenerate={onRegenerate} />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: '重新生成命令' }));
+    expect(onRegenerate).toHaveBeenCalledOnce();
+
+    rerender(
+      <PairRecoveryBox status={status('waiting')} regenerating onRegenerate={onRegenerate} />,
+    );
+    expect(screen.getByRole('button', { name: '正在生成…' })).toBeDisabled();
   });
 });

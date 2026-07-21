@@ -94,6 +94,7 @@ export type PairPhase = z.infer<typeof PairPhaseSchema>;
 
 export const PairStatusViewSchema = z.object({
   pairId: z.string(),
+  draftId: IdSchema.optional(),
   phase: PairPhaseSchema,
   jobId: IdSchema.optional(),
   eventsUrl: z

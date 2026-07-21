@@ -523,6 +523,7 @@ export function connectPairStatusHandler(): RouteHandlerMethod {
 
     const view: PairStatusView = {
       pairId,
+      ...(row.draftId ? { draftId: row.draftId } : {}),
       phase: row.phase,
       ...(row.jobId ? { jobId: row.jobId, eventsUrl: SSE_ROUTES.jobEvents(row.jobId) } : {}),
       uploadedParts: row.uploadedParts,

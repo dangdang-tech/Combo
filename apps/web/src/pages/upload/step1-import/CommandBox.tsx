@@ -8,6 +8,7 @@
 // 永不裸转圈：每个阶段都有人话会话状态 + 进度量化，绝不空转。
 import type { ReactElement } from 'react';
 import type { PairResult, PairStatusView } from '@cb/shared';
+import type { ApiError } from '../../../api/index.js';
 
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\"'\"'")}'`;
@@ -36,6 +37,12 @@ export interface CommandBoxProps {
   copied?: boolean;
   /** 配对码过期 → 点「重新生成」重新铸码。 */
   onRegenerate: () => void;
+  /** 可恢复的状态轮询瞬断；命令与已传进度仍保留。 */
+  reconnecting?: boolean;
+  /** 重连中显示的人话错误。 */
+  error?: ApiError | undefined;
+  /** 正在重新铸码；禁用按钮避免并发生成两条任务。 */
+  regenerating?: boolean;
 }
 
 /** 把 phase 翻成人话会话状态行（导入-25 逐行会话状态）。 */
@@ -46,7 +53,8 @@ function phasePhrase(status: PairStatusView | undefined): string {
       const done = status?.uploadedParts;
       const total = status?.totalParts;
       if (typeof done === 'number' && typeof total === 'number' && total > 0) {
-        return `正在上传你的对话历史…（已传 ${done} / ${total} 片）`;
+        const percent = Math.min(100, Math.round((done / total) * 100));
+        return `正在上传你的对话历史 · ${done} / ${total} 片（${percent}%）`;
       }
       return '正在上传你的对话历史…';
     }
@@ -60,12 +68,55 @@ function phasePhrase(status: PairStatusView | undefined): string {
   }
 }
 
+function PairStatusPanel({
+  status,
+  reconnecting = false,
+  error,
+}: {
+  status: PairStatusView | undefined;
+  reconnecting?: boolean;
+  error?: ApiError | undefined;
+}): ReactElement {
+  const phase = status?.phase ?? 'waiting';
+  const done = status?.uploadedParts;
+  const total = status?.totalParts;
+  const showProgress =
+    phase === 'uploading' && typeof done === 'number' && typeof total === 'number' && total > 0;
+
+  return (
+    <div className="cb-cmdbox__status" data-phase={phase}>
+      <div className="cb-cmdbox__status-line">
+        <span className="cb-cmdbox__status-dot" aria-hidden="true" />
+        <p className="cb-cmdbox__phase" role="status" aria-live="polite">
+          {phasePhrase(status)}
+        </p>
+      </div>
+      {showProgress && (
+        <progress
+          className="cb-cmdbox__progress"
+          aria-label={`终端上传进度 ${done} / ${total} 片`}
+          value={done}
+          max={total}
+        />
+      )}
+      {reconnecting && error && (
+        <p className="cb-cmdbox__connection" role="status" aria-live="polite">
+          {error.userMessage}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function CommandBox({
   pair,
   status,
   onCopy,
   copied = false,
   onRegenerate,
+  reconnecting = false,
+  error,
+  regenerating = false,
 }: CommandBoxProps): ReactElement {
   const phase = status?.phase ?? 'waiting';
   const expired = phase === 'expired';
@@ -92,9 +143,7 @@ export function CommandBox({
       </div>
 
       {/* 会话状态（逐行，永不裸转圈）。 */}
-      <p className="cb-cmdbox__phase" data-phase={phase} role="status" aria-live="polite">
-        {phasePhrase(status)}
-      </p>
+      <PairStatusPanel status={status} reconnecting={reconnecting} error={error} />
 
       {/* 过期引导（态非错误，导入-25）。 */}
       {expired && (
@@ -102,9 +151,65 @@ export function CommandBox({
           type="button"
           className="cb-btn cb-btn--primary cb-cmdbox__regen"
           onClick={onRegenerate}
+          disabled={regenerating}
         >
-          重新生成命令
+          {regenerating ? '正在生成…' : '重新生成命令'}
         </button>
+      )}
+    </section>
+  );
+}
+
+export interface PairRecoveryBoxProps {
+  /** URL 中的 pairId 已恢复轮询，但一次性明文命令不会持久化。 */
+  status: PairStatusView | undefined;
+  reconnecting?: boolean;
+  error?: ApiError | undefined;
+  regenerating?: boolean;
+  onRegenerate: () => void;
+}
+
+/**
+ * 刷新 / 重开后的配对恢复态：继续追踪同一 pairId，不把一次性配对码放进 URL 或存储。
+ * waiting 时无法安全重建旧命令，因此显式提供重新生成；uploading 时则原地继续接收进度。
+ */
+export function PairRecoveryBox({
+  status,
+  reconnecting = false,
+  error,
+  regenerating = false,
+  onRegenerate,
+}: PairRecoveryBoxProps): ReactElement {
+  const phase = status?.phase ?? 'waiting';
+  const canRegenerate = phase === 'waiting' || phase === 'expired';
+
+  return (
+    <section className="cb-cmdbox" aria-label="恢复终端上传">
+      <h2 className="cb-cmdbox__title">
+        {phase === 'uploading' ? '终端正在上传' : '正在恢复这次上传'}
+      </h2>
+      <p className="cb-cmdbox__lead">
+        页面已经重新连上云端任务。终端上传完成后，这里会自动进入处理和能力提取。
+      </p>
+
+      <PairStatusPanel status={status} reconnecting={reconnecting} error={error} />
+
+      {canRegenerate && (
+        <div className="cb-cmdbox__recovery-actions">
+          <p>
+            {phase === 'expired'
+              ? '这条配对码已过期，需要生成一条新命令。'
+              : '为了安全，刷新后不会保留旧配对码。如果终端还没开始，请重新生成。'}
+          </p>
+          <button
+            type="button"
+            className="cb-btn cb-btn--primary cb-cmdbox__regen"
+            onClick={onRegenerate}
+            disabled={regenerating}
+          >
+            {regenerating ? '正在生成…' : '重新生成命令'}
+          </button>
+        </div>
       )}
     </section>
   );
