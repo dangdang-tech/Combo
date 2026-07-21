@@ -241,7 +241,7 @@ export type StudioState = z.infer<typeof StudioStateSchema>;
 
 export const CreateStudioTestBodySchema = z.object({
   revisionId: z.string().uuid(),
-  prompt: z.string().trim().min(1),
+  prompt: z.string().trim().min(1).max(12_000),
 });
 export type CreateStudioTestBody = z.infer<typeof CreateStudioTestBodySchema>;
 

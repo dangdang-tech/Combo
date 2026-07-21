@@ -1108,6 +1108,17 @@ export function ChatPage() {
     currentRevision &&
     selectedStudioRevision.revisionNo !== currentRevision.revisionNo,
   );
+  const canStartCurrentTest = Boolean(
+    currentRevision && !isViewingHistory && !agui.isRunning && !studioTest.isRunning,
+  );
+  const canRunPreview = Boolean(
+    canStartCurrentTest &&
+    previewVersion &&
+    currentRevision &&
+    selectedStudioRevision?.id === currentRevision.id &&
+    previewVersion.artifactKey === currentRevision.artifactKey &&
+    previewVersion.version === currentRevision.artifactVersion,
+  );
   const showDraftStudio = isDraftTrial;
   const showInitialGenerating = showDraftStudio
     ? isBootstrapping
@@ -1150,10 +1161,13 @@ export function ChatPage() {
     setMobilePane('preview');
   };
 
-  const startStudioTest = (prompt: string): void => {
-    if (!currentRevision) return;
+  const startStudioTest = (prompt: string): boolean => {
+    if (!currentRevision || !canStartCurrentTest) return false;
+    const started = studioTest.run(currentRevision.id, prompt);
+    if (!started) return false;
     setStudioView('test');
-    studioTest.run(currentRevision.id, prompt);
+    setMobilePane('preview');
+    return true;
   };
 
   return (
@@ -1404,6 +1418,13 @@ export function ChatPage() {
                           <ArtifactRenderer
                             key={`${previewVersion.artifactKey}-${previewVersion.version}`}
                             artifact={previewVersion}
+                            onRunRequest={
+                              canRunPreview
+                                ? ({ prompt }) => {
+                                    startStudioTest(prompt);
+                                  }
+                                : undefined
+                            }
                           />
                         </div>
                       </div>

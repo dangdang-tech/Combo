@@ -1,19 +1,23 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { ArtifactVersion } from '@cb/shared';
 import { renderMarkdown } from '../lib/markdown.js';
 
+export interface ComboRunRequest {
+  prompt: string;
+}
+
+export interface ArtifactRendererProps {
+  artifact: ArtifactVersion;
+  onRunRequest?: (request: ComboRunRequest) => void;
+}
+
+const MAX_COMBO_RUN_PROMPT_LENGTH = 12_000;
+
 /** 按 kind 渲染一个 artifact 版本。html 走【沙箱 iframe】（allow-scripts、无 same-origin，隔离父页）。 */
-export function ArtifactRenderer({ artifact }: { artifact: ArtifactVersion }) {
+export function ArtifactRenderer({ artifact, onRunRequest }: ArtifactRendererProps) {
   switch (artifact.kind) {
     case 'html':
-      return (
-        <iframe
-          className="rt-artifact__frame"
-          title={artifact.title}
-          sandbox="allow-scripts allow-popups allow-forms"
-          srcDoc={artifact.content}
-        />
-      );
+      return <HtmlView artifact={artifact} onRunRequest={onRunRequest} />;
     case 'markdown':
       return <MarkdownView content={artifact.content} />;
     case 'code':
@@ -23,6 +27,47 @@ export function ArtifactRenderer({ artifact }: { artifact: ArtifactVersion }) {
     default:
       return <pre className="rt-artifact__raw">{artifact.content}</pre>;
   }
+}
+
+function HtmlView({ artifact, onRunRequest }: ArtifactRendererProps) {
+  const frameRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    if (!onRunRequest) return;
+
+    const handleMessage = (event: MessageEvent<unknown>): void => {
+      if (event.source !== frameRef.current?.contentWindow) return;
+      if (!isComboRunMessage(event.data)) return;
+      const prompt = event.data.prompt.trim();
+      if (!prompt || prompt.length > MAX_COMBO_RUN_PROMPT_LENGTH) return;
+      onRunRequest({ prompt });
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [onRunRequest]);
+
+  return (
+    <iframe
+      ref={frameRef}
+      className="rt-artifact__frame"
+      title={artifact.title}
+      sandbox="allow-scripts allow-popups allow-forms"
+      srcDoc={artifact.content}
+    />
+  );
+}
+
+function isComboRunMessage(
+  value: unknown,
+): value is { type: 'combo:run'; version: 1; prompt: string } {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as { type?: unknown; version?: unknown; prompt?: unknown };
+  return (
+    candidate.type === 'combo:run' &&
+    candidate.version === 1 &&
+    typeof candidate.prompt === 'string'
+  );
 }
 
 function MarkdownView({ content }: { content: string }) {

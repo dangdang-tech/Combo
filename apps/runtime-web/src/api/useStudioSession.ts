@@ -22,7 +22,7 @@ export interface StudioTestRunState {
   error: string | null;
   testSessionId: string | null;
   revisionId: string | null;
-  run: (revisionId: string, prompt: string) => void;
+  run: (revisionId: string, prompt: string) => boolean;
 }
 
 export function useStudioTestRun(studioSessionId: string | undefined): StudioTestRunState {
@@ -34,11 +34,13 @@ export function useStudioTestRun(studioSessionId: string | undefined): StudioTes
   const [testSessionId, setTestSessionId] = useState<string | null>(null);
   const [revisionId, setRevisionId] = useState<string | null>(null);
   const studioSessionRef = useRef(studioSessionId);
+  const busyRef = useRef(false);
 
   useEffect(() => {
     studioSessionRef.current = studioSessionId;
     sourceRef.current?.close();
     sourceRef.current = null;
+    busyRef.current = false;
     setIsRunning(false);
     setOutputText('');
     setError(null);
@@ -57,6 +59,7 @@ export function useStudioTestRun(studioSessionId: string | undefined): StudioTes
     source.close();
     if (sourceRef.current === source) sourceRef.current = null;
     if (studioSessionRef.current !== expectedStudioSessionId) return;
+    busyRef.current = false;
     setIsRunning(false);
     void qc.invalidateQueries({ queryKey: ['studio', expectedStudioSessionId] });
     void qc.invalidateQueries({ queryKey: ['session', finishedTestSessionId] });
@@ -91,8 +94,9 @@ export function useStudioTestRun(studioSessionId: string | undefined): StudioTes
     };
   };
 
-  const run = (revisionId: string, prompt: string): void => {
-    if (!studioSessionId || isRunning || !prompt.trim()) return;
+  const run = (revisionId: string, prompt: string): boolean => {
+    if (!studioSessionId || busyRef.current || !prompt.trim()) return false;
+    busyRef.current = true;
     sourceRef.current?.close();
     setIsRunning(true);
     setOutputText('');
@@ -110,9 +114,11 @@ export function useStudioTestRun(studioSessionId: string | undefined): StudioTes
       })
       .catch(() => {
         if (studioSessionRef.current !== expectedStudioSessionId) return;
+        busyRef.current = false;
         setIsRunning(false);
         setError('无法开始真实试用，请稍后重试。');
       });
+    return true;
   };
 
   return { isRunning, outputText, error, testSessionId, revisionId, run };

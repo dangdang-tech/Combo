@@ -14,7 +14,10 @@ const DESIGN_STUDIO_RULES = `
 - structured / markdown / code 可用作辅助产物，但不能取代 main HTML 页面。
 - 这不是 Landing Page。页面必须围绕当前能力的真实 inputs、主操作、运行状态和 output 组织成可使用的工具界面。
 - 主要区块与可编辑元素使用稳定且语义化的 data-combo-key（例如 input-goal、run-primary、result-main），后续修改保持 key 不变。
+- Miniapp 运行在 Combo 的沙箱 iframe 中。页面主操作必须使用 data-combo-key="run-primary"，把用户当前填写的真实表单内容整理成非空任务文本 prompt（不得写死或复用示例值），并且只通过 window.parent.postMessage({ type: 'combo:run', version: 1, prompt }, '*') 请求 Combo Runtime；平台会自动打开真实任务区并展示真实结果。
 - 未收到真实 Runtime 结果时不得伪造“生成成功”或虚构结果；可以展示清楚的待运行、空状态和示例输入。
+- 发出 combo:run 后，页面内只可展示已提交或正在运行的等待状态；真正结果由 Combo Runtime 生成和展示。
+- 禁止使用 setTimeout、setInterval、Math.random、硬编码样例、mock / 模拟数据、伪网络请求、页面直连模型 API 或“演示模式”来伪装能力执行。页面内按钮不得自行构造成功结果，主操作必须走 combo:run bridge。
 - 聊天正文只用简短说明本次真正改了什么；页面本体必须通过 upsert_artifact 工具更新。
 `.trim();
 
@@ -40,6 +43,27 @@ export function isCompleteDesignStudioHtml(content: string | null | undefined): 
     /<body(?:\s[^>]*)?>/i.test(content) &&
     /<\/body>/i.test(content) &&
     /<\/html>/i.test(content)
+  );
+}
+
+/** Miniapp 主操作必须交给宿主 Runtime，且不能以常见定时/随机逻辑伪造结果。 */
+export function hasDesignStudioRuntimeBridge(content: string | null | undefined): boolean {
+  if (!content) return false;
+  const postsToParent = /(?:window\s*\.\s*)?parent\s*\.\s*postMessage\s*\(/i.test(content);
+  const identifiesBridge = /['"]combo:run['"]/i.test(content);
+  const versioned = /['"]?version['"]?\s*:\s*1\b/i.test(content);
+  const includesPrompt = /\bprompt\b/i.test(content);
+  const hasPrimaryAction = /data-combo-key\s*=\s*['"]run-primary['"]/i.test(content);
+  const simulatesRuntime = /\b(?:setTimeout|setInterval)\s*\(|\bMath\s*\.\s*random\s*\(/i.test(
+    content,
+  );
+  return (
+    postsToParent &&
+    identifiesBridge &&
+    versioned &&
+    includesPrompt &&
+    hasPrimaryAction &&
+    !simulatesRuntime
   );
 }
 

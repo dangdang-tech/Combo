@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   hasDesignStudioPage,
+  hasDesignStudioRuntimeBridge,
   isCompleteDesignStudioHtml,
   withDesignStudioInstructions,
 } from './design-studio-prompt.js';
@@ -16,6 +17,29 @@ describe('withDesignStudioInstructions', () => {
     expect(prompt).toContain('复用同一 artifactKey 产生新版本');
     expect(prompt).toContain('这不是 Landing Page');
     expect(prompt).toContain('data-combo-key');
+    expect(prompt).toContain('data-combo-key="run-primary"');
+    expect(prompt).toContain("type: 'combo:run'");
+    expect(prompt).toContain('version: 1');
+    expect(prompt).toContain('禁止使用 setTimeout、setInterval、Math.random');
+  });
+
+  it('requires the versioned Runtime bridge and rejects simulated execution', () => {
+    const realBridge = `<!doctype html><html><body><button data-combo-key="run-primary">运行</button><script>
+      const prompt = '处理真实任务';
+      window.parent.postMessage({ type: 'combo:run', version: 1, prompt }, '*');
+    </script></body></html>`;
+    const fakeResult = `<!doctype html><html><body><script>
+      const prompt = '处理真实任务';
+      window.parent.postMessage({ type: 'combo:run', version: 1, prompt }, '*');
+      setTimeout(() => document.body.textContent = '成功', 800);
+    </script></body></html>`;
+
+    expect(hasDesignStudioRuntimeBridge(realBridge)).toBe(true);
+    expect(hasDesignStudioRuntimeBridge(realBridge.replace('version: 1', 'version: 2'))).toBe(
+      false,
+    );
+    expect(hasDesignStudioRuntimeBridge(fakeResult)).toBe(false);
+    expect(hasDesignStudioRuntimeBridge('<html><body>没有 bridge</body></html>')).toBe(false);
   });
 
   it('only accepts a fresh main HTML artifact as a completed design result', () => {

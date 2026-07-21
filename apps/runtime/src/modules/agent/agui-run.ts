@@ -16,7 +16,11 @@ import { createArtifactTool, type ArtifactValidationInput } from '../artifact/ar
 import { saveTurn, type SessionRow } from '../session/repo.js';
 import type { AguiEmitter } from './agui-emitter.js';
 import { buildAgent } from './build-agent.js';
-import { hasDesignStudioPage, isCompleteDesignStudioHtml } from './design-studio-prompt.js';
+import {
+  hasDesignStudioPage,
+  hasDesignStudioRuntimeBridge,
+  isCompleteDesignStudioHtml,
+} from './design-studio-prompt.js';
 import { hasLlmCredential } from './model.js';
 
 export interface TurnLogger {
@@ -130,6 +134,9 @@ export async function runAgui(input: RunAguiInput): Promise<RunAguiResult> {
             if (artifact.kind !== 'html' || !isCompleteDesignStudioHtml(artifact.content)) {
               return 'Design Agent 的 main 产物必须是完整 HTML 文档，请修正后重新提交。';
             }
+            if (!hasDesignStudioRuntimeBridge(artifact.content)) {
+              return 'Design Agent 的 main 页面必须使用 version 1 的 combo:run bridge 调用真实 Runtime，且不得使用定时器或随机数模拟结果。';
+            }
             return null;
           },
         }
@@ -214,7 +221,9 @@ export async function runAgui(input: RunAguiInput): Promise<RunAguiResult> {
 
   if (
     input.intent === 'design' &&
-    (!hasDesignStudioPage(collected) || !isCompleteDesignStudioHtml(designPageContent))
+    (!hasDesignStudioPage(collected) ||
+      !isCompleteDesignStudioHtml(designPageContent) ||
+      !hasDesignStudioRuntimeBridge(designPageContent))
   ) {
     closeTextIfOpen();
     emitStage(stageTemplates.length - 1, 'failed');
