@@ -6,7 +6,7 @@ data:
   init-buckets.sh: |
     #!/bin/sh
     # 一次性 minio_mc 容器入口（O-02）：建 ObjectStore 四桶（70 §8.2）。minio healthy 后跑、跑完退。幂等可重入。
-    # 四桶：combo-raw（去敏快照）/ combo-artifacts（产物）/ combo-exports（导出）/ combo-experience（经验体语料）。
+    # 四桶：保留现行对象存储协议名 agora-* 以兼容 API/Runtime；这是内部技术标识，不是用户可见品牌。
     set -eu
 
     S3_ENDPOINT="${S3_ENDPOINT:-http://minio:9000}"
@@ -24,7 +24,7 @@ data:
       sleep 2
     done
 
-    for bucket in combo-raw combo-artifacts combo-exports combo-experience; do
+    for bucket in agora-raw agora-artifacts agora-exports agora-experience; do
       # mb 已存在不报错（--ignore-existing → 幂等）
       mc mb --ignore-existing "local/${bucket}"
       echo "[init-buckets] ensured bucket '${bucket}'"

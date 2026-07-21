@@ -64,6 +64,10 @@ ready="$(curl "${curl_common[@]}" "${curl_auth[@]}" --fail "$REVIEW_BASE_URL/rea
 printf '%s' "$ready" | grep -q '"ready":true' || fail "/ready 未返回 ready=true：$ready"
 pass '公网 API readiness 通过'
 
+runtime_ready="$(curl "${curl_common[@]}" "${curl_auth[@]}" --fail "$REVIEW_BASE_URL/__review/runtime-ready")" || fail 'Runtime readiness 不可达或未就绪'
+printf '%s' "$runtime_ready" | grep -q '"ok":true' || fail "Runtime readiness 未返回 ok=true：$runtime_ready"
+pass '公网 Runtime readiness 通过'
+
 runtime="$(curl "${curl_common[@]}" "${curl_auth[@]}" --fail "$REVIEW_BASE_URL/try/")" || fail 'runtime 页面不可达'
 printf '%s' "$runtime" | grep -qi '<html' || fail 'runtime 入口未返回 HTML'
 pass 'runtime 静态入口可达'

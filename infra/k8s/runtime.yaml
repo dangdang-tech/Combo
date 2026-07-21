@@ -99,16 +99,16 @@ spec:
               containerPort: 3100
           livenessProbe:
             httpGet:
-              path: /health
+              path: /healthz
               port: 3100
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 6
-          # readiness 必须访问会检查全部依赖的 /ready，不能照抄 compose 的 /health。
+          # Runtime 的健康路由是 /healthz + /readyz；/readyz 会真实探测 DB。
           readinessProbe:
             httpGet:
-              path: /ready
+              path: /readyz
               port: 3100
             initialDelaySeconds: 5
             periodSeconds: 10
