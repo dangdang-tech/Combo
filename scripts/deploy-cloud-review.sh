@@ -82,11 +82,22 @@ kubectl -n "$NAMESPACE" wait --for=condition=complete job/migrate --timeout=300s
 
 echo "[cloud-review] 3/3 迁移成功后滚动固定单副本业务面"
 kubectl kustomize --load-restrictor=LoadRestrictionsNone "$WORK_ROOT/overlays/cloud-review/apps" | kubectl apply -f -
-# ConfigMap 与 Secret 使用稳定名称；即使同一 SHA 下只轮换访问凭据，也要显式重启 Web，
-# 避免 Nginx 进程继续持有旧的 envsubst 结果。
-kubectl -n "$NAMESPACE" rollout restart deployment/web
+# ConfigMap 与 Secret 使用稳定名称；即使同一 SHA 下只轮换凭据，也要显式重启
+# 使用 Secret 的运行面，以及持有 Nginx envsubst 结果的 Web。
+kubectl -n "$NAMESPACE" rollout restart deployment/worker deployment/runtime deployment/web
 for deployment in api worker consumer sweeper runtime web; do
   kubectl -n "$NAMESPACE" rollout status "deployment/$deployment" --timeout=300s
 done
+
+# Cloud Review 必须能真实运行 Agent；readiness 允许 LLM degraded，部署验收不能允许。
+kubectl -n "$NAMESPACE" exec deployment/runtime -- sh -ec '
+  case "${RUNTIME_LLM_PROVIDER:-}" in
+    openrouter) test -n "${OPENROUTER_API_KEY:-}" ;;
+    anthropic) test -n "${ANTHROPIC_API_KEY:-}" ;;
+    "") test -n "${OPENROUTER_API_KEY:-}" || test -n "${ANTHROPIC_API_KEY:-}" ;;
+    *) exit 1 ;;
+  esac
+  test -n "${RUNTIME_LLM_MODEL:-}"
+'
 
 echo "[cloud-review] 已部署 $SHA 到 $NAMESPACE（web 30081，MinIO API/console 30901/30902）"

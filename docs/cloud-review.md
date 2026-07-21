@@ -56,8 +56,10 @@ Cloud Review 的 Web 入口整体受独立 Cookie 访问闸保护。用户从 `/
 
 创建受保护的 `cloud-review` Environment，启用 required reviewers，并配置：
 
-- Secrets：`CLOUD_REVIEW_SSH_KEY`、`CLOUD_REVIEW_HOST`、`CLOUD_REVIEW_USER`、`CLOUD_REVIEW_ACCESS_TOKEN`。
-- Variable：`CLOUD_REVIEW_BASE_URL`，例如 `https://review.buildwithcombo.com`。
+- Secrets：`CLOUD_REVIEW_SSH_KEY`、`CLOUD_REVIEW_HOST`、`CLOUD_REVIEW_USER`、`CLOUD_REVIEW_ACCESS_TOKEN`、`CLOUD_REVIEW_OPENROUTER_API_KEY`。
+- Variables：`CLOUD_REVIEW_BASE_URL`（例如 `https://review.buildwithcombo.com`）、`CLOUD_REVIEW_LLM_PROVIDER`（当前为 `openrouter`）、`CLOUD_REVIEW_LLM_MODEL`（OpenRouter 模型 ID）。
+
+部署任务会把预览专属的 OpenRouter 凭据与模型选择合并进 `combo-preview-env`；凭据只通过 GitHub Environment Secret 和 SSH 标准输入传递，不写入仓库、命令参数或日志。Runtime 与 Worker 会在 Secret 更新后显式重启，部署脚本也会验证 Runtime 进程实际拿到了与 provider 匹配的 LLM 凭据和非空模型 ID。
 
 `.github/workflows/cloud-review.yml` 会在 `codex/agent-studio-cloud-preview` 分支 push 后自动运行，也支持手动 `workflow_dispatch` 选择其他 ref。三镜像在 GitHub runner 中构建并以完整 commit SHA 推送；只有通过 Environment 审批后，固定槽位才会被覆盖。
 
@@ -72,7 +74,7 @@ Web 镜像构建时同时写入 `VITE_DEPLOY_ENV=preview`、完整 `VITE_BUILD_S
 1. 创建 namespace，验证三个专属 Secret 存在且 bootstrap 键非空。
 2. 部署并等待 PostgreSQL、两个 Redis、MinIO 与建桶 Job。
 3. 删除并重建 migration Job，等待数据库迁移成功。
-4. 只有迁移成功后才更新 API、Worker、Consumer、Sweeper、Runtime、Web，并等待六个 rollout。
+4. 只有迁移成功后才更新 API、Worker、Consumer、Sweeper、Runtime、Web，并等待六个 rollout；Runtime、Worker 和 Web 会显式重启以加载稳定名称 Secret 的新值。
 5. GitHub runner 从公网运行 `scripts/cloud-review-smoke.sh`，验证匿名访问被拦、授权页面、bootstrap 会话、`/ready` 和 `/try/`。
 
 各阶段 overlay 复用仓库根部的生产资源文件，因此渲染命令显式使用 Kustomize 的 `LoadRestrictionsNone`；输入仍只来自本次 checkout 后同步到 `/opt/combo-preview/infra/k8s` 的受版本控制目录，不读取 Secret 文件。

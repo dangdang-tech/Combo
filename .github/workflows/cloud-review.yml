@@ -139,6 +139,35 @@ jobs:
           rsync -az --delete infra/k8s/ cloud-review-target:/opt/combo-preview/infra/k8s/
           rsync -az scripts/deploy-cloud-review.sh scripts/cloud-review-smoke.sh cloud-review-target:/opt/combo-preview/scripts/
 
+      - name: Sync preview LLM configuration
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.CLOUD_REVIEW_OPENROUTER_API_KEY }}
+          RUNTIME_LLM_PROVIDER: ${{ vars.CLOUD_REVIEW_LLM_PROVIDER }}
+          RUNTIME_LLM_MODEL: ${{ vars.CLOUD_REVIEW_LLM_MODEL }}
+        run: |
+          test -n "$OPENROUTER_API_KEY"
+          test "$RUNTIME_LLM_PROVIDER" = openrouter
+          test -n "$RUNTIME_LLM_MODEL"
+          python3 - <<'PY' | ssh cloud-review-target \
+            'kubectl -n combo-preview patch secret combo-preview-env --type merge --patch-file /dev/stdin'
+          import base64
+          import json
+          import os
+
+          values = {
+              "OPENROUTER_API_KEY": os.environ["OPENROUTER_API_KEY"],
+              "RUNTIME_LLM_PROVIDER": os.environ["RUNTIME_LLM_PROVIDER"],
+              "RUNTIME_LLM_MODEL": os.environ["RUNTIME_LLM_MODEL"],
+          }
+          payload = {
+              "data": {
+                  name: base64.b64encode(value.encode("utf-8")).decode("ascii")
+                  for name, value in values.items()
+              }
+          }
+          print(json.dumps(payload, separators=(",", ":")))
+          PY
+
       - name: Deploy after migration succeeds
         env:
           SHA: ${{ needs.resolve.outputs.sha }}
