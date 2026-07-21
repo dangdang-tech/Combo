@@ -29,4 +29,12 @@ describe('studio annotation protocol', () => {
   it('leaves normal conversation messages untouched', () => {
     expect(formatStudioAnnotationMessage('统一页面的色彩和圆角')).toBe('统一页面的色彩和圆角');
   });
+
+  it('keeps locator keys out of Design Agent replies', () => {
+    expect(
+      formatStudioAnnotationMessage(
+        '已围绕 `data-combo-key="run-primary"` 完成修改，其它区域保持不变。',
+      ),
+    ).toBe('已围绕 页面定位标记 完成修改，其它区域保持不变。');
+  });
 });

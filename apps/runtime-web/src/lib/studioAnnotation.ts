@@ -4,6 +4,11 @@ const CONTEXT_PREFIX = '请只围绕当前选中的页面元素「';
 const CONTEXT_SUFFIX = '」进行修改。';
 const PRESERVE_INSTRUCTION =
   '保留其它区域的内容结构与真实运行行为，并继续保留所有稳定的 data-combo-key。';
+const LOCATOR_PROTOCOL = /`?data-combo-key(?:=(["'])[^"']*\1)?`?/g;
+
+function hideLocatorProtocol(value: string): string {
+  return value.replace(LOCATOR_PROTOCOL, '页面定位标记');
+}
 
 export function buildContextualStudioPrompt(
   element: ComboElementSelection,
@@ -27,11 +32,11 @@ export function formatStudioAnnotationMessage(value: string): string {
     !lines[1]?.startsWith('定位键是 data-combo-key=') ||
     lines.at(-1) !== PRESERVE_INSTRUCTION
   ) {
-    return value;
+    return hideLocatorProtocol(value);
   }
 
   const label = firstLine.slice(CONTEXT_PREFIX.length, -CONTEXT_SUFFIX.length).trim();
   const instruction = lines.slice(2, -1).join('\n').trim();
-  if (!label || !instruction) return value;
+  if (!label || !instruction) return hideLocatorProtocol(value);
   return `标注「${label}」\n${instruction}`;
 }
