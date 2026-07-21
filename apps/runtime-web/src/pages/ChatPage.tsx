@@ -866,7 +866,9 @@ export function ChatPage() {
   );
   const activeVersion = latestVersion(activeArtifact);
   const activeHtmlVersions =
-    activeArtifact?.versions.filter((version) => version.kind === 'html') ?? [];
+    activeArtifact?.artifactKey === 'mock-full-html'
+      ? []
+      : (activeArtifact?.versions.filter((version) => version.kind === 'html') ?? []);
   const latestHtmlVersion = activeHtmlVersions[activeHtmlVersions.length - 1] ?? null;
   const previewVersion =
     activeHtmlVersions.find((version) => version.version === previewVersionNumber) ??
