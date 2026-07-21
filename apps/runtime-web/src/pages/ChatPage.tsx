@@ -981,7 +981,8 @@ export function ChatPage() {
       return;
     }
     autoBootstrapRef.current = sessionId;
-    agui.send(buildStudioBootstrapPrompt(capability), undefined, 'design');
+    const started = agui.send(buildStudioBootstrapPrompt(capability), undefined, 'design');
+    if (!started) autoBootstrapRef.current = null;
   }, [
     agui,
     capability,
@@ -1132,11 +1133,13 @@ export function ChatPage() {
             ? `UI R${currentRevision.revisionNo} 已自动保存 · 待试用`
             : '正在准备首版';
 
-  const sendStudioMessage = (text: string): void => {
+  const sendStudioMessage = (text: string): boolean => {
+    const started = agui.send(text, undefined, 'design');
+    if (!started) return false;
     setPreviewVersionNumber(null);
     setStudioView('preview');
-    agui.send(text, undefined, 'design');
     setMobilePane('preview');
+    return true;
   };
 
   const selectStudioRevision = (revisionNo: number): void => {

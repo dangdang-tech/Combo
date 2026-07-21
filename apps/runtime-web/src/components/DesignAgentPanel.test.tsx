@@ -25,7 +25,7 @@ function props(overrides: Partial<DesignAgentPanelProps> = {}): DesignAgentPanel
     readOnlyHistory: false,
     error: null,
     onBack: vi.fn(),
-    onSend: vi.fn(),
+    onSend: vi.fn(() => true),
     onInterrupt: vi.fn(),
     onReturnLatest: vi.fn(),
     onSelectRevision: vi.fn(),
@@ -36,7 +36,7 @@ function props(overrides: Partial<DesignAgentPanelProps> = {}): DesignAgentPanel
 
 describe('DesignAgentPanel', () => {
   it('turns a suggested edit into an editable prompt and sends it with Enter', () => {
-    const onSend = vi.fn();
+    const onSend = vi.fn(() => true);
     render(<DesignAgentPanel {...props({ onSend })} />);
 
     fireEvent.click(screen.getByRole('button', { name: '统一色彩、间距和圆角' }));
@@ -77,6 +77,30 @@ describe('DesignAgentPanel', () => {
     expect(screen.getByRole('textbox', { name: '描述页面修改' })).toBeEnabled();
   });
 
+  it('queues an edit during bootstrap and applies it when the first revision settles', () => {
+    const onSend = vi.fn(() => true);
+    const { rerender } = render(
+      <DesignAgentPanel
+        {...props({
+          revisions: [],
+          selectedRevisionNo: undefined,
+          isBootstrapping: true,
+          onSend,
+        })}
+      />,
+    );
+    const composer = screen.getByRole('textbox', { name: '描述页面修改' });
+
+    fireEvent.change(composer, { target: { value: '把结果区改成卡片' } });
+    fireEvent.keyDown(composer, { key: 'Enter' });
+    expect(onSend).not.toHaveBeenCalled();
+
+    rerender(
+      <DesignAgentPanel {...props({ revisions: [], selectedRevisionNo: undefined, onSend })} />,
+    );
+    expect(onSend).toHaveBeenCalledWith('把结果区改成卡片');
+  });
+
   it('exposes a stop action while the Design Agent is running', () => {
     const onInterrupt = vi.fn();
     render(<DesignAgentPanel {...props({ isRunning: true, onInterrupt })} />);
@@ -95,7 +119,7 @@ describe('DesignAgentPanel', () => {
   });
 
   it('offers an explicit retry when the first Miniapp fails', () => {
-    const onSend = vi.fn();
+    const onSend = vi.fn(() => true);
     render(
       <DesignAgentPanel
         {...props({
@@ -113,7 +137,7 @@ describe('DesignAgentPanel', () => {
   });
 
   it('pauses queued edits after an interrupted or failed run', () => {
-    const onSend = vi.fn();
+    const onSend = vi.fn(() => true);
     const { rerender } = render(<DesignAgentPanel {...props({ isRunning: true, onSend })} />);
     const composer = screen.getByRole('textbox', { name: '描述页面修改' });
     fireEvent.change(composer, { target: { value: '把结果区改成卡片' } });
@@ -122,5 +146,17 @@ describe('DesignAgentPanel', () => {
 
     rerender(<DesignAgentPanel {...props({ isRunning: false, error: '运行已打断。', onSend })} />);
     expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it('keeps the prompt when the run controller does not accept the send', () => {
+    const onSend = vi.fn(() => false);
+    render(<DesignAgentPanel {...props({ onSend })} />);
+    const composer = screen.getByRole('textbox', { name: '描述页面修改' });
+
+    fireEvent.change(composer, { target: { value: '把结果区改成卡片' } });
+    fireEvent.click(screen.getByRole('button', { name: '应用修改 ↑' }));
+
+    expect(onSend).toHaveBeenCalledWith('把结果区改成卡片');
+    expect(composer).toHaveValue('把结果区改成卡片');
   });
 });

@@ -37,7 +37,7 @@ export interface AguiSession {
   isRunning: boolean;
   error: string | null;
   setActiveKey: (key: string | null) => void;
-  send: (text: string, lockedElements?: LockedElement[], intent?: RunIntent) => void;
+  send: (text: string, lockedElements?: LockedElement[], intent?: RunIntent) => boolean;
   interrupt: () => void;
 }
 
@@ -92,6 +92,9 @@ export function useAguiSession(
   const qc = useQueryClient();
   const sourceRef = useRef<EventSource | null>(null);
   const activeRunRef = useRef<string | null>(null);
+  const busyRef = useRef(false);
+  const sessionIdRef = useRef(sessionId);
+  const hydratedDetailRef = useRef<SessionDetail | null>(null);
   const stateRef = useRef<ArtifactState>({});
 
   const [messages, setMessages] = useState<AguiUiMessage[]>([]);
@@ -108,11 +111,42 @@ export function useAguiSession(
     void qc.invalidateQueries({ queryKey: ['studio', sessionId] });
   };
 
+  // Switching sessions owns connection cleanup. A background detail refetch must
+  // never tear down the active run that is producing the next Studio revision.
   useEffect(() => {
-    if (!sessionId || !detail || detail.session.id !== sessionId) return;
+    sessionIdRef.current = sessionId;
     sourceRef.current?.close();
     sourceRef.current = null;
     activeRunRef.current = null;
+    busyRef.current = false;
+    hydratedDetailRef.current = null;
+    stateRef.current = {};
+    setMessages([]);
+    setArtifacts([]);
+    setActiveKeyState(null);
+    setTrialProcess(null);
+    setIsRunning(false);
+    setError(null);
+    return () => {
+      sourceRef.current?.close();
+      sourceRef.current = null;
+    };
+  }, [sessionId]);
+
+  // React Query may replace `detail` while a POST or SSE run is active. Hydrate
+  // only when idle; the run-finished invalidation will then deliver the durable
+  // transcript and artifacts without erasing optimistic/streaming state.
+  useEffect(() => {
+    if (
+      !sessionId ||
+      !detail ||
+      detail.session.id !== sessionId ||
+      busyRef.current ||
+      hydratedDetailRef.current === detail
+    ) {
+      return;
+    }
+    hydratedDetailRef.current = detail;
     const artifactMap = Object.fromEntries(detail.artifacts.map((a) => [a.artifactKey, a]));
     const primaryArtifactKey = selectPrimaryArtifactKey(detail.artifacts);
     stateRef.current = {
@@ -130,12 +164,6 @@ export function useAguiSession(
     setArtifacts(detail.artifacts);
     setActiveKeyState(primaryArtifactKey);
     setTrialProcess(null);
-    setIsRunning(false);
-    setError(null);
-    return () => {
-      sourceRef.current?.close();
-      sourceRef.current = null;
-    };
   }, [sessionId, detail]);
 
   const attachEvents = (runId: string, eventsUrl: string, after = 0, attempt = 0): void => {
@@ -209,12 +237,14 @@ export function useAguiSession(
             source: 'runtime-web',
           });
           setError(frame.message ?? '对话失败，请重试。');
+          busyRef.current = false;
           setIsRunning(false);
           activeRunRef.current = null;
           source.close();
           refreshSessionState();
           break;
         case EventType.RUN_FINISHED:
+          busyRef.current = false;
           setIsRunning(false);
           activeRunRef.current = null;
           source.close();
@@ -238,15 +268,18 @@ export function useAguiSession(
         source: 'runtime-web',
       });
       setError('事件流连接中断，可刷新会话恢复。');
+      busyRef.current = false;
       setIsRunning(false);
+      activeRunRef.current = null;
       refreshSessionState();
     };
   };
 
-  const send = (text: string, lockedElements?: LockedElement[], intent?: RunIntent): void => {
-    if (!sessionId || isRunning) return;
+  const send = (text: string, lockedElements?: LockedElement[], intent?: RunIntent): boolean => {
+    if (!sessionId || busyRef.current) return false;
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed) return false;
+    busyRef.current = true;
     setError(null);
     const userId = `u-${Date.now()}`;
     setMessages((cur) => [...cur, { id: userId, role: 'user', text: trimmed, artifacts: [] }]);
@@ -256,11 +289,17 @@ export function useAguiSession(
       ...(lockedElements && lockedElements.length > 0 ? { lockedElements } : {}),
       ...(intent ? { intent } : {}),
     })
-      .then((result) => attachEvents(result.run.id, result.eventsUrl))
+      .then((result) => {
+        if (sessionIdRef.current !== sessionId) return;
+        attachEvents(result.run.id, result.eventsUrl);
+      })
       .catch(() => {
+        if (sessionIdRef.current !== sessionId) return;
+        busyRef.current = false;
         setIsRunning(false);
         setError('无法启动运行，请重试。');
       });
+    return true;
   };
 
   const interrupt = (): void => {

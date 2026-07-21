@@ -23,7 +23,7 @@ export interface DesignAgentPanelProps {
   latestVersion?: number;
   error: string | null;
   onBack: () => void;
-  onSend: (text: string) => void;
+  onSend: (text: string) => boolean;
   onInterrupt: () => void;
   onReturnLatest: () => void;
   onSelectRevision: (revisionNo: number) => void;
@@ -66,7 +66,7 @@ export function DesignAgentPanel({
   const bootstrapFailed = revisions.length === 0 && !isBootstrapping && Boolean(error);
 
   useEffect(() => {
-    if (isRunning) {
+    if (isRunning || isBootstrapping) {
       wasRunningRef.current = true;
       return;
     }
@@ -77,17 +77,17 @@ export function DesignAgentPanel({
     if (!wasRunningRef.current || queued.length === 0 || readOnlyHistory) return;
     wasRunningRef.current = false;
     const [next, ...rest] = queued;
-    setQueued(rest);
-    if (next) onSend(next);
-  }, [error, isRunning, onSend, queued, readOnlyHistory]);
+    if (next && onSend(next)) setQueued(rest);
+  }, [error, isBootstrapping, isRunning, onSend, queued, readOnlyHistory]);
 
   const submit = (): void => {
     const trimmed = text.trim();
     if (!trimmed || readOnlyHistory) return;
-    if (isRunning || isBootstrapping) {
+    const accepted = isRunning || isBootstrapping;
+    if (accepted) {
       setQueued((current) => [...current, trimmed]);
     } else {
-      onSend(trimmed);
+      if (!onSend(trimmed)) return;
     }
     setText('');
   };
