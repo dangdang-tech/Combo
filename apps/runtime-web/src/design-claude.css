@@ -1264,7 +1264,7 @@ body {
 
 @media (max-width: 767px) {
   .rt-topbar {
-    height: 40px;
+    height: 48px;
   }
 
   .rt-topbar__eyebrow {
