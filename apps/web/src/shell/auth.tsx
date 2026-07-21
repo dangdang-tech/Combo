@@ -10,7 +10,8 @@
 // 401 与其它错误的区分只在内部按 HTTP status 判定：apiGet 抛的 ApiError 丢弃了 status，故这里用专用
 // fetchMe()（fetch + credentials:'include' + 同 API_PREFIX）直接读 res.status，绝不把 status 漏到 UI。
 //
-// 登录是后端 302 重定向端点（非 SPA 路由）：用 window.location.assign 整页跳转，浏览器随重定向去 Logto。
+// 登录是整页跳转：正式环境走后端 OIDC 端点；Cloud Review 走隔离的预览身份 bootstrap，
+// 避免把评审用户送到生产 Logto，也避免 preview client 配置异常时裸露 OIDC JSON 错误页。
 import { createContext, useContext, type ReactElement, type ReactNode } from 'react';
 import { Outlet } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -23,16 +24,25 @@ const MeEnvelopeSchema = envelopeSchema(MeViewSchema);
 /** 后端登录入口（302 跳 Logto）。非 SPA 路由：用 window.location.assign 整页跳转。 */
 export const AUTH_LOGIN_PATH = '/api/v1/auth/login';
 
+/** Cloud Review 受访问闸保护的预览身份入口；只在 preview 构建中使用。 */
+export const REVIEW_BOOTSTRAP_PATH = '/__review/bootstrap';
+
+/** 构建环境判定保持为函数，便于测试覆盖，也避免主环境误走预览身份。 */
+export function isCloudReviewEnvironment(): boolean {
+  return import.meta.env.VITE_DEPLOY_ENV?.trim().toLowerCase() === 'preview';
+}
+
 /**
  * 拼后端登录 URL：给了 returnTo（站内相对路径）则带 ?returnTo=<encoded>，否则裸路径。
  * 后端对 returnTo 做开放重定向防护 / 站内白名单（缺省回 /creator），前端只负责诚实携带当前访问上下文，
  * 让登录后回到原页（深链 /create/...?draftId=... 不丢、公开/个人页不被默认踢回 /creator）。
  */
 export function loginUrl(returnTo?: string): string {
+  const entryPath = isCloudReviewEnvironment() ? REVIEW_BOOTSTRAP_PATH : AUTH_LOGIN_PATH;
   // 仅接受同站相对路径（单个 / 开头）：挡掉绝对 http(s):// 与协议相对 //（前端侧第一道开放重定向防护，
   // 后端仍做白名单兜底）。非法 returnTo 直接丢弃，回裸登录路径而非把不可信跳转目标带给后端。
-  if (!returnTo || !returnTo.startsWith('/') || returnTo.startsWith('//')) return AUTH_LOGIN_PATH;
-  return `${AUTH_LOGIN_PATH}?returnTo=${encodeURIComponent(returnTo)}`;
+  if (!returnTo || !returnTo.startsWith('/') || returnTo.startsWith('//')) return entryPath;
+  return `${entryPath}?returnTo=${encodeURIComponent(returnTo)}`;
 }
 
 /** 跳转后端登录端点（整页重定向；非 react-router 导航）。可带 returnTo 站内回跳路径。 */
@@ -161,14 +171,20 @@ function AuthLoading(): ReactElement {
 
 /** 匿名闸门：裸页（无创作者外壳/侧栏/账号），人话 + 「去登录」（带 returnTo 回当前页）。 */
 function AuthLoginGate(): ReactElement {
+  const isCloudReview = isCloudReviewEnvironment();
   return (
-    <AuthGateFrame role="alert" message="请先登录后进入创作者中心。">
+    <AuthGateFrame
+      role="alert"
+      message={
+        isCloudReview ? '预览身份已失效，请重新进入云端评审。' : '请先登录后进入创作者中心。'
+      }
+    >
       <button
         type="button"
         className="cb-auth-gate__action"
         onClick={() => goToLogin(currentReturnTo())}
       >
-        去登录
+        {isCloudReview ? '重新进入预览' : '去登录'}
       </button>
     </AuthGateFrame>
   );

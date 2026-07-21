@@ -8,13 +8,21 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import type { MeView } from '@cb/shared';
 import { installFetchMock, type FetchMock } from '../test/mockFetch.js';
-import { fetchMe, loginUrl, AuthProvider, RequireAuth, AUTH_LOGIN_PATH } from './auth.js';
+import {
+  fetchMe,
+  loginUrl,
+  AuthProvider,
+  RequireAuth,
+  AUTH_LOGIN_PATH,
+  REVIEW_BOOTSTRAP_PATH,
+} from './auth.js';
 
 let fm: FetchMock | undefined;
 afterEach(() => {
   fm?.restore();
   fm = undefined;
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 const ME: MeView = {
@@ -111,6 +119,15 @@ describe('loginUrl — 带 returnTo（Fix3，开放重定向防护在后端）',
   it('returnTo 非 / 开头(相对片段)→ 丢弃,回裸登录路径', () => {
     expect(loginUrl('create/import')).toBe(AUTH_LOGIN_PATH);
   });
+
+  it('Cloud Review → 改走隔离预览身份入口，并保留完整站内 returnTo', () => {
+    vi.stubEnv('VITE_DEPLOY_ENV', 'preview');
+    const returnTo = '/create/capabilities?snapshotId=s1&draftId=d1';
+    expect(loginUrl(returnTo)).toBe(
+      `${REVIEW_BOOTSTRAP_PATH}?returnTo=${encodeURIComponent(returnTo)}`,
+    );
+    expect(loginUrl('https://evil.example/phish')).toBe(REVIEW_BOOTSTRAP_PATH);
+  });
 });
 
 function renderGuard() {
@@ -161,6 +178,18 @@ describe('RequireAuth — error 态给「重试」（非「去登录」），不
     renderGuard();
     expect(await screen.findByText('请先登录后进入创作者中心。')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '去登录' })).toBeInTheDocument();
+  });
+
+  it('Cloud Review 的 401 → 解释为预览身份失效，不再把用户送往正式 OIDC', async () => {
+    vi.stubEnv('VITE_DEPLOY_ENV', 'preview');
+    fm = installFetchMock({
+      status: 401,
+      json: { error: { userMessage: '请先登录' } },
+    });
+    renderGuard();
+    expect(await screen.findByText('预览身份已失效，请重新进入云端评审。')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '重新进入预览' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '去登录' })).toBeNull();
   });
 
   it('200 + 真实 Envelope<MeView> → 放行 <Outlet/>（authed 用户真能进受保护应用）', async () => {

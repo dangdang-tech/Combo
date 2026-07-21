@@ -6,6 +6,7 @@ import { LoginPage, resolveLocalReturnTo } from './index.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe('LoginPage local review login', () => {
@@ -33,6 +34,23 @@ describe('LoginPage local review login', () => {
       'href',
       `/api/v1/auth/login?returnTo=${encodeURIComponent(returnTo)}`,
     );
+  });
+
+  it('Cloud Review 使用隔离预览身份入口，不显示正式账号登录', () => {
+    vi.stubEnv('VITE_DEPLOY_ENV', 'preview');
+    const returnTo = '/create/capabilities?snapshotId=s1&draftId=d1';
+    render(
+      <MemoryRouter initialEntries={[`/login?returnTo=${encodeURIComponent(returnTo)}`]}>
+        <LoginPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: '进入云端评审' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '进入云端评审' })).toHaveAttribute(
+      'href',
+      `/__review/bootstrap?returnTo=${encodeURIComponent(returnTo)}`,
+    );
+    expect(screen.queryByRole('link', { name: '使用正式账号登录' })).toBeNull();
   });
 
   it('development login posts to the guarded real endpoint and shows a useful failure', async () => {
