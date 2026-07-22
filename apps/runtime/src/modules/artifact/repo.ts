@@ -1,7 +1,10 @@
 // artifacts 表 SQL。无版本：同一产物再次 upsert 原地覆盖（storage_key 稳定，MinIO 内容直接覆写）。
+import { randomUUID } from 'node:crypto';
 import type { ArtifactView } from '@cb/shared';
-import type { Queryable } from '../../platform/infra/db.js';
+import { withTransaction, type Queryable, type RuntimeDb } from '../../platform/infra/db.js';
+import type { RuntimeObjectStore } from '../../platform/infra/object-store.js';
 import { toIso } from '../session/repo.js';
+import { validateStudioHtml } from './studio-contract.js';
 
 /** 产物内容所在桶。 */
 export const ARTIFACT_BUCKET = 'combo-artifacts' as const;
@@ -31,7 +34,31 @@ interface ArtifactDbRow {
   kind: string;
   title: string | null;
   storage_key: string;
+  meta?: Record<string, unknown>;
+  created_at?: string | Date;
   updated_at: string | Date;
+}
+
+export interface StoredArtifact {
+  id: string;
+  sessionId: string;
+  kind: string;
+  title: string | null;
+  storageKey: string;
+  meta: Record<string, unknown>;
+  updatedAt: string;
+}
+
+function toStoredArtifact(r: ArtifactDbRow): StoredArtifact {
+  return {
+    id: r.id,
+    sessionId: r.session_id,
+    kind: r.kind,
+    title: r.title,
+    storageKey: r.storage_key,
+    meta: r.meta ?? {},
+    updatedAt: toIso(r.updated_at),
+  };
 }
 
 function toView(r: ArtifactDbRow): ArtifactView {
@@ -89,6 +116,235 @@ export async function readArtifactInSession(
     [artifactId, sessionId],
   );
   return res.rows[0] ?? null;
+}
+
+/** 会话内最近更新的 HTML。Studio 用它兜底复用主页面，避免模型漏传 artifactId 时制造副本。 */
+export async function readLatestHtmlArtifactInSession(
+  db: Queryable,
+  sessionId: string,
+): Promise<StoredArtifact | null> {
+  const res = await db.query<ArtifactDbRow>(
+    `SELECT id, session_id, kind, title, storage_key, meta, created_at, updated_at
+       FROM artifacts
+      WHERE session_id = $1 AND kind = 'html'
+      ORDER BY updated_at DESC, created_at DESC
+      LIMIT 1`,
+    [sessionId],
+  );
+  const row = res.rows[0];
+  return row ? toStoredArtifact(row) : null;
+}
+
+/** capability 当前生效的 Studio HTML；额外校验指针确实来自该 capability 的 Studio 会话。 */
+export async function readCapabilityUiArtifact(
+  db: Queryable,
+  capabilityId: string,
+): Promise<StoredArtifact | null> {
+  const res = await db.query<ArtifactDbRow>(
+    `SELECT a.id, a.session_id, a.kind, a.title, a.storage_key, a.meta,
+            a.created_at, a.updated_at
+       FROM capabilities c
+       JOIN artifacts a ON a.id = c.ui_artifact_id
+       JOIN sessions s ON s.id = a.session_id
+      WHERE c.id = $1
+        AND a.kind = 'html'
+        AND s.capability_id = c.id
+        AND s.mode = 'studio'
+      LIMIT 1`,
+    [capabilityId],
+  );
+  const row = res.rows[0];
+  return row ? toStoredArtifact(row) : null;
+}
+
+/** 把一次成功 Studio 写入原子提升为该 capability 的当前 UI。 */
+export async function bindCapabilityUiArtifact(
+  db: Queryable,
+  input: { capabilityId: string; artifactId: string; studioSessionId: string },
+): Promise<boolean> {
+  return bindCapabilityUiArtifactWithGuard(db, input, false);
+}
+
+/** 旧 UI 首次迁移专用 CAS：只允许从空指针提升，不能覆盖并发完成的新 revision。 */
+async function bindCapabilityUiArtifactIfEmpty(
+  db: Queryable,
+  input: { capabilityId: string; artifactId: string; studioSessionId: string },
+): Promise<boolean> {
+  return bindCapabilityUiArtifactWithGuard(db, input, true);
+}
+
+async function bindCapabilityUiArtifactWithGuard(
+  db: Queryable,
+  input: { capabilityId: string; artifactId: string; studioSessionId: string },
+  onlyIfEmpty: boolean,
+): Promise<boolean> {
+  const res = await db.query<{ id: string }>(
+    `UPDATE capabilities c
+        SET ui_artifact_id = $2, updated_at = now()
+      WHERE c.id = $1
+        ${onlyIfEmpty ? 'AND c.ui_artifact_id IS NULL' : ''}
+        AND EXISTS (
+          SELECT 1
+            FROM artifacts a
+            JOIN sessions s ON s.id = a.session_id
+           WHERE a.id = $2
+             AND a.session_id = $3
+             AND a.kind = 'html'
+             AND s.capability_id = c.id
+             AND s.mode = 'studio'
+        )
+      RETURNING c.id`,
+    [input.capabilityId, input.artifactId, input.studioSessionId],
+  );
+  return Boolean(res.rows[0]);
+}
+
+/**
+ * 首次进入 Studio 的旧数据兼容：只检查这个 Agent 创作者本人、目标 Studio 创建前的
+ * consume HTML。候选还必须通过当前 Miniapp 运行契约，避免把普通报告/网页误认成 Agent UI。
+ */
+async function listLegacyUiCandidates(
+  db: Queryable,
+  input: { capabilityId: string; ownerUserId: string; targetStudioSessionId: string },
+): Promise<StoredArtifact[]> {
+  const res = await db.query<ArtifactDbRow>(
+    `SELECT a.id, a.session_id, a.kind, a.title, a.storage_key, a.meta,
+            a.created_at, a.updated_at
+       FROM artifacts a
+       JOIN sessions s ON s.id = a.session_id
+       JOIN capabilities c ON c.id = s.capability_id
+       JOIN sessions target ON target.id = $3
+      WHERE c.id = $1
+        AND c.owner_user_id = $2
+        AND c.ui_artifact_id IS NULL
+        AND s.owner_user_id = $2
+        AND s.mode = 'consume'
+        AND a.kind = 'html'
+        AND target.capability_id = c.id
+        AND target.owner_user_id = $2
+        AND target.mode = 'studio'
+        AND a.created_at < target.created_at
+      ORDER BY a.updated_at DESC, a.created_at DESC
+      LIMIT 20`,
+    [input.capabilityId, input.ownerUserId, input.targetStudioSessionId],
+  );
+  return res.rows.map(toStoredArtifact);
+}
+
+class LegacyUiAdoptionConflictError extends Error {
+  constructor() {
+    super('capability UI was promoted concurrently');
+    this.name = 'LegacyUiAdoptionConflictError';
+  }
+}
+
+/**
+ * 把可确认的旧版 Miniapp 克隆进当前 Studio，并以空指针 CAS 提升为当前 UI。
+ * 对象先用不可变新键写入；DB 事务失败时旧指针不变，最多留下可离线清理的孤儿对象。
+ */
+export async function adoptLegacyCapabilityUiArtifact(
+  db: RuntimeDb,
+  objectStore: RuntimeObjectStore,
+  input: { capabilityId: string; ownerUserId: string; targetStudioSessionId: string },
+): Promise<ArtifactView | null> {
+  const candidates = await listLegacyUiCandidates(db, input);
+  for (const source of candidates) {
+    let content: Uint8Array;
+    try {
+      content = await objectStore.getObject(ARTIFACT_BUCKET, source.storageKey);
+    } catch {
+      // 旧索引可能残留已清理对象；继续检查下一个候选，而不是阻断设计空间。
+      continue;
+    }
+    const validation = validateStudioHtml(new TextDecoder().decode(content));
+    if (!validation.ok) continue;
+
+    const id = randomUUID();
+    const storageKey = artifactStorageKey(input.targetStudioSessionId, id);
+    await objectStore.putObject(ARTIFACT_BUCKET, storageKey, content, {
+      contentType: contentTypeFor(source.kind),
+    });
+
+    try {
+      return await withTransaction(db, async (tx) => {
+        const view = await upsertArtifact(tx, {
+          id,
+          sessionId: input.targetStudioSessionId,
+          kind: 'html',
+          title: source.title ?? 'Agent UI',
+          storageKey,
+          meta: {
+            ...source.meta,
+            adoption: 'legacy-owner-consume-html',
+            legacySourceArtifactId: source.id,
+            legacySourceSessionId: source.sessionId,
+            legacySourceUpdatedAt: source.updatedAt,
+          },
+        });
+        const bound = await bindCapabilityUiArtifactIfEmpty(tx, {
+          capabilityId: input.capabilityId,
+          artifactId: id,
+          studioSessionId: input.targetStudioSessionId,
+        });
+        if (!bound) throw new LegacyUiAdoptionConflictError();
+        return view;
+      });
+    } catch (err) {
+      if (err instanceof LegacyUiAdoptionConflictError) {
+        // 另一请求已经完成了同一能力的提升；它才是当前真源，本次不覆盖。
+        return null;
+      }
+      throw err;
+    }
+  }
+  return null;
+}
+
+/**
+ * 把 capability 当前 UI 复制到目标会话，形成与之后 Studio 修改隔离的快照。
+ * 目标已有 HTML 时幂等返回现有项；这让“重新进入 active Studio”不会重复 seed。
+ */
+export async function seedCapabilityUiArtifact(
+  db: Queryable,
+  objectStore: RuntimeObjectStore,
+  input: { capabilityId: string; targetSessionId: string },
+): Promise<ArtifactView | null> {
+  const existing = await readLatestHtmlArtifactInSession(db, input.targetSessionId);
+  if (existing) return toView({ ...existingToDbRow(existing) });
+
+  const source = await readCapabilityUiArtifact(db, input.capabilityId);
+  if (!source) return null;
+
+  const content = await objectStore.getObject(ARTIFACT_BUCKET, source.storageKey);
+  const id = randomUUID();
+  const storageKey = artifactStorageKey(input.targetSessionId, id);
+  await objectStore.putObject(ARTIFACT_BUCKET, storageKey, content, {
+    contentType: contentTypeFor(source.kind),
+  });
+  return upsertArtifact(db, {
+    id,
+    sessionId: input.targetSessionId,
+    kind: source.kind,
+    title: source.title ?? 'Agent UI',
+    storageKey,
+    meta: {
+      ...source.meta,
+      sourceArtifactId: source.id,
+      sourceUpdatedAt: source.updatedAt,
+    },
+  });
+}
+
+function existingToDbRow(artifact: StoredArtifact): ArtifactDbRow {
+  return {
+    id: artifact.id,
+    session_id: artifact.sessionId,
+    kind: artifact.kind,
+    title: artifact.title,
+    storage_key: artifact.storageKey,
+    meta: artifact.meta,
+    updated_at: artifact.updatedAt,
+  };
 }
 
 /** 会话全部产物（详情画布恢复用），按创建先后。 */

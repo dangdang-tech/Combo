@@ -7,7 +7,12 @@ import {
   SessionInactiveError,
   TurnAgentUnavailableError,
 } from '../modules/agent/run-turn.js';
-import { archiveSession, createSession, type SessionRow } from '../modules/session/repo.js';
+import {
+  archiveSession,
+  createSession,
+  getOrCreateStudioSession,
+  type SessionRow,
+} from '../modules/session/repo.js';
 import { createSessionEventBus, type PublishedStreamEvent } from '../platform/infra/event-bus.js';
 import {
   FakeDb,
@@ -19,6 +24,12 @@ import {
   type FakeAgentScript,
 } from './fakes.js';
 import { createInterruptBus } from '../platform/infra/redis-interrupt-bus.js';
+import { createArtifactTool } from '../modules/artifact/tool.js';
+import {
+  ARTIFACT_BUCKET,
+  artifactStorageKey,
+  bindCapabilityUiArtifact,
+} from '../modules/artifact/repo.js';
 
 const ME = 'user-me';
 
@@ -32,6 +43,17 @@ const DEFINITION: CapabilityDefinition = {
   starterPrompts: [],
   meta: {},
 };
+
+function studioHtml(label: string): string {
+  return `<!doctype html><html><head><style>button{color:red}</style></head><body>
+  <input id="goal"><button data-combo-key="run-primary">${label}</button><script>
+  const button = document.querySelector('[data-combo-key="run-primary"]');
+  button.addEventListener('click', () => {
+    const prompt = document.querySelector('#goal').value.trim();
+    window.parent.postMessage({type:'combo:run',version:1,prompt}, '*');
+  });
+  </script></body></html>`;
+}
 
 async function setup(script: FakeAgentScript = {}, idleTimeoutMs = 60_000) {
   const db = new FakeDb();
@@ -133,7 +155,85 @@ describe('run-turn 成功路径', () => {
 
     // agent 工厂拿到 definition 与空历史（首轮）。
     expect(handle.calls[0]?.definition).toEqual(DEFINITION);
+    expect(handle.calls[0]?.mode).toBe('consume');
     expect(handle.calls[0]?.history).toHaveLength(0);
+  });
+
+  it('Studio 会话把设计模式传给 agent 工厂', async () => {
+    const { db, runner, session, handle } = await setup({
+      finalMessages: [{ role: 'assistant', content: [{ type: 'text', text: '已更新页面' }] }],
+    });
+    const studio = await getOrCreateStudioSession(db, {
+      capabilityId: session.capabilityId,
+      ownerUserId: session.ownerUserId,
+    });
+
+    await runToIdle(runner, db, studio, '把主要按钮改成绿色');
+    expect(handle.calls[0]?.mode).toBe('studio');
+  });
+
+  it('Studio 只有整轮成功后才在同一终态事务提升最后一个 revision', async () => {
+    const { db, runner, session } = await setup({
+      invokeTool: { title: 'Agent UI', content: studioHtml('新版本') },
+      finalMessages: [{ role: 'assistant', content: [{ type: 'text', text: '已更新页面' }] }],
+    });
+    const studio = await getOrCreateStudioSession(db, {
+      capabilityId: session.capabilityId,
+      ownerUserId: session.ownerUserId,
+    });
+
+    await runToIdle(runner, db, studio, '更新页面');
+    const currentId = db.capabilities.get(session.capabilityId)?.ui_artifact_id;
+    expect(currentId).toBeTruthy();
+    expect(db.artifacts.get(currentId!)?.session_id).toBe(studio.id);
+    expect(db.txLog.slice(-2)).toEqual(['BEGIN', 'COMMIT']);
+  });
+
+  it('Studio 在 tool 后整轮失败时保留旧 current UI 与旧对象', async () => {
+    const { db, store, session } = await setup();
+    const studio = await getOrCreateStudioSession(db, {
+      capabilityId: session.capabilityId,
+      ownerUserId: session.ownerUserId,
+    });
+    const oldRevision = await createArtifactTool({
+      db,
+      objectStore: store,
+      sessionId: studio.id,
+      capabilityId: session.capabilityId,
+      mode: 'studio',
+      onArtifact: () => undefined,
+    }).execute('old', { kind: 'html', title: '旧 UI', content: studioHtml('旧版本') });
+    await bindCapabilityUiArtifact(db, {
+      capabilityId: session.capabilityId,
+      artifactId: oldRevision.details!.artifactId,
+      studioSessionId: studio.id,
+    });
+    const failingAgent = makeFakeAgentFactory({
+      invokeTool: { title: '失败 revision', content: studioHtml('不应生效') },
+      promptError: new Error('model failed after tool'),
+    });
+    const runner = createTurnRunner({
+      db,
+      objectStore: store,
+      bus: createSessionEventBus(),
+      eventLog: new FakeSessionEventLog(),
+      agentFactory: failingAgent.factory,
+      idleTimeoutMs: 60_000,
+      interrupts: createInterruptBus(),
+      log: silentLog,
+    });
+
+    await runToIdle(runner, db, studio, '失败的修改');
+    expect(db.capabilities.get(session.capabilityId)?.ui_artifact_id).toBe(
+      oldRevision.details!.artifactId,
+    );
+    expect(
+      await store.getObjectText(
+        ARTIFACT_BUCKET as never,
+        artifactStorageKey(studio.id, oldRevision.details!.artifactId),
+      ),
+    ).toContain('旧版本');
+    expect(db.artifacts.size).toBe(2);
   });
 
   it('第二轮把上一轮定稿作为历史喂给 agent（failed 消息除外）', async () => {

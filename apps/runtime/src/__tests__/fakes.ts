@@ -32,6 +32,7 @@ export interface CapabilityRowF {
   kind: string;
   storage_key: string;
   published: boolean;
+  ui_artifact_id: string | null;
   created_at: string;
 }
 
@@ -39,6 +40,7 @@ export interface SessionRowF {
   id: string;
   capability_id: string;
   owner_user_id: string;
+  mode: 'consume' | 'studio';
   title: string | null;
   status: 'active' | 'closed';
   created_at: string;
@@ -132,6 +134,7 @@ export class FakeDb implements Queryable, TxPool {
       kind: input.kind ?? 'writing',
       storage_key: input.storage_key ?? `capabilities/${id}/definition.json`,
       published: input.published ?? false,
+      ui_artifact_id: input.ui_artifact_id ?? null,
       created_at: input.created_at ?? nowIso(),
     };
     this.capabilities.set(row.id, row);
@@ -158,6 +161,44 @@ export class FakeDb implements Queryable, TxPool {
     }
 
     // ---------- capabilities ----------
+    if (s.startsWith('UPDATE capabilities c SET ui_artifact_id = $2')) {
+      const [capabilityId, artifactId, studioSessionId] = params as [string, string, string];
+      const capability = this.capabilities.get(capabilityId);
+      const artifact = this.artifacts.get(artifactId);
+      const session = this.sessions.get(studioSessionId);
+      if (
+        !capability ||
+        (s.includes('c.ui_artifact_id IS NULL') && capability.ui_artifact_id !== null) ||
+        !artifact ||
+        artifact.session_id !== studioSessionId ||
+        artifact.kind !== 'html' ||
+        !session ||
+        session.capability_id !== capabilityId ||
+        session.mode !== 'studio'
+      ) {
+        return { rows: [], rowCount: 0 };
+      }
+      capability.ui_artifact_id = artifactId;
+      return { rows: [{ id: capabilityId }] as R[], rowCount: 1 };
+    }
+    if (s.includes('FROM capabilities c JOIN artifacts a ON a.id = c.ui_artifact_id')) {
+      const capability = this.capabilities.get(params[0] as string);
+      const artifact = capability?.ui_artifact_id
+        ? this.artifacts.get(capability.ui_artifact_id)
+        : undefined;
+      const session = artifact ? this.sessions.get(artifact.session_id) : undefined;
+      if (
+        !capability ||
+        !artifact ||
+        artifact.kind !== 'html' ||
+        !session ||
+        session.capability_id !== capability.id ||
+        session.mode !== 'studio'
+      ) {
+        return { rows: [], rowCount: 0 };
+      }
+      return { rows: [{ ...artifact }] as R[], rowCount: 1 };
+    }
     if (s.includes('FROM capabilities WHERE id = $1') && s.includes('storage_key')) {
       const c = this.capabilities.get(params[0] as string);
       return c ? { rows: [{ ...c }] as R[], rowCount: 1 } : { rows: [], rowCount: 0 };
@@ -183,11 +224,23 @@ export class FakeDb implements Queryable, TxPool {
     // ---------- sessions ----------
     if (s.startsWith('INSERT INTO sessions')) {
       const [capabilityId, ownerUserId] = params as [string, string];
+      const mode: SessionRowF['mode'] = s.includes("'studio'") ? 'studio' : 'consume';
+      if (mode === 'studio' && s.includes('ON CONFLICT')) {
+        const existing = [...this.sessions.values()].find(
+          (row) =>
+            row.owner_user_id === ownerUserId &&
+            row.capability_id === capabilityId &&
+            row.status === 'active' &&
+            row.mode === 'studio',
+        );
+        if (existing) return { rows: [{ ...existing }] as R[], rowCount: 1 };
+      }
       const now = nowIso();
       const row: SessionRowF = {
         id: nextId('sess'),
         capability_id: capabilityId,
         owner_user_id: ownerUserId,
+        mode,
         title: null,
         status: 'active',
         created_at: now,
@@ -203,10 +256,12 @@ export class FakeDb implements Queryable, TxPool {
       // 对齐真 SQL：$2 为 null 不过滤，否则只留该能力下的会话。
       const owner = params[0] as string;
       const capabilityId = (params[1] ?? null) as string | null;
+      const mode = (params[2] ?? 'consume') as SessionRowF['mode'];
       const rows = [...this.sessions.values()]
         .filter((x) => x.owner_user_id === owner)
         .filter((x) => x.status === 'active')
         .filter((x) => capabilityId === null || x.capability_id === capabilityId)
+        .filter((x) => x.mode === mode)
         .sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1))
         .slice(0, 100)
         .map((x) => ({ ...x }));
@@ -388,6 +443,44 @@ export class FakeDb implements Queryable, TxPool {
     }
 
     // ---------- artifacts ----------
+    if (
+      s.includes('FROM artifacts a JOIN sessions s ON s.id = a.session_id') &&
+      s.includes('JOIN capabilities c ON c.id = s.capability_id') &&
+      s.includes("s.mode = 'consume'")
+    ) {
+      const [capabilityId, ownerUserId, targetStudioSessionId] = params as [string, string, string];
+      const capability = this.capabilities.get(capabilityId);
+      const target = this.sessions.get(targetStudioSessionId);
+      if (
+        !capability ||
+        capability.owner_user_id !== ownerUserId ||
+        capability.ui_artifact_id !== null ||
+        !target ||
+        target.capability_id !== capabilityId ||
+        target.owner_user_id !== ownerUserId ||
+        target.mode !== 'studio'
+      ) {
+        return { rows: [], rowCount: 0 };
+      }
+      const rows = [...this.artifacts.values()]
+        .filter((artifact) => {
+          const sourceSession = this.sessions.get(artifact.session_id);
+          return (
+            artifact.kind === 'html' &&
+            artifact.created_at < target.created_at &&
+            sourceSession?.capability_id === capabilityId &&
+            sourceSession.owner_user_id === ownerUserId &&
+            sourceSession.mode === 'consume'
+          );
+        })
+        .sort(
+          (a, b) =>
+            b.updated_at.localeCompare(a.updated_at) || b.created_at.localeCompare(a.created_at),
+        )
+        .slice(0, 20)
+        .map((artifact) => ({ ...artifact }));
+      return { rows: rows as R[], rowCount: rows.length };
+    }
     if (s.startsWith('INSERT INTO artifacts')) {
       const [id, sessionId, kind, title, storageKey, metaJson] = params as [
         string,
@@ -430,6 +523,18 @@ export class FakeDb implements Queryable, TxPool {
       const a = this.artifacts.get(params[0] as string);
       if (!a || a.session_id !== params[1]) return { rows: [], rowCount: 0 };
       return { rows: [{ id: a.id }] as R[], rowCount: 1 };
+    }
+    if (
+      s.includes("FROM artifacts WHERE session_id = $1 AND kind = 'html'") &&
+      s.includes('ORDER BY updated_at DESC')
+    ) {
+      const row = [...this.artifacts.values()]
+        .filter((artifact) => artifact.session_id === params[0] && artifact.kind === 'html')
+        .sort(
+          (a, b) =>
+            b.updated_at.localeCompare(a.updated_at) || b.created_at.localeCompare(a.created_at),
+        )[0];
+      return row ? { rows: [{ ...row }] as R[], rowCount: 1 } : { rows: [], rowCount: 0 };
     }
     if (s.includes('FROM artifacts WHERE session_id = $1 ORDER BY created_at ASC')) {
       const rows = [...this.artifacts.values()]

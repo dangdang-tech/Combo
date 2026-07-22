@@ -79,4 +79,23 @@ describe('SessionSidebar 会话操作', () => {
     expect(markup).toContain('aria-label="“项目复盘”正在生成，暂时不能归档"');
     expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>⌑<\/button>/);
   });
+
+  it('Studio 设计上下文不显示通用归档入口', () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(SessionListItem, {
+          session: CURRENT,
+          active: true,
+          allowArchive: false,
+          onRename: async () => undefined,
+          onArchive: async () => undefined,
+        }),
+      ),
+    );
+
+    expect(markup).toContain('aria-label="重命名“项目复盘”"');
+    expect(markup).not.toContain('归档“项目复盘”');
+  });
 });

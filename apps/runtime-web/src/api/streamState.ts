@@ -12,13 +12,25 @@ import type { ArtifactView } from '@cb/shared';
 /** 线上一帧 AG-UI 事件里前端消费的字段（其余字段透传忽略）。 */
 export interface StreamEvent {
   type: string;
+  /** Stable backend turn id; required to distinguish replayed and concurrent runs. */
+  runId?: unknown;
   delta?: unknown;
   message?: string;
+}
+
+export interface StreamTerminalRun {
+  runId: string;
+  state: 'completed' | 'failed';
+  message: string;
 }
 
 export interface StreamUiState {
   /** 后端是否正在生成（RUN_STARTED 后、终态前；发消息 202 后也乐观置起）。 */
   running: boolean;
+  /** 当前由 SSE 明确标识的轮次；POST 乐观阶段尚未拿到 id 时为 null。 */
+  activeRunId: string | null;
+  /** 最近一个带 runId 的终态；Miniapp bridge 只消费与自身请求匹配的终态。 */
+  terminalRun: StreamTerminalRun | null;
   /** 进行中一轮的流式助手文本（打字机）；无进行中文本 → null。 */
   streamingText: string | null;
   /** 产物画布（id → 视图），详情种子 + STATE_DELTA 增量共同收敛。 */
@@ -30,6 +42,8 @@ export interface StreamUiState {
 
 export const initialStreamUiState: StreamUiState = {
   running: false,
+  activeRunId: null,
+  terminalRun: null,
   streamingText: null,
   artifacts: {},
   activeArtifactId: null,
@@ -89,9 +103,16 @@ function applyStateDelta(state: StreamUiState, delta: unknown): StreamUiState {
 }
 
 function applyStreamEvent(state: StreamUiState, event: StreamEvent): StreamUiState {
+  const runId = typeof event.runId === 'string' && event.runId ? event.runId : null;
   switch (event.type) {
     case EventType.RUN_STARTED:
-      return { ...state, running: true, streamingText: null, errorMessage: null };
+      return {
+        ...state,
+        running: true,
+        activeRunId: runId,
+        streamingText: null,
+        errorMessage: null,
+      };
     case EventType.TEXT_MESSAGE_START:
       return { ...state, streamingText: '' };
     case EventType.TEXT_MESSAGE_CONTENT:
@@ -101,13 +122,45 @@ function applyStreamEvent(state: StreamUiState, event: StreamEvent): StreamUiSta
       return applyStateDelta(state, event.delta);
     case EventType.RUN_FINISHED:
       // 终态清空流式文本：这一轮的定稿以详情接口回拉为真源。
-      return { ...state, running: false, streamingText: null };
-    case EventType.RUN_ERROR:
+      if (runId && state.activeRunId && runId !== state.activeRunId) {
+        return {
+          ...state,
+          terminalRun: { runId, state: 'completed', message: '已完成，页面结果已更新。' },
+        };
+      }
       return {
         ...state,
         running: false,
+        activeRunId: null,
+        streamingText: null,
+        terminalRun: runId
+          ? { runId, state: 'completed', message: '已完成，页面结果已更新。' }
+          : state.terminalRun,
+      };
+    case EventType.RUN_ERROR:
+      if (runId && state.activeRunId && runId !== state.activeRunId) {
+        return {
+          ...state,
+          terminalRun: {
+            runId,
+            state: 'failed',
+            message: event.message ?? '这轮生成失败了，请重试。',
+          },
+        };
+      }
+      return {
+        ...state,
+        running: false,
+        activeRunId: null,
         streamingText: null,
         errorMessage: event.message ?? '这轮生成失败了，请重试。',
+        terminalRun: runId
+          ? {
+              runId,
+              state: 'failed',
+              message: event.message ?? '这轮生成失败了，请重试。',
+            }
+          : state.terminalRun,
       };
     default:
       // TEXT_MESSAGE_END / 心跳外的其他 AG-UI 事件：当前 UI 不消费，原样忽略。
@@ -133,9 +186,9 @@ export function streamUiReducer(state: StreamUiState, action: StreamUiAction): S
     case 'select-artifact':
       return { ...state, activeArtifactId: action.id };
     case 'turn-accepted':
-      return { ...state, running: true, errorMessage: null };
+      return { ...state, running: true, activeRunId: null, errorMessage: null };
     case 'error':
-      return { ...state, running: false, errorMessage: action.message };
+      return { ...state, running: false, activeRunId: null, errorMessage: action.message };
     case 'reset':
       return initialStreamUiState;
   }

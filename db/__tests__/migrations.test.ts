@@ -120,6 +120,23 @@ describe('migrations', () => {
     expect(sql).toContain('ALTER COLUMN seq DROP NOT NULL');
   });
 
+  it('0004 separates Studio sessions and atomically reuses one active design session', () => {
+    const sql = readFileSync(join(MIGRATIONS_DIR, '0004_studio_sessions.sql'), 'utf-8');
+    expect(sql).toMatch(/ADD COLUMN mode text NOT NULL DEFAULT 'consume'/);
+    expect(sql).toMatch(/mode IN \('consume', 'studio'\)/);
+    expect(sql).toContain('uq_sessions_active_studio_owner_capability');
+    expect(sql).toContain('ON sessions (owner_user_id, capability_id)');
+    expect(sql).toContain("WHERE status = 'active' AND mode = 'studio'");
+  });
+
+  it('0005 lets each capability point at one current Studio UI artifact', () => {
+    const sql = readFileSync(join(MIGRATIONS_DIR, '0005_capability_current_ui.sql'), 'utf-8');
+    expect(sql).toMatch(/ADD COLUMN ui_artifact_id uuid REFERENCES artifacts\(id\)/);
+    expect(sql).toContain('ON DELETE SET NULL');
+    expect(sql).toContain('uq_capabilities_ui_artifact');
+    expect(sql).toContain('WHERE ui_artifact_id IS NOT NULL');
+  });
+
   it('stream_events use bigserial for resumable ordering', () => {
     const sql = allSql();
     expect(sql).toMatch(/CREATE TABLE stream_events \(\n\s+id\s+bigserial\s+PRIMARY KEY/);

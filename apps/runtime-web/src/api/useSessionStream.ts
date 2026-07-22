@@ -23,7 +23,8 @@ export interface SessionStream extends StreamUiState {
   /** 画布产物列表（map 展平，稳定给渲染用）。 */
   artifactList: ArtifactView[];
   selectArtifact: (id: string) => void;
-  send: (text: string) => void;
+  /** Resolves with the accepted user message, whose turnId links this request to SSE terminal events. */
+  send: (text: string) => Promise<MessageView>;
   interrupt: () => void;
 }
 
@@ -108,27 +109,34 @@ export function useSessionStream(
     });
   }, [sessionId, qc]);
 
-  const send = (text: string): void => {
+  const send = async (text: string): Promise<MessageView> => {
     const trimmed = text.trim();
-    if (!sessionId || !trimmed || state.running) return;
+    if (!sessionId) throw new Error('会话还没有准备好，请稍后重试。');
+    if (!trimmed) throw new Error('请输入任务内容。');
+    if (state.running) throw new Error('Agent 正在处理当前任务，请稍候。');
     dispatch({ kind: 'turn-accepted' });
-    sendSessionMessage(sessionId, trimmed)
-      .then((message) => {
-        // 202 带回已落库的 user 消息：直接写进详情缓存，聊天流立即可见。
-        qc.setQueryData<SessionDetail>(['session', sessionId], (cur) =>
-          cur ? { ...cur, messages: appendMessage(cur.messages, message) } : cur,
-        );
-      })
-      .catch((err: unknown) => {
-        // 登录态失效：跳创作端登录（回来落在当前会话页）。
-        if (isUnauthenticated(err)) {
-          window.location.assign(loginUrl());
-          return;
-        }
-        // 服务端错误信封中的 userMessage 已是人话，直接展示。
-        const message = err instanceof ApiError ? err.userMessage : '发送失败，请重试。';
-        dispatch({ kind: 'error', message });
-      });
+    try {
+      const message = await sendSessionMessage(sessionId, trimmed);
+      // 202 带回已落库的 user 消息：直接写进详情缓存，聊天流立即可见。
+      qc.setQueryData<SessionDetail>(['session', sessionId], (cur) =>
+        cur ? { ...cur, messages: appendMessage(cur.messages, message) } : cur,
+      );
+      return message;
+    } catch (err: unknown) {
+      // 登录态失效：跳创作端登录（回来落在当前会话页）。
+      if (isUnauthenticated(err)) {
+        window.location.assign(loginUrl());
+      }
+      // 服务端错误信封中的 userMessage 已是人话；同时 reject 给 Miniapp bridge，
+      // 让它不依赖一次可能来不及渲染的 optimistic running 状态。
+      const message = isUnauthenticated(err)
+        ? '登录态失效了，请重新登录。'
+        : err instanceof ApiError
+          ? err.userMessage
+          : '发送失败，请重试。';
+      dispatch({ kind: 'error', message });
+      throw new Error(message, { cause: err });
+    }
   };
 
   const interrupt = (): void => {

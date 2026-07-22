@@ -4,7 +4,7 @@
 import { randomUUID } from 'node:crypto';
 import { StringEnum, Type, type Static } from '@earendil-works/pi-ai';
 import type { AgentTool, AgentToolResult } from '@earendil-works/pi-agent-core';
-import type { ArtifactView } from '@cb/shared';
+import type { ArtifactView, SessionMode } from '@cb/shared';
 import type { Queryable } from '../../platform/infra/db.js';
 import type { RuntimeObjectStore } from '../../platform/infra/object-store.js';
 import {
@@ -14,6 +14,7 @@ import {
   readArtifactInSession,
   upsertArtifact,
 } from './repo.js';
+import { StudioArtifactValidationError, validateStudioHtml } from './studio-contract.js';
 
 const ArtifactParams = Type.Object({
   artifactId: Type.Optional(
@@ -41,6 +42,8 @@ export interface ArtifactToolContext {
   db: Queryable;
   objectStore: RuntimeObjectStore;
   sessionId: string;
+  mode?: SessionMode;
+  capabilityId?: string;
   /** 产出/更新一个产物后回调；run-turn 据此发 AG-UI 产物更新事件。 */
   onArtifact: (artifact: ArtifactView) => void;
 }
@@ -58,11 +61,26 @@ export function createArtifactTool(ctx: ArtifactToolContext): ArtifactAgentTool 
       _toolCallId: string,
       params: ArtifactParamsT,
     ): Promise<AgentToolResult<{ artifactId: string }>> {
+      const studio = ctx.mode === 'studio';
+      if (studio) {
+        if (!ctx.capabilityId) {
+          throw new Error('Studio artifact tool requires capabilityId');
+        }
+        if (params.kind !== 'html') {
+          throw new StudioArtifactValidationError(['Studio 主产物必须使用 kind=html']);
+        }
+        const validation = validateStudioHtml(params.content);
+        if (!validation.ok) throw new StudioArtifactValidationError(validation.errors);
+      }
+
       // 模型给的 id 只有真实存在于本会话才算「更新」；否则按新建处理（防跨会话指涉/幻觉 id）。
       const requested = params.artifactId?.trim();
-      const existing = requested
+      const requestedExisting = requested
         ? await readArtifactInSession(ctx.db, requested, ctx.sessionId)
         : null;
+      // Studio 每次写不可变 revision：失败轮不会覆盖 capability 当前对象，也保留后续版本审计。
+      // 普通运行产物仍保留原来的“同 id 原地更新”语义。
+      const existing = studio ? null : requestedExisting;
       const id = existing?.id ?? randomUUID();
 
       const storageKey = artifactStorageKey(ctx.sessionId, id);
@@ -87,9 +105,9 @@ export function createArtifactTool(ctx: ArtifactToolContext): ArtifactAgentTool 
         content: [
           {
             type: 'text',
-            text:
-              `已${existing ? '更新' : '产出'}产物「${params.title}」（artifactId=${id}，kind=${params.kind}），已在画布展示给用户。` +
-              `后续修改同一产物请带同一个 artifactId。请用一两句话说明并邀请继续迭代，不要在正文重复产物全文。`,
+            text: studio
+              ? `已生成 Miniapp revision「${params.title}」（artifactId=${id}）。本轮完整成功后才会设为 Agent 当前 UI；后续修改请再生成新 revision，不要复用这个 artifactId。请用一两句话说明并邀请继续迭代。`
+              : `已${existing ? '更新' : '产出'}产物「${params.title}」（artifactId=${id}，kind=${params.kind}），已在画布展示给用户。后续修改同一产物请带同一个 artifactId。请用一两句话说明并邀请继续迭代，不要在正文重复产物全文。`,
           },
         ],
         details: { artifactId: id },

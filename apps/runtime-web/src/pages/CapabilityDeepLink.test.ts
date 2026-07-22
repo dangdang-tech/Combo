@@ -14,7 +14,7 @@ describe('CapabilityDeepLink', () => {
     expect(navigate).toHaveBeenCalledWith('/session/session-1', { replace: true });
   });
 
-  it('建会话失败后 replace 回市集', async () => {
+  it('建会话失败后 replace 回我的 Agent，而不是未开放的市集', async () => {
     const guard: CapabilityDeepLinkGuard = { current: false };
     const createSession = vi.fn(async () => {
       throw new Error('capability unavailable');
@@ -24,7 +24,7 @@ describe('CapabilityDeepLink', () => {
     await runCapabilityDeepLink({ capabilityId: 'cap-missing', guard, createSession, navigate });
 
     expect(createSession).toHaveBeenCalledOnce();
-    expect(navigate).toHaveBeenCalledWith('/market', { replace: true });
+    expect(navigate).toHaveBeenCalledWith('/capabilities', { replace: true });
   });
 
   it('StrictMode 重跑 effect 时只发一次建会话 POST', async () => {

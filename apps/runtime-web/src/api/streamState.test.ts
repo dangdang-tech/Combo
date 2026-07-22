@@ -44,25 +44,59 @@ describe('文本事件聚合（打字机）', () => {
 
   it('RUN_FINISHED 清空流式文本并结束运行态（详情为真源）', () => {
     const state = replay([
-      { type: EventType.RUN_STARTED },
+      { type: EventType.RUN_STARTED, runId: 'turn-1' },
       { type: EventType.TEXT_MESSAGE_START },
       { type: EventType.TEXT_MESSAGE_CONTENT, delta: 'abc' },
-      { type: EventType.RUN_FINISHED },
+      { type: EventType.RUN_FINISHED, runId: 'turn-1' },
     ]);
-    expect(state).toMatchObject({ running: false, streamingText: null, errorMessage: null });
+    expect(state).toMatchObject({
+      running: false,
+      activeRunId: null,
+      streamingText: null,
+      errorMessage: null,
+      terminalRun: {
+        runId: 'turn-1',
+        state: 'completed',
+        message: '已完成，页面结果已更新。',
+      },
+    });
   });
 
   it('RUN_ERROR 置人话错误并清空流式文本', () => {
     const state = replay([
-      { type: EventType.RUN_STARTED },
+      { type: EventType.RUN_STARTED, runId: 'turn-2' },
       { type: EventType.TEXT_MESSAGE_START },
       { type: EventType.TEXT_MESSAGE_CONTENT, delta: '半截' },
-      { type: EventType.RUN_ERROR, message: '本轮生成已打断。' },
+      { type: EventType.RUN_ERROR, runId: 'turn-2', message: '本轮生成已打断。' },
     ]);
     expect(state).toMatchObject({
       running: false,
       streamingText: null,
       errorMessage: '本轮生成已打断。',
+      terminalRun: {
+        runId: 'turn-2',
+        state: 'failed',
+        message: '本轮生成已打断。',
+      },
+    });
+  });
+
+  it('其他/历史轮次的终态不会结束当前 activeRunId', () => {
+    const state = replay([
+      { type: EventType.RUN_STARTED, runId: 'turn-current' },
+      { type: EventType.TEXT_MESSAGE_START, runId: 'turn-current' },
+      { type: EventType.TEXT_MESSAGE_CONTENT, runId: 'turn-current', delta: '进行中' },
+      { type: EventType.RUN_FINISHED, runId: 'turn-history' },
+    ]);
+
+    expect(state).toMatchObject({
+      running: true,
+      activeRunId: 'turn-current',
+      streamingText: '进行中',
+      terminalRun: {
+        runId: 'turn-history',
+        state: 'completed',
+      },
     });
   });
 
@@ -151,9 +185,9 @@ describe('产物 STATE_DELTA 归并', () => {
 
 describe('帧解析与终态判定', () => {
   it('parseStreamEvent：合法 JSON 事件解析成功，坏帧返回 null', () => {
-    expect(parseStreamEvent('{"type":"RUN_STARTED","extra":"忽略透传字段"}')).toMatchObject({
-      type: 'RUN_STARTED',
-    });
+    expect(
+      parseStreamEvent('{"type":"RUN_STARTED","runId":"turn-1","extra":"忽略透传字段"}'),
+    ).toMatchObject({ type: 'RUN_STARTED', runId: 'turn-1' });
     expect(parseStreamEvent('not-json')).toBeNull();
     expect(parseStreamEvent('123')).toBeNull();
     expect(parseStreamEvent('{"noType":true}')).toBeNull();

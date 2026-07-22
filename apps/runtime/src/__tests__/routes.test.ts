@@ -4,6 +4,8 @@ import type { FastifyReply, FastifyRequest, RouteHandlerMethod } from 'fastify';
 import { ALL_ENDPOINTS } from '../bootstrap/routes.js';
 import {
   archiveSessionHandler,
+  createSessionHandler,
+  createStudioSessionHandler,
   getSessionDetailHandler,
   interruptHandler,
   listSessionsHandler,
@@ -12,7 +14,18 @@ import {
 } from '../modules/session/handlers.js';
 import { CAPABILITY_BUCKET } from '../modules/capability/loader.js';
 import { artifactContentHandler } from '../modules/artifact/handlers.js';
-import { appendTurnMessage, createSession } from '../modules/session/repo.js';
+import { createArtifactTool } from '../modules/artifact/tool.js';
+import {
+  ARTIFACT_BUCKET,
+  artifactStorageKey,
+  bindCapabilityUiArtifact,
+} from '../modules/artifact/repo.js';
+import {
+  archiveSession as archiveSessionRow,
+  appendTurnMessage,
+  createSession,
+  getOrCreateStudioSession,
+} from '../modules/session/repo.js';
 import { createTurn, finishTurnCas } from '../modules/agent/turn-repo.js';
 import { createTurnRunner } from '../modules/agent/run-turn.js';
 import { createSessionEventBus } from '../platform/infra/event-bus.js';
@@ -29,8 +42,8 @@ const ME = 'user-me';
 const OTHER = 'user-other';
 
 describe('route registry self-check', () => {
-  it('registers exactly 10 endpoints (capability 1 + session 8 + artifact 1)', () => {
-    expect(ALL_ENDPOINTS).toHaveLength(10);
+  it('registers exactly 11 endpoints (capability 1 + session 9 + artifact 1)', () => {
+    expect(ALL_ENDPOINTS).toHaveLength(11);
   });
 
   it('no duplicate (method,url) pairs', () => {
@@ -124,6 +137,260 @@ async function seedOwnedSession(db: FakeDb, owner: string): Promise<string> {
   const session = await createSession(db, { capabilityId: cap.id, ownerUserId: owner });
   return session.id;
 }
+
+function seedRunnableDefinition(store: FakeObjectStore, cap: ReturnType<FakeDb['seedCapability']>) {
+  store.seedText(
+    CAPABILITY_BUCKET,
+    cap.storage_key,
+    JSON.stringify({
+      version: 1,
+      name: cap.name,
+      summary: cap.summary,
+      kind: cap.kind,
+      instructions: '执行任务',
+      inputs: [],
+      starterPrompts: [],
+    }),
+  );
+}
+
+describe('POST /runtime/studio/sessions', () => {
+  it('同一创作者与 Agent 重试时复用同一 active Studio 会话', async () => {
+    const db = new FakeDb();
+    const store = new FakeObjectStore();
+    const cap = db.seedCapability({ id: CAP_A, owner_user_id: ME });
+    seedRunnableDefinition(store, cap);
+
+    const first = await call(
+      createStudioSessionHandler(),
+      makeReq({ db, objectStore: store, userId: ME, body: { capabilityId: cap.id } }),
+    );
+    const second = await call(
+      createStudioSessionHandler(),
+      makeReq({ db, objectStore: store, userId: ME, body: { capabilityId: cap.id } }),
+    );
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    const firstSession = (
+      first.body as { data: { session: { id: string; capabilityId: string; mode: string } } }
+    ).data.session;
+    const secondSession = (
+      second.body as { data: { session: { id: string; capabilityId: string; mode: string } } }
+    ).data.session;
+    expect(firstSession).toMatchObject({ capabilityId: cap.id, mode: 'studio' });
+    expect(secondSession.id).toBe(firstSession.id);
+    expect([...db.sessions.values()].filter((row) => row.mode === 'studio')).toHaveLength(1);
+  });
+
+  it('已发布 Agent 也只有创作者本人能进入 Studio', async () => {
+    const db = new FakeDb();
+    const store = new FakeObjectStore();
+    const cap = db.seedCapability({ id: CAP_A, owner_user_id: OTHER, published: true });
+    seedRunnableDefinition(store, cap);
+
+    const reply = await call(
+      createStudioSessionHandler(),
+      makeReq({ db, objectStore: store, userId: ME, body: { capabilityId: cap.id } }),
+    );
+
+    expect(reply.statusCode).toBe(404);
+    expect(db.sessions.size).toBe(0);
+  });
+
+  it('旧 Studio 归档后重新进入，会从 capability 当前 UI 恢复到新 Studio', async () => {
+    const db = new FakeDb();
+    const store = new FakeObjectStore();
+    const cap = db.seedCapability({ id: CAP_A, owner_user_id: ME });
+    seedRunnableDefinition(store, cap);
+    const first = await getOrCreateStudioSession(db, {
+      capabilityId: cap.id,
+      ownerUserId: ME,
+    });
+    const tool = createArtifactTool({
+      db,
+      objectStore: store,
+      sessionId: first.id,
+      capabilityId: cap.id,
+      mode: 'studio',
+      onArtifact: () => undefined,
+    });
+    const html = `<!doctype html><html><head><style>button{color:red}</style></head><body>
+      <button data-combo-key="run-primary">运行</button><script>
+      const prompt = '真实任务'; parent.postMessage({type:'combo:run',version:1,prompt}, '*');
+      </script></body></html>`;
+    const firstRevision = await tool.execute('tc-studio', {
+      kind: 'html',
+      title: 'Agent UI',
+      content: html,
+    });
+    await bindCapabilityUiArtifact(db, {
+      capabilityId: cap.id,
+      artifactId: firstRevision.details!.artifactId,
+      studioSessionId: first.id,
+    });
+    await archiveSessionRow(db, first.id, ME);
+
+    const reply = await call(
+      createStudioSessionHandler(),
+      makeReq({ db, objectStore: store, userId: ME, body: { capabilityId: cap.id } }),
+    );
+    expect(reply.statusCode).toBe(200);
+    const restored = (reply.body as { data: { session: { id: string; mode: string } } }).data
+      .session;
+    expect(restored).toMatchObject({ mode: 'studio' });
+    expect(restored.id).not.toBe(first.id);
+    const restoredArtifact = [...db.artifacts.values()].find(
+      (artifact) => artifact.session_id === restored.id,
+    );
+    expect(restoredArtifact).toBeTruthy();
+    expect(
+      await store.getObjectText(
+        ARTIFACT_BUCKET as never,
+        artifactStorageKey(restored.id, restoredArtifact!.id),
+      ),
+    ).toBe(html);
+  });
+
+  it('首次进入只迁移同 Agent、同 owner 且通过运行契约的旧 consume HTML', async () => {
+    const db = new FakeDb();
+    const store = new FakeObjectStore();
+    const cap = db.seedCapability({ id: CAP_A, owner_user_id: ME });
+    seedRunnableDefinition(store, cap);
+    const legacy = await createSession(db, { capabilityId: cap.id, ownerUserId: ME });
+    const validHtml = `<!doctype html><html><head><style>body{margin:0}</style></head><body>
+      <input id="goal"><button data-combo-key="run-primary">运行</button><script>
+      const prompt = document.querySelector('#goal').value;
+      window.parent.postMessage({type:'combo:run',version:1,prompt}, '*');
+      </script></body></html>`;
+    const valid = await createArtifactTool({
+      db,
+      objectStore: store,
+      sessionId: legacy.id,
+      onArtifact: () => undefined,
+    }).execute('legacy-valid', { kind: 'html', title: '旧版 Agent UI', content: validHtml });
+    const invalid = await createArtifactTool({
+      db,
+      objectStore: store,
+      sessionId: legacy.id,
+      onArtifact: () => undefined,
+    }).execute('legacy-invalid', {
+      kind: 'html',
+      title: '普通 HTML 报告',
+      content: '<!doctype html><html><body>普通报告</body></html>',
+    });
+    db.artifacts.get(valid.details!.artifactId)!.created_at = '2026-07-20T00:00:00.000Z';
+    db.artifacts.get(valid.details!.artifactId)!.updated_at = '2026-07-20T00:00:00.000Z';
+    db.artifacts.get(invalid.details!.artifactId)!.created_at = '2026-07-21T00:00:00.000Z';
+    db.artifacts.get(invalid.details!.artifactId)!.updated_at = '2026-07-21T00:00:00.000Z';
+
+    const reply = await call(
+      createStudioSessionHandler(),
+      makeReq({ db, objectStore: store, userId: ME, body: { capabilityId: cap.id } }),
+    );
+    expect(reply.statusCode).toBe(200);
+    const studioId = (reply.body as { data: { session: { id: string } } }).data.session.id;
+    const adoptedId = db.capabilities.get(cap.id)?.ui_artifact_id;
+    expect(adoptedId).toBeTruthy();
+    const adopted = db.artifacts.get(adoptedId!);
+    expect(adopted).toMatchObject({
+      session_id: studioId,
+      meta: expect.objectContaining({
+        adoption: 'legacy-owner-consume-html',
+        legacySourceArtifactId: valid.details!.artifactId,
+      }),
+    });
+    expect(await store.getObjectText(ARTIFACT_BUCKET as never, adopted!.storage_key)).toBe(
+      validHtml,
+    );
+  });
+
+  it('Studio seed 瞬时失败时保留复用会话为 active，供下次幂等重试', async () => {
+    const db = new FakeDb();
+    const store = new FakeObjectStore();
+    const cap = db.seedCapability({ id: CAP_A, owner_user_id: ME });
+    seedRunnableDefinition(store, cap);
+    const studio = await getOrCreateStudioSession(db, {
+      capabilityId: cap.id,
+      ownerUserId: ME,
+    });
+    const query = db.query.bind(db);
+    let failed = false;
+    db.query = (async (sql: string, params?: unknown[]) => {
+      if (!failed && sql.includes('FROM artifacts') && sql.includes("kind = 'html'")) {
+        failed = true;
+        throw new Error('transient db read failure');
+      }
+      return query(sql, params);
+    }) as typeof db.query;
+
+    const reply = await call(
+      createStudioSessionHandler(),
+      makeReq({ db, objectStore: store, userId: ME, body: { capabilityId: cap.id } }),
+    );
+    expect(reply.statusCode).toBe(500);
+    expect(db.sessions.get(studio.id)?.status).toBe('active');
+  });
+});
+
+describe('POST /runtime/sessions capability UI 快照', () => {
+  it('有当前 UI 时新 consume 自动复制；无当前 UI 时仍正常创建空会话', async () => {
+    const db = new FakeDb();
+    const store = new FakeObjectStore();
+    const withUi = db.seedCapability({ id: CAP_A, owner_user_id: ME, published: true });
+    const withoutUi = db.seedCapability({ id: CAP_B, owner_user_id: ME });
+    seedRunnableDefinition(store, withUi);
+    seedRunnableDefinition(store, withoutUi);
+    const studio = await getOrCreateStudioSession(db, {
+      capabilityId: withUi.id,
+      ownerUserId: ME,
+    });
+    const html = `<!doctype html><html><head><style>body{margin:0}</style></head><body>
+      <button data-combo-key="run-primary">运行</button><script>
+      const prompt = '真实任务'; window.parent.postMessage({type:'combo:run',version:1,prompt}, '*');
+      </script></body></html>`;
+    const currentRevision = await createArtifactTool({
+      db,
+      objectStore: store,
+      sessionId: studio.id,
+      capabilityId: withUi.id,
+      mode: 'studio',
+      onArtifact: () => undefined,
+    }).execute('tc-studio', { kind: 'html', title: 'Agent UI', content: html });
+    await bindCapabilityUiArtifact(db, {
+      capabilityId: withUi.id,
+      artifactId: currentRevision.details!.artifactId,
+      studioSessionId: studio.id,
+    });
+
+    const seeded = await call(
+      createSessionHandler(),
+      makeReq({ db, objectStore: store, userId: OTHER, body: { capabilityId: withUi.id } }),
+    );
+    expect(seeded.statusCode).toBe(201);
+    const seededSessionId = (seeded.body as { data: { id: string } }).data.id;
+    const snapshot = [...db.artifacts.values()].find(
+      (artifact) => artifact.session_id === seededSessionId,
+    );
+    expect(snapshot).toBeTruthy();
+    expect(
+      await store.getObjectText(
+        ARTIFACT_BUCKET as never,
+        artifactStorageKey(seededSessionId, snapshot!.id),
+      ),
+    ).toBe(html);
+
+    const compatible = await call(
+      createSessionHandler(),
+      makeReq({ db, objectStore: store, userId: ME, body: { capabilityId: withoutUi.id } }),
+    );
+    expect(compatible.statusCode).toBe(201);
+    const compatibleId = (compatible.body as { data: { id: string } }).data.id;
+    expect(
+      [...db.artifacts.values()].filter((artifact) => artifact.session_id === compatibleId),
+    ).toHaveLength(0);
+  });
+});
 
 describe('session 端点 owner 守卫', () => {
   it('GET /runtime/sessions/:id：本人 200，非本人 404', async () => {
@@ -342,6 +609,7 @@ describe('GET /runtime/sessions 按能力过滤', () => {
     await createSession(db, { capabilityId: CAP_A, ownerUserId: ME });
     await createSession(db, { capabilityId: CAP_A, ownerUserId: ME });
     await createSession(db, { capabilityId: CAP_B, ownerUserId: ME });
+    const studio = await getOrCreateStudioSession(db, { capabilityId: CAP_A, ownerUserId: ME });
 
     const all = await call(listSessionsHandler(), makeReq({ db, userId: ME }));
     expect(all.statusCode).toBe(200);
@@ -355,6 +623,15 @@ describe('GET /runtime/sessions 按能力过滤', () => {
     const items = (onlyA.body as { data: { capabilityId: string }[] }).data;
     expect(items).toHaveLength(2);
     expect(items.every((s) => s.capabilityId === CAP_A)).toBe(true);
+
+    const studioOnly = await call(
+      listSessionsHandler(),
+      makeReq({ db, userId: ME, query: { capabilityId: CAP_A, mode: 'studio' } }),
+    );
+    expect(studioOnly.statusCode).toBe(200);
+    expect((studioOnly.body as { data: { id: string; mode: string }[] }).data).toEqual([
+      expect.objectContaining({ id: studio.id, mode: 'studio' }),
+    ]);
   });
 
   it('默认只回 active 会话', async () => {
@@ -376,6 +653,15 @@ describe('GET /runtime/sessions 按能力过滤', () => {
     const reply = await call(
       listSessionsHandler(),
       makeReq({ db, userId: ME, query: { capabilityId: 'not-a-uuid' } }),
+    );
+    expect(reply.statusCode).toBe(400);
+  });
+
+  it('未知 mode → 400', async () => {
+    const db = new FakeDb();
+    const reply = await call(
+      listSessionsHandler(),
+      makeReq({ db, userId: ME, query: { mode: 'mystery' } }),
     );
     expect(reply.statusCode).toBe(400);
   });
