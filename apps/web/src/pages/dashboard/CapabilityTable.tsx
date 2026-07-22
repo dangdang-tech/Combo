@@ -1,10 +1,10 @@
-// 我的能力体列表（外壳首页-11/14/15/30/35）。
+// 我的 Agent 列表（外壳首页-11/14/15/30/35）。
 //
 // 列：名称 + 一句话简介 / 状态（后端单源 reviewStatus+statusLabel 派生，不前端自造）/
 //     本月调用（usage 占位）/ 消耗迷你图（MiniSparkline 占位）/ 收益（usage 占位）/
-//     操作（试用·编辑·更多）。
-// 试用恒「本期未开放」占位（决策③，actions.trial.enabled=false）；编辑进草稿/编辑路由；
-// 被拒态（review_rejected）显示拒绝原因 + 重试/编辑（B-30 工作台落点）。
+//     操作（重新生成·更多）。
+// 未兑现的试用入口不展示；“重新生成”明确表达会回到创建流程，不冒充就地编辑。
+// 被拒态（review_rejected）继续显示拒绝原因，操作同样是“重新生成”。
 import { useState, type ReactElement } from 'react';
 import type { DashboardCapabilityRow, Meta } from '@cb/shared';
 import { MiniSparkline, UsagePlaceholder } from '../../components/index.js';
@@ -12,9 +12,7 @@ import { MiniSparkline, UsagePlaceholder } from '../../components/index.js';
 export interface CapabilityTableProps {
   rows: DashboardCapabilityRow[];
   meta: Meta | undefined;
-  /** 行内「试用」点击 → 落「本期未开放」占位（不进 runtime）。 */
-  onTrial: (row: DashboardCapabilityRow) => void;
-  /** 「编辑」→ 草稿/编辑路由。 */
+  /** 「重新生成」→ 带 Agent 上下文回到创建流程。 */
   onEdit: (row: DashboardCapabilityRow) => void;
   /** 「更多」菜单（下架/改价/查看，外壳首页-35）；本期占位入口。 */
   onMore: (row: DashboardCapabilityRow) => void;
@@ -44,13 +42,11 @@ function StatusBadge({ row }: { row: DashboardCapabilityRow }): ReactElement {
 function CapabilityRow({
   row,
   meta,
-  onTrial,
   onEdit,
   onMore,
 }: {
   row: DashboardCapabilityRow;
   meta: Meta | undefined;
-  onTrial: (row: DashboardCapabilityRow) => void;
   onEdit: (row: DashboardCapabilityRow) => void;
   onMore: (row: DashboardCapabilityRow) => void;
 }): ReactElement {
@@ -86,22 +82,13 @@ function CapabilityRow({
         )}
       </td>
       <td className="cb-cap-row__actions">
-        {/* 试用本期不做（决策③）：按钮在、文案正确，点击落「本期未开放」占位、不进 runtime。 */}
-        <button
-          type="button"
-          className="cb-cap-action cb-cap-action--trial"
-          onClick={() => onTrial(row)}
-          title={row.actions.trial.hint}
-        >
-          试用
-        </button>
         {row.actions.edit && (
           <button
             type="button"
             className="cb-cap-action cb-cap-action--edit"
             onClick={() => onEdit(row)}
           >
-            {row.retryEditable ? '重试 / 编辑' : '编辑'}
+            重新生成
           </button>
         )}
         {row.actions.more && (
@@ -124,7 +111,7 @@ function EmptyRow(): ReactElement {
   return (
     <tr className="cb-cap-row cb-cap-row--empty">
       <td colSpan={6} className="cb-cap-row__empty">
-        还没有能力体，点右上「上传新能力」开始第一个。
+        还没有 Agent，点右上「创建 Agent」开始第一个。
       </td>
     </tr>
   );
@@ -133,7 +120,6 @@ function EmptyRow(): ReactElement {
 export function CapabilityTable({
   rows,
   meta,
-  onTrial,
   onEdit,
   onMore,
 }: CapabilityTableProps): ReactElement {
@@ -141,7 +127,7 @@ export function CapabilityTable({
     <table className="cb-cap-table">
       <thead>
         <tr>
-          <th scope="col">能力体</th>
+          <th scope="col">Agent</th>
           <th scope="col">状态</th>
           <th scope="col">本月调用</th>
           <th scope="col">消耗趋势</th>
@@ -158,7 +144,6 @@ export function CapabilityTable({
               key={r.capabilityId}
               row={r}
               meta={meta}
-              onTrial={onTrial}
               onEdit={onEdit}
               onMore={onMore}
             />

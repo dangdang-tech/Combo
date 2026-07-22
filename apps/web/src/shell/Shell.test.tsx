@@ -77,10 +77,10 @@ describe('侧栏导航分两组且菜单项齐全（外壳首页-03）', () => {
     expect(screen.getByText('我的')).toBeInTheDocument();
   });
 
-  it('六个导航项齐全（工作台/我的能力/上传能力/数据分析/收益/个人主页）', () => {
+  it('六个导航项齐全（工作台/我的 Agent/创建 Agent/数据分析/收益/个人主页）', () => {
     renderShell();
     const nav = screen.getByRole('navigation', { name: '主导航' });
-    for (const label of ['工作台', '我的能力', '上传能力', '数据分析', '收益', '个人主页']) {
+    for (const label of ['工作台', '我的 Agent', '创建 Agent', '数据分析', '收益', '个人主页']) {
       expect(within(nav).getByText(label)).toBeInTheDocument();
     }
   });
@@ -93,10 +93,7 @@ describe('侧栏导航分两组且菜单项齐全（外壳首页-03）', () => {
       expect(item).toHaveClass('cb-shell__navlink--disabled');
       expect(item).toHaveAttribute('aria-disabled', 'true');
     }
-    expect(within(nav).getByRole('link', { name: '工作台' })).toHaveAttribute(
-      'href',
-      '/creator',
-    );
+    expect(within(nav).getByRole('link', { name: '工作台' })).toHaveAttribute('href', '/creator');
     expect(within(nav).queryByRole('link', { name: '数据分析' })).toBeNull();
     expect(within(nav).queryByRole('link', { name: '收益' })).toBeNull();
     expect(within(nav).queryByRole('link', { name: '个人主页' })).toBeNull();
@@ -133,16 +130,16 @@ describe('收起 / 展开纯图标态（外壳首页-04/05/36）', () => {
     const user = userEvent.setup();
     renderShell();
     await user.click(screen.getByRole('button', { name: '收起侧栏' }));
-    const link = screen.getByRole('link', { name: '我的能力' });
+    const link = screen.getByRole('link', { name: '我的 Agent' });
     expect(link).toBeInTheDocument();
-    expect(link).toHaveAttribute('title', '我的能力');
+    expect(link).toHaveAttribute('title', '我的 Agent');
   });
 
   it('收起态：链接仍可点并完成导航（外壳首页-05）', async () => {
     const user = userEvent.setup();
     renderShell();
     await user.click(screen.getByRole('button', { name: '收起侧栏' }));
-    await user.click(screen.getByRole('link', { name: '我的能力' }));
+    await user.click(screen.getByRole('link', { name: '我的 Agent' }));
     expect(screen.getByTestId('page')).toHaveTextContent('我的能力页');
   });
 
@@ -180,10 +177,10 @@ describe('上传向导顶栏（Figma STEP 顶栏）', () => {
     expect(screen.queryByRole('banner')).toBeNull();
   });
 
-  it('五步页 extract → 顶栏使用面包屑「上传能力 / Combo Builder」', () => {
+  it('Agent 结果页 → 顶栏使用面包屑「创建 Agent / Combo Builder」', () => {
     renderShell('/create/extract');
     const topbar = screen.getByRole('banner');
-    expect(within(topbar).getByText('上传能力')).toBeInTheDocument();
+    expect(within(topbar).getByText('创建 Agent')).toBeInTheDocument();
     expect(within(topbar).getByText('Combo Builder')).toBeInTheDocument();
     expect(within(topbar).queryByText(/COMBO · CREATOR/)).not.toBeInTheDocument();
     // 顶栏右上常驻真实账号头像（Figma STEP 顶栏右上）。
@@ -204,8 +201,8 @@ describe('当前页高亮（外壳首页-28）', () => {
     );
     expect(within(nav).getAllByRole('link')).toHaveLength(3);
 
-    await user.click(within(nav).getByRole('link', { name: '我的能力' }));
-    expect(within(nav).getByRole('link', { name: '我的能力' })).toHaveClass(
+    await user.click(within(nav).getByRole('link', { name: '我的 Agent' }));
+    expect(within(nav).getByRole('link', { name: '我的 Agent' })).toHaveClass(
       'cb-shell__navlink--active',
     );
     const actives0 = within(nav)
@@ -213,11 +210,11 @@ describe('当前页高亮（外壳首页-28）', () => {
       .filter((el) => el.classList.contains('cb-shell__navlink--active'));
     expect(actives0).toHaveLength(1);
 
-    await user.click(within(nav).getByRole('link', { name: '上传能力' }));
-    expect(within(nav).getByRole('link', { name: '上传能力' })).toHaveClass(
+    await user.click(within(nav).getByRole('link', { name: '创建 Agent' }));
+    expect(within(nav).getByRole('link', { name: '创建 Agent' })).toHaveClass(
       'cb-shell__navlink--active',
     );
-    expect(within(nav).getByRole('link', { name: '我的能力' })).not.toHaveClass(
+    expect(within(nav).getByRole('link', { name: '我的 Agent' })).not.toHaveClass(
       'cb-shell__navlink--active',
     );
   });
@@ -236,8 +233,8 @@ describe('五步流程外壳不重建（外壳首页-07，批注 D14）', () => 
     expect(screen.getByTestId('page')).toHaveTextContent('上传 import');
 
     // 离开再回，验证外壳不随内容重建。
-    await user.click(screen.getByRole('link', { name: '我的能力' }));
-    await user.click(screen.getByRole('link', { name: '上传能力' }));
+    await user.click(screen.getByRole('link', { name: '我的 Agent' }));
+    await user.click(screen.getByRole('link', { name: '创建 Agent' }));
 
     // 同一外壳 DOM 节点（toBe 引用相等 → 没有被卸载重建）。
     expect(screen.getByRole('complementary', { name: '侧边导航' })).toBe(asideBefore);

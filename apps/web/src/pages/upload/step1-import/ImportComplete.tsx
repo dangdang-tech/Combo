@@ -64,7 +64,9 @@ export function ImportComplete({
           <p className="cb-import-done__banner-title">
             已导入全部对话历史（{sourcesText(snapshot)}）
           </p>
-          <p className="cb-import-done__banner-sub">生成了一份原始数据，下一步从中提取能力项</p>
+          <p className="cb-import-done__banner-sub">
+            会话已整理完成，接下来会自动识别可复用的 Agent
+          </p>
         </div>
         <button type="button" className="cb-link cb-import-done__reimport" onClick={onReimport}>
           重新导入

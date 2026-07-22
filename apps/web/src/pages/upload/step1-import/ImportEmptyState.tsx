@@ -31,7 +31,7 @@ export function ImportEmptyState({
 
   return (
     <section className="cb-import-empty" aria-label="导入你的对话历史">
-      <h2 className="cb-import-empty__title">把对话历史，变成可发布的能力</h2>
+      <h2 className="cb-import-empty__title">把对话历史，变成可使用的 Agent</h2>
 
       <div className="cb-import-empty__cards">
         {/* 主卡：命令行 / 本机直读（命令行优先方案，标推荐）。 */}

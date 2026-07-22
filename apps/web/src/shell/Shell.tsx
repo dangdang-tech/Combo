@@ -4,7 +4,7 @@
 //   顶部 — Combo 品牌字标 + 收起/展开开关
 //   中段 — 两组导航（创作 / 我的），可收起为纯图标态（收起后只剩图标 + hover tooltip）
 //   底部 — 当前账号常驻区（头像 + 姓名 · 职位，如 Wayne · CGO）
-// 上传向导顶栏（§2.2）：面包屑（如「Combo Builder / 上传能力」）+ 右上角账号头像。
+// Agent 创作顶栏（§2.2）：面包屑（如「Combo Builder / 创建 Agent」）+ 右上角账号头像。
 // 子页经 <Outlet> 渲染；五步上传流程任何一步都不改外壳结构（批注 D14）。
 import type { ReactElement } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
@@ -23,10 +23,10 @@ export function Shell(): ReactElement {
   const { collapsed, toggle: toggleCollapse } = useCollapse();
   const account = useAccount();
   const crumbs = breadcrumbFor(location.pathname);
-  // 上传五步页保留左面包屑「上传能力 / Combo Builder」+ 右上头像；
+  // Agent 创作页保留左面包屑「创建 Agent / Combo Builder」+ 右上头像；
   // 工作台等普通页不再渲染顶部横栏，内容直接从主区顶部开始。
   const isWizard = location.pathname === '/create' || location.pathname.startsWith('/create/');
-  const wizardSection = crumbs[1]?.label ?? '上传能力';
+  const wizardSection = crumbs[1]?.label ?? '创建 Agent';
 
   return (
     <div
@@ -93,7 +93,7 @@ export function Shell(): ReactElement {
         {!isWizard && <CloudReviewBar placement="page" />}
         {isWizard && (
           <header className="cb-shell__topbar">
-            {/* 向导顶栏左侧面包屑（Figma STEP：上传能力 / Combo Builder）。 */}
+            {/* 创作顶栏左侧面包屑（创建 Agent / Combo Builder）。 */}
             <p className="cb-shell__crumbs">
               <span className="cb-shell__crumb-page">{wizardSection}</span>
               <span className="cb-shell__crumb-sep" aria-hidden="true">

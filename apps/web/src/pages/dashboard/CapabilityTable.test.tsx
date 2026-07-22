@@ -1,5 +1,5 @@
 // CapabilityTable 测试（外壳首页-11/14/15/30/35）：
-//   状态单源（reviewStatus+statusLabel）/ usage 列占位 / 试用「本期未开放」/ 编辑·更多入口 / 拒绝原因。
+//   状态单源（reviewStatus+statusLabel）/ usage 列占位 / 重新生成·更多入口 / 拒绝原因。
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -39,13 +39,7 @@ const noop = (): void => {};
 describe('CapabilityTable 列与单源状态', () => {
   it('渲染名称 + 简介；状态徽章用后端 statusLabel（单源派生 tone）', () => {
     const { container } = render(
-      <CapabilityTable
-        rows={[row()]}
-        meta={undefined}
-        onTrial={noop}
-        onEdit={noop}
-        onMore={noop}
-      />,
+      <CapabilityTable rows={[row()]} meta={undefined} onEdit={noop} onMore={noop} />,
     );
     expect(screen.getByText('保险方案速算')).toBeInTheDocument();
     expect(screen.getByText('一句话算清两全险现金价值')).toBeInTheDocument();
@@ -55,7 +49,7 @@ describe('CapabilityTable 列与单源状态', () => {
     expect(badge.getAttribute('data-tone')).toBe('ok');
   });
 
-  it('被拒态：statusLabel 已退回 + 拒绝原因 + 重试/编辑', () => {
+  it('被拒态：statusLabel 已退回 + 拒绝原因 + 重新生成', () => {
     render(
       <CapabilityTable
         rows={[
@@ -67,14 +61,13 @@ describe('CapabilityTable 列与单源状态', () => {
           }),
         ]}
         meta={undefined}
-        onTrial={noop}
         onEdit={noop}
         onMore={noop}
       />,
     );
     expect(screen.getByText('已退回')).toBeInTheDocument();
     expect(screen.getByText('示例字段过少')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '重试 / 编辑' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '重新生成' })).toBeInTheDocument();
   });
 
   it('usage 列（本月调用 / 收益 / 消耗迷你图）走占位，绝不显 0、不画图', () => {
@@ -86,7 +79,7 @@ describe('CapabilityTable 列与单源状态', () => {
       },
     };
     const { container } = render(
-      <CapabilityTable rows={[row()]} meta={meta} onTrial={noop} onEdit={noop} onMore={noop} />,
+      <CapabilityTable rows={[row()]} meta={meta} onEdit={noop} onMore={noop} />,
     );
     // 至少两个 usage 占位（本月调用 + 收益），且不画真图
     expect(container.querySelectorAll('.cb-usage-placeholder').length).toBeGreaterThanOrEqual(2);
@@ -97,36 +90,16 @@ describe('CapabilityTable 列与单源状态', () => {
 });
 
 describe('CapabilityTable 操作入口', () => {
-  it('试用按钮在、文案/hint 正确，点击 → onTrial（占位，不进 runtime）', async () => {
-    const onTrial = vi.fn();
-    render(
-      <CapabilityTable
-        rows={[row()]}
-        meta={undefined}
-        onTrial={onTrial}
-        onEdit={noop}
-        onMore={noop}
-      />,
-    );
-    const trialBtn = screen.getByRole('button', { name: '试用' });
-    expect(trialBtn).toHaveAttribute('title', '本期未开放');
-    await userEvent.click(trialBtn);
-    expect(onTrial).toHaveBeenCalledOnce();
+  it('不展示尚未兑现的「试用」入口', () => {
+    render(<CapabilityTable rows={[row()]} meta={undefined} onEdit={noop} onMore={noop} />);
+    expect(screen.queryByRole('button', { name: '试用' })).not.toBeInTheDocument();
   });
 
-  it('编辑 / 更多入口可点', async () => {
+  it('重新生成 / 更多入口可点', async () => {
     const onEdit = vi.fn();
     const onMore = vi.fn();
-    render(
-      <CapabilityTable
-        rows={[row()]}
-        meta={undefined}
-        onTrial={noop}
-        onEdit={onEdit}
-        onMore={onMore}
-      />,
-    );
-    await userEvent.click(screen.getByRole('button', { name: '编辑' }));
+    render(<CapabilityTable rows={[row()]} meta={undefined} onEdit={onEdit} onMore={onMore} />);
+    await userEvent.click(screen.getByRole('button', { name: '重新生成' }));
     await userEvent.click(screen.getByRole('button', { name: '更多操作' }));
     expect(onEdit).toHaveBeenCalledOnce();
     expect(onMore).toHaveBeenCalledOnce();
@@ -141,20 +114,17 @@ describe('CapabilityTable 操作入口', () => {
           }),
         ]}
         meta={undefined}
-        onTrial={noop}
         onEdit={noop}
         onMore={noop}
       />,
     );
-    expect(screen.queryByRole('button', { name: '编辑' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '重新生成' })).toBeNull();
     expect(screen.queryByRole('button', { name: '更多操作' })).toBeNull();
   });
 
   it('空 rows → 友好空态，不裸空表', () => {
-    render(
-      <CapabilityTable rows={[]} meta={undefined} onTrial={noop} onEdit={noop} onMore={noop} />,
-    );
-    expect(screen.getByText(/还没有能力体/)).toBeInTheDocument();
+    render(<CapabilityTable rows={[]} meta={undefined} onEdit={noop} onMore={noop} />);
+    expect(screen.getByText(/还没有 Agent/)).toBeInTheDocument();
   });
 });
 

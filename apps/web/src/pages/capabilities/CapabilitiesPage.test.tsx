@@ -1,8 +1,8 @@
-// 我的能力页测试（F-07）：渲染 / 列表管理 / usage 占位口径 / 操作入口 / 空态 / 分页 / 错误。
+// 我的 Agent 页测试（F-07）：渲染 / 列表管理 / usage 占位口径 / 操作入口 / 空态 / 分页 / 错误。
 import { describe, it, expect, afterEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { DashboardCapabilityRow, DraftView } from '@cb/shared';
+import type { DashboardCapabilityRow } from '@cb/shared';
 import { installFetchMock, type FetchMock } from '../../test/mockFetch.js';
 import { renderPage } from '../__testutils__/renderPage.js';
 import { CapabilitiesPage } from './CapabilitiesPage.js';
@@ -52,19 +52,10 @@ function pageBody(
   };
 }
 
-function draftPageBody(drafts: DraftView[]): unknown {
-  return {
-    data: drafts,
-    meta: {
-      page: { nextCursor: null, hasMore: false, limit: 20, order: 'desc' },
-    },
-  };
-}
-
 let mock: FetchMock | undefined;
 afterEach(() => mock?.restore());
 
-describe('我的能力页', () => {
+describe('我的 Agent 页', () => {
   it('渲染列表：能力名 + 后端单源状态文案（不前端自造）', async () => {
     mock = installFetchMock({
       status: 200,
@@ -75,34 +66,16 @@ describe('我的能力页', () => {
     expect(await screen.findByText('保险话术助手')).toBeInTheDocument();
     // 状态徽章在表内（与同名筛选 chip 区分：scope 到 table）。
     expect(within(screen.getByRole('table')).getByText('已上架')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '我的能力' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '我的 Agent' })).toBeInTheDocument();
   });
 
-  it('顶部显示进行中的创作，并根据真实断点给出继续动作', async () => {
-    mock = installFetchMock([
-      { status: 200, json: pageBody([row()]) },
-      {
-        status: 200,
-        json: draftPageBody([
-          {
-            id: 'd1',
-            status: 'active',
-            currentStep: 'select',
-            stepProgress: { percent: 100, phrase: '已识别 5 个候选' },
-            title: '内容选题 Agent',
-            snapshotId: 's1',
-            extractJobId: 'j1',
-            createdAt: '2026-07-22T04:00:00Z',
-            updatedAt: '2026-07-22T04:10:00Z',
-          },
-        ]),
-      },
-    ]);
+  it('不重复展示工作台的创作恢复卡，只给明确的创建入口', async () => {
+    mock = installFetchMock({ status: 200, json: pageBody([row()]) });
     renderPage(<CapabilitiesPage />);
 
-    expect(await screen.findByRole('region', { name: '进行中的创作' })).toBeInTheDocument();
-    expect(screen.getByText('内容选题 Agent')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '查看 Agent →' })).toBeInTheDocument();
+    await screen.findByText('保险话术助手');
+    expect(screen.queryByRole('region', { name: '继续上次创作' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '创建 Agent' })).toBeInTheDocument();
   });
 
   it('usage 列统一占位（本月调用 / 收益）：显示占位文案、绝不显 0', async () => {
@@ -125,20 +98,15 @@ describe('我的能力页', () => {
     expect(container.querySelector('.cb-sparkline--placeholder')).toBeInTheDocument();
   });
 
-  it('试用按钮恒「本期未开放」占位，点击落占位浮层、不进 runtime', async () => {
+  it('不展示尚未兑现的行内试用入口', async () => {
     mock = installFetchMock({ status: 200, json: pageBody([row()]) });
     renderPage(<CapabilitiesPage />);
     await screen.findByText('保险话术助手');
 
-    const trialBtn = screen.getByRole('button', { name: '试用' });
-    expect(trialBtn).toHaveAttribute('title', '本期未开放');
-    await userEvent.click(trialBtn);
-    // 点击落占位（TrialNotice 浮层），不触发任何 runtime 路由。
-    expect(await screen.findByRole('dialog', { name: '试用提示' })).toBeInTheDocument();
-    expect(screen.getByText(/本期未开放/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '试用' })).not.toBeInTheDocument();
   });
 
-  it('操作入口：编辑按钮存在；被退回态显示重试/编辑 + 拒绝原因', async () => {
+  it('操作入口：被退回态显示重新生成 + 拒绝原因', async () => {
     mock = installFetchMock({
       status: 200,
       json: pageBody([
@@ -158,7 +126,7 @@ describe('我的能力页', () => {
     // 状态徽章「已退回」在表内（与同名筛选 chip 区分）。
     expect(within(table).getByText('已退回')).toBeInTheDocument();
     expect(within(table).getByText('内容含敏感词')).toBeInTheDocument();
-    expect(within(table).getByRole('button', { name: '重试 / 编辑' })).toBeInTheDocument();
+    expect(within(table).getByRole('button', { name: '重新生成' })).toBeInTheDocument();
   });
 
   it('更多菜单：点「更多」打开菜单（下架/改价/查看可达），下架点击落本期未开放占位反馈', async () => {
@@ -178,10 +146,10 @@ describe('我的能力页', () => {
     expect(within(menu).getByRole('status')).toHaveTextContent(/下架.*本期未开放/);
   });
 
-  it('空态（无能力体）→ 友好空态，不裸空表', async () => {
+  it('空态（无 Agent）→ 友好空态，不裸空表', async () => {
     mock = installFetchMock({ status: 200, json: pageBody([]) });
     renderPage(<CapabilitiesPage />);
-    expect(await screen.findByText('还没有能力体')).toBeInTheDocument();
+    expect(await screen.findByText('还没有 Agent')).toBeInTheDocument();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 
@@ -211,7 +179,6 @@ describe('我的能力页', () => {
           nextCursor: 'CUR2',
         }),
       },
-      { status: 200, json: draftPageBody([]) },
       {
         status: 200,
         json: pageBody([row({ capabilityId: 'cap-2', name: '能力 B' })], { hasMore: false }),
@@ -240,7 +207,6 @@ describe('我的能力页', () => {
           nextCursor: 'CUR2',
         }),
       },
-      { status: 200, json: draftPageBody([]) },
       {
         status: 200,
         // 后端重叠返回了 cap-1（边界/并发新增导致游标重叠）+ 新行 cap-2。
@@ -274,7 +240,6 @@ describe('我的能力页', () => {
           nextCursor: 'CUR2',
         }),
       },
-      { status: 200, json: draftPageBody([]) },
       {
         status: 200,
         json: pageBody([row({ capabilityId: 'cap-2', name: '能力 B' })], { hasMore: false }),
@@ -320,7 +285,6 @@ describe('我的能力页', () => {
           },
         },
       },
-      { status: 200, json: draftPageBody([]) },
     ]);
     const { container } = renderPage(<CapabilitiesPage />);
 

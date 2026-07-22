@@ -42,7 +42,7 @@ describe('ImportComplete', () => {
     // 主行：来源口径动态拼（Claude + Codex）。
     expect(screen.getByText('已导入全部对话历史（Claude + Codex）')).toBeInTheDocument();
     // 副行：下一步指引（§5.1.3 逐字）。
-    expect(screen.getByText('生成了一份原始数据，下一步从中提取能力项')).toBeInTheDocument();
+    expect(screen.getByText('会话已整理完成，接下来会自动识别可复用的 Agent')).toBeInTheDocument();
   });
 
   it('完成横幅带「重新导入」入口，点击触发 onReimport（导入-13/21）', async () => {

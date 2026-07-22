@@ -35,7 +35,7 @@ function renderPage(
 
   function LocationProbe() {
     const location = useLocation();
-    const { selection, agentReady, publishCompleted } = useWizard();
+    const { selection, agentReady, trialCompleted, publishCompleted } = useWizard();
     return (
       <>
         <span data-testid="path">{`${location.pathname}${location.search}`}</span>
@@ -43,6 +43,7 @@ function renderPage(
           {selection?.mode === 'single' ? selection.candidateId : 'none'}
         </span>
         <span data-testid="agent-ready">{agentReady ? 'ready' : 'pending'}</span>
+        <span data-testid="trial-completed">{trialCompleted ? 'done' : 'pending'}</span>
         <span data-testid="publish-completed">{publishCompleted ? 'done' : 'pending'}</span>
       </>
     );
@@ -63,6 +64,7 @@ function renderPage(
         <LocationProbe />
         <Routes>
           <Route path="/create/capabilities" element={<CapabilitiesStepPage />} />
+          <Route path="/create/import" element={<span data-testid="import-page">导入页</span>} />
           <Route path="/a/:slug" element={<span data-testid="market">market</span>} />
         </Routes>
       </WizardProvider>
@@ -209,12 +211,15 @@ const extractDone = {
   },
 };
 
-async function finishExtract(): Promise<void> {
+async function finishExtract(
+  heading = '第一个 Agent 已经准备好了',
+  done = extractDone,
+): Promise<void> {
   await waitFor(() => expect(MockFetchEventSource.connections.length).toBeGreaterThan(0));
   const connection = connectionFor('/jobs/j1/events');
   act(() => connection.open());
-  act(() => connection.emit('done', extractDone, { id: '1-0' }));
-  await screen.findByRole('heading', { level: 1, name: '第一个 Agent 已经准备好了' });
+  act(() => connection.emit('done', done, { id: '1-0' }));
+  await screen.findByRole('heading', { level: 1, name: heading });
 }
 
 function expectCapabilitiesReturnTo(trialUrl: string, candidateId = 'c1') {
@@ -251,6 +256,18 @@ afterEach(() => {
 });
 
 describe('CapabilitiesStepPage — real creation checkpoint', () => {
+  it('缺少 snapshot/job 上下文时不空转，给明确“返回导入”退路', async () => {
+    mock = installFetchMock({ status: 500, json: {} });
+    renderPage('/create/capabilities', 'd1');
+
+    expect(
+      screen.getByRole('heading', { name: '这个创作还没有可分析的工作历史' }),
+    ).toBeInTheDocument();
+    expect(mock.calls).toHaveLength(0);
+    await userEvent.click(screen.getByRole('button', { name: '返回导入 →' }));
+    expect(await screen.findByTestId('import-page')).toBeInTheDocument();
+  });
+
   it('提取完成后按 reusability → segmentCount → slug 排序，默认只聚焦一个 Agent', async () => {
     mock = installFetchMock([
       extractAccepted,
@@ -285,6 +302,8 @@ describe('CapabilitiesStepPage — real creation checkpoint', () => {
     await finishExtract();
 
     expect(screen.getByTestId('agent-ready')).toHaveTextContent('ready');
+    expect(screen.getByText(/结合多项工作流证据给出综合推荐顺序/)).toBeInTheDocument();
+    expect(screen.queryByText(/按复用性替你排好顺序/)).toBeNull();
 
     expect(screen.getByRole('heading', { level: 2, name: '主结果' })).toBeInTheDocument();
     expect(screen.queryByRole('checkbox')).toBeNull();
@@ -533,6 +552,7 @@ describe('CapabilitiesStepPage — real creation checkpoint', () => {
     await finishExtract();
 
     expect(await screen.findByText(/上次试用已保存/)).toBeInTheDocument();
+    expect(screen.getByTestId('trial-completed')).toHaveTextContent('done');
     expect(screen.getByRole('button', { name: '发布这个 Agent →' })).toBeEnabled();
     expect(
       mock.calls.some(
@@ -567,6 +587,7 @@ describe('CapabilitiesStepPage — real creation checkpoint', () => {
     await finishExtract();
 
     expect(await screen.findByText(/上次试用已保存/)).toBeInTheDocument();
+    expect(screen.getByTestId('trial-completed')).toHaveTextContent('done');
     expect(
       mock.calls.some(
         (call) =>
@@ -591,6 +612,7 @@ describe('CapabilitiesStepPage — real creation checkpoint', () => {
     await finishExtract();
 
     expect(await screen.findByText(/这次试用与当前 Agent 不匹配/)).toBeInTheDocument();
+    expect(screen.getByTestId('trial-completed')).toHaveTextContent('pending');
     expect(screen.queryByRole('button', { name: '发布这个 Agent →' })).toBeNull();
     expect(screen.getByRole('button', { name: '重新试用这个 Agent →' })).toBeEnabled();
   });
@@ -624,6 +646,7 @@ describe('CapabilitiesStepPage — real creation checkpoint', () => {
     await finishExtract();
 
     expect(await screen.findByText(/上次试用还没有完成/)).toBeInTheDocument();
+    expect(screen.getByTestId('trial-completed')).toHaveTextContent('pending');
     expect(screen.queryByRole('button', { name: '发布这个 Agent →' })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: '继续试用这个 Agent →' }));
     expect(openTrial).toHaveBeenCalledOnce();
@@ -658,6 +681,7 @@ describe('CapabilitiesStepPage — real creation checkpoint', () => {
     expect(screen.queryByRole('button', { name: '用真实任务试一次 →' })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: '重新恢复试用记录 →' }));
     expect(await screen.findByText(/上次试用已保存/)).toBeInTheDocument();
+    expect(screen.getByTestId('trial-completed')).toHaveTextContent('done');
     expect(screen.getByRole('button', { name: '发布这个 Agent →' })).toBeEnabled();
   });
 
@@ -832,13 +856,44 @@ describe('CapabilitiesStepPage — real creation checkpoint', () => {
     ).toBe(false);
   });
 
-  it('没有可用候选时给真实空态，不展示试用或发布动作', async () => {
-    mock = installFetchMock([extractAccepted, candidateResponse([])]);
+  it('没有可用候选时给可重新提取或返回导入的双退路', async () => {
+    const reextractAccepted = {
+      status: 202,
+      json: { data: { jobId: 'j2', snapshotId: 's1', status: 'queued', eventsUrl: '/x2' } },
+    };
+    mock = installFetchMock([extractAccepted, candidateResponse([]), reextractAccepted]);
     renderPage();
-    await finishExtract();
+    await finishExtract('这次还没有找到合适的 Agent', {
+      ...extractDone,
+      result: { ...extractDone.result, candidateCount: 0, readyCount: 0 },
+    });
 
-    expect(screen.getByText(/没识别出可复用的能力/)).toBeInTheDocument();
+    const reextract = screen.getByRole('button', { name: '重新提取当前历史 →' });
+    expect(reextract).toBeEnabled();
+    expect(screen.getByRole('button', { name: '返回导入' })).toBeEnabled();
+    expect(screen.getByTestId('agent-ready')).toHaveTextContent('pending');
     expect(screen.queryByRole('button', { name: /试/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /发布/ })).toBeNull();
+
+    const firstExtract = mock.calls.find(
+      (call) => call.method === 'POST' && call.url.endsWith('/snapshots/s1/extract'),
+    );
+    await userEvent.click(reextract);
+
+    await waitFor(() =>
+      expect(
+        mock.calls.filter(
+          (call) => call.method === 'POST' && call.url.endsWith('/snapshots/s1/extract'),
+        ),
+      ).toHaveLength(2),
+    );
+    const extractCalls = mock.calls.filter(
+      (call) => call.method === 'POST' && call.url.endsWith('/snapshots/s1/extract'),
+    );
+    expect(extractCalls[1]?.headers['Idempotency-Key']).not.toBe(
+      firstExtract?.headers['Idempotency-Key'],
+    );
+    await waitFor(() => expect(screen.getByTestId('path')).toHaveTextContent('extractJobId=j2'));
+    await waitFor(() => expect(() => connectionFor('/jobs/j2/events')).not.toThrow());
   });
 });

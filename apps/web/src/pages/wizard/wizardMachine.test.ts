@@ -38,7 +38,7 @@ describe('wizardMachine（2 步：上传 / 能力页）', () => {
   });
 
   it('stepLabel 取 CREATE_STEPS.label', () => {
-    expect(stepLabel('import')).toBe('上传');
-    expect(stepLabel('capabilities')).toBe('能力');
+    expect(stepLabel('import')).toBe('导入记录');
+    expect(stepLabel('capabilities')).toBe('Agent 结果');
   });
 });

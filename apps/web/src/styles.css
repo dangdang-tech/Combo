@@ -1073,6 +1073,41 @@ body {
   margin: 4px 0 12px;
 }
 
+.cb-page__head.cb-page__head--split {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  max-width: none;
+}
+
+.cb-page__head-copy {
+  min-width: 0;
+}
+
+.cb-page__head--split > .cb-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+:root[data-theme='dark'] .cb-page__head--split > .cb-btn--primary {
+  border-color: var(--cb-action-primary, var(--cb-accent));
+  background: var(--cb-action-primary, var(--cb-accent));
+  color: var(--cb-on-action-primary, #fff);
+}
+
+@media (max-width: 760px) {
+  .cb-page__head.cb-page__head--split {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .cb-page__head--split > .cb-btn {
+    width: 100%;
+  }
+}
+
 /* 段控 chip（状态筛选 / range 切换）：当前档高亮。 */
 .cb-filter-chip {
   border: 1px solid var(--cb-border);
@@ -2913,74 +2948,170 @@ body {
   }
 }
 
-/* 草稿条单 bar（Figma：冷纸横 bar，label + 胶囊行 + 单 CTA，BUG-012 结构精修）。 */
-.cb-draft-strip {
+/* 工作台恢复入口：最近一次创作是唯一主任务，其余创作纵向收起。 */
+.cb-resume-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px 20px;
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-card);
+  background: var(--cb-surface-card, var(--cb-surface));
+  color: var(--cb-fg);
+}
+
+.cb-resume-card__head,
+.cb-resume-card__primary {
   display: flex;
   align-items: center;
-  gap: 16px;
-  background: var(--cb-rail);
-  border-radius: var(--cb-radius-card);
-  padding: 14px 20px;
-  margin-top: 24px;
+  justify-content: space-between;
+  gap: 20px;
 }
-.cb-draft-strip__label {
+
+.cb-resume-card__eyebrow {
+  margin: 0 0 4px;
+  color: var(--cb-muted);
   font-family: var(--cb-font-mono);
   font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 1.2px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--cb-muted);
-  white-space: nowrap;
-  flex-shrink: 0;
 }
-.cb-draft-strip__chips {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 1;
-  min-width: 0;
-  overflow-x: auto;
-}
-.cb-draft-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--cb-surface);
-  border: 1px solid var(--cb-border);
-  border-radius: var(--cb-radius-pill);
-  padding: 5px 12px;
-  font-size: 13px;
+
+.cb-resume-card__title {
+  margin: 0;
   color: var(--cb-fg);
-  cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.cb-draft-chip:hover {
-  border-color: var(--cb-accent);
-}
-.cb-draft-chip__dot {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--cb-radius-pill);
-  background: var(--cb-accent);
-  flex-shrink: 0;
-}
-.cb-draft-chip__name {
+  font-family: var(--cb-font-serif);
+  font-size: 22px;
   font-weight: 500;
+  line-height: 1.2;
 }
-.cb-draft-chip__phrase {
+
+.cb-resume-card__count {
+  flex: 0 0 auto;
   color: var(--cb-muted);
   font-size: 12px;
 }
-.cb-draft-strip__cta {
-  border: none;
-  background: none;
-  color: var(--cb-accent);
+
+.cb-resume-card__primary {
+  padding: 14px 16px;
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-control);
+  background: var(--cb-surface);
+}
+
+.cb-resume-card__copy,
+.cb-resume-card__other-copy {
+  display: grid;
+  min-width: 0;
+}
+
+.cb-resume-card__copy {
+  gap: 4px;
+}
+
+.cb-resume-card__name,
+.cb-resume-card__other-name {
+  overflow: hidden;
+  color: var(--cb-fg);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cb-resume-card__progress,
+.cb-resume-card__other-progress,
+.cb-resume-card__time {
+  color: var(--cb-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.cb-resume-card__action {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.cb-resume-card__more {
+  border-top: 1px solid var(--cb-border);
+}
+
+.cb-resume-card__more-summary {
+  width: fit-content;
+  padding: 11px 0 0;
+  color: var(--cb-action-link, var(--cb-accent));
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
+}
+
+.cb-resume-card__other-list {
+  display: grid;
+  gap: 1px;
+  margin-top: 10px;
+  overflow: hidden;
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-control);
+  background: var(--cb-border);
+}
+
+.cb-resume-card__other {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 0;
+  background: var(--cb-surface);
+  color: var(--cb-fg);
+  text-align: left;
+  cursor: pointer;
+}
+
+.cb-resume-card__other:hover,
+.cb-resume-card__other:focus-visible {
+  background: var(--cb-selection-bg, var(--cb-rail));
+  outline: none;
+}
+
+.cb-resume-card__other-action {
+  flex: 0 0 auto;
+  color: var(--cb-action-link, var(--cb-accent));
+  font-size: 12px;
   white-space: nowrap;
-  flex-shrink: 0;
+}
+
+/* 暗色下仍是低对比管理面；强调色只留给恢复动作。 */
+:root[data-theme='dark'] .cb-resume-card {
+  border-color: var(--cb-border);
+  background: var(--cb-surface-card, var(--cb-rail));
+}
+
+:root[data-theme='dark'] .cb-resume-card__primary,
+:root[data-theme='dark'] .cb-resume-card__other {
+  background: var(--cb-surface);
+}
+
+@media (max-width: 760px) {
+  .cb-resume-card {
+    padding: 16px;
+  }
+
+  .cb-resume-card__primary,
+  .cb-resume-card__other {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .cb-resume-card__action {
+    width: 100%;
+  }
+
+  .cb-resume-card__other-action {
+    align-self: flex-start;
+  }
 }
 
 /* ============================================================

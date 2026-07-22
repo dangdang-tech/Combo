@@ -131,7 +131,7 @@ describe('DesignAgentPanel', () => {
     expect(onInterrupt).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps one continuous conversation and renders artifact changes as light events', () => {
+  it('keeps one continuous conversation and marks the open artifact without a no-op action', () => {
     const onOpenArtifact = vi.fn();
     render(
       <DesignAgentPanel
@@ -162,6 +162,49 @@ describe('DesignAgentPanel', () => {
     expect(screen.getByRole('log', { name: '页面修改记录' })).toBeInTheDocument();
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/已创建页面.*每日待办管家.*当前页面/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /每日待办管家.*查看/ })).not.toBeInTheDocument();
+    expect(onOpenArtifact).not.toHaveBeenCalled();
+  });
+
+  it('keeps historical artifact events available for preview', () => {
+    const onOpenArtifact = vi.fn();
+    render(
+      <DesignAgentPanel
+        {...props({
+          revisions: [
+            ...props().revisions,
+            {
+              ...props().revisions[0]!,
+              id: '44444444-4444-4444-8444-444444444444',
+              revisionNo: 2,
+              artifactVersion: 2,
+            },
+          ],
+          selectedRevisionNo: 2,
+          messages: [
+            {
+              id: 'message-artifact-history',
+              runId: '33333333-3333-4333-8333-333333333333',
+              seq: 1,
+              role: 'assistant',
+              text: '首版页面已经准备好了。',
+              artifacts: [
+                {
+                  artifactKey: 'main',
+                  version: 1,
+                  kind: 'html',
+                  title: '每日待办管家',
+                },
+              ],
+              createdAt: '2026-07-21T10:00:00.000Z',
+            },
+          ],
+          onOpenArtifact,
+        })}
+      />,
+    );
+
     const event = screen.getByRole('button', { name: /已创建页面.*每日待办管家.*查看/ });
     fireEvent.click(event);
     expect(onOpenArtifact).toHaveBeenCalledWith(
@@ -183,7 +226,7 @@ describe('DesignAgentPanel', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: '重试' }));
-    expect(onSend).toHaveBeenCalledWith(expect.stringContaining('重新生成首版 Miniapp'));
+    expect(onSend).toHaveBeenCalledWith(expect.stringContaining('重新生成首版页面'));
   });
 
   it('pauses queued edits after an interrupted or failed run', () => {

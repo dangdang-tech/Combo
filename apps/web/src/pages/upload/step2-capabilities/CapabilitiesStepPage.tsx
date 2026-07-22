@@ -9,7 +9,7 @@
 //      glyph/free/public）→ 订阅批次 job SSE，mergeBatchState 合并逐项态 → 卡片状态槽反映 发布中 / 已发布 / 失败；
 //      完成后给已发布数 + 每个已发布能力的市集链接（/a/{slug}）。
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   SSE_ROUTES,
   type CandidateTrialCapability,
@@ -174,6 +174,7 @@ function ExtractJobStream({
 export function CapabilitiesStepPage(): ReactElement {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const {
     draftId: ctxDraftId,
     snapshotId: ctxSnapshotId,
@@ -186,7 +187,10 @@ export function CapabilitiesStepPage(): ReactElement {
     setVersionId,
     setCapabilityId,
     setAgentReady,
+    setTrialCompleted,
     setPublishCompleted,
+    setDraftId,
+    setSnapshotId,
     selection: draftSelection,
     setSelection,
   } = useWizard();
@@ -213,6 +217,7 @@ export function CapabilitiesStepPage(): ReactElement {
   const [doneResult, setDoneResult] = useState<ExtractDoneResult | undefined>();
   const [error, setError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [reextractAttempt, setReextractAttempt] = useState(0);
   const failCountRef = useRef(0);
 
   // —— 批量发布态（叠在 ready 上）——
@@ -257,18 +262,17 @@ export function CapabilitiesStepPage(): ReactElement {
   const triggerKey = useMemo(
     () =>
       snapshotId
-        ? `extract:${EXTRACT_IDEMPOTENCY_VERSION}:${draftId ?? 'nodraft'}:${snapshotId}`
+        ? `extract:${EXTRACT_IDEMPOTENCY_VERSION}:${draftId ?? 'nodraft'}:${snapshotId}${
+            reextractAttempt > 0 ? `:retry:${reextractAttempt}` : ''
+          }`
         : undefined,
-    [snapshotId, draftId],
+    [snapshotId, draftId, reextractAttempt],
   );
 
   // 触发萃取（仅 triggering 且有 snapshotId）。
   useEffect(() => {
     if (phase.kind !== 'triggering') return;
-    if (!snapshotId || !triggerKey) {
-      setError(fallbackError('没找到要提取的原始数据，回上一步重新导入。'));
-      return;
-    }
+    if (!snapshotId || !triggerKey) return;
     let active = true;
     void (async () => {
       try {
@@ -321,6 +325,85 @@ export function CapabilitiesStepPage(): ReactElement {
     failCountRef.current = 0;
     setAttempt((a) => a + 1);
   }, []);
+
+  /**
+   * 返回一个真正可重新导入的空项目：WizardProvider 在 /create 内会常驻，只换路由不会清理旧
+   * snapshot/draft，所以必须先清共享上下文，避免 ImportStepPage 立即又把用户送回当前结果。
+   */
+  const handleReturnToImport = useCallback((): void => {
+    setDraftId(undefined);
+    setSnapshotId(undefined);
+    setExtractJobId(undefined);
+    setSelection(null);
+    setVersionId(undefined);
+    setCapabilityId(undefined);
+    setBatchId(undefined);
+    setAgentReady(false);
+    setTrialCompleted(false);
+    setPublishCompleted(false);
+    navigate('/create/import');
+  }, [
+    navigate,
+    setAgentReady,
+    setBatchId,
+    setCapabilityId,
+    setDraftId,
+    setExtractJobId,
+    setPublishCompleted,
+    setSelection,
+    setSnapshotId,
+    setTrialCompleted,
+    setVersionId,
+  ]);
+
+  /** 0 候选时显式重跑当前快照；换新幂等键，不回放已完成的旧 extract job。 */
+  const handleReextract = useCallback((): void => {
+    setError(null);
+    setCandidates([]);
+    setDoneResult(undefined);
+    setTrialLaunch(null);
+    setTrialVerification({ kind: 'idle' });
+    setShowAlternatives(false);
+    setBatchView(null);
+    setPublishError(null);
+    itemKeysRef.current.clear();
+    batchKeyRef.current = newKey();
+    setExtractJobId(undefined);
+    setSelection(null);
+    setVersionId(undefined);
+    setCapabilityId(undefined);
+    setBatchId(undefined);
+    setAgentReady(false);
+    setTrialCompleted(false);
+    setPublishCompleted(false);
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete('extractJobId');
+        next.delete('candidateId');
+        next.delete('tested');
+        next.delete('failed');
+        next.delete('session');
+        next.delete('trialVersionId');
+        next.delete('trialVersion');
+        next.delete('batchId');
+        return next;
+      },
+      { replace: true },
+    );
+    setPhase({ kind: 'triggering' });
+    setReextractAttempt((current) => current + 1);
+  }, [
+    setAgentReady,
+    setBatchId,
+    setCapabilityId,
+    setExtractJobId,
+    setPublishCompleted,
+    setSearchParams,
+    setSelection,
+    setTrialCompleted,
+    setVersionId,
+  ]);
 
   const readyCandidates = useMemo(
     () => candidates.filter((candidate) => candidate.status === 'ready').sort(candidateRank),
@@ -595,6 +678,18 @@ export function CapabilitiesStepPage(): ReactElement {
     trialVerification.candidateId === activeCandidate?.id
       ? trialVerification
       : undefined;
+
+  // Runtime latest-session 是刷新/异步恢复的真源：一旦验证完成，同步推进顶部共享旅程。
+  // 离开本页时清理，防止在同一 WizardProvider 内返回导入后仍显示“等待发布”。
+  useEffect(() => {
+    setTrialCompleted(trialVerified);
+  }, [setTrialCompleted, trialVerified]);
+  useEffect(
+    () => () => {
+      setTrialCompleted(false);
+    },
+    [setTrialCompleted],
+  );
 
   // —— 单 Agent 发布：只发刚刚试用并校验过的 draft version，绝不重新挑版本/重复结构化。——
   const handlePublish = useCallback((): void => {
@@ -1008,6 +1103,20 @@ export function CapabilitiesStepPage(): ReactElement {
   }, [published, setPublishCompleted]);
 
   // —— 渲染 ——
+  if (phase.kind === 'triggering' && !snapshotId) {
+    return (
+      <section className="cb-capabilities cb-capabilities__empty" role="status">
+        <h1 className="cb-empty__title">这个创作还没有可分析的工作历史</h1>
+        <p className="cb-empty__hint">
+          导入上下文可能已失效或尚未完成。返回导入页重新选择对话历史，不会在这里反复重试空请求。
+        </p>
+        <button type="button" className="cb-btn cb-btn--primary" onClick={handleReturnToImport}>
+          返回导入 →
+        </button>
+      </section>
+    );
+  }
+
   if (error) {
     return (
       <ErrorState
@@ -1045,9 +1154,13 @@ export function CapabilitiesStepPage(): ReactElement {
     <section className="cb-capabilities cb-agent-result" aria-label="Agent 创作结果">
       <header className="cb-capabilities__header">
         <p className="cb-capabilities__eyebrow">导入完成 · 提取完成</p>
-        <h1 className="cb-capabilities__title">第一个 Agent 已经准备好了</h1>
+        <h1 className="cb-capabilities__title">
+          {readyCount === 0 ? '这次还没有找到合适的 Agent' : '第一个 Agent 已经准备好了'}
+        </h1>
         <p className="cb-capabilities__lead">
-          我们已经按复用性替你排好顺序。先用一个真实任务跑一遍，满意后直接发布。
+          {readyCount === 0
+            ? '我们已完成本次分析。你可以重新提取当前历史，或返回导入补充更多对话。'
+            : '我们结合多项工作流证据给出综合推荐顺序。先用一个真实任务跑一遍，满意后直接发布。'}
         </p>
         <dl className="cb-agent-result__summary" aria-label="提取摘要">
           {typeof analyzed === 'number' && (
@@ -1076,9 +1189,18 @@ export function CapabilitiesStepPage(): ReactElement {
       </header>
 
       {readyCount === 0 ? (
-        <p className="cb-capabilities__empty">
-          没识别出可复用的能力。可以回上一步换个目录再导入，或多积累一些对话历史后再来。
-        </p>
+        <div className="cb-capabilities__empty" role="status">
+          <p>这次还没有识别出适合包装成 Agent 的工作流。</p>
+          <p>可以重新分析当前历史，或返回导入补充更多对话。</p>
+          <div className="cb-agent-primary__actions">
+            <button type="button" className="cb-btn cb-btn--primary" onClick={handleReextract}>
+              重新提取当前历史 →
+            </button>
+            <button type="button" className="cb-btn" onClick={handleReturnToImport}>
+              返回导入
+            </button>
+          </div>
+        </div>
       ) : activeCandidate ? (
         <>
           <article

@@ -1,7 +1,7 @@
 // 路由 / 导航单一真源（D14：恒定结构）。Shell 侧栏、面包屑、<Routes> 都读这里，不各写一套。
 //
 // 侧栏分两组（开工总纲 §2.1）：
-//   「创作」→ 工作台 / 我的能力 / 上传能力 / 数据分析 / 收益
+//   「创作」→ 工作台 / 我的 Agent / 创建 Agent / 数据分析 / 收益
 //   「我的」→ 个人主页
 // 上传流程收敛为 PRD 的 2 个用户步（上传 → 能力页）+ 1 个自动过程态（提取，寄生在能力页内，不占路由）：
 //   /create/import（上传，传完自动进入能力页）、/create/capabilities（能力页：过程态提取 → 候选卡 → 一键发布）。
@@ -41,18 +41,18 @@ export const NAV_GROUPS: { key: NavGroupKey; label: string }[] = [
 /** 创作者侧栏主导航（恒定结构，开工总纲 §2.1）。顺序即展示顺序。 */
 export const CREATOR_NAV: NavItem[] = [
   { path: '/creator', label: '工作台', group: 'create', icon: IconWorkbench },
-  { path: '/capabilities', label: '我的能力', group: 'create', icon: IconCapabilities },
-  { path: '/create', label: '上传能力', group: 'create', icon: IconUpload },
+  { path: '/capabilities', label: '我的 Agent', group: 'create', icon: IconCapabilities },
+  { path: '/create', label: '创建 Agent', group: 'create', icon: IconUpload },
   { path: '/analytics', label: '数据分析', group: 'create', icon: IconAnalytics, disabled: true },
   { path: '/earnings', label: '收益', group: 'create', icon: IconEarnings, disabled: true },
   { path: '/profile', label: '个人主页', group: 'mine', icon: IconProfile, disabled: true },
 ];
 
-/** 上传子路由（PRD 2 步：上传 → 能力页）。不进侧栏。step 放宽为 string（'capabilities' 非 DraftStep 枚举值）。
-    标签取纯动作名（上传 / 能力；提取过程态不占独立步，寄生在能力页内）。 */
+/** 创建 Agent 子路由（PRD 2 步：导入记录 → Agent 结果）。不进侧栏。
+    step 放宽为 string（'capabilities' 非 DraftStep 枚举值）。 */
 export const CREATE_STEPS: { step: string; path: string; label: string }[] = [
-  { step: 'import', path: '/create/import', label: '上传' },
-  { step: 'capabilities', path: '/create/capabilities', label: '能力' },
+  { step: 'import', path: '/create/import', label: '导入记录' },
+  { step: 'capabilities', path: '/create/capabilities', label: 'Agent 结果' },
 ];
 
 /** 面包屑根（开工总纲 §2.2：如「上传能力 / Combo Builder」恒以产品域为根）。 */
@@ -65,7 +65,7 @@ export interface Crumb {
 
 /**
  * 面包屑：把当前 pathname 拆成可点段（产品域根 → 区段 → 子步）。
- * 例：/create/capabilities → 「Combo Builder / 上传能力 / 能力」（外壳首页-06）。
+ * 例：/create/capabilities → 「Combo Builder / 创建 Agent / Agent 结果」（外壳首页-06）。
  * 末段为当前页（不可点），其余可点回跳。2 步流程下最多再追加 1 个子步（import/capabilities）。
  */
 export function breadcrumbFor(pathname: string): Crumb[] {

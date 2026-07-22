@@ -3,9 +3,9 @@ import { describe, it, expect } from 'vitest';
 import { CREATOR_NAV, NAV_GROUPS, CREATE_STEPS, BREADCRUMB_ROOT, breadcrumbFor } from './routes.js';
 
 describe('CREATOR_NAV 分组结构（外壳首页-03）', () => {
-  it('创作组含 工作台/我的能力/上传能力/数据分析/收益 五项，顺序对', () => {
+  it('创作组含 工作台/我的 Agent/创建 Agent/数据分析/收益 五项，顺序对', () => {
     const createLabels = CREATOR_NAV.filter((n) => n.group === 'create').map((n) => n.label);
-    expect(createLabels).toEqual(['工作台', '我的能力', '上传能力', '数据分析', '收益']);
+    expect(createLabels).toEqual(['工作台', '我的 Agent', '创建 Agent', '数据分析', '收益']);
   });
 
   it('我的组含 个人主页 一项', () => {
@@ -34,13 +34,13 @@ describe('CREATOR_NAV 分组结构（外壳首页-03）', () => {
   });
 });
 
-describe('CREATE_STEPS 两步（PRD 结构坍缩：上传 / 能力页）', () => {
+describe('CREATE_STEPS 两步（PRD 结构坍缩：导入记录 / Agent 结果）', () => {
   it('两步顺序 import/capabilities', () => {
     expect(CREATE_STEPS.map((s) => s.step)).toEqual(['import', 'capabilities']);
   });
 
-  it('标签 上传 / 能力，路径 /create/import 与 /create/capabilities', () => {
-    expect(CREATE_STEPS.map((s) => s.label)).toEqual(['上传', '能力']);
+  it('标签 导入记录 / Agent 结果，路径 /create/import 与 /create/capabilities', () => {
+    expect(CREATE_STEPS.map((s) => s.label)).toEqual(['导入记录', 'Agent 结果']);
     expect(CREATE_STEPS.map((s) => s.path)).toEqual(['/create/import', '/create/capabilities']);
   });
 });
@@ -51,19 +51,19 @@ describe('breadcrumbFor 分层（外壳首页-06）', () => {
     expect(c.map((x) => x.label)).toEqual([BREADCRUMB_ROOT.label]);
   });
 
-  it('上传能力 → Combo Builder / 上传能力', () => {
+  it('创建 Agent → Combo Builder / 创建 Agent', () => {
     const c = breadcrumbFor('/create');
-    expect(c.map((x) => x.label)).toEqual(['Combo Builder', '上传能力']);
+    expect(c.map((x) => x.label)).toEqual(['Combo Builder', '创建 Agent']);
   });
 
-  it('能力页子步 → Combo Builder / 上传能力 / 能力', () => {
+  it('Agent 结果子步 → Combo Builder / 创建 Agent / Agent 结果', () => {
     const c = breadcrumbFor('/create/capabilities');
-    expect(c.map((x) => x.label)).toEqual(['Combo Builder', '上传能力', '能力']);
+    expect(c.map((x) => x.label)).toEqual(['Combo Builder', '创建 Agent', 'Agent 结果']);
   });
 
-  it('上传子步 → Combo Builder / 上传能力 / 上传', () => {
+  it('导入子步 → Combo Builder / 创建 Agent / 导入记录', () => {
     const c = breadcrumbFor('/create/import');
-    expect(c.map((x) => x.label)).toEqual(['Combo Builder', '上传能力', '上传']);
+    expect(c.map((x) => x.label)).toEqual(['Combo Builder', '创建 Agent', '导入记录']);
   });
 
   it('数据分析 → Combo Builder / 数据分析', () => {

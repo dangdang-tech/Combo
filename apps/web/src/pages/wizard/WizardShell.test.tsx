@@ -3,6 +3,7 @@
 //   保存退出回工作台 / 无 draftId 存草稿人话退路 / 换步壳结构不变。
 //   旧 StepBar + 恒定底栏（WizardFooter）已随 2 步坍缩下线；当前旅程只观察状态，不承担导航。
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { useEffect } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
@@ -29,7 +30,11 @@ function draftView(over: Partial<DraftView> = {}): DraftView {
 /** 暴露当前路由 + wizard 选择态，供断言续传恢复。 */
 function StepProbe() {
   const loc = useLocation();
-  const { selection, currentStep } = useWizard();
+  const { selection, currentStep, setTrialCompleted } = useWizard();
+  const restoresVerifiedTrial = new URLSearchParams(loc.search).get('runtimeTrial') === 'verified';
+  useEffect(() => {
+    if (restoresVerifiedTrial) setTrialCompleted(true);
+  }, [restoresVerifiedTrial, setTrialCompleted]);
   return (
     <div>
       <span data-testid="path">{loc.pathname}</span>
@@ -102,7 +107,7 @@ describe('WizardShell（F-09 向导壳，2 步）', () => {
       'aria-current',
       'step',
     );
-    expect(screen.getByRole('listitem', { name: '待进行：修改与发布' })).toBeInTheDocument();
+    expect(screen.getByRole('listitem', { name: '待进行：试用与发布' })).toBeInTheDocument();
   });
 
   it('只有提取任务时诚实停在「识别 Agent」，不把后台开始谎报为页面已生成', () => {
@@ -133,14 +138,35 @@ describe('WizardShell（F-09 向导壳，2 步）', () => {
     ).toEqual(['done', 'done', 'active', 'pending']);
   });
 
-  it('真实试用回流或发布批次存在时进入「修改与发布」，不把发布开始谎报为完成', () => {
+  it('发布批次存在时显示“正在发布”，不把发布开始谎报为完成', () => {
     renderWizard('/create/capabilities?snapshotId=s1&batchId=b1');
 
     expect(screen.getAllByRole('listitem', { name: /^已完成：/ })).toHaveLength(3);
-    expect(screen.getByRole('listitem', { name: '当前阶段：修改与发布' })).toHaveAttribute(
+    expect(screen.getByRole('listitem', { name: '当前阶段：正在发布' })).toHaveAttribute(
       'aria-current',
       'step',
     );
+  });
+
+  it('Runtime 恢复出已完成试用时，无 session/tested URL 也进入“试用完成 · 等待发布”', async () => {
+    renderWizard(
+      '/create/capabilities?snapshotId=s1&version=v1&capability=c1&runtimeTrial=verified',
+    );
+
+    expect(
+      await screen.findByRole('listitem', { name: '当前阶段：试用完成 · 等待发布' }),
+    ).toHaveAttribute('aria-current', 'step');
+    expect(screen.getAllByRole('listitem', { name: /^已完成：/ })).toHaveLength(3);
+  });
+
+  it('空 session/tested 只是无效 URL，不能越过 Runtime 校验冒充试用完成', () => {
+    renderWizard('/create/capabilities?snapshotId=s1&version=v1&capability=c1&session=&tested=');
+
+    expect(screen.getByRole('listitem', { name: '当前阶段：生成页面' })).toHaveAttribute(
+      'aria-current',
+      'step',
+    );
+    expect(screen.getByRole('listitem', { name: '待进行：试用与发布' })).toBeInTheDocument();
   });
 
   it('只有真实发布终态才把整条旅程标为完成', () => {

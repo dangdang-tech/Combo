@@ -38,7 +38,7 @@ describe('SummaryHeader', () => {
     render(<SummaryHeader summary={summary()} meta={meta} onCreate={() => {}} />);
     expect(screen.getByRole('heading', { name: '创作者中心' })).toBeInTheDocument();
     expect(screen.getByText(/暂无数据/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '+ 上传新能力' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '创建 Agent' })).toBeInTheDocument();
   });
 
   it('占位态打标记 data-monthly-placeholder=true', () => {
@@ -52,7 +52,7 @@ describe('SummaryHeader', () => {
   it('点上传按钮 → onCreate 触发', async () => {
     const onCreate = vi.fn();
     render(<SummaryHeader summary={summary()} meta={undefined} onCreate={onCreate} />);
-    await userEvent.click(screen.getByRole('button', { name: '+ 上传新能力' }));
+    await userEvent.click(screen.getByRole('button', { name: '创建 Agent' }));
     expect(onCreate).toHaveBeenCalledOnce();
   });
 });

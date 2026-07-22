@@ -1,4 +1,4 @@
-// DashboardPage 集成测试（F-05）：5 端点拼装 + 局部失败不连坐 + 时间范围切换 + 试用占位 + 上传入口路由。
+// DashboardPage 集成测试（F-05）：5 端点拼装 + 局部失败不连坐 + 时间范围切换 + 创建/恢复入口路由。
 //
 // 用按 URL 路由的 fetch mock（5 端点并发，顺序不定，不能用 queue）；react-query retry:false 防慢/flaky。
 // jsdom 无 canvas → mock echarts。
@@ -177,6 +177,7 @@ function renderPage(): { container: HTMLElement } {
           {/* 草稿续传（已过导入的 currentStep）落能力页；编辑入口仍带 ?capability= 进结构化路由。 */}
           <Route path="/create/capabilities" element={<LocationProbe />} />
           <Route path="/create/structure" element={<LocationProbe />} />
+          <Route path="/capabilities" element={<LocationProbe />} />
           <Route path="/a/:slug" element={<LocationProbe />} />
         </Routes>
       </MemoryRouter>
@@ -296,13 +297,11 @@ describe('DashboardPage 时间范围切换', () => {
 });
 
 describe('DashboardPage 操作入口', () => {
-  it('行内试用 → 弹「本期未开放」占位（不导航）', async () => {
+  it('不展示尚未兑现的行内试用入口', async () => {
     restore = installRoutedFetch(ok());
     renderPage();
     await screen.findByText('保险方案速算');
-    await userEvent.click(screen.getByRole('button', { name: '试用' }));
-    expect(await screen.findByRole('dialog', { name: '试用提示' })).toHaveTextContent('本期未开放');
-    expect(screen.queryByTestId('probe')).toBeNull();
+    expect(screen.queryByRole('button', { name: '试用' })).not.toBeInTheDocument();
   });
 
   it('行内「更多」→ 打开菜单（下架/改价占位 + 查看公开页），下架点击落本期未开放反馈、不导航', async () => {
@@ -334,19 +333,18 @@ describe('DashboardPage 操作入口', () => {
     expect(await screen.findByTestId('probe')).toBeInTheDocument();
   });
 
-  it('「+ 上传新能力」→ 进五步上传流程（/create/import）', async () => {
+  it('「创建 Agent」→ 进创建流程（/create/import）', async () => {
     restore = installRoutedFetch(ok());
     renderPage();
-    const createBtns = await screen.findAllByRole('button', { name: '+ 上传新能力' });
-    await userEvent.click(createBtns[0] as HTMLElement);
+    await userEvent.click(await screen.findByRole('button', { name: '创建 Agent' }));
     expect(await screen.findByTestId('probe')).toBeInTheDocument();
   });
 
-  it('能力行「编辑」→ 进上传流程并带 ?capability=（对齐向导消费键，非被丢弃的 ?capabilityId=）', async () => {
+  it('Agent 行「重新生成」→ 进创建流程并带 ?capability=', async () => {
     restore = installRoutedFetch(ok());
     renderPage();
     await screen.findByText('保险方案速算');
-    await userEvent.click(screen.getByRole('button', { name: '编辑' }));
+    await userEvent.click(screen.getByRole('button', { name: '重新生成' }));
     const probe = await screen.findByTestId('probe');
     // 向导只读 ?capability=（WizardLayout/PublishStepPage/StructureStepPage）：编辑入口须发同名键，
     // 否则参数被静默丢弃。断言带的是 capability= cap-1，且不是旧的 capabilityId=。
@@ -357,7 +355,15 @@ describe('DashboardPage 操作入口', () => {
     restore = installRoutedFetch(ok());
     renderPage();
     await screen.findByText(/结构化中 60%/);
-    await userEvent.click(screen.getByRole('button', { name: '继续完善 →' }));
+    await userEvent.click(screen.getByRole('button', { name: '继续完善：保险话术草稿' }));
+    expect(await screen.findByTestId('probe')).toBeInTheDocument();
+  });
+
+  it('工作台 Agent 只是概览，「查看全部」进入独立管理页', async () => {
+    restore = installRoutedFetch(ok());
+    renderPage();
+    await screen.findByText('保险方案速算');
+    await userEvent.click(screen.getByRole('button', { name: '查看全部' }));
     expect(await screen.findByTestId('probe')).toBeInTheDocument();
   });
 });

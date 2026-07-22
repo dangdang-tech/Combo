@@ -1,7 +1,7 @@
-// 进行中的创作条（外壳首页-16/17/23/33/34，F-15）。
+// 工作台的“继续上次创作”入口（外壳首页-16/17/23/33/34，F-15）。
 //
-// 冷纸单 bar：左侧说明这是可恢复的创作，中间逐项展示当前阶段，右侧动作跟随首项所处阶段。
-// 每个胶囊可点，各回各的精确断点（currentStep → 当前两页创作路由，不串台）；右侧 CTA 回首条草稿断点。
+// 默认只给最近一次 Agent 创作强入口，避免匿名草稿以横向 ticker 铺满页面。
+// 其余草稿收进“查看其余 N 个”，仍各回各的精确断点（currentStep → 当前两页创作路由）。
 // 阶段由后端 currentStep 单源；实时进度沿用 stepProgress.phrase，前端只补用户可理解的阶段名称与动作名称。
 // 空态（外壳首页-23）：无 active 草稿 → 整条不渲染。
 import type { ReactElement } from 'react';
@@ -48,8 +48,12 @@ function progressForDraft(draft: DraftView): string {
 function nameForDraft(draft: DraftView): string {
   const explicit = draft.title?.trim();
   if (explicit) return explicit;
+  return '未命名 Agent';
+}
+
+function timeForDraft(draft: DraftView): string {
   const updatedAt = new Date(draft.updatedAt);
-  if (Number.isNaN(updatedAt.getTime())) return '新的 Agent 创作';
+  if (Number.isNaN(updatedAt.getTime())) return '更新时间未知';
   const parts = new Intl.DateTimeFormat('zh-CN', {
     month: '2-digit',
     day: '2-digit',
@@ -59,10 +63,10 @@ function nameForDraft(draft: DraftView): string {
   }).formatToParts(updatedAt);
   const value = (type: Intl.DateTimeFormatPartTypes): string =>
     parts.find((part) => part.type === type)?.value ?? '';
-  return `Agent 创作 · ${value('month')}/${value('day')} ${value('hour')}:${value('minute')}`;
+  return `更新于 ${value('month')}/${value('day')} ${value('hour')}:${value('minute')}`;
 }
 
-function DraftChip({
+function OtherDraft({
   draft,
   onResume,
 }: {
@@ -73,54 +77,89 @@ function DraftChip({
   const name = nameForDraft(draft);
   const copy = copyForDraft(draft);
   const progress = progressForDraft(draft);
+  const time = timeForDraft(draft);
   return (
     <button
       type="button"
-      className="cb-draft-chip"
+      className="cb-resume-card__other"
       data-draft={draft.id}
       data-step={draft.currentStep}
       onClick={() => onResume(draft, path)}
-      aria-label={`${copy.action}：${name}，${progress}`}
-      title={`${copy.action}：${name} · ${progress}`}
+      aria-label={`${copy.action}：${name}，${progress}，${time}`}
     >
-      <span className="cb-draft-chip__dot" aria-hidden="true" />
-      <span className="cb-draft-chip__name">{name}</span>
-      <span className="cb-draft-chip__phrase">· {progress}</span>
+      <span className="cb-resume-card__other-copy">
+        <span className="cb-resume-card__other-name">{name}</span>
+        <span className="cb-resume-card__other-progress">{progress}</span>
+      </span>
+      <span className="cb-resume-card__other-action" aria-hidden="true">
+        {copy.action} →
+      </span>
     </button>
   );
 }
 
 export function DraftStrip({ drafts, onResume }: DraftStripProps): ReactElement | null {
   // API 契约外的残缺行不应拖垮整个管理页；只有具备阶段与进度的活动草稿才进入恢复入口。
-  const resumableDrafts = drafts.filter(
-    (draft) =>
-      Boolean(STEP_COPY[draft.currentStep]) &&
-      typeof draft.stepProgress?.phrase === 'string' &&
-      !(
-        draft.currentStep === 'publish' &&
-        draft.stepProgress.percent >= 100 &&
-        draft.stepProgress.phrase.trim() === '发布完成'
-      ),
-  );
+  const resumableDrafts = drafts
+    .filter(
+      (draft) =>
+        Boolean(STEP_COPY[draft.currentStep]) &&
+        typeof draft.stepProgress?.phrase === 'string' &&
+        !(
+          draft.currentStep === 'publish' &&
+          draft.stepProgress.percent >= 100 &&
+          draft.stepProgress.phrase.trim() === '发布完成'
+        ),
+    )
+    .sort((a, b) => {
+      const bTime = new Date(b.updatedAt).getTime();
+      const aTime = new Date(a.updatedAt).getTime();
+      return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime);
+    });
   // 空态：无草稿整条不渲染（外壳首页-23）。
   if (resumableDrafts.length === 0) return null;
   const first = resumableDrafts[0]!;
+  const others = resumableDrafts.slice(1);
   const firstAction = copyForDraft(first).action;
+  const firstName = nameForDraft(first);
   return (
-    <section className="cb-draft-strip" aria-label="进行中的创作">
-      <span className="cb-draft-strip__label">进行中的创作</span>
-      <div className="cb-draft-strip__chips">
-        {resumableDrafts.map((d) => (
-          <DraftChip key={d.id} draft={d} onResume={onResume} />
-        ))}
+    <section className="cb-resume-card" aria-label="继续上次创作">
+      <div className="cb-resume-card__head">
+        <div>
+          <p className="cb-resume-card__eyebrow">进行中的 Agent</p>
+          <h2 className="cb-resume-card__title">继续上次创作</h2>
+        </div>
+        {others.length > 0 && (
+          <span className="cb-resume-card__count">共 {resumableDrafts.length} 个</span>
+        )}
       </div>
-      <button
-        type="button"
-        className="cb-draft-strip__cta"
-        onClick={() => onResume(first, pathForStep(first.currentStep))}
-      >
-        {firstAction} →
-      </button>
+
+      <div className="cb-resume-card__primary" data-draft={first.id} data-step={first.currentStep}>
+        <div className="cb-resume-card__copy">
+          <strong className="cb-resume-card__name">{firstName}</strong>
+          <span className="cb-resume-card__progress">{progressForDraft(first)}</span>
+          <span className="cb-resume-card__time">{timeForDraft(first)}</span>
+        </div>
+        <button
+          type="button"
+          className="cb-btn cb-btn--primary cb-resume-card__action"
+          onClick={() => onResume(first, pathForStep(first.currentStep))}
+          aria-label={`${firstAction}：${firstName}`}
+        >
+          {firstAction} →
+        </button>
+      </div>
+
+      {others.length > 0 && (
+        <details className="cb-resume-card__more">
+          <summary className="cb-resume-card__more-summary">查看其余 {others.length} 个</summary>
+          <div className="cb-resume-card__other-list">
+            {others.map((draft) => (
+              <OtherDraft key={draft.id} draft={draft} onResume={onResume} />
+            ))}
+          </div>
+        </details>
+      )}
     </section>
   );
 }

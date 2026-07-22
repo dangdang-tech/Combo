@@ -59,6 +59,11 @@ export interface WizardState {
   /** 提取结果中是否已有可继续包装的 Agent；由能力结果页的真实候选响应回填，不用 job id 猜完成。 */
   agentReady: boolean;
   /**
+   * 当前 Agent 的真实试用是否已经由 Runtime 校验完成。
+   * URL 只帮子页定位待恢复的会话；顶部旅程只信 Runtime latest-session 校验后回填的本态。
+   */
+  trialCompleted: boolean;
+  /**
    * 底栏步骤摘要前缀（各步可选注入，如 STEP① 完成态「原始数据仅你可见 · 」5.1.3 / 导入-17）。
    * 各步在 effect 内 setSummaryPrefix（离开/卸载时清回 undefined），WizardShell 透传给 WizardFooter。
    */
@@ -93,6 +98,8 @@ export interface WizardActions {
   setBatchId: (batchId: string | undefined) => void;
   /** 标记真实候选是否已准备好，让上传页与结果页共享同一阶段事实。 */
   setAgentReady: (ready: boolean) => void;
+  /** 把 Runtime 校验过的试用完成态同步给常驻 CreationJourney。 */
+  setTrialCompleted: (completed: boolean) => void;
   /**
    * 续传：用 DraftView 恢复 draftId + selection + snapshot/extract/version/capability/batch 全引用（F-15，
    * current_step 由路由落点决定）。各步优先读这些引用而非新建任务（STEP④ 不重建版、STEP⑤ 不缺 version、
@@ -124,6 +131,7 @@ type Action =
   | { type: 'setCapabilityId'; capabilityId: string | undefined }
   | { type: 'setBatchId'; batchId: string | undefined }
   | { type: 'setAgentReady'; ready: boolean }
+  | { type: 'setTrialCompleted'; completed: boolean }
   | { type: 'hydrateFromDraft'; draft: DraftView }
   | { type: 'setPrimaryAction'; action: PrimaryAction | null }
   | { type: 'setSummaryPrefix'; prefix: string | undefined }
@@ -179,6 +187,10 @@ function reducer(state: InternalState, action: Action): InternalState {
       return state.batchId === action.batchId ? state : { ...state, batchId: action.batchId };
     case 'setAgentReady':
       return state.agentReady === action.ready ? state : { ...state, agentReady: action.ready };
+    case 'setTrialCompleted':
+      return state.trialCompleted === action.completed
+        ? state
+        : { ...state, trialCompleted: action.completed };
     case 'hydrateFromDraft':
       // 续传恢复 draftId + selection + snapshot/extract/version/batch 全引用（current_step 由路由落点决定，
       // 不在此覆写 currentStep）。各步据这些引用续接已生成产物，不重建任务（已生成不丢、续传精确）。
@@ -254,6 +266,7 @@ export function WizardProvider({
     capabilityId: initialCapabilityId,
     batchId: initialBatchId,
     agentReady: Boolean(initialVersionId || initialCapabilityId || initialBatchId),
+    trialCompleted: false,
     summaryPrefix: undefined,
     publishCompleted: false,
     primaryAction: null,
@@ -303,6 +316,10 @@ export function WizardProvider({
     (ready: boolean) => dispatch({ type: 'setAgentReady', ready }),
     [],
   );
+  const setTrialCompleted = useCallback(
+    (completed: boolean) => dispatch({ type: 'setTrialCompleted', completed }),
+    [],
+  );
   const hydrateFromDraft = useCallback(
     (draft: DraftView) => dispatch({ type: 'hydrateFromDraft', draft }),
     [],
@@ -334,6 +351,7 @@ export function WizardProvider({
       setCapabilityId,
       setBatchId,
       setAgentReady,
+      setTrialCompleted,
       hydrateFromDraft,
       setPrimaryAction,
       setSummaryPrefix,
@@ -352,6 +370,7 @@ export function WizardProvider({
       setCapabilityId,
       setBatchId,
       setAgentReady,
+      setTrialCompleted,
       hydrateFromDraft,
       setPrimaryAction,
       setSummaryPrefix,

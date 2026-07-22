@@ -1,4 +1,4 @@
-// 页头摘要（外壳首页-08）——固定标题 +「一句话经营摘要」+ 右上「上传新能力」主按钮。
+// 页头摘要（外壳首页-08）——固定标题 +「一句话经营摘要」+ 右上「创建 Agent」主按钮。
 //
 // 摘要句由后端 summaryTemplate 提供（含 {publishedCount}/{monthlyInvocations} 占位符），
 // 前端代入：publishedCount 真实；monthlyInvocations 为 usage 占位 → 用得体占位文案代入（决策②），
@@ -11,7 +11,7 @@ export interface SummaryHeaderProps {
   /** summary 端点数据；null = 加载中（由上层决定渲染骨架，这里只在拿到数据后用）。 */
   summary: DashboardSummary;
   meta: Meta | undefined;
-  /** 「+ 上传新能力」主按钮（进五步上传流程）。 */
+  /** 「创建 Agent」主按钮（进入创作流程）。 */
   onCreate: () => void;
 }
 
@@ -52,7 +52,7 @@ export function SummaryHeader({ summary, meta, onCreate }: SummaryHeaderProps): 
         className="cb-btn cb-btn--primary cb-dash-header__create"
         onClick={onCreate}
       >
-        + 上传新能力
+        创建 Agent
       </button>
     </header>
   );

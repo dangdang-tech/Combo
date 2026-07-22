@@ -13,6 +13,8 @@ const ARTIFACT_DETAIL_COLLAPSE_LENGTH = 96;
 
 export type ArtifactPresentation = 'default' | 'event';
 
+type ActiveArtifactRef = Pick<ArtifactRef, 'artifactKey' | 'version'>;
+
 export interface ChatThreadProps {
   messages: RuntimeMessage[];
   /** 流式中的助手正文（未落库前的实时显示）。 */
@@ -23,6 +25,8 @@ export interface ChatThreadProps {
    * Studio 中将 artifact 作为轻量创建/更新事件展示；普通运行聊天沿用原卡片与正文。
    */
   artifactPresentation?: ArtifactPresentation;
+  /** Studio 当前已经展示的页面；对应事件只做状态提示，不再提供无效果的“查看”。 */
+  activeArtifact?: ActiveArtifactRef;
 }
 
 export function ChatThread({
@@ -31,6 +35,7 @@ export function ChatThread({
   onOpenArtifact,
   assistantLabel = '能力',
   artifactPresentation = 'default',
+  activeArtifact,
 }: ChatThreadProps) {
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -46,6 +51,7 @@ export function ChatThread({
           assistantLabel={assistantLabel}
           onOpenArtifact={onOpenArtifact}
           artifactPresentation={artifactPresentation}
+          activeArtifact={activeArtifact}
         />
       ))}
       {streamingText !== null && (
@@ -64,11 +70,13 @@ function MessageBubble({
   assistantLabel,
   onOpenArtifact,
   artifactPresentation,
+  activeArtifact,
 }: {
   message: RuntimeMessage;
   assistantLabel: string;
   onOpenArtifact: (ref: ArtifactRef) => void;
   artifactPresentation: ArtifactPresentation;
+  activeArtifact?: ActiveArtifactRef;
 }) {
   const useArtifactEvents = artifactPresentation === 'event' && message.artifacts.length > 0;
   const collapseDescription = useArtifactEvents && isLongArtifactDescription(message.text);
@@ -90,6 +98,7 @@ function MessageBubble({
           artifacts={message.artifacts}
           presentation="event"
           onOpenArtifact={onOpenArtifact}
+          activeArtifact={activeArtifact}
         />
       )}
       {collapseDescription ? (
@@ -112,6 +121,7 @@ function MessageBubble({
           artifacts={message.artifacts}
           presentation="default"
           onOpenArtifact={onOpenArtifact}
+          activeArtifact={activeArtifact}
         />
       )}
     </div>
@@ -122,22 +132,23 @@ function ArtifactReferences({
   artifacts,
   presentation,
   onOpenArtifact,
+  activeArtifact,
 }: {
   artifacts: ArtifactRef[];
   presentation: ArtifactPresentation;
   onOpenArtifact: (ref: ArtifactRef) => void;
+  activeArtifact?: ActiveArtifactRef;
 }) {
   return (
     <div className="rt-msg__artifacts">
       {artifacts.map((artifact) => {
         const eventLabel = artifact.version <= 1 ? '已创建页面' : '已更新页面';
-        return (
-          <button
-            key={`${artifact.artifactKey}-${artifact.version}`}
-            type="button"
-            className={`rt-artifact-chip${presentation === 'event' ? ' rt-artifact-chip--event' : ''}`}
-            onClick={() => onOpenArtifact(artifact)}
-          >
+        const isActiveEvent =
+          presentation === 'event' &&
+          activeArtifact?.artifactKey === artifact.artifactKey &&
+          activeArtifact.version === artifact.version;
+        const content = (
+          <>
             {presentation === 'event' ? (
               <span className="rt-artifact-chip__event">{eventLabel}</span>
             ) : (
@@ -145,8 +156,34 @@ function ArtifactReferences({
             )}
             <span className="rt-artifact-chip__title">{artifact.title}</span>
             <span className="rt-artifact-chip__ver">
-              {presentation === 'event' ? '查看' : `v${artifact.version}`}
+              {presentation === 'event'
+                ? isActiveEvent
+                  ? '当前页面'
+                  : '查看'
+                : `v${artifact.version}`}
             </span>
+          </>
+        );
+
+        if (isActiveEvent) {
+          return (
+            <div
+              key={`${artifact.artifactKey}-${artifact.version}`}
+              className="rt-artifact-chip rt-artifact-chip--event"
+              aria-label={`${eventLabel} ${artifact.title} 当前页面`}
+            >
+              {content}
+            </div>
+          );
+        }
+        return (
+          <button
+            key={`${artifact.artifactKey}-${artifact.version}`}
+            type="button"
+            className={`rt-artifact-chip${presentation === 'event' ? ' rt-artifact-chip--event' : ''}`}
+            onClick={() => onOpenArtifact(artifact)}
+          >
+            {content}
           </button>
         );
       })}

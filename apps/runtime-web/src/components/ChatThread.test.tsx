@@ -48,7 +48,7 @@ describe('ChatThread', () => {
     expect(onOpenArtifact).toHaveBeenCalledWith(message.artifacts[0]);
   });
 
-  it('renders the first Studio artifact as a created-page event', () => {
+  it('renders the currently open Studio artifact as a non-actionable event', () => {
     const onOpenArtifact = vi.fn();
     const message = assistantMessage();
     render(
@@ -56,15 +56,16 @@ describe('ChatThread', () => {
         messages={[message]}
         streamingText={null}
         artifactPresentation="event"
+        activeArtifact={{ artifactKey: 'main', version: 1 }}
         onOpenArtifact={onOpenArtifact}
       />,
     );
 
-    const event = screen.getByRole('button', {
-      name: /已创建页面.*Agent-VM 任务助手.*查看/,
-    });
-    fireEvent.click(event);
-    expect(onOpenArtifact).toHaveBeenCalledWith(message.artifacts[0]);
+    expect(screen.getByLabelText(/已创建页面.*Agent-VM 任务助手.*当前页面/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Agent-VM 任务助手.*查看/ }),
+    ).not.toBeInTheDocument();
+    expect(onOpenArtifact).not.toHaveBeenCalled();
     expect(screen.getByText('页面已经准备好了。')).toBeInTheDocument();
   });
 

@@ -10,6 +10,7 @@ function progress(over: Partial<ProgressView> = {}): ProgressView {
   return {
     percent: 33,
     phrase: '已识别 3 / 9 能力项…',
+    subtasks: [],
     done: 3,
     total: 9,
     metrics: { analyzedSegments: 166, discoveredCandidates: 3 },

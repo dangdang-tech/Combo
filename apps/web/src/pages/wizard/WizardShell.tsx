@@ -31,6 +31,7 @@ export function WizardShell(): ReactElement {
     capabilityId,
     batchId,
     agentReady,
+    trialCompleted,
     publishCompleted,
     setCurrentStep,
   } = useWizard();
@@ -85,7 +86,7 @@ export function WizardShell(): ReactElement {
         capabilityId={capabilityId}
         batchId={batchId}
         hasAgentReady={agentReady}
-        hasTrialResult={searchParams.has('session') || searchParams.has('tested')}
+        hasTrialResult={trialCompleted}
         publishCompleted={publishCompleted}
       />
 

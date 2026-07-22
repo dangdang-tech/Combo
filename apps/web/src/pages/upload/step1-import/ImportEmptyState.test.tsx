@@ -9,9 +9,9 @@ const noop = (): void => undefined;
 const BROWSER_TOGGLE = '不想开终端？用浏览器选文件上传';
 
 describe('ImportEmptyState', () => {
-  it('大标题逐字对齐 PRD §5.1.1 / 验收 导入-01（把对话历史，变成可发布的能力）', () => {
+  it('大标题说明导入的最终结果是可使用的 Agent', () => {
     render(<ImportEmptyState onFiles={noop} onStart={noop} />);
-    expect(screen.getByText('把对话历史，变成可发布的能力')).toBeInTheDocument();
+    expect(screen.getByText('把对话历史，变成可使用的 Agent')).toBeInTheDocument();
   });
 
   it('主路径是「命令行导入（本机直读）」主卡，标推荐 + 「开始导入 →」入口（命令行优先）', () => {

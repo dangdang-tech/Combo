@@ -1,32 +1,24 @@
-// 我的能力（F-07，接 GET /api/v1/dashboard/capabilities，60 域 §1.4）。
+// 我的 Agent（F-07，接 GET /api/v1/dashboard/capabilities，60 域 §1.4）。
 //
-// 已发布 / 草稿等能力体列表管理（按状态筛选 + cursor 分页）。合规要点：
-//   - 复用工作台已建的 CapabilityTable / TrialNotice / MoreMenu（行渲染、状态徽章、试用占位、更多菜单）——不另造行。
+// 已发布 / 草稿等 Agent 列表管理（按状态筛选 + cursor 分页）。合规要点：
+//   - 复用工作台已建的 CapabilityTable / MoreMenu（行渲染、状态徽章、更多菜单）——不另造行。
 //   - 状态后端单源：reviewStatus / statusLabel / retryEditable / actions 全从后端派生，不前端自造。
 //   - usage 列（本月调用 / 消耗 sparkline / 收益）统一占位（CapabilityTable 内部 UsagePlaceholder / MiniSparkline）。
-//   - 试用恒「本期未开放」占位（actions.trial.hint），点击落 TrialNotice，不进 runtime。
+//   - 管理页不展示尚未兑现的「试用」入口；真实试用从创作流程进入。
 //   - 加载用 4A 加载件（Skeleton），错误用 ErrorState（只 userMessage + action）。
 //   - 空态友好（区分「确实没有」与「该筛选下没有」），不裸转圈、不空白。
-//   - 渲染在 4A Shell 主区（侧栏「我的能力」对应项），页面自身不重搭外壳。
+//   - 渲染在 4A Shell 主区（侧栏「我的 Agent」对应项），页面自身不重搭外壳。
 //
 // 分页用 useInfiniteQuery（cursor 原生累积，外壳首页-11）：点「加载更多」翻下一页 → 真追加，旧行不被替换。
 // 多页累积后按 capabilityId 去重（防后端重叠返回时同一能力出现两行），保留首次出现（旧行口径不被覆盖）。
 import { useMemo, useState, type ReactElement } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import type { DashboardCapabilityRow, DraftView, Meta, PageMeta, Range } from '@cb/shared';
+import type { DashboardCapabilityRow, Meta, PageMeta, Range } from '@cb/shared';
 import { apiGetEnvelope } from '../../api/index.js';
 import { ErrorState, LoadingState } from '../../components/index.js';
-import {
-  CapabilityTable,
-  TrialNotice,
-  useTrialNotice,
-  MoreMenu,
-  useMoreMenu,
-} from '../dashboard/CapabilityTable.js';
+import { CapabilityTable, MoreMenu, useMoreMenu } from '../dashboard/CapabilityTable.js';
 import { dedupeByCapabilityId } from '../dashboard/dedupe.js';
-import { DraftStrip } from '../dashboard/DraftStrip.js';
-import { useDrafts } from '../dashboard/hooks.js';
 
 /** 状态筛选档（与后端 DashboardCapabilitiesQuery.status 一致）。 */
 export type CapabilityStatusFilter =
@@ -77,20 +69,9 @@ async function fetchCapabilitiesPage(params: {
 
 export function CapabilitiesPage(): ReactElement {
   const navigate = useNavigate();
-  const trial = useTrialNotice();
   const more = useMoreMenu();
   const [status, setStatus] = useState<CapabilityStatusFilter>('all');
   const range: Range = '30d';
-
-  const resumeDraft = (draft: DraftView, path: string): void => {
-    const params = new URLSearchParams({ draftId: draft.id });
-    if (draft.snapshotId) params.set('snapshotId', draft.snapshotId);
-    if (draft.extractJobId) params.set('extractJobId', draft.extractJobId);
-    if (draft.versionId) params.set('version', draft.versionId);
-    if (draft.capabilityId) params.set('capability', draft.capabilityId);
-    if (draft.batchId) params.set('batchId', draft.batchId);
-    navigate(`${path}?${params.toString()}`);
-  };
 
   const query = useInfiniteQuery<CapabilitiesPageResult, Error>({
     // 换筛选即换 queryKey → 新口径独立累积（旧筛选累积页不串台，cursor 自然回第一页，60 §1.6）。
@@ -106,8 +87,6 @@ export function CapabilitiesPage(): ReactElement {
     getNextPageParam: (last) =>
       last.page.hasMore ? (last.page.nextCursor ?? undefined) : undefined,
   });
-  const drafts = useDrafts();
-
   const pages = query.data?.pages ?? [];
   // 真追加：摊平所有已翻页 → 去重（旧行不被替换）。最近一页 meta 作 usage 占位/分页源。
   const rows = useMemo(() => dedupeByCapabilityId(pages.flatMap((p) => p.rows)), [pages]);
@@ -124,21 +103,21 @@ export function CapabilitiesPage(): ReactElement {
 
   return (
     <section className="cb-page cb-capabilities" aria-labelledby="cb-capabilities-title">
-      <header className="cb-page__head">
-        <h2 className="cb-page__title" id="cb-capabilities-title">
-          我的能力
-        </h2>
-        <p className="cb-page__lead">管理你创建的能力体：查看状态、编辑、试用与更多操作。</p>
+      <header className="cb-page__head cb-page__head--split">
+        <div className="cb-page__head-copy">
+          <h2 className="cb-page__title" id="cb-capabilities-title">
+            我的 Agent
+          </h2>
+          <p className="cb-page__lead">管理你创建的 Agent：查看状态、重新生成或打开公开页。</p>
+        </div>
+        <button
+          type="button"
+          className="cb-btn cb-btn--primary"
+          onClick={() => navigate('/create/import')}
+        >
+          创建 Agent
+        </button>
       </header>
-
-      {/* 同一条创作旅程的异步入口：离开上传/提取/编辑后，可从常驻管理页继续到真实断点。 */}
-      {drafts.isLoading ? (
-        <LoadingState skeletonRows={1} label="正在查找进行中的创作" />
-      ) : drafts.isError ? (
-        <ErrorState error={drafts.error} onRetry={drafts.retry} />
-      ) : (
-        <DraftStrip drafts={drafts.items} onResume={resumeDraft} />
-      )}
 
       {/* 状态筛选段控（当前档有选中标识）。 */}
       <div className="cb-capabilities__filters" role="group" aria-label="按状态筛选">
@@ -157,16 +136,16 @@ export function CapabilitiesPage(): ReactElement {
 
       {/* 首屏加载（无任何已渲染数据）→ 骨架，永不裸转圈。 */}
       {query.isPending ? (
-        <LoadingState skeletonRows={5} label="能力体加载中" />
+        <LoadingState skeletonRows={5} label="Agent 列表加载中" />
       ) : query.isError && !hasLoaded ? (
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />
       ) : hasLoaded && rows.length === 0 ? (
         <div className="cb-empty" role="status">
-          <p className="cb-empty__title">{hasFilter ? '该筛选下还没有能力体' : '还没有能力体'}</p>
+          <p className="cb-empty__title">{hasFilter ? '该筛选下还没有 Agent' : '还没有 Agent'}</p>
           <p className="cb-empty__hint">
             {hasFilter
-              ? '换一个状态筛选，或从「上传能力」创建你的第一个能力体。'
-              : '从「上传能力」开始，导入素材并发布你的第一个能力体。'}
+              ? '换一个状态筛选，或创建你的第一个 Agent。'
+              : '从「创建 Agent」开始，导入工作记录并生成你的第一个 Agent。'}
           </p>
           {hasFilter && (
             <button type="button" className="cb-empty__action" onClick={() => changeFilter('all')}>
@@ -179,9 +158,8 @@ export function CapabilitiesPage(): ReactElement {
           <CapabilityTable
             rows={rows}
             meta={lastMeta}
-            onTrial={trial.openTrial}
-            /* 2 步模型不做逐项能力编辑（PRD「不做能力编辑」）；「编辑」退化为回上传入口重新生成，
-               与工作台 goEdit 同口径（不再指向已删的 /create/structure，避免 404）。 */
+            /* 2 步模型不做逐项原地编辑；“重新生成”回创建入口，
+               带上 capability 供向导恢复上下文，不冒充就地编辑。 */
             onEdit={(row) => navigate(`/create/import?capability=${row.capabilityId}`)}
             onMore={more.openMore}
           />
@@ -203,9 +181,6 @@ export function CapabilitiesPage(): ReactElement {
           </div>
         </>
       ) : null}
-
-      {/* 试用占位浮层（点试用 → 「本期未开放」，不进 runtime）。 */}
-      <TrialNotice capabilityName={trial.noticeName} onClose={trial.closeTrial} />
 
       {/* 更多菜单（下架/改价占位 + 查看公开页路由占位，外壳首页-35）。 */}
       <MoreMenu

@@ -4,8 +4,8 @@
 //   ① 页头摘要（SummaryHeader）         ← /dashboard/summary
 //   ② 四张大数字卡（MetricCards）        ← /dashboard/metrics（usage 3 卡占位）
 //   ③ token 趋势（TokenTrendChart）      ← /dashboard/token-trend（usage 占位 + 双口径切换）
-//   ④ 能力体列表（CapabilityTable）      ← /dashboard/capabilities（cursor 分页 + usage 列占位）
-//   ⑤ 草稿条（DraftStrip）               ← /dashboard/drafts（真实数据）
+//   ④ Agent 列表（CapabilityTable）       ← /dashboard/capabilities（cursor 分页 + usage 列占位）
+//   ⑤ 最近创作（DraftStrip）             ← /dashboard/drafts（真实数据）
 // 时间范围切换（近7/近30/全部）作用于 summary/metrics/trend/capabilities 的 query key。
 // 加载用 4A 加载件（Skeleton / ChartSkeleton），错误用 ErrorState（只 userMessage + action，无 code）。
 import { useState, type ReactElement } from 'react';
@@ -23,13 +23,7 @@ import { goToLogin } from '../../shell/auth.js';
 import { RangeSwitch } from './RangeSwitch.js';
 import { SummaryHeader } from './SummaryHeader.js';
 import { MetricCards } from './MetricCards.js';
-import {
-  CapabilityTable,
-  TrialNotice,
-  useTrialNotice,
-  MoreMenu,
-  useMoreMenu,
-} from './CapabilityTable.js';
+import { CapabilityTable, MoreMenu, useMoreMenu } from './CapabilityTable.js';
 import { DraftStrip } from './DraftStrip.js';
 import { useSummary, useMetrics, useTokenTrend, useCapabilities, useDrafts } from './hooks.js';
 
@@ -39,7 +33,6 @@ export function DashboardPage(): ReactElement {
   const navigate = useNavigate();
   const [range, setRange] = useState<Range>('30d');
   const [trendMetric, setTrendMetric] = useState<TrendMetric>('tokens');
-  const trial = useTrialNotice();
   const more = useMoreMenu();
 
   // 会话中途过期（mid-session）防御：读失败若 action=escalate，给可用「去登录」CTA（整页跳后端登录端点）。
@@ -53,11 +46,11 @@ export function DashboardPage(): ReactElement {
   const caps = useCapabilities(range);
   const drafts = useDrafts();
 
-  // 「+ 上传新能力」/「编辑」/草稿恢复 → Agent 创作流程。
+  // 「创建 Agent」/「重新生成」/草稿恢复 → Agent 创作流程。
   const goCreate = (): void => navigate(CREATE_ENTRY);
-  // 向导消费方读 ?capability=（WizardLayout / PublishStepPage / StructureStepPage），故编辑入口须发同名
-  // 参数（旧 ?capabilityId= 会被向导静默丢弃）。本期是「编辑既有能力」占位，对齐消费键即可、不另立契约。
-  const goEdit = (row: DashboardCapabilityRow): void =>
+  // 当前流程不支持对已生成 Agent 原地编辑；此入口会带上 capability 回到创建流程，
+  // 因此用户可见动作明确写“重新生成”，不冒充就地编辑。
+  const goRegenerate = (row: DashboardCapabilityRow): void =>
     navigate(`${CREATE_ENTRY}?capability=${row.capabilityId}`);
   // 「查看公开页」→ 对外只读公开页路由占位（不进编辑/管理；公开页 /a/{slug} 由后续接，本期落 probe 路由）。
   const goView = (row: DashboardCapabilityRow): void => {
@@ -100,6 +93,34 @@ export function DashboardPage(): ReactElement {
         <RangeSwitch value={range} onChange={setRange} />
       </div>
 
+      {/* 工作台首要任务：恢复最近一次 Agent 创作，其余创作收起。 */}
+      <section className="cb-dashboard__drafts" aria-label="创作恢复区">
+        {drafts.isLoading ? (
+          <LoadingState skeletonRows={1} label="正在查找上次创作" />
+        ) : drafts.isError ? (
+          <ErrorState
+            error={drafts.error}
+            onRetry={drafts.retry}
+            onEscalate={goLogin}
+            escalateLabel="去登录"
+          />
+        ) : (
+          <>
+            <DraftStrip drafts={drafts.items} onResume={resumeDraft} />
+            {drafts.hasMore && (
+              <button
+                type="button"
+                className="cb-loadmore"
+                onClick={drafts.loadMore}
+                disabled={drafts.isFetching}
+              >
+                {drafts.isFetching ? '加载中…' : '加载更多创作'}
+              </button>
+            )}
+          </>
+        )}
+      </section>
+
       {/* ② 四张大数字卡 */}
       <section className="cb-dashboard__metrics" aria-label="核心指标">
         {metricsQ.isLoading ? (
@@ -138,12 +159,12 @@ export function DashboardPage(): ReactElement {
         )}
       </section>
 
-      {/* ④ 我的能力体列表 */}
-      <section className="cb-dashboard__capabilities" aria-label="我的能力体">
+      {/* ④ 我的 Agent 列表 */}
+      <section className="cb-dashboard__capabilities" aria-label="我的 Agent">
         <div className="cb-dashboard__section-head">
-          <h3 className="cb-dashboard__section-title">我的能力体</h3>
-          <button type="button" className="cb-btn cb-btn--primary" onClick={goCreate}>
-            + 上传新能力
+          <h3 className="cb-dashboard__section-title">我的 Agent</h3>
+          <button type="button" className="cb-btn" onClick={() => navigate('/capabilities')}>
+            查看全部
           </button>
         </div>
         {caps.isLoading ? (
@@ -160,54 +181,12 @@ export function DashboardPage(): ReactElement {
             <CapabilityTable
               rows={caps.items}
               meta={caps.meta}
-              onTrial={trial.openTrial}
-              onEdit={goEdit}
+              onEdit={goRegenerate}
               onMore={more.openMore}
             />
-            {caps.hasMore && (
-              <button
-                type="button"
-                className="cb-loadmore"
-                onClick={caps.loadMore}
-                disabled={caps.isFetching}
-              >
-                {caps.isFetching ? '加载中…' : '加载更多'}
-              </button>
-            )}
           </>
         )}
       </section>
-
-      {/* ⑤ 可恢复的 Agent 创作 */}
-      <section className="cb-dashboard__drafts" aria-label="创作恢复区">
-        {drafts.isLoading ? (
-          <LoadingState skeletonRows={1} label="草稿加载中" />
-        ) : drafts.isError ? (
-          <ErrorState
-            error={drafts.error}
-            onRetry={drafts.retry}
-            onEscalate={goLogin}
-            escalateLabel="去登录"
-          />
-        ) : (
-          <>
-            <DraftStrip drafts={drafts.items} onResume={resumeDraft} />
-            {drafts.hasMore && (
-              <button
-                type="button"
-                className="cb-loadmore"
-                onClick={drafts.loadMore}
-                disabled={drafts.isFetching}
-              >
-                {drafts.isFetching ? '加载中…' : '加载更多草稿'}
-              </button>
-            )}
-          </>
-        )}
-      </section>
-
-      {/* 试用「本期未开放」占位浮层 */}
-      <TrialNotice capabilityName={trial.noticeName} onClose={trial.closeTrial} />
 
       {/* 更多菜单（下架/改价占位 + 查看公开页路由占位，外壳首页-35） */}
       <MoreMenu

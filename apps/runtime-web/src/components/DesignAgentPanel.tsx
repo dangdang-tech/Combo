@@ -51,6 +51,7 @@ function elementRole(element: ComboElementSelection): string {
 export function DesignAgentPanel({
   messages,
   revisions,
+  selectedRevisionNo,
   isRunning,
   isBootstrapping,
   readOnlyHistory,
@@ -73,6 +74,7 @@ export function DesignAgentPanel({
     hiddenMessageCount > 0 && !showEarlierMessages
       ? messages.slice(-RECENT_MESSAGE_LIMIT)
       : messages;
+  const selectedRevision = revisions.find((item) => item.revisionNo === selectedRevisionNo);
   const wasRunningRef = useRef(false);
   const bootstrapFailed = revisions.length === 0 && !isBootstrapping && Boolean(error);
 
@@ -147,6 +149,14 @@ export function DesignAgentPanel({
             streamingText={null}
             assistantLabel="Combo"
             artifactPresentation="event"
+            activeArtifact={
+              selectedRevision
+                ? {
+                    artifactKey: selectedRevision.artifactKey,
+                    version: selectedRevision.artifactVersion,
+                  }
+                : undefined
+            }
             onOpenArtifact={onOpenArtifact}
           />
         )}
@@ -187,7 +197,7 @@ export function DesignAgentPanel({
               <button
                 type="button"
                 onClick={() =>
-                  onSend('请重新生成首版 Miniapp，保持能力输入、核心任务和结果区域完整。')
+                  onSend('请重新生成首版页面，保持 Agent 输入、核心任务和结果区域完整。')
                 }
               >
                 重试

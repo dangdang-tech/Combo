@@ -209,15 +209,15 @@ function TrialIntakeForm({
   return (
     <section className="rt-intake" aria-label="本次试用输入">
       <div className="rt-intake__head">
-        <div className="rt-intake__eyebrow">{mode === 'test' ? 'REAL TASK TEST' : 'NEW RUN'}</div>
+        <div className="rt-intake__eyebrow">{mode === 'test' ? '真实任务试用' : '开始使用'}</div>
         <h2>
           {mode === 'test'
-            ? `运行真实任务 · 当前 UI R${revisionNo ?? '—'}`
+            ? `运行真实任务 · 页面版本 ${revisionNo ?? '—'}`
             : `开始生成 · ${capability.name}`}
         </h2>
         <p>
           {mode === 'test'
-            ? '这里会启动一条干净的 Agent 运行，不把设计对话混入能力上下文；结果会和当前 UI Revision 一起留在工作台。'
+            ? '这次试用会独立运行 Agent，不带入页面修改对话；输入和结果都会保存，方便稍后回来查看。'
             : '补充这次使用需要的上下文，我会按这个能力生成第一版产物。'}
         </p>
       </div>
@@ -1169,7 +1169,7 @@ export function ChatPage() {
       : capability.name;
   const toolbarVersion = isDraftTrial
     ? currentRevision
-      ? `UI R${currentRevision.revisionNo}`
+      ? `版本 ${currentRevision.revisionNo}`
       : '准备首版'
     : !hasStarted || !activeArtifact
       ? capability.version
@@ -1213,7 +1213,7 @@ export function ChatPage() {
           : agui.isRunning || isBootstrapping
             ? { state: 'saving', label: '正在更新' }
             : currentRevision?.verified
-              ? { state: 'verified', label: '已验证' }
+              ? { state: 'verified', label: '已试用' }
               : currentRevision
                 ? { state: 'saved', label: '已保存' }
                 : { state: 'preparing', label: '正在准备' };
@@ -1359,7 +1359,7 @@ export function ChatPage() {
                 {isDraftTrial ? toolbarVersion : `v${toolbarVersion}`}
               </span>
               <span className={`rt-mode-chip rt-mode-chip--${sessionMode}`}>
-                {isTrialSession ? (isDraftTrial ? 'Miniapp 编辑' : '试用') : '正式使用'}
+                {isTrialSession ? (isDraftTrial ? '页面编辑' : '试用') : '正式使用'}
               </span>
             </div>
             {isTrialSession && hasStarted ? (
@@ -1385,7 +1385,7 @@ export function ChatPage() {
           >
             {productionError && <div className="rt-inline-error">{productionError}</div>}
             {showDraftStudio ? (
-              <section className="rt-design-preview" aria-label="Miniapp 页面预览">
+              <section className="rt-design-preview" aria-label="Agent 页面预览">
                 <header className="rt-design-preview__bar">
                   <div className="rt-artifact-shell__identity">
                     <strong className="rt-artifact-shell__title">
@@ -1396,17 +1396,17 @@ export function ChatPage() {
                         <span className="rt-sr-only">版本</span>
                         <select
                           className="rt-artifact-shell__version-select"
-                          aria-label="Miniapp 版本"
+                          aria-label="页面版本"
                           value={selectedStudioRevision.revisionNo}
                           onChange={(event) => selectStudioRevision(Number(event.target.value))}
                         >
                           {studioRevisionOptions.map((revision) => (
                             <option key={revision.id} value={revision.revisionNo}>
-                              R{revision.revisionNo}
+                              版本 {revision.revisionNo}
                               {revision.id === currentRevision?.id
                                 ? ' · 当前'
                                 : revision.verified
-                                  ? ' · 已验证'
+                                  ? ' · 已试用'
                                   : ''}
                             </option>
                           ))}
@@ -1418,8 +1418,8 @@ export function ChatPage() {
                         type="button"
                         className="rt-artifact-shell__run-status"
                         data-state={artifactShellStatus.state}
-                        aria-label={`${artifactShellStatus.label}，查看运行结果`}
-                        title="查看最近一次运行结果"
+                        aria-label={`${artifactShellStatus.label}，查看最近一次试用`}
+                        title="查看最近一次试用"
                         onClick={() => setRunDrawerOpen(true)}
                       >
                         {artifactShellStatus.label}
@@ -1457,14 +1457,14 @@ export function ChatPage() {
                       disabled={!canConfirmDraftTrial || isViewingHistory}
                       title={
                         isViewingHistory
-                          ? '切换到当前版本后发布'
+                          ? '切换到当前版本后完成编辑'
                           : canConfirmDraftTrial
-                            ? '发布当前 Miniapp'
-                            : '完成一次真实运行后即可发布'
+                            ? '返回创作流程，确认是否发布'
+                            : '完成一次真实试用后再返回发布'
                       }
                       onClick={backToPublish}
                     >
-                      发布
+                      完成编辑
                     </button>
                   </div>
                 </header>
@@ -1518,11 +1518,11 @@ export function ChatPage() {
                     )}
                   </div>
                   {runDrawerOpen && currentRevision && (
-                    <aside className="rt-artifact-run-drawer" aria-label="运行结果">
+                    <aside className="rt-artifact-run-drawer" aria-label="最近一次试用">
                       <header className="rt-artifact-run-drawer__head">
                         <div>
-                          <strong>运行结果</strong>
-                          <span>R{currentRevision.revisionNo}</span>
+                          <strong>最近一次试用</strong>
+                          <span>版本 {currentRevision.revisionNo}</span>
                         </div>
                         <div>
                           <span
@@ -1540,12 +1540,12 @@ export function ChatPage() {
                               ? '运行中'
                               : currentTestError
                                 ? '运行失败'
-                                : '运行完成'}
+                                : '试用完成'}
                           </span>
                           <button
                             type="button"
                             className="rt-artifact-run-drawer__close"
-                            aria-label="关闭运行结果"
+                            aria-label="关闭试用记录"
                             onClick={() => setRunDrawerOpen(false)}
                           >
                             ×
@@ -1553,6 +1553,11 @@ export function ChatPage() {
                         </div>
                       </header>
                       <div className="rt-artifact-run-drawer__body" aria-live="polite">
+                        {!currentTestIsRunning && !currentTestError && (
+                          <div className="rt-studio-test__notice">
+                            本次真实任务已运行完成，请根据下方结果判断是否符合预期。
+                          </div>
+                        )}
                         {latestTestPrompt && (
                           <div className="rt-studio-test__submitted-prompt">
                             <span>本次任务</span>

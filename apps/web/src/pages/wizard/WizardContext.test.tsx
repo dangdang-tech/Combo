@@ -19,6 +19,7 @@ function Capture() {
       <span data-testid="draftId">{captured.draftId ?? 'none'}</span>
       <span data-testid="capabilityId">{captured.capabilityId ?? 'none'}</span>
       <span data-testid="agentReady">{captured.agentReady ? 'ready' : 'pending'}</span>
+      <span data-testid="trialCompleted">{captured.trialCompleted ? 'done' : 'pending'}</span>
       <span data-testid="errors">{Object.keys(captured.stepErrors).join(',') || 'none'}</span>
       <span data-testid="summaryPrefix">{captured.summaryPrefix ?? 'none'}</span>
     </div>
@@ -84,6 +85,15 @@ describe('WizardContext', () => {
     expect(screen.getByTestId('agentReady')).toHaveTextContent('pending');
     act(() => captured.setAgentReady(true));
     expect(screen.getByTestId('agentReady')).toHaveTextContent('ready');
+  });
+
+  it('setTrialCompleted 把 Runtime 校验过的试用完成态写入共享旅程', () => {
+    setup();
+    expect(screen.getByTestId('trialCompleted')).toHaveTextContent('pending');
+    act(() => captured.setTrialCompleted(true));
+    expect(screen.getByTestId('trialCompleted')).toHaveTextContent('done');
+    act(() => captured.setTrialCompleted(false));
+    expect(screen.getByTestId('trialCompleted')).toHaveTextContent('pending');
   });
 
   it('setCapabilityId 写真实能力体 id（STEP④ 建版回填，P1-5）', () => {

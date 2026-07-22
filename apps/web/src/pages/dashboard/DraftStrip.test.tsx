@@ -1,5 +1,5 @@
-// DraftStrip 测试（外壳首页-16/17/23/33/34）：
-//   单 bar 列进行中的创作 + 可理解阶段 / 动态 CTA 与精确断点 / 多条不串台 / 空态不渲染。
+// 工作台创作恢复入口测试：
+//   最近一次创作是唯一主入口，其余创作收起，每条仍精确回到真实断点。
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -20,29 +20,28 @@ function draft(over: Partial<DraftView> = {}): DraftView {
 }
 
 describe('DraftStrip', () => {
-  it('空 drafts → 不渲染（不出空白条）', () => {
+  it('空 drafts → 不渲染（不出空白卡）', () => {
     const { container } = render(<DraftStrip drafts={[]} onResume={() => {}} />);
-    expect(container.querySelector('.cb-draft-strip')).toBeNull();
+    expect(container.querySelector('.cb-resume-card')).toBeNull();
   });
 
-  it('渲染进行中的创作 + 名称 + 用户阶段 + 后端进度短语', () => {
+  it('只强调最近一次创作，并展示名称、阶段、进度与更新时间', () => {
     render(<DraftStrip drafts={[draft()]} onResume={() => {}} />);
-    expect(screen.getByRole('region', { name: '进行中的创作' })).toBeInTheDocument();
-    expect(screen.getByText('进行中的创作')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '继续上次创作' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '继续上次创作' })).toBeInTheDocument();
     expect(screen.getByText('保险话术草稿')).toBeInTheDocument();
-    expect(screen.getByText(/正在完善 Agent/)).toBeInTheDocument();
-    expect(screen.getByText(/结构化中 60%/)).toBeInTheDocument();
+    expect(screen.getByText('正在完善 Agent · 结构化中 60%')).toBeInTheDocument();
+    expect(screen.getByText(/^更新于 /)).toBeInTheDocument();
   });
 
-  it('点动态 CTA → onResume 带首条草稿 + currentStep 对应路由（已过导入 → 能力页）', async () => {
+  it('点主 CTA → onResume 带最近草稿 + currentStep 对应路由', async () => {
     const onResume = vi.fn();
     render(<DraftStrip drafts={[draft()]} onResume={onResume} />);
-    await userEvent.click(screen.getByRole('button', { name: '继续完善 →' }));
-    expect(onResume).toHaveBeenCalledOnce();
-    const [d, path] = onResume.mock.calls[0] ?? [];
-    expect(d.id).toBe('draft-1');
-    // PRD 2 步：草稿 currentStep=structure（已过导入）→ 续断点落能力页。
-    expect(path).toBe('/create/capabilities');
+    await userEvent.click(screen.getByRole('button', { name: '继续完善：保险话术草稿' }));
+    expect(onResume).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'draft-1' }),
+      '/create/capabilities',
+    );
   });
 
   it.each([
@@ -67,65 +66,50 @@ describe('DraftStrip', () => {
         />,
       );
 
-      expect(screen.getByText(new RegExp(stage))).toBeInTheDocument();
-      const cta = screen.getByRole('button', { name: `${action} →` });
-      await userEvent.click(cta);
+      expect(screen.getByText(`${stage} · 已完成 42%`)).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: `${action}：保险话术草稿` }));
       expect(onResume).toHaveBeenCalledWith(expect.objectContaining({ currentStep }), expectedPath);
     },
   );
 
-  it('草稿胶囊的 accessible name 同时说明恢复动作、名称、阶段与实时进度', () => {
-    render(<DraftStrip drafts={[draft()]} onResume={() => {}} />);
-    expect(
-      screen.getByRole('button', {
-        name: '继续完善：保险话术草稿，正在完善 Agent · 结构化中 60%',
-      }),
-    ).toBeInTheDocument();
-  });
-
-  it('多条草稿各回各的断点：仍在导入 → 上传页；已过导入 → 能力页', async () => {
+  it('多条时按 updatedAt 选最近一条，其余收起但仍可回到各自断点', async () => {
     const onResume = vi.fn();
     render(
       <DraftStrip
         drafts={[
-          draft({ id: 'a', title: 'A 草稿', currentStep: 'import' }),
-          draft({ id: 'b', title: 'B 草稿', currentStep: 'publish' }),
+          draft({
+            id: 'a',
+            title: 'A Agent',
+            currentStep: 'import',
+            updatedAt: '2026-06-11T00:00:00Z',
+          }),
+          draft({
+            id: 'b',
+            title: 'B Agent',
+            currentStep: 'publish',
+            updatedAt: '2026-06-12T00:00:00Z',
+          }),
         ]}
         onResume={onResume}
       />,
     );
-    await userEvent.click(screen.getByRole('button', { name: /继续发布：B 草稿/ }));
-    const [d, path] = onResume.mock.calls[0] ?? [];
-    expect(d.id).toBe('b');
-    expect(path).toBe('/create/capabilities');
-    // 仍在导入的草稿 → 上传页。
-    await userEvent.click(screen.getByRole('button', { name: /继续导入：A 草稿/ }));
-    const [d2, path2] = onResume.mock.calls[1] ?? [];
-    expect(d2.id).toBe('a');
-    expect(path2).toBe('/create/import');
+
+    expect(screen.getByText('B Agent')).toBeInTheDocument();
+    expect(screen.getByText('共 2 个')).toBeInTheDocument();
+    await userEvent.click(screen.getByText('查看其余 1 个'));
+    await userEvent.click(screen.getByRole('button', { name: /继续导入：A Agent/ }));
+    expect(onResume).toHaveBeenCalledWith(expect.objectContaining({ id: 'a' }), '/create/import');
   });
 
-  it('无标题草稿 → 用更新时间形成可区分的创作项目名', () => {
+  it('无标题草稿用「未命名 Agent」，不把时间伪装成项目名', () => {
     const noTitle = draft();
     delete noTitle.title;
     render(<DraftStrip drafts={[noTitle]} onResume={() => {}} />);
-    const formatted = new Intl.DateTimeFormat('zh-CN', {
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hourCycle: 'h23',
-    }).formatToParts(new Date(noTitle.updatedAt));
-    const part = (type: Intl.DateTimeFormatPartTypes): string =>
-      formatted.find((entry) => entry.type === type)?.value ?? '';
-    expect(
-      screen.getByText(
-        `Agent 创作 · ${part('month')}/${part('day')} ${part('hour')}:${part('minute')}`,
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByText('未命名 Agent')).toBeInTheDocument();
+    expect(screen.queryByText(/Agent 创作 ·/)).not.toBeInTheDocument();
   });
 
-  it('提取终态已由 worker 持久化 → 自动变成可查看的识别结果，不再假装仍在分析', async () => {
+  it('提取终态自动变成可查看的识别结果，不再假装仍在分析', async () => {
     const onResume = vi.fn();
     render(
       <DraftStrip
@@ -139,8 +123,8 @@ describe('DraftStrip', () => {
       />,
     );
 
-    expect(screen.getByText(/识别已完成 · 已准备好 5 个 Agent/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: '查看识别结果 →' }));
+    expect(screen.getByText('识别已完成 · 已准备好 5 个 Agent')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '查看识别结果：保险话术草稿' }));
     expect(onResume).toHaveBeenCalledWith(
       expect.objectContaining({ currentStep: 'extract' }),
       '/create/capabilities',
@@ -154,11 +138,11 @@ describe('DraftStrip', () => {
         onResume={() => {}}
       />,
     );
-    expect(screen.getByText('· 正在分析工作历史')).toBeInTheDocument();
+    expect(screen.getByText('正在分析工作历史')).toBeInTheDocument();
     expect(screen.queryByText(/正在分析工作历史 ·\s*$/)).toBeNull();
   });
 
-  it('发布终态已持久化 → 不再出现在“进行中的创作”', () => {
+  it('发布终态已持久化 → 不再出现在恢复入口', () => {
     const { container } = render(
       <DraftStrip
         drafts={[
@@ -171,6 +155,6 @@ describe('DraftStrip', () => {
       />,
     );
 
-    expect(container.querySelector('.cb-draft-strip')).toBeNull();
+    expect(container.querySelector('.cb-resume-card')).toBeNull();
   });
 });
