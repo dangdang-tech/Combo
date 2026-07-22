@@ -593,11 +593,12 @@
   border-radius: var(--cb-radius-card);
   background: var(--cb-bg);
   overflow: hidden;
+  transition: border-color 0.12s ease;
 }
 
 .rt-design-agent__composer:focus-within {
-  border-color: var(--cb-focus-ring);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cb-focus-ring) 15%, transparent);
+  border-color: color-mix(in srgb, var(--cb-fg) 55%, var(--cb-border-control));
+  box-shadow: none;
 }
 
 .rt-design-agent__composer textarea {
@@ -614,6 +615,10 @@
   font: inherit;
   font-size: 13px;
   line-height: 1.45;
+}
+
+.rt-design-agent__composer textarea:focus-visible {
+  outline: 0;
 }
 
 .rt-design-agent__composer textarea::placeholder {

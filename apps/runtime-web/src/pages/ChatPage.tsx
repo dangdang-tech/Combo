@@ -326,9 +326,9 @@ function StudioTestInputReceipt({
   return (
     <section className="rt-intake" aria-label="本次 Miniapp 提交">
       <div className="rt-intake__head">
-        <div className="rt-intake__eyebrow">测试输入 · R{revisionNo}</div>
+        <div className="rt-intake__eyebrow">试运行输入 · R{revisionNo}</div>
         <h2>本次任务</h2>
-        <p>再次运行会用相同输入测试当前页面。</p>
+        <p>再次运行会用相同输入检查当前版本。</p>
       </div>
       <div className="rt-studio-test__submitted-prompt">
         <span>本次提交</span>
@@ -972,9 +972,9 @@ export function ChatPage() {
   const currentTestError = localTestMatchesCurrentRevision
     ? studioTest.error
     : storedCurrentTestStatus === 'failed'
-      ? '上一次测试没有完成，请重试。'
+      ? '上一次试运行没有完成，请重试。'
       : storedCurrentTestStatus === 'interrupted'
-        ? '上一次测试已停止。'
+        ? '上一次试运行已停止。'
         : null;
 
   const selectedArtifactKey =
@@ -1232,7 +1232,7 @@ export function ChatPage() {
     : isViewingHistory && selectedStudioRevision
       ? { state: 'history', label: `R${selectedStudioRevision.revisionNo} · 历史版本` }
       : currentTestIsRunning
-        ? { state: 'testing', label: `R${currentRevision?.revisionNo ?? '—'} · 测试中` }
+        ? { state: 'testing', label: `R${currentRevision?.revisionNo ?? '—'} · 试运行中` }
         : agui.isRunning
           ? {
               state: 'saving',
@@ -1362,14 +1362,6 @@ export function ChatPage() {
               <button type="button" className="is-primary" onClick={backToPublish}>
                 发布
               </button>
-            ) : currentRevision ? (
-              <button
-                type="button"
-                disabled={agui.isRunning || isBootstrapping || currentTestIsRunning}
-                onClick={openStudioTest}
-              >
-                {currentTestIsRunning ? '测试中…' : '测试'}
-              </button>
             ) : null}
           </div>
         </header>
@@ -1452,16 +1444,17 @@ export function ChatPage() {
                     >
                       页面
                     </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={studioView === 'test'}
-                      disabled={!currentRevision}
-                      onClick={openStudioTest}
-                    >
-                      测试
-                      {currentRevision?.verified && <span aria-label="任务校验已通过">✓</span>}
-                    </button>
+                    {currentRevision && (
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={studioView === 'test'}
+                        onClick={openStudioTest}
+                      >
+                        试运行
+                        {currentRevision.verified && <span aria-label="试运行已通过">✓</span>}
+                      </button>
+                    )}
                   </div>
                   {studioView === 'preview' && (
                     <div className="rt-design-preview__devices" role="group" aria-label="预览尺寸">
@@ -1509,7 +1502,7 @@ export function ChatPage() {
                     <div className="rt-studio-test__result" aria-live="polite">
                       <div className="rt-studio-test__result-head">
                         <div>
-                          <span>测试结果 · R{currentRevision.revisionNo}</span>
+                          <span>试运行结果 · R{currentRevision.revisionNo}</span>
                           <h2>运行结果</h2>
                         </div>
                         <em
