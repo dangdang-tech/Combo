@@ -10,9 +10,11 @@
 import type { LlmGatewayPort, CapabilityType, Confidence } from '@cb/shared';
 import { slugify } from '@cb/shared';
 import {
+  capabilityNameNeedsReview,
   firstNonEmptyLine,
   isBlockedCapabilityLabel,
   isPlatformPromptText,
+  normalizeCapabilityNameComparable,
   stripRolePrefix,
 } from '../../platform/text/session-noise.js';
 
@@ -314,6 +316,7 @@ export async function nameSessionCapability(
   const validName =
     parsedName &&
     !isBlockedCapabilityLabel(parsedName) &&
+    !capabilityNameNeedsReview(parsedName) &&
     !isShortGreeting(parsedName) &&
     cleanComparable(parsedName) !== rawTitle
       ? parsedName
@@ -374,20 +377,13 @@ function meaningfulSessionText(segment: ExtractSegment): string {
 }
 
 function cleanComparable(text: string | null | undefined): string {
-  return (text ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/^(user|assistant|system|tool):\s*/i, '')
-    .replace(/[\s，。！？、,.!?;；:：'"“”‘’`~～()[\]{}<>《》]/g, '');
+  return normalizeCapabilityNameComparable(text);
 }
 
 function cleanCapabilityName(text: string | null | undefined): string {
   const line = firstNonEmptyLine(text);
   if (!line) return '';
-  return line
-    .replace(/^["“”'‘’]+|["“”'‘’]+$/g, '')
-    .trim()
-    .slice(0, 24);
+  return line.replace(/^["“”'‘’]+|["“”'‘’]+$/g, '').trim();
 }
 
 function cleanIntent(text: string | null | undefined): string {
@@ -404,8 +400,8 @@ function languageOfText(text: string): 'zh' | 'en' | 'mixed' | undefined {
   return undefined;
 }
 
-function fallbackSessionCapability(segment: ExtractSegment): { name: string; intent: string } {
-  const text = `${segment.title ?? ''}\n${segment.content}`.toLowerCase();
+function fallbackCapabilityFromText(textInput: string): { name: string; intent: string } {
+  const text = textInput.toLowerCase();
   if (/docker|compose|镜像|容器|后台|部署|ready|health/.test(text)) {
     return {
       name: 'Docker部署排障',
@@ -446,6 +442,10 @@ function fallbackSessionCapability(segment: ExtractSegment): { name: string; int
     name: '任务流程整理',
     intent: '把该 session 中的任务处理过程整理成可复用工作流',
   };
+}
+
+function fallbackSessionCapability(segment: ExtractSegment): { name: string; intent: string } {
+  return fallbackCapabilityFromText(`${segment.title ?? ''}\n${segment.content}`);
 }
 
 /** 簇标签：优先使用真实任务标题；否则取簇内最高频标题/正文词（兜底名 + slug 种子）。 */
@@ -830,16 +830,28 @@ export async function nameOne(
   cand: ScoredCandidate,
   opts: { traceId: string; ownerUserId?: string },
 ): Promise<NamedCandidate> {
-  const fallbackName = fallbackNameOf(cand);
-  if (!fallbackName) throw new CandidateNameUnavailable();
-  const fallbackIntent = `把「${fallbackName}」这类反复出现的工作流打包成可复用能力`;
+  const semanticFallback = fallbackCapabilityFromText(
+    cand.segments.map((segment) => `${segment.title ?? ''}\n${segment.content}`).join('\n'),
+  );
+  const cleanClusterLabel = cleanCapabilityName(cand.clusterLabel);
+  const fallback =
+    cleanClusterLabel &&
+    !isBlockedCapabilityLabel(cleanClusterLabel) &&
+    !capabilityNameNeedsReview(cleanClusterLabel)
+      ? {
+          name: cleanClusterLabel,
+          intent: `把「${cleanClusterLabel}」这类反复出现的工作流打包成可复用能力`,
+        }
+      : semanticFallback;
 
   const sample = cand.segments
     .slice(0, 3)
     .map((s, i) => `${i + 1}. ${(s.title ?? '').slice(0, 40)}：${s.content.slice(0, 120)}`)
     .join('\n');
   const prompt =
-    `下面是用户反复做的同一类工作流的去敏会话片段，请给它起一个简短中文能力名（≤12字）和一句话用途描述。\n` +
+    `下面是用户反复做的同一类工作流的去敏会话片段，请把它抽象成一个可复用 mini-app 能力，而不是复述 session 标题。\n` +
+    `能力名要求：简短中文、≤12字；禁止平台标签、Automation 前缀、文件名、整句指令和原 session 标题。\n` +
+    `用途描述要求：一句话说明它能帮用户完成什么。\n` +
     `严格输出 JSON：{"name":"...","intent":"..."}，不要其它内容。\n\n${sample}`;
 
   const result = await gateway.complete(prompt, {
@@ -849,23 +861,27 @@ export async function nameOne(
   });
 
   if (result.degraded || !result.text) {
-    return { ...cand, name: fallbackName, intent: fallbackIntent, degradedNaming: true };
+    return { ...cand, name: fallback.name, intent: fallback.intent, degradedNaming: true };
   }
   const parsed = parseNameJson(result.text);
-  const parsedName =
-    parsed?.name && !isBlockedCapabilityLabel(parsed.name) ? parsed.name.trim().slice(0, 24) : '';
+  const parsedName = cleanCapabilityName(parsed?.name);
+  const sourceLabels = [cand.clusterLabel, ...cand.segments.map((segment) => segment.title ?? '')]
+    .map(cleanComparable)
+    .filter(Boolean);
+  const validName =
+    parsedName &&
+    !isBlockedCapabilityLabel(parsedName) &&
+    !capabilityNameNeedsReview(parsedName) &&
+    !sourceLabels.includes(cleanComparable(parsedName))
+      ? parsedName
+      : '';
+  const intent = cleanIntent(parsed?.intent);
   return {
     ...cand,
-    name: parsedName || fallbackName,
-    intent: parsed?.intent?.trim().slice(0, 200) || fallbackIntent,
-    degradedNaming: false,
+    name: validName || fallback.name,
+    intent: intent || fallback.intent,
+    degradedNaming: !validName || !intent,
   };
-}
-
-function fallbackNameOf(cand: ScoredCandidate): string | null {
-  const label = firstNonEmptyLine(cand.clusterLabel);
-  if (!label || isBlockedCapabilityLabel(label)) return null;
-  return label.slice(0, 24);
 }
 
 /** 容错解析 LLM 命名 JSON（提取首个 {...}；坏 JSON → null，调用方兜底）。 */

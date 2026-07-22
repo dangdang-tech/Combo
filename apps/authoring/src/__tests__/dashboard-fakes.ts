@@ -83,7 +83,21 @@ export interface VerRow {
   status: string; // draft|published|superseded|review_rejected
   visibility: string | null;
   source_candidate_id: string | null;
-  manifest: { name?: string; tagline?: string };
+  manifest: {
+    id?: string;
+    version?: string;
+    status?: string;
+    inputs?: { fields: unknown[] };
+    output?: { type: string };
+    boundaries?: { riskLevel: string; redLines: string[] };
+    name?: string;
+    tagline?: string;
+    role?: string;
+    goal?: string;
+    instructions?: string;
+    skill_set?: string[];
+    starter_prompts?: string[];
+  };
   rejected_at: string | null;
   updated_at: string;
   created_at: string;
@@ -151,14 +165,16 @@ export class DashboardFakeDb implements Queryable {
     ) {
       const owner = params[0] as string;
       const anchor = params[params.length - 1] as string; // 末位 = 锚 id
-      const filterDraftOnly = sql.includes('p.capability_id IS NULL');
+      const filterDraftOnly = sql.includes("dv.status = 'draft'");
       // status 过滤【镜像派生态】（Codex#r3 P1）：SQL 谓词为字面量（无参数占位），按谓词文本判派生态。
       const displayStatus = parseDisplayStateFromSql(sql, filterDraftOnly);
       const cap = this.capabilities.get(anchor);
       let exists = !!cap && cap.creator_user_id === owner;
       if (exists) {
         if (filterDraftOnly) {
-          exists = !this.publications.has(anchor);
+          exists = [...this.versions.values()].some(
+            (version) => version.capability_id === anchor && version.status === 'draft',
+          );
         } else if (displayStatus) {
           exists = matchesDisplayState(this.publications.get(anchor), displayStatus);
         }
@@ -228,7 +244,7 @@ export class DashboardFakeDb implements Queryable {
       // 解析中间参数（cursor），按 repo 拼装顺序。status 过滤已是字面量谓词（无参数占位，Codex#r3 P1），
       //   故 owner 之后直接是 cursor（若有），不再为 status 占一个参数位。
       let cursorFilter: string | null = null;
-      const filterDraftOnly = sql.includes('p.capability_id IS NULL');
+      const filterDraftOnly = sql.includes("dv.status = 'draft'");
       const displayStatus = parseDisplayStateFromSql(sql, filterDraftOnly);
       if (sql.includes('c.id < $') || sql.includes('c.id > $')) {
         cursorFilter = params[1] as string; // owner=$1 后即 cursor（status 无参数位）
@@ -237,7 +253,11 @@ export class DashboardFakeDb implements Queryable {
       let caps = [...this.capabilities.values()].filter((c) => c.creator_user_id === owner);
       // status 过滤【镜像派生态】（与 displayStatePredicateSql / derive 同口径）。
       if (filterDraftOnly) {
-        caps = caps.filter((c) => !this.publications.has(c.id));
+        caps = caps.filter((c) =>
+          [...this.versions.values()].some(
+            (version) => version.capability_id === c.id && version.status === 'draft',
+          ),
+        );
       } else if (displayStatus) {
         caps = caps.filter((c) => matchesDisplayState(this.publications.get(c.id), displayStatus));
       }
@@ -250,14 +270,18 @@ export class DashboardFakeDb implements Queryable {
       const page = caps.slice(0, limitPlus);
 
       const rows = page.map((c) => {
-        // current_version_id 或最近一条版本（按 created_at desc）
-        let ver: VerRow | undefined = c.current_version_id
-          ? this.versions.get(c.current_version_id)
-          : undefined;
+        // 管理页优先继续最新 draft；无 draft 时才回到当前公开版/最新版。
+        const draftVersions = [...this.versions.values()].filter(
+          (v) => v.capability_id === c.id && v.status === 'draft',
+        );
+        let ver: VerRow | undefined = draftVersions.sort((a, b) =>
+          b.created_at.localeCompare(a.created_at),
+        )[0];
+        if (!ver && c.current_version_id) ver = this.versions.get(c.current_version_id);
         if (!ver) {
           ver = [...this.versions.values()]
             .filter((v) => v.capability_id === c.id)
-            .sort((a, b) => (b.created_at < a.created_at ? -1 : 1))[0];
+            .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
         }
         const pub = this.publications.get(c.id) ?? null;
         const rej = [...this.versions.values()]
@@ -316,19 +340,46 @@ export class DashboardFakeDb implements Queryable {
           currentVersion?.status === 'published' &&
           (currentVersion.visibility ?? 'public') === 'public' &&
           !shadowedByNewerDuplicate;
+        const manifest = ver?.manifest;
+        const studioAvailable = Boolean(
+          c.status === 'active' &&
+          ver?.status === 'draft' &&
+          manifest?.id?.trim() &&
+          manifest?.version?.trim() &&
+          manifest?.status === 'draft' &&
+          manifest?.inputs &&
+          Array.isArray(manifest?.inputs.fields) &&
+          manifest?.output?.type?.trim() &&
+          manifest?.boundaries?.riskLevel?.trim() &&
+          Array.isArray(manifest?.boundaries.redLines) &&
+          manifest?.name?.trim() &&
+          manifest.tagline?.trim() &&
+          manifest.role?.trim() &&
+          manifest.goal?.trim() &&
+          manifest.instructions?.trim() &&
+          manifest.skill_set?.length &&
+          manifest.starter_prompts?.length,
+        );
         return {
           capability_id: c.id,
-          version_id: c.current_version_id ?? ver?.id ?? null,
+          version_id: ver?.id ?? null,
+          current_version_id: c.current_version_id,
           slug: c.slug,
+          manifest: manifest ?? {},
+          current_manifest: currentVersion?.manifest ?? null,
           name: ver?.manifest.name ?? '',
           tagline: ver?.manifest.tagline ?? '',
           review_status: pub?.review_status ?? null,
           reject_reason: pub?.reject_reason ?? null,
           rejected_version_id: rej?.id ?? null,
           has_published_version: hasPublishedVersion,
+          studio_available: studioAvailable,
+          studio_draftable: Boolean(
+            c.status === 'active' && currentVersion?.status === 'published',
+          ),
           public_page_available: publicPageAvailable,
           published_at: pub?.published_at ?? null,
-          updated_at: c.updated_at,
+          updated_at: ver && ver.updated_at > c.updated_at ? ver.updated_at : c.updated_at,
         };
       });
       return ok<R>(rows as R[]);
@@ -418,7 +469,21 @@ export function seedCapability(
     status: opts?.versionStatus ?? 'draft',
     visibility: opts?.visibility ?? 'public',
     source_candidate_id: candidateId,
-    manifest: { name: opts?.name ?? '需求炼金师', tagline: opts?.tagline ?? '把对话炼成能力' },
+    manifest: {
+      id: capabilityId,
+      version: '0.1.0',
+      status: 'draft',
+      inputs: { fields: [] },
+      output: { type: 'text' },
+      boundaries: { riskLevel: 'low', redLines: [] },
+      name: opts?.name ?? '需求炼金师',
+      tagline: opts?.tagline ?? '把对话炼成能力',
+      role: '工作流助手',
+      goal: '完成用户任务',
+      instructions: '按步骤完成任务',
+      skill_set: ['理解需求'],
+      starter_prompts: ['帮我开始'],
+    },
     rejected_at: null,
     updated_at: opts?.versionUpdatedAt ?? now,
     created_at: now,

@@ -2,7 +2,11 @@ import type { Pool } from 'pg';
 import { describe, expect, it } from 'vitest';
 import type { Manifest } from '@cb/shared';
 import type { CapabilityLoadError } from './loader.js';
-import { getCreatorCapabilityVersionForTrial, getPublishedCapability } from './loader.js';
+import {
+  getCreatorCapabilityVersionForStudioSource,
+  getCreatorCapabilityVersionForTrial,
+  getPublishedCapability,
+} from './loader.js';
 import { manifestHash } from './manifest-hash.js';
 
 const MANIFEST: Manifest = {
@@ -185,5 +189,59 @@ describe('getCreatorCapabilityVersionForTrial', () => {
     );
 
     expect(loaded).toBeNull();
+  });
+});
+
+describe('getCreatorCapabilityVersionForStudioSource', () => {
+  it('creator 可以把精确被退回版作为修复 UI 的安全源', async () => {
+    const frozenHash = manifestHash(MANIFEST);
+    const seen: { sql?: string; params?: unknown[] } = {};
+    const loaded = await getCreatorCapabilityVersionForStudioSource(
+      poolCapturing(
+        [
+          {
+            capability_id: 'cap-1',
+            slug: 'short-video-script',
+            version: '0.2.0',
+            status: 'review_rejected',
+            manifest: { ...MANIFEST, version: '0.2.0' },
+            manifest_hash: manifestHash({ ...MANIFEST, version: '0.2.0' }),
+          },
+        ],
+        seen,
+      ),
+      {
+        capabilityId: 'cap-1',
+        versionId: 'ver-rejected',
+        creatorUserId: 'user-1',
+      },
+    );
+
+    expect(seen.sql).toContain(`v.status IN ('published', 'review_rejected')`);
+    expect(seen.params).toEqual(['cap-1', 'ver-rejected', 'user-1']);
+    expect(loaded?.view.status).toBe('review_rejected');
+    expect(loaded?.view.manifestHash).not.toBe(frozenHash);
+  });
+
+  it('拒绝被篡改的退回版 Studio 源', async () => {
+    await expect(
+      getCreatorCapabilityVersionForStudioSource(
+        poolReturning([
+          {
+            capability_id: 'cap-1',
+            slug: 'short-video-script',
+            version: '0.2.0',
+            status: 'review_rejected',
+            manifest: { ...MANIFEST, version: '0.2.0' },
+            manifest_hash: 'corrupt',
+          },
+        ]),
+        {
+          capabilityId: 'cap-1',
+          versionId: 'ver-rejected',
+          creatorUserId: 'user-1',
+        },
+      ),
+    ).rejects.toMatchObject<Partial<CapabilityLoadError>>({ reason: 'integrity' });
   });
 });

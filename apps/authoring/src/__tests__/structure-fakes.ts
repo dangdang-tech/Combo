@@ -326,6 +326,9 @@ export class StructureFakeDb implements Queryable {
           structure_state: v.structure_state,
           source_candidate_id: v.source_candidate_id,
           creator_user_id: c?.creator_user_id ?? '',
+          existing_versions: [...this.versions.values()]
+            .filter((version) => version.capability_id === v.capability_id)
+            .map((version) => version.version),
           updated_at: v.updated_at ?? new Date(0).toISOString(),
         },
       ] as R[]);
@@ -389,12 +392,12 @@ export class StructureFakeDb implements Queryable {
     ) {
       const c = this.candidates.get(params[0] as string);
       if (!c || c.owner_user_id !== params[1]) return ok<R>([]);
-      return ok<R>(
-        [{ id: c.id, name: c.name, intent: null, slug: c.slug, status: c.status }] as R[],
-      );
+      return ok<R>([
+        { id: c.id, name: c.name, intent: null, slug: c.slug, status: c.status },
+      ] as R[]);
     }
 
-    // ---- readCapabilityForNewVersion（SELECT c.id, c.slug, cur.status, cur.version FROM capabilities c LEFT JOIN ... WHERE c.id=$1 AND c.creator_user_id=$2）----
+    // ---- readCapabilityForNewVersion（当前版状态/版本 + manifest + 候选血缘）----
     if (
       sql.includes('FROM capabilities c') &&
       sql.includes('LEFT JOIN capability_versions cur') &&
@@ -409,6 +412,11 @@ export class StructureFakeDb implements Queryable {
           slug: c.slug,
           current_version_status: cur?.status ?? null,
           current_version: cur?.version ?? null,
+          current_manifest: cur?.manifest ?? null,
+          current_source_candidate_id: cur?.source_candidate_id ?? null,
+          existing_versions: [...this.versions.values()]
+            .filter((version) => version.capability_id === c.id)
+            .map((version) => version.version),
         },
       ] as R[]);
     }

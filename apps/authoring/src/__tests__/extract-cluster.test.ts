@@ -219,6 +219,11 @@ describe('clusterSegments — 聚类相似工作流', () => {
         content: 'user: <environment_context>\n  <cwd>/x</cwd>\n</environment_context>',
       }),
       mkSeg({
+        segmentId: 'n-plugins',
+        title: '<recommended_plugins>',
+        content: 'user: <recommended_plugins>\n- Slack\n- Notion\n</recommended_plugins>',
+      }),
+      mkSeg({
         segmentId: 'n-agents',
         title: '# AGENTS.md instructions for /x',
         content: 'user: # AGENTS.md instructions for /x\n\n<INSTRUCTIONS>...</INSTRUCTIONS>',
@@ -442,9 +447,7 @@ describe('selectPublishableCandidates — 发布准备质量门槛', () => {
     expect(founderQuality.externalValue).toBeGreaterThanOrEqual(0.25);
     expect(feeQuality.oneOffPenalty).toBeGreaterThan(0);
 
-    expect(selectPublishableCandidates([oneOffFeeQuery, founderReview])).toEqual([
-      founderReview,
-    ]);
+    expect(selectPublishableCandidates([oneOffFeeQuery, founderReview])).toEqual([founderReview]);
   });
 
   it('保留高证据的长期维护类 creator 工作流，避免真实长 snapshot 候选归零', () => {
@@ -561,5 +564,75 @@ describe('nameOne — 经 3A LLM 网关命名', () => {
     const named = await nameOne(gw, scored[0]!, { traceId: 't' });
     expect(named.name.length).toBeGreaterThan(0);
     expect(named.intent.length).toBeGreaterThan(0);
+  });
+
+  it('LLM 照抄 Automation 原标题时拒绝脏名称，按证据语义生成能力名', async () => {
+    const gw = new FakeLlmGateway();
+    gw.default = {
+      text: '{"name":"Automation: AVM 周期 dogfo","intent":"处理 AVM 周期工作"}',
+      degraded: false,
+    };
+    const scored = scoreCandidates(
+      clusterSegments([
+        mkSeg({
+          segmentId: 's1',
+          title: 'Automation: AVM 周期 dogfo',
+          content: '检查前端 UI 页面组件样式和交互，然后完成测试回归',
+        }),
+      ]),
+      Date.now(),
+    );
+
+    const named = await nameOne(gw, scored[0]!, { traceId: 't' });
+    expect(named.name).toBe('前端组件还原');
+    expect(named.name).not.toContain('Automation');
+    expect(named.degradedNaming).toBe(true);
+  });
+
+  it('LLM 把平台标签转写成纯英文时也拒绝，不让 Recommended Plugins 流入产品名', async () => {
+    const gw = new FakeLlmGateway();
+    gw.default = {
+      text: '{"name":"Recommended Plugins","intent":"完成页面设计工作"}',
+      degraded: false,
+    };
+    const scored = scoreCandidates(
+      clusterSegments([
+        mkSeg({
+          segmentId: 's1',
+          title: '页面样式调整',
+          content: '根据设计规范修改前端 UI 组件、样式和交互',
+        }),
+      ]),
+      Date.now(),
+    );
+
+    const named = await nameOne(gw, scored[0]!, { traceId: 't' });
+    expect(named.name).toBe('页面样式调整');
+    expect(named.name).not.toMatch(/recommended|plugins/i);
+    expect(named.degradedNaming).toBe(true);
+  });
+
+  it('LLM 原样返回超过 12 字的长 session 标题时不先截断伪装成新名称', async () => {
+    const title = '设计系统审计与前端页面规范自动检查';
+    const gw = new FakeLlmGateway();
+    gw.default = {
+      text: JSON.stringify({ name: title, intent: '检查页面规范' }),
+      degraded: false,
+    };
+    const scored = scoreCandidates(
+      clusterSegments([
+        mkSeg({
+          segmentId: 's1',
+          title,
+          content: '检查前端 UI 组件、样式与设计 token 的一致性',
+        }),
+      ]),
+      Date.now(),
+    );
+
+    const named = await nameOne(gw, scored[0]!, { traceId: 't' });
+    expect(named.name).toBe('前端组件还原');
+    expect(named.name).not.toBe([...title].slice(0, 12).join(''));
+    expect(named.degradedNaming).toBe(true);
   });
 });

@@ -1,7 +1,8 @@
 // CapabilityTable 测试：
-//   状态单源（reviewStatus+statusLabel）/ usage 列占位 / 状态一致的真实动作 / 拒绝原因。
+//   状态单源 / analytics 占位 / Agent 身份 / 管理页真实动作 / 拒绝原因。
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { ReactElement } from 'react';
 import type { DashboardCapabilityRow } from '@cb/shared';
@@ -32,6 +33,9 @@ function row(over: Partial<DashboardCapabilityRow> = {}): DashboardCapabilityRow
     monthlyInvocations: null,
     spendSparkline: null,
     revenueMicros: null,
+    studioAvailable: false,
+    studioDraftable: false,
+    nameNeedsReview: false,
     publicPageAvailable: true,
     publishedAt: '2026-06-01T00:00:00Z',
     updatedAt: '2026-06-10T00:00:00Z',
@@ -98,8 +102,8 @@ describe('CapabilityTable 操作入口', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('当前公开页不可达：操作列只显示无操作占位，不出现死入口', () => {
-    renderTable(
+  it('当前公开页不可达：操作列不显示破折号或死入口', () => {
+    const { container } = renderTable(
       <CapabilityTable
         rows={[
           row({
@@ -112,8 +116,153 @@ describe('CapabilityTable 操作入口', () => {
         meta={undefined}
       />,
     );
-    expect(screen.getByLabelText('暂无可用操作')).toHaveTextContent('—');
+    const actionCell = container.querySelector('.cb-cap-row__actions') as HTMLElement;
+    expect(within(actionCell).queryByRole('button')).toBeNull();
+    expect(within(actionCell).queryByRole('link')).toBeNull();
+    expect(actionCell).not.toHaveTextContent('—');
+    expect(actionCell).toHaveAttribute('aria-label', '暂无可用操作');
+    expect(actionCell).toBeEmptyDOMElement();
     expect(screen.queryByRole('link', { name: /公开页/ })).toBeNull();
+  });
+
+  it('管理页：稳定 Agent 标识 + 草稿可编辑 UI，旧名称可自动整理', async () => {
+    const openStudio = vi.fn();
+    const regenerateName = vi.fn();
+    const draft = row({
+      reviewStatus: 'draft',
+      statusLabel: '草稿',
+      publishedAt: null,
+      publicPageAvailable: false,
+      studioAvailable: true,
+      nameNeedsReview: true,
+      name: '<recommended_plugins>',
+    });
+    const { container, rerender } = renderTable(
+      <CapabilityTable
+        rows={[draft]}
+        meta={undefined}
+        mode="manage"
+        onOpenStudio={openStudio}
+        onRegenerateName={regenerateName}
+      />,
+    );
+
+    const mark = container.querySelector('.cb-agent-mark') as HTMLElement;
+    const variant = mark.getAttribute('data-variant');
+    expect(mark).toHaveTextContent('RP');
+    expect(variant).toMatch(/^[1-8]$/);
+    expect(screen.getByText('名称可优化')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /编辑.*UI 版本/ }));
+    expect(openStudio).toHaveBeenCalledWith(draft);
+    await userEvent.click(screen.getByRole('button', { name: /自动整理.*名称/ }));
+    expect(regenerateName).toHaveBeenCalledWith(draft);
+
+    rerender(
+      <CapabilityTable
+        rows={[draft]}
+        meta={undefined}
+        mode="manage"
+        onOpenStudio={openStudio}
+        onRegenerateName={regenerateName}
+      />,
+    );
+    expect(container.querySelector('.cb-agent-mark')).toHaveAttribute('data-variant', variant);
+  });
+
+  it('管理页：未完成结构化时提供真实的 UI 生成入口', async () => {
+    const openStudio = vi.fn();
+    const draft = row({
+      reviewStatus: 'draft',
+      statusLabel: '草稿',
+      publicPageAvailable: false,
+      publishedAt: null,
+      studioAvailable: false,
+    });
+    renderTable(
+      <CapabilityTable rows={[draft]} meta={undefined} mode="manage" onOpenStudio={openStudio} />,
+    );
+    expect(screen.queryByRole('button', { name: /编辑.*UI 版本/ })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: /生成.*UI 版本/ }));
+    expect(openStudio).toHaveBeenCalledWith(draft);
+  });
+
+  it('管理页：被退回版本提供“修复 UI”入口', async () => {
+    const openStudio = vi.fn();
+    const rejected = row({
+      reviewStatus: 'review_rejected',
+      statusLabel: '已退回',
+      retryEditable: true,
+      retryVersionId: 'rejected-version',
+    });
+    renderTable(
+      <CapabilityTable
+        rows={[rejected]}
+        meta={undefined}
+        mode="manage"
+        onOpenStudio={openStudio}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /修复.*UI 版本/ }));
+    expect(openStudio).toHaveBeenCalledWith(rejected);
+  });
+
+  it('管理页：无上一公开版的已下架 Agent 也能修复 UI', async () => {
+    const openStudio = vi.fn();
+    const unpublished = row({
+      reviewStatus: 'unpublished',
+      statusLabel: '已下架',
+      retryEditable: true,
+      retryVersionId: 'rejected-version',
+      publicPageAvailable: false,
+    });
+    renderTable(
+      <CapabilityTable
+        rows={[unpublished]}
+        meta={undefined}
+        mode="manage"
+        onOpenStudio={openStudio}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /修复.*UI 版本/ }));
+    expect(openStudio).toHaveBeenCalledWith(unpublished);
+  });
+
+  it('管理页：已发布且没有草稿时明确提供“新建 UI 版本”入口', async () => {
+    const openStudio = vi.fn();
+    const published = row({ studioDraftable: true });
+    renderTable(
+      <CapabilityTable
+        rows={[published]}
+        meta={undefined}
+        mode="manage"
+        onOpenStudio={openStudio}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /新建.*UI 版本/ }));
+    expect(openStudio).toHaveBeenCalledWith(published);
+  });
+
+  it('管理页：任一创作动作执行时禁用所有行的冲突动作', () => {
+    renderTable(
+      <CapabilityTable
+        rows={[
+          row({ capabilityId: 'cap-1', studioAvailable: true, publicPageAvailable: false }),
+          row({ capabilityId: 'cap-2', studioAvailable: true, publicPageAvailable: false }),
+        ]}
+        meta={undefined}
+        mode="manage"
+        onOpenStudio={vi.fn()}
+        actionsBusy
+      />,
+    );
+    expect(screen.getByRole('table')).toHaveAttribute('aria-busy', 'true');
+    for (const button of screen.getAllByRole('button', { name: /编辑.*UI 版本/ })) {
+      expect(button).toBeDisabled();
+    }
   });
 
   it('空 rows → 友好空态，不裸空表', () => {

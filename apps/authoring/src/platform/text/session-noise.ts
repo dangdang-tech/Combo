@@ -3,6 +3,13 @@
 
 const PLATFORM_PROMPT_PREFIXES = [
   '<environment_context>',
+  '<recommended_plugins>',
+  '<permissions instructions>',
+  '<app-context>',
+  '<skills_instructions>',
+  '<plugins_instructions>',
+  '<apps_instructions>',
+  '<in-app-browser-context',
   '# AGENTS.md instructions',
   '# Instructions',
   '# Files mentioned by the user:',
@@ -41,4 +48,33 @@ export function isBlockedCapabilityLabel(text: string | null | undefined): boole
   const first = firstNonEmptyLine(text);
   if (!first) return true;
   return isPlatformPromptText(first) || BLOCKED_CAPABILITY_LABELS.has(first);
+}
+
+export const CAPABILITY_NAME_MAX_CODEPOINTS = 12;
+
+/** 名称比较统一去掉平台标签符、空白和常见分隔符，避免“换个写法照抄原题”。 */
+export function normalizeCapabilityNameComparable(text: string | null | undefined): string {
+  return stripRolePrefix(firstNonEmptyLine(text))
+    .toLowerCase()
+    .replace(/[\s，。！？、,.!?;；:：'"“”‘’`~～()[\]{}<>《》_\-/]/g, '');
+}
+
+/** 新生成的产品名称契约：中文语义、最多 12 个 Unicode 字符、不是平台块或整句指令。 */
+export function isValidCapabilityName(text: string | null | undefined): boolean {
+  const first = stripRolePrefix(firstNonEmptyLine(text));
+  if (!first || isBlockedCapabilityLabel(first)) return false;
+  if ([...first].length > CAPABILITY_NAME_MAX_CODEPOINTS) return false;
+  if (!/[\u3400-\u9fff]/.test(first)) return false;
+  if (/[<>_]/.test(first) || /[。！？!?]/.test(first)) return false;
+  if (/^(automation|workflow|task|agent)\s*[:：]/i.test(first)) return false;
+  if (/^(你是|请你|请帮|下面是|这是一个|you are|please\s)/i.test(first)) return false;
+  return normalizeCapabilityNameComparable(first).length > 0;
+}
+
+/**
+ * 历史候选曾把平台块、自动化前缀或整句任务原样写进 manifest.name。
+ * 命中后由草稿的真实 name regenerate 端点重新命名，读模型本身不伪造别名。
+ */
+export function capabilityNameNeedsReview(text: string | null | undefined): boolean {
+  return !isValidCapabilityName(text);
 }

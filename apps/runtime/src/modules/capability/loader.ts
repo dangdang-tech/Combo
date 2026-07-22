@@ -194,3 +194,46 @@ export async function getCreatorCapabilityVersionForTrial(
     manifestHash: resolvedManifestHash,
   });
 }
+
+/**
+ * Studio 新版本的页面源：只允许本人同 Agent 的已发布版或精确被退回版。
+ *
+ * 被退回版在进入审核时已冻结 manifest_hash，因此与 published 一样必须验签；
+ * 它只能被当作 UI fork 源，不能直接开试用会话或对外消费。
+ */
+export async function getCreatorCapabilityVersionForStudioSource(
+  pool: Pool,
+  input: { capabilityId: string; versionId: string; creatorUserId: string },
+): Promise<LoadedCapability | null> {
+  const res = await pool.query<CapabilityRow>(
+    `SELECT v.capability_id, c.slug, v.version, v.status, v.manifest, v.manifest_hash
+       FROM capability_versions v
+       JOIN capabilities c ON c.id = v.capability_id
+      WHERE c.id::text = $1
+        AND v.id::text = $2
+        AND c.creator_user_id = $3
+        AND c.status = 'active'
+        AND v.status IN ('published', 'review_rejected')
+      LIMIT 1`,
+    [input.capabilityId, input.versionId, input.creatorUserId],
+  );
+  const row = res.rows[0];
+  if (!row) return null;
+
+  if (!row.manifest_hash || !verifyManifest(row.manifest, row.manifest_hash)) {
+    throw new CapabilityLoadError('integrity', 'Studio 源版本完整性校验未通过，拒绝继承');
+  }
+
+  const manifest = ManifestSchema.parse(row.manifest);
+  const ready = SOFT_FIELD_KEYS.every((field) => hasSoftFieldValue(manifest, field));
+  if (!ready) return null;
+
+  return toLoadedCapability({
+    capabilityId: row.capability_id,
+    slug: row.slug,
+    version: row.version,
+    status: row.status as VersionStatus,
+    manifest,
+    manifestHash: row.manifest_hash,
+  });
+}

@@ -148,7 +148,11 @@ export async function listCapabilities(
   //   谓词只引用列别名（p.*）、无参数占位，故对主查询与下方 cursor 锚点校验（共用 conds）同口径生效。
   const status = params.status ?? 'all';
   if (status === 'draft') {
-    conds.push('p.capability_id IS NULL');
+    conds.push(`EXISTS (
+      SELECT 1 FROM capability_versions dv
+       WHERE dv.capability_id = c.id
+         AND dv.status = 'draft'
+    )`);
   } else if (status !== 'all') {
     conds.push(displayStatePredicateSql(status, 'p'));
   }
@@ -182,14 +186,45 @@ export async function listCapabilities(
 
   const res = await db.query<DashboardCapabilityJoinRow>(
     `SELECT c.id                                       AS capability_id,
-            COALESCE(c.current_version_id, v.id)       AS version_id,
+            v.id                                       AS version_id,
+            c.current_version_id                       AS current_version_id,
             c.slug                                     AS slug,
+            v.manifest                                 AS manifest,
+            cv.manifest                                AS current_manifest,
             COALESCE(v.manifest->>'name', '')          AS name,
             COALESCE(v.manifest->>'tagline', '')       AS tagline,
             p.review_status                            AS review_status,
             p.reject_reason                            AS reject_reason,
             rej.id                                     AS rejected_version_id,
             (pubv.id IS NOT NULL)                      AS has_published_version,
+            (
+              c.status = 'active'
+              AND v.status = 'draft'
+              AND NULLIF(BTRIM(v.manifest->>'id'), '') IS NOT NULL
+              AND NULLIF(BTRIM(v.manifest->>'version'), '') IS NOT NULL
+              AND v.manifest->>'status' = 'draft'
+              AND jsonb_typeof(v.manifest->'inputs') = 'object'
+              AND jsonb_typeof(v.manifest->'inputs'->'fields') = 'array'
+              AND jsonb_typeof(v.manifest->'output') = 'object'
+              AND NULLIF(BTRIM(v.manifest->'output'->>'type'), '') IS NOT NULL
+              AND jsonb_typeof(v.manifest->'boundaries') = 'object'
+              AND NULLIF(BTRIM(v.manifest->'boundaries'->>'riskLevel'), '') IS NOT NULL
+              AND jsonb_typeof(v.manifest->'boundaries'->'redLines') = 'array'
+              AND NULLIF(BTRIM(v.manifest->>'name'), '') IS NOT NULL
+              AND NULLIF(BTRIM(v.manifest->>'tagline'), '') IS NOT NULL
+              AND NULLIF(BTRIM(v.manifest->>'role'), '') IS NOT NULL
+              AND NULLIF(BTRIM(v.manifest->>'goal'), '') IS NOT NULL
+              AND NULLIF(BTRIM(v.manifest->>'instructions'), '') IS NOT NULL
+              AND CASE WHEN jsonb_typeof(v.manifest->'skill_set') = 'array'
+                       THEN jsonb_array_length(v.manifest->'skill_set') > 0 ELSE false END
+              AND CASE WHEN jsonb_typeof(v.manifest->'starter_prompts') = 'array'
+                       THEN jsonb_array_length(v.manifest->'starter_prompts') > 0 ELSE false END
+            )                                           AS studio_available,
+            (
+              c.status = 'active'
+              AND cv.id IS NOT NULL
+              AND cv.status = 'published'
+            )                                           AS studio_draftable,
             (
               c.status = 'active'
               AND cv.id IS NOT NULL
@@ -216,13 +251,23 @@ export async function listCapabilities(
               )
             )                                           AS public_page_available,
             p.published_at::text                       AS published_at,
-            c.updated_at::text                         AS updated_at
+            GREATEST(c.updated_at, v.updated_at)::text AS updated_at
        FROM capabilities c
        LEFT JOIN capability_versions v
-              ON v.id = COALESCE(c.current_version_id, (
-                   SELECT v2.id FROM capability_versions v2
-                    WHERE v2.capability_id = c.id
-                    ORDER BY v2.created_at DESC LIMIT 1))
+              ON v.id = COALESCE(
+                   (
+                     SELECT v2.id FROM capability_versions v2
+                      WHERE v2.capability_id = c.id
+                        AND v2.status = 'draft'
+                      ORDER BY v2.created_at DESC LIMIT 1
+                   ),
+                   c.current_version_id,
+                   (
+                     SELECT v3.id FROM capability_versions v3
+                      WHERE v3.capability_id = c.id
+                      ORDER BY v3.created_at DESC LIMIT 1
+                   )
+                 )
        LEFT JOIN publications p ON p.capability_id = c.id
        LEFT JOIN capability_versions cv ON cv.id = c.current_version_id
        LEFT JOIN capability_candidates cc ON cc.id = cv.source_candidate_id

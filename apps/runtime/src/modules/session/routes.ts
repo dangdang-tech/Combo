@@ -22,6 +22,7 @@ import { runAgui } from '../agent/agui-run.js';
 import { composeSystemPrompt } from '../agent/compose-prompt.js';
 import { withDesignStudioInstructions } from '../agent/design-studio-prompt.js';
 import {
+  getCreatorCapabilityVersionForStudioSource,
   getCreatorCapabilityVersionForTrial,
   getPublishedCapability,
 } from '../capability/loader.js';
@@ -45,6 +46,7 @@ import { resolveSessionDetailAccess } from './detail-access.js';
 import {
   discardStudioRevisionForRun,
   finalizeStudioRevision,
+  forkLatestStudioRevision,
   isStudioTestSession,
 } from '../studio/repo.js';
 
@@ -179,6 +181,7 @@ export async function registerSessionRoutes(
     ownerId: string;
     slugOrId: string;
     versionId?: string;
+    sourceVersionId?: string;
     title?: string;
     mode?: 'consume' | 'trial';
     reuseEmpty?: boolean;
@@ -192,7 +195,27 @@ export async function registerSessionRoutes(
       : await getPublishedCapability(ctx.pool, input.slugOrId);
     if (!loaded) return null;
 
-    if (input.mode === 'trial' && input.reuseEmpty) {
+    let forkSource: Awaited<ReturnType<typeof getCreatorCapabilityVersionForStudioSource>> = null;
+    if (input.sourceVersionId) {
+      // Forking only makes sense from an explicit frozen published/rejected
+      // version into a new draft of the same creator-owned capability. The
+      // source loader applies creator + version ownership and hash checks.
+      if (input.mode !== 'trial' || !input.versionId || loaded.view.status !== 'draft') return null;
+      forkSource = await getCreatorCapabilityVersionForStudioSource(ctx.pool, {
+        capabilityId: input.slugOrId,
+        versionId: input.sourceVersionId,
+        creatorUserId: input.ownerId,
+      });
+      if (
+        !forkSource ||
+        !['published', 'review_rejected'].includes(forkSource.view.status) ||
+        forkSource.view.capabilityId !== loaded.view.capabilityId
+      ) {
+        return null;
+      }
+    }
+
+    if (input.mode === 'trial' && input.reuseEmpty && !forkSource) {
       const existing = await findEmptyTrialSession(ctx.pool, {
         ownerId: input.ownerId,
         capabilityId: loaded.view.capabilityId,
@@ -215,6 +238,25 @@ export async function registerSessionRoutes(
       manifestHash: loaded.view.manifestHash,
       publicView: loaded.publicView,
     });
+
+    if (forkSource) {
+      try {
+        await forkLatestStudioRevision(ctx.pool, {
+          ownerId: input.ownerId,
+          capabilityId: loaded.view.capabilityId,
+          targetSessionId: meta.id,
+          targetVersion: loaded.view.version,
+          targetManifestHash: loaded.view.manifestHash,
+          sourceVersion: forkSource.view.version,
+          sourceManifestHash: forkSource.view.manifestHash,
+        });
+      } catch (error) {
+        // createSession and the shallow-fork transaction are deliberately
+        // separate repository boundaries. Hide the orphan if the copy fails.
+        await archiveSession(ctx.pool, meta.id, input.ownerId).catch(() => undefined);
+        throw error;
+      }
+    }
     return { session: meta, capability: loaded.publicView };
   }
 
@@ -246,6 +288,7 @@ export async function registerSessionRoutes(
         ownerId: identity.userId,
         slugOrId: req.params.capabilityId,
         versionId: parsed.data.versionId,
+        sourceVersionId: parsed.data.sourceVersionId,
         title: parsed.data.title,
         mode: 'trial',
         reuseEmpty: true,

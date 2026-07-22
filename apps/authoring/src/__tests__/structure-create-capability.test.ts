@@ -7,11 +7,12 @@ import { HARD_FIELD_KEYS, SOFT_FIELD_KEYS, type Manifest, type StructureState } 
 import {
   createCapability,
   bumpMinor,
+  nextAvailableMinorVersion,
   INITIAL_VERSION,
   CreateCapabilityError,
 } from '../modules/structure/create-capability.js';
 import { StructureFakeDb, StructureFakeTxPool, type VersionRowF } from './structure-fakes.js';
-import { initialManifest } from '../modules/structure/manifest.js';
+import { applySoftFields, initialManifest } from '../modules/structure/manifest.js';
 
 function setup(): { db: StructureFakeDb; tx: StructureFakeTxPool } {
   const db = new StructureFakeDb();
@@ -23,6 +24,11 @@ describe('B-24 semver bump', () => {
     expect(bumpMinor('0.1.0')).toBe('0.2.0');
     expect(bumpMinor('1.4.7')).toBe('1.5.0');
     expect(bumpMinor('garbage')).toBe(INITIAL_VERSION);
+  });
+
+  it('nextAvailableMinorVersion: 跳过损坏草稿已占用的版本号', () => {
+    expect(nextAvailableMinorVersion('0.1.0', ['0.1.0', '0.2.0'])).toBe('0.3.0');
+    expect(nextAvailableMinorVersion('1.4.7', ['1.5.0', '1.6.0'])).toBe('1.7.0');
   });
 });
 
@@ -154,7 +160,7 @@ describe('B-24 ① 从候选新建首版（sourceCandidateId）', () => {
 });
 
 describe('B-24 ② published 后建新版本（capabilityId，bump minor）', () => {
-  it('当前生效版 published → bump minor 建新 draft（同能力体、slug 不变、软字段空）', async () => {
+  it('当前生效版 published → 复制软字段与血缘、硬字段重锁后 bump minor 建新 draft', async () => {
     const { db, tx } = setup();
     // 能力体 + 一个 published current version 0.1.0。
     db.capabilities.set('c1', {
@@ -164,14 +170,23 @@ describe('B-24 ② published 后建新版本（capabilityId，bump minor）', ()
       current_version_id: 'pubv',
       status: 'active',
     });
+    const publishedManifest = applySoftFields(initialManifest('c1', '0.1.0'), {
+      name: '已发布 Agent',
+      tagline: '保留已验证的定位',
+      role: '设计助手',
+      goal: '继续迭代已发布界面',
+      instructions: '根据 {{topic|主题}} 生成页面。',
+      skill_set: ['界面设计'],
+      starter_prompts: ['帮我调整首屏'],
+    });
     const pub: VersionRowF = {
       id: 'pubv',
       capability_id: 'c1',
       version: '0.1.0',
       status: 'published',
-      manifest: initialManifest('c1', '0.1.0'),
+      manifest: publishedManifest,
       structure_state: {},
-      source_candidate_id: null,
+      source_candidate_id: 'cand-published',
     };
     db.versions.set('pubv', pub);
 
@@ -179,8 +194,70 @@ describe('B-24 ② published 后建新版本（capabilityId，bump minor）', ()
     expect(res.version).toBe('0.2.0'); // bump minor。
     expect(res.capabilityId).toBe('c1'); // 同能力体。
     expect(res.slug).toBe('my-cap'); // slug 不变。
-    expect(res.manifest.name).toBe(''); // 新版本软字段空（重新结构化）。
-    expect(db.versions.get(res.versionId)!.status).toBe('draft');
+    expect(res.manifest).toMatchObject({
+      id: 'c1',
+      version: '0.2.0',
+      status: 'draft',
+      name: '已发布 Agent',
+      tagline: '保留已验证的定位',
+      role: '设计助手',
+      goal: '继续迭代已发布界面',
+      instructions: '根据 {{topic|主题}} 生成页面。',
+      skill_set: ['界面设计'],
+      starter_prompts: ['帮我调整首屏'],
+    });
+    expect(res.manifest.inputs.fields[0]?.key).toBe('topic');
+    expect(res.structureState.doneCount).toBe(SOFT_FIELD_KEYS.length);
+    const created = db.versions.get(res.versionId)!;
+    expect(created.status).toBe('draft');
+    expect(created.source_candidate_id).toBe('cand-published');
+    // 源发布版终态与内容均不变。
+    expect(db.versions.get('pubv')).toEqual(pub);
+  });
+
+  it('下一 minor 已被损坏草稿占用时 → 跳到首个可用版本，不撞唯一约束', async () => {
+    const { db, tx } = setup();
+    db.capabilities.set('c1', {
+      id: 'c1',
+      creator_user_id: 'u1',
+      slug: 'recover-cap',
+      current_version_id: 'pubv',
+      status: 'active',
+    });
+    const publishedManifest = applySoftFields(initialManifest('c1', '0.1.0'), {
+      name: '可恢复 Agent',
+      tagline: '从公开版创建新 UI',
+      role: '设计助手',
+      goal: '恢复界面创作',
+      instructions: '根据输入继续生成页面。',
+      skill_set: ['界面设计'],
+      starter_prompts: ['继续修改页面'],
+    });
+    db.versions.set('pubv', {
+      id: 'pubv',
+      capability_id: 'c1',
+      version: '0.1.0',
+      status: 'published',
+      manifest: publishedManifest,
+      structure_state: {},
+      source_candidate_id: 'cand-published',
+    });
+    db.versions.set('broken-draft', {
+      id: 'broken-draft',
+      capability_id: 'c1',
+      version: '0.2.0',
+      status: 'draft',
+      manifest: initialManifest('c1', '0.2.0'),
+      structure_state: {},
+      source_candidate_id: 'cand-published',
+    });
+
+    const res = await createCapability(db, tx, { capabilityId: 'c1' }, { userId: 'u1' });
+
+    expect(res.version).toBe('0.3.0');
+    expect(res.manifest).toMatchObject({ version: '0.3.0', name: '可恢复 Agent' });
+    expect(db.versions.get('broken-draft')?.version).toBe('0.2.0');
+    expect(db.versions.size).toBe(3);
   });
 
   it('当前生效版非 published（draft）→ STATE_CONFLICT', async () => {
@@ -262,6 +339,50 @@ describe('B-24 ③ 被拒重发派生新 draft（fromVersionId）', () => {
     expect(db.versions.get(res.versionId)!.source_candidate_id).toBe('cand1');
     // 原被拒版不动（status 仍 review_rejected）。
     expect(db.versions.get('rejv')!.status).toBe('review_rejected');
+  });
+
+  it('被拒版的下一 minor 已被坏草稿占用时 → 修复草稿顺延到可用版本', async () => {
+    const { db, tx } = setup();
+    db.capabilities.set('c1', {
+      id: 'c1',
+      creator_user_id: 'u1',
+      slug: 'repair-cap',
+      current_version_id: null,
+      status: 'active',
+    });
+    const rejectedManifest = applySoftFields(initialManifest('c1', '0.1.0'), {
+      name: '待修复 Agent',
+      tagline: '修复被退回版本',
+      role: '任务助手',
+      goal: '完成修复',
+      instructions: '按步骤完成任务。',
+      skill_set: ['任务执行'],
+      starter_prompts: ['开始修复'],
+    });
+    db.versions.set('rejected-v1', {
+      id: 'rejected-v1',
+      capability_id: 'c1',
+      version: '0.1.0',
+      status: 'review_rejected',
+      manifest: rejectedManifest,
+      structure_state: {},
+      source_candidate_id: 'cand1',
+    });
+    db.versions.set('broken-v2', {
+      id: 'broken-v2',
+      capability_id: 'c1',
+      version: '0.2.0',
+      status: 'draft',
+      manifest: initialManifest('c1', '0.2.0'),
+      structure_state: {},
+      source_candidate_id: 'cand1',
+    });
+
+    const res = await createCapability(db, tx, { fromVersionId: 'rejected-v1' }, { userId: 'u1' });
+
+    expect(res.version).toBe('0.3.0');
+    expect(res.manifest.name).toBe('待修复 Agent');
+    expect(db.versions.size).toBe(3);
   });
 
   it('源版非 review_rejected → STATE_CONFLICT', async () => {

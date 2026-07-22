@@ -175,6 +175,11 @@ export type CreateSessionBody = z.infer<typeof CreateSessionBodySchema>;
 export const CreateTrialChainSessionBodySchema = z.object({
   slugOrId: z.string().min(1).optional(),
   versionId: z.string().min(1).optional(),
+  /**
+   * 新 draft 继续 UI 设计时的显式源版本（当前发布版或被退回版）。
+   * Runtime 会再做 creator + capability + 冻结版本验签，不信任浏览器传入。
+   */
+  sourceVersionId: z.string().uuid().optional(),
   title: z.string().optional(),
   runGrant: z.string().optional(),
   intake: z.record(z.string()).optional(),

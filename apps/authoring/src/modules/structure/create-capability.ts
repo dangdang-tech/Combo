@@ -1,6 +1,6 @@
 // 40 · B-24 建能力体 draft 版本（三分支恰好三选一，40-step3-4-structure §4.A / §2.4）。
 //   ① sourceCandidateId：从候选新建首版（capabilities + capability_versions，单 PG 事务）。
-//   ② capabilityId：published 后建新版本（复用能力体、bump minor、status=draft）。
+//   ② capabilityId：published 后建新版本（复用能力体、复制当前发布版软字段与血缘、bump minor、status=draft）。
 //   ③ fromVersionId：被拒重发派生新 draft（同能力体复制被拒版软字段、bump minor，原被拒版不动，§2.4 / 50 §1.1 F-14）。
 //   幂等：同 key + 同 hash + 已完成 → 回放首次结果（中间件 requireIdempotency 兜，本模块产稳定结果即可，§4.A 幂等回放）。
 //   slug 服务端从候选名/能力名生成（URL 安全、唯一、不可变，不由客户端传，§4.A 注）。
@@ -114,6 +114,21 @@ export function bumpMinor(version: string): string {
   const major = Number(m[1]);
   const minor = Number(m[2]);
   return `${major}.${minor + 1}.0`;
+}
+
+/**
+ * 从当前公开版向后寻找第一个未占用的 minor 版本。
+ * 管理页可能正在恢复一个损坏草稿；该草稿仍会占用原本的下一版本号，不能再次 INSERT 同一
+ * (capability_id, version)。例如公开版 0.1.0 + 损坏草稿 0.2.0 → 新草稿必须是 0.3.0。
+ */
+export function nextAvailableMinorVersion(
+  currentVersion: string,
+  existingVersions: readonly string[],
+): string {
+  const occupied = new Set(existingVersions);
+  let candidate = bumpMinor(currentVersion);
+  while (occupied.has(candidate)) candidate = bumpMinor(candidate);
+  return candidate;
 }
 
 /**
@@ -285,10 +300,20 @@ async function createNewVersion(
       'capabilityId branch requires published current version',
     );
   }
+  if (!cap.currentManifest) {
+    throw new CreateCapabilityError(
+      ErrorCode.STATE_CONFLICT,
+      'published current version is missing manifest',
+    );
+  }
   const versionId = randomUUID();
-  const version = bumpMinor(cap.currentVersion ?? INITIAL_VERSION);
-  // 新版本软字段空（重新结构化）；硬字段重锁。slug 不变（沿用能力体）。
-  const manifest = initialManifest(capabilityId, version);
+  const version = nextAvailableMinorVersion(
+    cap.currentVersion ?? INITIAL_VERSION,
+    cap.existingVersions,
+  );
+  // 以当前发布版软字段为编辑起点；硬字段按新 draft 重锁（id/version/status），
+  // inputs/output 据 instructions 重算。slug 不变，候选血缘沿用当前发布版。
+  const manifest = copySoftFieldsToNewVersion(cap.currentManifest, capabilityId, version);
   const structureState = initialStructureState(versionId, manifest);
 
   await withTransaction(txPool, async (tx) => {
@@ -298,7 +323,7 @@ async function createNewVersion(
       version,
       manifest,
       structureState,
-      sourceCandidateId: null,
+      sourceCandidateId: cap.currentSourceCandidateId,
     });
     if (draftId) {
       const ok = await backfillDraftInTx(tx, {
@@ -306,7 +331,7 @@ async function createNewVersion(
         versionId,
         capabilityId,
         ownerUserId: ctx.userId,
-        selection: { mode: 'single', candidateId: capabilityId }, // 衔接：续传读回（无候选血缘，记能力体）。
+        selection: { mode: 'single', candidateId: capabilityId }, // 版本编辑入口按能力体定位续传。
       });
       if (!ok) {
         throw new CreateCapabilityError(
@@ -345,7 +370,7 @@ async function createFromRejected(
   }
 
   const versionId = randomUUID();
-  const version = bumpMinor(src.version);
+  const version = nextAvailableMinorVersion(src.version, src.existingVersions ?? [src.version]);
   // 复制被拒版【软字段】为起点；硬字段按平台规则重锁（id=capabilityId、version=bump、status=draft）。
   const manifest = copySoftFieldsToNewVersion(src.manifest, src.capabilityId, version);
   const structureState = initialStructureState(versionId, manifest);

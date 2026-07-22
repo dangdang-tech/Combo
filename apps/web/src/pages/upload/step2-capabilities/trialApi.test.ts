@@ -64,13 +64,19 @@ describe('runtime trial authentication recovery', () => {
     mock = installFetchMock(unauthenticated);
 
     await expect(
-      createRuntimeTrialSession({ capabilityId: 'cap-1', versionId: 'ver-1', title: '试用' }),
+      createRuntimeTrialSession({
+        capabilityId: 'cap-1',
+        versionId: 'ver-1',
+        sourceVersionId: 'source-ver-1',
+        title: '试用',
+      }),
     ).rejects.toBeInstanceOf(TrialAuthenticationRequiredError);
 
     expect(mock.calls[0]).toMatchObject({
       url: '/api/v1/runtime/trial-chains/cap-1/sessions',
       method: 'POST',
       credentials: 'include',
+      body: { versionId: 'ver-1', sourceVersionId: 'source-ver-1', title: '试用' },
     });
   });
 

@@ -109,6 +109,7 @@ export function startStructureForTrial(versionId: string): Promise<StartStructur
 export async function createRuntimeTrialSession(input: {
   capabilityId: string;
   versionId: string;
+  sourceVersionId?: string;
   title: string;
 }): Promise<CreateTrialSessionResult> {
   let res: Response;
@@ -119,7 +120,11 @@ export async function createRuntimeTrialSession(input: {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ versionId: input.versionId, title: input.title }),
+        body: JSON.stringify({
+          versionId: input.versionId,
+          ...(input.sourceVersionId ? { sourceVersionId: input.sourceVersionId } : {}),
+          title: input.title,
+        }),
       },
     );
   } catch {

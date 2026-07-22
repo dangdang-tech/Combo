@@ -30,6 +30,27 @@ interface TestDbRow {
   completed_at: Date | null;
 }
 
+interface StudioForkSourceRow {
+  source_session_id: string;
+  source_revision_id: string;
+  source_run_input: Record<string, unknown>;
+  source_user_text: string;
+  source_assistant_text: string;
+  transcript: unknown[];
+  artifact_key: string;
+  artifact_title: string;
+  artifact_language: string | null;
+  artifact_content: string;
+  summary: string;
+}
+
+export interface StudioForkResult {
+  sourceSessionId: string;
+  sourceRevisionId: string;
+  targetRevisionId: string;
+  targetRunId: string;
+}
+
 function toRevision(row: RevisionDbRow): StudioRevision {
   return {
     id: row.id,
@@ -54,6 +75,229 @@ function toTest(row: TestDbRow): StudioTest {
     createdAt: row.created_at.toISOString(),
     completedAt: row.completed_at?.toISOString() ?? null,
   };
+}
+
+/**
+ * Copy the latest durable UI from a frozen published/rejected version into a
+ * brand-new draft Studio session. The copied page starts a new local history
+ * at R1 while the source revision remains immutable.
+ *
+ * The caller has already creator-loaded both authoring versions. This write
+ * still repeats owner/capability/version/hash guards at the runtime boundary so
+ * a forged sourceVersionId cannot cross tenants or capabilities.
+ *
+ * No Studio test row is copied. A forked R1 must be tested again in its new
+ * draft/version context.
+ */
+export async function forkLatestStudioRevision(
+  pool: Pool,
+  input: {
+    ownerId: string;
+    capabilityId: string;
+    targetSessionId: string;
+    targetVersion: string;
+    targetManifestHash: string;
+    sourceVersion: string;
+    sourceManifestHash: string;
+  },
+): Promise<StudioForkResult | null> {
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // The destination must be the untouched draft trial session just created
+    // for this owner/version. Refuse to graft into an existing conversation.
+    const target = await client.query<{ id: string }>(
+      `SELECT s.id
+         FROM rt_chat_sessions s
+        WHERE s.id = $1
+          AND s.owner_id = $2
+          AND s.capability_id = $3
+          AND s.version = $4
+          AND s.manifest_hash = $5
+          AND s.mode = 'trial'
+          AND s.status = 'active'
+          AND s.public_view ->> 'status' = 'draft'
+          AND NOT EXISTS (SELECT 1 FROM rt_chat_messages m WHERE m.session_id = s.id)
+          AND NOT EXISTS (SELECT 1 FROM rt_chat_runs run WHERE run.session_id = s.id)
+          AND NOT EXISTS (SELECT 1 FROM rt_chat_artifacts a WHERE a.session_id = s.id)
+          AND NOT EXISTS (
+            SELECT 1 FROM rt_studio_revisions revision WHERE revision.studio_session_id = s.id
+          )
+        FOR UPDATE`,
+      [
+        input.targetSessionId,
+        input.ownerId,
+        input.capabilityId,
+        input.targetVersion,
+        input.targetManifestHash,
+      ],
+    );
+    if (!target.rows[0]) {
+      throw new Error('forkLatestStudioRevision: target is not an empty owned draft Studio');
+    }
+
+    // A revision only qualifies when its design run completed, the exact HTML
+    // version exists, and a persisted assistant message references it. This is
+    // the same durability boundary used by getStudioState/finalizeRevision.
+    const sourceResult = await client.query<StudioForkSourceRow>(
+      `SELECT source_session.id AS source_session_id,
+              source_session.transcript,
+              revision.id AS source_revision_id,
+              source_run.input AS source_run_input,
+              COALESCE(source_user.text, '继续设计已发布页面') AS source_user_text,
+              source_assistant.text AS source_assistant_text,
+              revision.artifact_key,
+              artifact_version.title AS artifact_title,
+              artifact_version.language AS artifact_language,
+              artifact_version.content AS artifact_content,
+              revision.summary
+         FROM rt_studio_revisions revision
+         JOIN rt_chat_sessions source_session
+           ON source_session.id = revision.studio_session_id
+         JOIN rt_chat_runs source_run
+           ON source_run.id = revision.source_run_id
+          AND source_run.session_id = source_session.id
+          AND source_run.owner_id = source_session.owner_id
+          AND source_run.status = 'completed'
+          AND source_run.input ->> 'intent' = 'design'
+         JOIN rt_chat_artifacts artifact
+           ON artifact.session_id = source_session.id
+          AND artifact.artifact_key = revision.artifact_key
+         JOIN rt_chat_artifact_versions artifact_version
+           ON artifact_version.artifact_id = artifact.id
+          AND artifact_version.version = revision.artifact_version
+          AND artifact_version.kind = 'html'
+         JOIN rt_chat_messages source_assistant
+           ON source_assistant.session_id = source_session.id
+          AND source_assistant.run_id = source_run.id
+          AND source_assistant.role = 'assistant'
+          AND source_assistant.artifacts @> jsonb_build_array(
+            jsonb_build_object(
+              'artifactKey', revision.artifact_key,
+              'version', revision.artifact_version,
+              'kind', 'html',
+              'title', artifact_version.title
+            )
+          )
+         LEFT JOIN LATERAL (
+           SELECT message.text
+             FROM rt_chat_messages message
+            WHERE message.session_id = source_session.id
+              AND message.run_id = source_run.id
+              AND message.role = 'user'
+            ORDER BY message.seq DESC
+            LIMIT 1
+         ) source_user ON true
+        WHERE source_session.owner_id = $1
+          AND source_session.capability_id = $2
+          AND source_session.version = $3
+          AND source_session.manifest_hash = $4
+          AND source_session.mode = 'trial'
+          AND revision.artifact_key = 'main'
+          AND artifact.kind = 'html'
+          AND NOT EXISTS (
+            SELECT 1
+              FROM rt_studio_tests child
+             WHERE child.test_session_id = source_session.id
+          )
+        ORDER BY revision.created_at DESC, revision.revision_no DESC, source_session.updated_at DESC
+        LIMIT 1`,
+      [
+        input.ownerId,
+        input.capabilityId,
+        input.sourceVersion,
+        input.sourceManifestHash,
+      ],
+    );
+    const source = sourceResult.rows[0];
+    if (!source) {
+      await client.query('COMMIT');
+      return null;
+    }
+
+    const targetArtifactId = randomUUID();
+    const targetRunId = randomUUID();
+    const targetRevisionId = randomUUID();
+    const targetArtifactRef = {
+      artifactKey: source.artifact_key,
+      version: 1,
+      kind: 'html' as const,
+      title: source.artifact_title,
+    };
+
+    await client.query(
+      `INSERT INTO rt_chat_runs (
+         id, session_id, owner_id, status, input, completed_at
+       ) VALUES ($1, $2, $3, 'completed', $4::jsonb, now())`,
+      [targetRunId, input.targetSessionId, input.ownerId, JSON.stringify(source.source_run_input)],
+    );
+    await client.query(
+      `INSERT INTO rt_chat_artifacts (
+         id, session_id, artifact_key, kind, title, latest_version
+       ) VALUES ($1, $2, $3, 'html', $4, 1)`,
+      [targetArtifactId, input.targetSessionId, source.artifact_key, source.artifact_title],
+    );
+    await client.query(
+      `INSERT INTO rt_chat_artifact_versions (
+         artifact_id, version, kind, title, language, content
+       ) VALUES ($1, 1, 'html', $2, $3, $4)`,
+      [targetArtifactId, source.artifact_title, source.artifact_language, source.artifact_content],
+    );
+    await client.query(
+      `INSERT INTO rt_chat_messages (
+         id, session_id, run_id, seq, role, text, artifacts
+       ) VALUES
+         ($1, $2, $3, 1, 'user', $4, '[]'::jsonb),
+         ($5, $2, $3, 2, 'assistant', $6, $7::jsonb)`,
+      [
+        randomUUID(),
+        input.targetSessionId,
+        targetRunId,
+        source.source_user_text,
+        randomUUID(),
+        source.source_assistant_text,
+        JSON.stringify([targetArtifactRef]),
+      ],
+    );
+    await client.query(
+      `INSERT INTO rt_studio_revisions (
+         id, studio_session_id, revision_no, artifact_key, artifact_version,
+         source_run_id, restored_from_revision_id, summary
+       ) VALUES ($1, $2, 1, $3, 1, $4, $5, $6)`,
+      [
+        targetRevisionId,
+        input.targetSessionId,
+        source.artifact_key,
+        targetRunId,
+        source.source_revision_id,
+        source.summary,
+      ],
+    );
+    await client.query(
+      `UPDATE rt_chat_sessions
+          SET transcript = $2::jsonb,
+              updated_at = now()
+        WHERE id = $1`,
+      [
+        input.targetSessionId,
+        JSON.stringify(Array.isArray(source.transcript) ? source.transcript : []),
+      ],
+    );
+
+    await client.query('COMMIT');
+    return {
+      sourceSessionId: source.source_session_id,
+      sourceRevisionId: source.source_revision_id,
+      targetRevisionId,
+      targetRunId,
+    };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 /**

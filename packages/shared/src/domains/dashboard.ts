@@ -72,9 +72,19 @@ export const DashboardCapabilityRowSchema = z.object({
   statusLabel: z.string(),
   rejectReason: z.string().nullable(),
   retryEditable: z.boolean(),
+  /** 被退回版的精确定位；管理页据此创建修复草稿。旧服务可暂不返回。 */
+  retryVersionId: IdSchema.nullable().optional(),
   monthlyInvocations: z.number().int().nullable(),
   spendSparkline: z.array(TrendPointSchema).nullable(),
   revenueMicros: z.number().int().nullable(),
+  /** 管理页选中的最新草稿是否具备可进入 UI Studio 的完整结构。 */
+  studioAvailable: z.boolean(),
+  /** 没有现成草稿，但当前公开版可复制成新的 UI Studio 草稿。 */
+  studioDraftable: z.boolean(),
+  /** 创建新 UI 版本时可继承的精确源版本：当前发布版或被退回版。 */
+  studioSourceVersionId: IdSchema.nullable().optional(),
+  /** 历史版本名称是否仍像原始会话标题/平台标签，需要重新自动命名。 */
+  nameNeedsReview: z.boolean(),
   /** 只有当前版本确实可被 Runtime 公开读取时才展示公开页链接。 */
   publicPageAvailable: z.boolean(),
   publishedAt: IsoDateTimeSchema.nullable(),

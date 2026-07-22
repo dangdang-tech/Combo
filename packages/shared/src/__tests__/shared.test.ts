@@ -48,6 +48,7 @@ import {
   traceIdFromUrl,
   uuidToTraceHex,
   RunInputSchema,
+  CreateTrialChainSessionBodySchema,
 } from '../index.js';
 import { z } from 'zod';
 
@@ -83,6 +84,26 @@ describe('Runtime run input', () => {
 
   it('rejects unknown run intents', () => {
     expect(RunInputSchema.safeParse({ contentParts, intent: 'preview-only' }).success).toBe(false);
+  });
+});
+
+describe('Runtime Studio fork input', () => {
+  it('accepts an explicit published source version id', () => {
+    expect(
+      CreateTrialChainSessionBodySchema.safeParse({
+        versionId: '11111111-1111-4111-8111-111111111111',
+        sourceVersionId: '22222222-2222-4222-8222-222222222222',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects an ambiguous non-UUID source version id', () => {
+    expect(
+      CreateTrialChainSessionBodySchema.safeParse({
+        versionId: 'draft-v1',
+        sourceVersionId: 'published-latest',
+      }).success,
+    ).toBe(false);
   });
 });
 

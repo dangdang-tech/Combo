@@ -1189,7 +1189,7 @@ body {
   cursor: pointer;
 }
 
-/* cursor 分页器（加载更多 / 没有更多了）。 */
+/* cursor 分页器（只在确有下一页时展示加载更多）。 */
 .cb-capabilities__pager {
   margin-top: 16px;
   text-align: center;
@@ -1208,12 +1208,6 @@ body {
 .cb-pager__more:disabled {
   color: var(--cb-muted);
   cursor: default;
-}
-
-.cb-pager__end {
-  color: var(--cb-muted);
-  font-size: 13px;
-  margin: 0;
 }
 
 /* ---------- 数据分析 ---------- */

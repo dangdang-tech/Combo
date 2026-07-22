@@ -4,16 +4,18 @@
 //   状态列【单一真源】：能力表 reviewStatus/statusLabel/rejectReason/retryEditable 由 3E 单源派生
 //     derivePublicationDisplayState（publications.review_status/reject_reason）+ 工作台展示态补充
 //     （draft/unpublished 两个【派生】态）落定，绝不各自从底层 review_status 码自行拼装（杜绝漂移，§1.4 注）。
-import type {
-  DashboardSummary,
-  DashboardMetrics,
-  MetricCard,
-  TokenTrend,
-  DashboardCapabilityRow,
-  CapabilityReviewStatus,
-  Range,
+import {
+  ManifestSchema,
+  type DashboardSummary,
+  type DashboardMetrics,
+  type MetricCard,
+  type TokenTrend,
+  type DashboardCapabilityRow,
+  type CapabilityReviewStatus,
+  type Range,
 } from '@cb/shared';
 import { derivePublicationDisplayState } from '../publish/index.js';
+import { capabilityNameNeedsReview } from '../../platform/text/session-noise.js';
 
 /** 页头固定标题（外壳首页-08）。 */
 export const DASHBOARD_TITLE = '创作者中心';
@@ -119,8 +121,12 @@ export function buildTokenTrend(range: Range, metric: 'tokens' | 'invocations'):
 /** capability + version + publication 联表行（dashboard-repo 读出，view 投影所需列）。 */
 export interface DashboardCapabilityJoinRow {
   capability_id: string;
-  version_id: string; // 当前展示版本（被拒回退则 capabilities.current_version_id）
+  version_id: string; // 管理版本：最新 draft 优先，否则当前公开版/最新版。
+  current_version_id: string | null;
   slug: string;
+  manifest: unknown;
+  /** capabilities.current_version_id 指向的当前已发布版 manifest；与上方「管理版」manifest 分离。 */
+  current_manifest: unknown;
   name: string; // manifest 软字段（真实）
   tagline: string; // manifest 软字段（真实）
   /** publications.review_status（存储 3 值之一；无 publication 行则 null = 未发布草稿）。 */
@@ -133,6 +139,10 @@ export interface DashboardCapabilityJoinRow {
   has_published_version: boolean;
   /** 当前公开页是否与 Runtime 同口径真实可达。 */
   public_page_available: boolean;
+  /** 精确草稿版本软字段齐全，可进入 Runtime UI Studio。 */
+  studio_available: boolean;
+  /** 当前版本是 published，具备作为新 Studio 草稿源的粗守门；精确 manifest 校验在 view。 */
+  studio_draftable: boolean;
   published_at: string | null;
   updated_at: string;
 }
@@ -187,7 +197,10 @@ export function deriveCapabilityReviewStatus(
  */
 export function toDashboardCapabilityRow(row: DashboardCapabilityJoinRow): DashboardCapabilityRow {
   const reviewStatus = deriveCapabilityReviewStatus(row);
-  const isRejected = reviewStatus === 'review_rejected';
+  const isRejected = reviewStatus === 'review_rejected' || reviewStatus === 'unpublished';
+  const studioAvailable = row.studio_available && ManifestSchema.safeParse(row.manifest).success;
+  const publishedSourceReady =
+    row.studio_draftable && ManifestSchema.safeParse(row.current_manifest).success;
   return {
     capabilityId: row.capability_id,
     versionId: row.version_id,
@@ -196,13 +209,23 @@ export function toDashboardCapabilityRow(row: DashboardCapabilityJoinRow): Dashb
     tagline: row.tagline,
     reviewStatus,
     statusLabel: STATUS_LABEL[reviewStatus],
-    // 拒绝原因仅在退回态出（人话镜像，B-30 三处可见之一）；其它态 null。
+    // 拒绝原因在退回/已下架态出（人话镜像，B-30 三处可见之一）；其它态 null。
     rejectReason: isRejected ? (row.reject_reason ?? null) : null,
-    // 可重试编辑：被退回且有被拒版可定位（与 3E 单源 retryEditable 同口径）。
+    // 可重试编辑：被退回/已下架且有被拒版可定位（与 3E 单源同口径）。
     retryEditable: isRejected && row.rejected_version_id !== null,
+    retryVersionId: isRejected ? row.rejected_version_id : null,
     monthlyInvocations: null, // usage 占位
     spendSparkline: null, // usage 占位（消耗迷你图）
     revenueMicros: null, // usage 占位（收益）
+    studioAvailable,
+    // 优先续编完整草稿；仅当管理版不可用时，才允许从当前已发布版安全复制。
+    studioDraftable: !studioAvailable && publishedSourceReady,
+    studioSourceVersionId: isRejected
+      ? row.rejected_version_id
+      : reviewStatus === 'published' && publishedSourceReady
+        ? row.current_version_id
+        : null,
+    nameNeedsReview: capabilityNameNeedsReview(row.name),
     publicPageAvailable: row.public_page_available,
     publishedAt: row.published_at,
     updatedAt: row.updated_at,

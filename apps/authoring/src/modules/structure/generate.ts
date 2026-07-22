@@ -5,6 +5,11 @@
 //   - 单字段重试 ≤2（脊柱 §3.1 LLM_MAX_RETRIES）：两次仍真抛 → 调用方落字段级错误态（§3.4，不在此抛人话信封）。
 // 本模块只产「字段值 + 是否 degraded」，不写库、不发 SSE 帧（帧/落库由 handler 编排，关注点分离）。
 import { LLM_MAX_RETRIES, type LlmGatewayPort, type SoftFieldKey } from '@cb/shared';
+import {
+  capabilityNameNeedsReview,
+  firstNonEmptyLine,
+  normalizeCapabilityNameComparable,
+} from '../../platform/text/session-noise.js';
 import type { StructureEvidence } from './repo.js';
 
 /** 单软字段生成结果（值 + degraded 标；数组字段 value 为 string[]）。 */
@@ -54,6 +59,18 @@ export async function streamScalarField(
     const fallback = scalarFallback(field, ctx);
     await onDelta(fallback);
     return { value: fallback, degraded: true };
+  }
+  if (field === 'name') {
+    const cleaned = firstNonEmptyLine(value)
+      .replace(/^["“”'‘’]+|["“”'‘’]+$/g, '')
+      .trim();
+    const echoesEvidenceTitle = ctx.evidence.segments.some(
+      (segment) => segment.title && comparableName(segment.title) === comparableName(cleaned),
+    );
+    if (capabilityNameNeedsReview(cleaned) || echoesEvidenceTitle) {
+      return { value: scalarFallback(field, ctx), degraded: true };
+    }
+    return { value: trimScalar(field, cleaned), degraded: false };
   }
   return { value: trimScalar(field, value), degraded: false };
 }
@@ -172,7 +189,7 @@ function evidenceBlurb(ctx: GenContext): string {
 }
 
 const SCALAR_INSTRUCTION: Record<Exclude<SoftFieldKey, 'skill_set' | 'starter_prompts'>, string> = {
-  name: '给这个可复用能力起一个简短中文名称（≤12字），只输出名称本身。',
+  name: '给这个可复用能力起一个简短中文名称（≤12字），不要复述 session 标题、平台标签或整句指令，只输出名称本身。',
   tagline: '用一句话写出这个能力的卖点/定位（≤30字），只输出这句话。',
   role: '一句话描述这个能力扮演的角色（如「资深产品经理」）。',
   goal: '一句话描述这个能力要为使用者达成的目标。',
@@ -214,7 +231,7 @@ function scalarFallback(
   const topic = evidenceTopic(ctx);
   switch (field) {
     case 'name':
-      return topic.slice(0, 12) || '未命名能力';
+      return fallbackNameForEvidence(ctx);
     case 'tagline':
       return `把「${topic}」这类反复出现的工作流打包成可复用能力`;
     case 'role':
@@ -226,6 +243,24 @@ function scalarFallback(
     default:
       return topic;
   }
+}
+
+function comparableName(value: string): string {
+  return normalizeCapabilityNameComparable(value);
+}
+
+function fallbackNameForEvidence(ctx: GenContext): string {
+  const text = ctx.evidence.segments
+    .map((segment) => `${segment.title ?? ''}\n${segment.content}`)
+    .join('\n')
+    .toLowerCase();
+  if (/docker|compose|镜像|容器|部署|health/.test(text)) return 'Docker部署排障';
+  if (/figma|react|组件|token|ui|前端|页面|样式/.test(text)) return '前端页面设计';
+  if (/飞书|wiki|文档|评审|审核/.test(text)) return '文档质量评审';
+  if (/prompt|agent|模型|ai|llm|提示词/.test(text)) return 'Agent工作流设计';
+  if (/bug|error|日志|修复|排障|测试|回归|失败/.test(text)) return '问题根因定位';
+  if (/prd|需求|产品|用户|原型|方案|项目/.test(text)) return '需求方案梳理';
+  return '任务流程助手';
 }
 
 function arrayFallback(field: 'skill_set' | 'starter_prompts', ctx: GenContext): string[] {
@@ -261,9 +296,9 @@ function parseArray(text: string): string[] {
   }
 }
 
-/** 单值字段裁剪（name ≤24、tagline ≤60；其余原样）。 */
+/** 单值字段裁剪（name ≤12 个 Unicode 字符、tagline ≤60；其余原样）。 */
 function trimScalar(field: SoftFieldKey, value: string): string {
-  if (field === 'name') return value.slice(0, 24);
+  if (field === 'name') return [...value].slice(0, 12).join('');
   if (field === 'tagline') return value.slice(0, 60);
   return value;
 }

@@ -502,6 +502,8 @@ export interface VersionRow {
   structureState: Partial<StructureState>;
   sourceCandidateId: string | null;
   creatorUserId: string;
+  /** 完整 readVersion 会填充；写路径的锁行投影可省略。 */
+  existingVersions?: string[];
   /** 行 updated_at（ISO），用作 PATCH 乐观锁 ETag 的来源（§4.E If-Match，Codex P1-5）。 */
   updatedAt: string;
 }
@@ -523,11 +525,17 @@ export async function readVersion(db: Queryable, versionId: string): Promise<Ver
     structure_state: Partial<StructureState>;
     source_candidate_id: string | null;
     creator_user_id: string;
+    existing_versions: string[];
     updated_at: string;
   }>(
     `SELECT v.id, v.capability_id, c.slug, v.version, v.status,
             v.manifest, v.structure_state, v.source_candidate_id,
-            c.creator_user_id, v.updated_at
+            c.creator_user_id, v.updated_at,
+            ARRAY(
+              SELECT existing.version
+                FROM capability_versions existing
+               WHERE existing.capability_id = v.capability_id
+            ) AS existing_versions
        FROM capability_versions v
        JOIN capabilities c ON c.id = v.capability_id
       WHERE v.id = $1`,
@@ -545,6 +553,7 @@ export async function readVersion(db: Queryable, versionId: string): Promise<Ver
     structureState: r.structure_state ?? {},
     sourceCandidateId: r.source_candidate_id,
     creatorUserId: r.creator_user_id,
+    existingVersions: r.existing_versions,
     updatedAt:
       typeof r.updated_at === 'string' ? r.updated_at : new Date(r.updated_at).toISOString(),
   };
@@ -724,7 +733,7 @@ export async function createCapabilityWithVersionInTx(
 /**
  * ②③ 在已有 capability 下建新 draft 版本（capabilityId 建新版本 / fromVersionId 被拒重发派生，§4.A）。
  *   复合 FK 同 capability（INSERT 落 capability_id = 入参 capabilityId）；status=draft、新 versionId、bump 版本号。
- *   软字段起点由调用方传入 manifest（②空软字段 / ③复制源被拒版软字段）；硬字段重锁。
+ *   软字段起点由调用方传入 manifest（②复制当前发布版 / ③复制源被拒版软字段）；硬字段重锁。
  */
 export async function insertNewVersionInTx(
   tx: Tx,
@@ -789,16 +798,29 @@ export async function readCapabilityForNewVersion(
   slug: string;
   currentVersionStatus: string | null;
   currentVersion: string | null;
+  currentManifest: Manifest | null;
+  currentSourceCandidateId: string | null;
+  existingVersions: string[];
 } | null> {
   const res = await db.query<{
     id: string;
     slug: string;
     current_version_status: string | null;
     current_version: string | null;
+    current_manifest: Manifest | null;
+    current_source_candidate_id: string | null;
+    existing_versions: string[];
   }>(
     `SELECT c.id, c.slug,
             cur.status  AS current_version_status,
-            cur.version AS current_version
+            cur.version AS current_version,
+            cur.manifest AS current_manifest,
+            cur.source_candidate_id AS current_source_candidate_id,
+            ARRAY(
+              SELECT existing.version
+                FROM capability_versions existing
+               WHERE existing.capability_id = c.id
+            ) AS existing_versions
        FROM capabilities c
        LEFT JOIN capability_versions cur ON cur.id = c.current_version_id
       WHERE c.id = $1 AND c.creator_user_id = $2`,
@@ -811,6 +833,9 @@ export async function readCapabilityForNewVersion(
     slug: r.slug,
     currentVersionStatus: r.current_version_status,
     currentVersion: r.current_version,
+    currentManifest: r.current_manifest,
+    currentSourceCandidateId: r.current_source_candidate_id,
+    existingVersions: r.existing_versions,
   };
 }
 

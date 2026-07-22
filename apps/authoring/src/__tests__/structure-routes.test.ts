@@ -237,20 +237,47 @@ describe('createCapabilityHandler (§4.A)', () => {
     assertNoCode(ctx.sent.body);
   });
 
-  it('② capabilityId 当前版已 published → 201 建新 draft 版本 bump minor(0.2.0)', async () => {
+  it('② capabilityId 当前版已 published → 201 复制软字段/血缘并 bump minor 建新 draft', async () => {
     const db = new StructureRoutesFakeDb();
+    const publishedManifest = applySoftFields(initialManifest('placeholder', '0.1.0'), {
+      name: '已发布任务助手',
+      tagline: '继续编辑原有 Agent',
+      role: '任务助手',
+      goal: '产出可用结果',
+      instructions: '处理 {{topic|主题}} 并返回结果。',
+      skill_set: ['分析任务'],
+      starter_prompts: ['帮我处理这个任务'],
+    });
     const seeded = seedCapabilityWithVersion(db, 'u1', {
       versionStatus: 'published',
       version: '0.1.0',
+      manifest: publishedManifest,
       isCurrent: true,
+      sourceCandidateId: 'cand-source',
     });
     const ctx = makeReqReply({ userId: 'u1', body: { capabilityId: seeded.capabilityId }, db });
     await call(createCapabilityHandler(), ctx);
     expect(ctx.sent.code).toBe(201);
-    const r = dataOf<{ version: string; slug: string; capabilityId: string }>(ctx.sent.body);
+    const r = dataOf<{
+      version: string;
+      slug: string;
+      capabilityId: string;
+      versionId: string;
+      manifest: { id: string; version: string; status: string; name: string };
+      structureState: { doneCount: number };
+    }>(ctx.sent.body);
     expect(r.version).toBe('0.2.0');
     expect(r.slug).toBe(seeded.slug); // slug 不变（沿用能力体）
     expect(r.capabilityId).toBe(seeded.capabilityId);
+    expect(r.manifest).toMatchObject({
+      id: seeded.capabilityId,
+      version: '0.2.0',
+      status: 'draft',
+      name: '已发布任务助手',
+    });
+    expect(r.structureState.doneCount).toBe(7);
+    expect(db.versions.get(r.versionId)?.source_candidate_id).toBe('cand-source');
+    expect(db.versions.get(seeded.versionId)?.status).toBe('published');
     expect(db.versions.size).toBe(2); // 原 published + 新 draft
   });
 

@@ -132,6 +132,9 @@ export class StructureRoutesFakeDb implements Queryable {
           structure_state: v.structure_state,
           source_candidate_id: v.source_candidate_id,
           creator_user_id: cap.creator_user_id,
+          existing_versions: [...this.versions.values()]
+            .filter((version) => version.capability_id === v.capability_id)
+            .map((version) => version.version),
           updated_at: v.updated_at,
         },
       ] as R[]);
@@ -207,12 +210,12 @@ export class StructureRoutesFakeDb implements Queryable {
       const owner = params[1] as string;
       const c = this.candidates.get(id);
       if (!c || c.owner_user_id !== owner) return ok<R>([]);
-      return ok<R>(
-        [{ id: c.id, name: c.name, intent: null, slug: c.slug, status: c.status }] as R[],
-      );
+      return ok<R>([
+        { id: c.id, name: c.name, intent: null, slug: c.slug, status: c.status },
+      ] as R[]);
     }
 
-    // —— readCapabilityForNewVersion（SELECT c.id, c.slug, cur.status, cur.version ...）——
+    // —— readCapabilityForNewVersion（当前版状态/版本 + manifest + 候选血缘）——
     if (
       sql.includes('FROM capabilities c') &&
       sql.includes('LEFT JOIN capability_versions cur') &&
@@ -229,6 +232,11 @@ export class StructureRoutesFakeDb implements Queryable {
           slug: cap.slug,
           current_version_status: cur?.status ?? null,
           current_version: cur?.version ?? null,
+          current_manifest: cur?.manifest ?? null,
+          current_source_candidate_id: cur?.source_candidate_id ?? null,
+          existing_versions: [...this.versions.values()]
+            .filter((version) => version.capability_id === cap.id)
+            .map((version) => version.version),
         },
       ] as R[]);
     }
@@ -534,7 +542,13 @@ export function seedCandidate(
 export function seedCapabilityWithVersion(
   db: StructureRoutesFakeDb,
   owner: string,
-  opts?: { versionStatus?: string; version?: string; manifest?: unknown; isCurrent?: boolean },
+  opts?: {
+    versionStatus?: string;
+    version?: string;
+    manifest?: unknown;
+    isCurrent?: boolean;
+    sourceCandidateId?: string | null;
+  },
 ): { capabilityId: string; versionId: string; slug: string } {
   const capabilityId = genId('cap');
   const versionId = genId('ver');
@@ -555,7 +569,7 @@ export function seedCapabilityWithVersion(
     status,
     manifest,
     structure_state: manifestToStructureState(versionId, manifest as never),
-    source_candidate_id: null,
+    source_candidate_id: opts?.sourceCandidateId ?? null,
     updated_at: new Date(db.now).toISOString(),
   });
   return { capabilityId, versionId, slug };

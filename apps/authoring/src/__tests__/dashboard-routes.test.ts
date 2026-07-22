@@ -373,8 +373,14 @@ describe('GET /dashboard/capabilities（能力表，§1.4）', () => {
     expect(byName('D').statusLabel).toBe('已退回');
     expect(byName('D').rejectReason).toBe('描述与能力不符');
     expect(byName('D').retryEditable).toBe(true); // 有被拒版定位
+    expect(byName('D').retryVersionId).toEqual(expect.any(String));
+    expect(byName('D').studioSourceVersionId).toBe(byName('D').retryVersionId);
     expect(byName('E').reviewStatus).toBe('unpublished'); // 被拒下架
     expect(byName('E').statusLabel).toBe('已下架');
+    expect(byName('E').rejectReason).toBe('内容不合规');
+    expect(byName('E').retryEditable).toBe(true);
+    expect(byName('E').retryVersionId).toEqual(expect.any(String));
+    expect(byName('E').studioSourceVersionId).toBe(byName('E').retryVersionId);
   });
 
   it('usage 列（本月调用/消耗迷你图/收益）null + meta.placeholders 逐键标注；名称/简介真实', async () => {
@@ -397,6 +403,214 @@ describe('GET /dashboard/capabilities（能力表，§1.4）', () => {
     expect(body.meta?.placeholders?.monthlyInvocations).toBe(USAGE_PLACEHOLDER_TEXT);
     expect(body.meta?.placeholders?.spendSparkline).toBe(USAGE_PLACEHOLDER_TEXT);
     expect(body.meta?.placeholders?.revenueMicros).toBe(USAGE_PLACEHOLDER_TEXT);
+  });
+
+  it('管理入口单源：完整草稿可进 Studio，历史系统式名称提示自动命名', async () => {
+    const db = new DashboardFakeDb();
+    const me = 'user-me';
+    seedCapability(db, me, {
+      reviewStatus: null,
+      versionStatus: 'draft',
+      name: '<recommended_plugins>',
+    });
+    seedCapability(db, me, {
+      reviewStatus: 'published',
+      versionStatus: 'published',
+      name: '需求炼金师',
+    });
+
+    const ctx = makeReqReply({ userId: me, db });
+    await call(dashboardCapabilitiesHandler(), ctx);
+    const rows = (ctx.sent.body as { data: Array<Record<string, unknown>> }).data;
+    const dirtyDraft = rows.find((row) => row.name === '<recommended_plugins>')!;
+    const published = rows.find((row) => row.name === '需求炼金师')!;
+
+    expect(dirtyDraft.studioAvailable).toBe(true);
+    expect(dirtyDraft.studioDraftable).toBe(false);
+    expect(dirtyDraft.nameNeedsReview).toBe(true);
+    expect(published.studioAvailable).toBe(false);
+    expect(published.studioDraftable).toBe(true);
+    expect(published.nameNeedsReview).toBe(false);
+  });
+
+  it('已发布 Agent 有较新草稿时：管理页继续最新草稿，公开页仍使用已发布版', async () => {
+    const db = new DashboardFakeDb();
+    const me = 'user-me';
+    const { capabilityId, versionId: publishedVersionId } = seedCapability(db, me, {
+      reviewStatus: 'published',
+      versionStatus: 'published',
+      name: '已发布工作台',
+      versionUpdatedAt: '2026-06-16T00:00:00.000Z',
+    });
+    db.versions.set('ver-new-draft', {
+      id: 'ver-new-draft',
+      capability_id: capabilityId,
+      status: 'draft',
+      visibility: 'public',
+      source_candidate_id: null,
+      manifest: {
+        id: capabilityId,
+        version: '0.2.0',
+        status: 'draft',
+        inputs: { fields: [] },
+        output: { type: 'text' },
+        boundaries: { riskLevel: 'low', redLines: [] },
+        name: '最新草稿工作台',
+        tagline: '继续打磨界面',
+        role: '工作流助手',
+        goal: '完成用户任务',
+        instructions: '按步骤完成任务',
+        skill_set: ['理解需求'],
+        starter_prompts: ['帮我开始'],
+      },
+      rejected_at: null,
+      updated_at: '2026-06-17T00:00:00.000Z',
+      created_at: '2026-06-17T00:00:00.000Z',
+    });
+
+    const ctx = makeReqReply({ userId: me, db });
+    await call(dashboardCapabilitiesHandler(), ctx);
+    const managed = (ctx.sent.body as { data: Array<Record<string, unknown>> }).data[0]!;
+
+    expect(managed.versionId).toBe('ver-new-draft');
+    expect(managed.name).toBe('最新草稿工作台');
+    expect(managed.reviewStatus).toBe('published');
+    expect(managed.studioAvailable).toBe(true);
+    expect(managed.studioDraftable).toBe(false);
+    expect(managed.studioSourceVersionId).toBe(publishedVersionId);
+    expect(managed.publicPageAvailable).toBe(true);
+    expect(managed.updatedAt).toBe('2026-06-17T00:00:00.000Z');
+
+    const draftCtx = makeReqReply({ userId: me, query: { status: 'draft' }, db });
+    await call(dashboardCapabilitiesHandler(), draftCtx);
+    const draftRows = (draftCtx.sent.body as { data: Array<Record<string, unknown>> }).data;
+    expect(draftRows.map((row) => row.capabilityId)).toContain(capabilityId);
+  });
+
+  it('Studio 入口使用完整 ManifestSchema 校验，不把枚举值非法的草稿判为可打开', async () => {
+    const db = new DashboardFakeDb();
+    const me = 'user-me';
+    const { versionId } = seedCapability(db, me, {
+      reviewStatus: null,
+      versionStatus: 'draft',
+      name: '格式错误草稿',
+    });
+    const version = db.versions.get(versionId)!;
+    version.manifest.output = { type: 'pdf' };
+
+    const ctx = makeReqReply({ userId: me, db });
+    await call(dashboardCapabilitiesHandler(), ctx);
+    const managed = (ctx.sent.body as { data: Array<Record<string, unknown>> }).data[0]!;
+
+    expect(managed.studioAvailable).toBe(false);
+    expect(managed.studioDraftable).toBe(false);
+  });
+
+  it('已发布 Agent 的最新草稿损坏时：不打开损坏草稿，从完整当前发布版安全恢复', async () => {
+    const db = new DashboardFakeDb();
+    const me = 'user-me';
+    const { capabilityId, versionId: publishedVersionId } = seedCapability(db, me, {
+      reviewStatus: 'published',
+      versionStatus: 'published',
+      name: '已发布工作台',
+    });
+    db.versions.set('ver-broken-draft', {
+      id: 'ver-broken-draft',
+      capability_id: capabilityId,
+      status: 'draft',
+      visibility: 'public',
+      source_candidate_id: null,
+      manifest: {
+        id: capabilityId,
+        version: '0.2.0',
+        status: 'draft',
+        inputs: { fields: [] },
+        output: { type: 'pdf' },
+        boundaries: { riskLevel: 'low', redLines: [] },
+        name: '损坏草稿',
+        tagline: '不应直接打开',
+        role: '工作流助手',
+        goal: '完成用户任务',
+        instructions: '按步骤完成任务',
+        skill_set: ['理解需求'],
+        starter_prompts: ['帮我开始'],
+      },
+      rejected_at: null,
+      updated_at: '2026-06-17T00:00:00.000Z',
+      created_at: '2026-06-17T00:00:00.000Z',
+    });
+
+    const ctx = makeReqReply({ userId: me, db });
+    await call(dashboardCapabilitiesHandler(), ctx);
+    const managed = (ctx.sent.body as { data: Array<Record<string, unknown>> }).data[0]!;
+
+    expect(managed.versionId).toBe('ver-broken-draft');
+    expect(managed.studioAvailable).toBe(false);
+    expect(managed.studioDraftable).toBe(true);
+    expect(managed.studioSourceVersionId).toBe(publishedVersionId);
+  });
+
+  it('完整草稿仍保留当前发布版源：先自动命名、稍后编辑也不丢原 UI', async () => {
+    const db = new DashboardFakeDb();
+    const me = 'user-me';
+    const { capabilityId, versionId: publishedVersionId } = seedCapability(db, me, {
+      reviewStatus: 'published',
+      versionStatus: 'published',
+      name: '已发布工作台',
+    });
+    db.versions.set('ver-complete-draft', {
+      ...db.versions.get(publishedVersionId)!,
+      id: 'ver-complete-draft',
+      capability_id: capabilityId,
+      status: 'draft',
+      manifest: {
+        ...db.versions.get(publishedVersionId)!.manifest,
+        version: '0.2.0',
+        status: 'draft',
+        name: '自动命名后的草稿',
+      },
+      updated_at: '2026-06-18T00:00:00.000Z',
+      created_at: '2026-06-18T00:00:00.000Z',
+    });
+
+    const ctx = makeReqReply({ userId: me, db });
+    await call(dashboardCapabilitiesHandler(), ctx);
+    const managed = (ctx.sent.body as { data: Array<Record<string, unknown>> }).data[0]!;
+
+    expect(managed.versionId).toBe('ver-complete-draft');
+    expect(managed.studioAvailable).toBe(true);
+    expect(managed.studioDraftable).toBe(false);
+    expect(managed.studioSourceVersionId).toBe(publishedVersionId);
+  });
+
+  it('已发布源 manifest 也不完整时：不暴露伪恢复入口', async () => {
+    const db = new DashboardFakeDb();
+    const me = 'user-me';
+    const { versionId } = seedCapability(db, me, {
+      reviewStatus: 'published',
+      versionStatus: 'published',
+      name: '已发布源损坏',
+    });
+    db.versions.get(versionId)!.manifest.output = { type: 'pdf' };
+    db.versions.set('ver-broken-draft-too', {
+      ...db.versions.get(versionId)!,
+      id: 'ver-broken-draft-too',
+      status: 'draft',
+      manifest: {
+        ...db.versions.get(versionId)!.manifest,
+        version: '0.2.0',
+        name: '新草稿也损坏',
+      },
+      updated_at: '2026-06-17T00:00:00.000Z',
+      created_at: '2026-06-17T00:00:00.000Z',
+    });
+
+    const ctx = makeReqReply({ userId: me, db });
+    await call(dashboardCapabilitiesHandler(), ctx);
+    const managed = (ctx.sent.body as { data: Array<Record<string, unknown>> }).data[0]!;
+
+    expect(managed.studioAvailable).toBe(false);
+    expect(managed.studioDraftable).toBe(false);
   });
 
   it('公开页动作与 Runtime 真实可达条件同源，不把历史发布版或不可见版变成死入口', async () => {
@@ -483,7 +697,7 @@ describe('GET /dashboard/capabilities（能力表，§1.4）', () => {
     );
   });
 
-  it('status=draft 过滤只回无 publication 行的能力', async () => {
+  it('status=draft 过滤回所有存在未发布草稿的能力（包括已有公开版的继续修改）', async () => {
     const db = new DashboardFakeDb();
     const me = 'user-me';
     seedCapability(db, me, { reviewStatus: 'published', name: 'pub' });
@@ -494,7 +708,7 @@ describe('GET /dashboard/capabilities（能力表，§1.4）', () => {
     const names = (
       ctx.sent.body as { data: Array<{ name: string; reviewStatus: string }> }
     ).data.map((r) => r.name);
-    expect(names.sort()).toEqual(['draft1', 'draft2']);
+    expect(names.sort()).toEqual(['draft1', 'draft2', 'pub']);
   });
 
   // —— status 过滤【镜像单源派生态】（Codex#r3 P1）：回退拒绝态（published + reject_reason）按 ——
