@@ -183,6 +183,25 @@
   padding: 18px 20px;
 }
 
+.rt-design-agent__earlier {
+  display: block;
+  flex: 0 0 auto;
+  min-height: 28px;
+  margin: 10px auto 0;
+  border: 0;
+  border-bottom: 1px solid var(--cb-border);
+  padding: 0 4px;
+  background: transparent;
+  color: var(--cb-muted);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.rt-design-agent__earlier:hover {
+  color: var(--cb-fg);
+}
+
 .rt-design-agent__tabs {
   flex: 0 0 44px;
   display: grid;

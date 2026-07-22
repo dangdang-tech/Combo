@@ -12,6 +12,8 @@ const ROLE_LABELS: Record<string, string> = {
   form: '表单',
 };
 
+const RECENT_MESSAGE_LIMIT = 4;
+
 interface QueuedEdit {
   text: string;
   label: string;
@@ -75,8 +77,14 @@ export function DesignAgentPanel({
 }: DesignAgentPanelProps) {
   const [text, setText] = useState('');
   const [view, setView] = useState<'conversation' | 'versions'>('conversation');
+  const [showEarlierMessages, setShowEarlierMessages] = useState(false);
   const [queued, setQueued] = useState<QueuedEdit[]>([]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const hiddenMessageCount = Math.max(0, messages.length - RECENT_MESSAGE_LIMIT);
+  const visibleMessages =
+    hiddenMessageCount > 0 && !showEarlierMessages
+      ? messages.slice(-RECENT_MESSAGE_LIMIT)
+      : messages;
   const wasRunningRef = useRef(false);
   const bootstrapFailed = revisions.length === 0 && !isBootstrapping && Boolean(error);
 
@@ -195,9 +203,19 @@ export function DesignAgentPanel({
         </div>
       ) : (
         <div className="rt-design-agent__thread" role="tabpanel">
+          {hiddenMessageCount > 0 && (
+            <button
+              type="button"
+              className="rt-design-agent__earlier"
+              aria-expanded={showEarlierMessages}
+              onClick={() => setShowEarlierMessages((current) => !current)}
+            >
+              {showEarlierMessages ? '收起较早对话' : `查看更早的 ${hiddenMessageCount} 条对话`}
+            </button>
+          )}
           {messages.length > 0 && (
             <ChatThread
-              messages={messages}
+              messages={visibleMessages}
               streamingText={null}
               assistantLabel="Combo"
               onOpenArtifact={onOpenArtifact}

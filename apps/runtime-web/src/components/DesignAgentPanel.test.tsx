@@ -44,6 +44,26 @@ function props(overrides: Partial<DesignAgentPanelProps> = {}): DesignAgentPanel
 }
 
 describe('DesignAgentPanel', () => {
+  it('keeps earlier conversation available without letting it dominate the editor', () => {
+    const messages = Array.from({ length: 6 }, (_, index) => ({
+      id: `message-${index}`,
+      runId: null,
+      seq: index,
+      role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
+      text: `第 ${index + 1} 条对话`,
+      artifacts: [],
+      createdAt: `2026-07-21T10:0${index}:00.000Z`,
+    }));
+    render(<DesignAgentPanel {...props({ messages })} />);
+
+    expect(screen.queryByText('第 1 条对话')).not.toBeInTheDocument();
+    expect(screen.getByText('第 3 条对话')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看更早的 2 条对话' }));
+    expect(screen.getByText('第 1 条对话')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '收起较早对话' }));
+    expect(screen.queryByText('第 1 条对话')).not.toBeInTheDocument();
+  });
+
   it('sends a typed edit with Enter', () => {
     const onSend = vi.fn(() => true);
     render(<DesignAgentPanel {...props({ onSend })} />);
