@@ -137,6 +137,9 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      - name: Build shared first (integration tests import its package entry)
+        run: pnpm -F @cb/shared build
+
       - name: Install psql + redis-cli clients
         run: sudo apt-get update && sudo apt-get install -y postgresql-client redis-tools
 
