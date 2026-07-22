@@ -315,31 +315,38 @@ function StudioTestInputReceipt({
   prompt,
   isRunning,
   onNewTask,
+  onRerun,
 }: {
   revisionNo: number;
   prompt: string;
   isRunning: boolean;
   onNewTask: () => void;
+  onRerun: () => void;
 }) {
   return (
     <section className="rt-intake" aria-label="本次 Miniapp 提交">
       <div className="rt-intake__head">
-        <div className="rt-intake__eyebrow">MINIAPP SUBMISSION</div>
-        <h2>UI R{revisionNo} 发起的真实任务</h2>
-        <p>这是刚才由 Miniapp 主按钮提交给 Combo Runtime 的原始任务，会与本次结果一起保留。</p>
+        <div className="rt-intake__eyebrow">测试输入 · R{revisionNo}</div>
+        <h2>本次任务</h2>
+        <p>再次运行会用相同输入测试当前页面。</p>
       </div>
       <div className="rt-studio-test__submitted-prompt">
         <span>本次提交</span>
         <p>{prompt}</p>
       </div>
-      <button
-        type="button"
-        className="rt-btn rt-intake__start"
-        disabled={isRunning}
-        onClick={onNewTask}
-      >
-        {isRunning ? '真实任务运行中…' : '换一个任务'}
-      </button>
+      <div className="rt-studio-test__receipt-actions">
+        <button
+          type="button"
+          className="rt-btn rt-btn--accent"
+          disabled={isRunning}
+          onClick={onRerun}
+        >
+          {isRunning ? '运行中…' : '再次运行'}
+        </button>
+        <button type="button" className="rt-btn" disabled={isRunning} onClick={onNewTask}>
+          换一个任务
+        </button>
+      </div>
     </section>
   );
 }
@@ -952,16 +959,23 @@ export function ChatPage() {
   const storedTestMatchesCurrentRevision = Boolean(
     currentRevision && studioState?.latestTest?.revisionId === currentRevision.id,
   );
-  const latestTestSessionId = localTestMatchesCurrentRevision
-    ? (studioTest.testSessionId ?? undefined)
-    : storedTestMatchesCurrentRevision
-      ? studioState?.latestTest?.testSessionId
-      : undefined;
   const reusableTestSessionId =
     studioTest.testSessionId ?? studioState?.latestTest?.testSessionId ?? undefined;
   const latestTestSessionQ = useSession(reusableTestSessionId);
-  const currentTestIsRunning = localTestMatchesCurrentRevision && studioTest.isRunning;
-  const currentTestError = localTestMatchesCurrentRevision ? studioTest.error : null;
+  const storedCurrentTestStatus = storedTestMatchesCurrentRevision
+    ? studioState?.latestTest?.status
+    : undefined;
+  const currentTestIsRunning = Boolean(
+    (localTestMatchesCurrentRevision && studioTest.isRunning) ||
+    storedCurrentTestStatus === 'running',
+  );
+  const currentTestError = localTestMatchesCurrentRevision
+    ? studioTest.error
+    : storedCurrentTestStatus === 'failed'
+      ? '上一次测试没有完成，请重试。'
+      : storedCurrentTestStatus === 'interrupted'
+        ? '上一次测试已停止。'
+        : null;
 
   const selectedArtifactKey =
     currentRevision?.artifactKey ?? agui.activeKey ?? selectPrimaryArtifactKey(agui.artifacts);
@@ -1014,7 +1028,7 @@ export function ChatPage() {
   );
   const publishReturnTo = safeReturnTo(searchParams.get('returnTo'));
   const canConfirmDraftTrial = Boolean(
-    isDraftTrial && currentRevision?.verified && !agui.isRunning && !studioTest.isRunning,
+    isDraftTrial && currentRevision?.verified && !agui.isRunning && !currentTestIsRunning,
   );
   const isBootstrapping = Boolean(
     isDraftTrial && !currentRevision && (agui.isRunning || studioState?.activeDesignRunId),
@@ -1059,11 +1073,10 @@ export function ChatPage() {
 
   const backToPublish = useCallback(() => {
     if (!capability || !sessionId) return;
-    const outcomeSessionId = latestTestSessionId ?? sessionId;
     window.location.assign(
-      trialOutcomeReturnTo(publishReturnTo, 'tested', capability.capabilityId, outcomeSessionId),
+      trialOutcomeReturnTo(publishReturnTo, 'tested', capability.capabilityId, sessionId),
     );
-  }, [capability, latestTestSessionId, publishReturnTo, sessionId]);
+  }, [capability, publishReturnTo, sessionId]);
 
   const enterProduction = useCallback(async () => {
     if (!capability || capability.status === 'draft' || productionPending) return;
@@ -1143,12 +1156,6 @@ export function ChatPage() {
     storedTestMatchesCurrentRevision,
     studioTest.prompt,
   ]);
-  const reusableTestPrompt = useMemo(() => {
-    const localPrompt = studioTest.prompt.trim();
-    if (localPrompt) return localPrompt;
-    const messages = latestTestSessionQ.data?.messages ?? [];
-    return messages.find((message) => message.role === 'user')?.text.trim() ?? '';
-  }, [latestTestSessionQ.data?.messages, studioTest.prompt]);
   const latestTestArtifact = useMemo(() => {
     if (!localTestMatchesCurrentRevision && !storedTestMatchesCurrentRevision) return undefined;
     const artifacts = latestTestSessionQ.data?.artifacts ?? [];
@@ -1195,7 +1202,7 @@ export function ChatPage() {
     selectedStudioRevision.revisionNo !== currentRevision.revisionNo,
   );
   const canStartCurrentTest = Boolean(
-    currentRevision && !isViewingHistory && !agui.isRunning && !studioTest.isRunning,
+    currentRevision && !isViewingHistory && !agui.isRunning && !currentTestIsRunning,
   );
   const canRunPreview = Boolean(
     canStartCurrentTest &&
@@ -1217,21 +1224,29 @@ export function ChatPage() {
   const annotationAvailable = Boolean(
     !isViewingHistory && showArtifact && previewVersion && studioElements.length > 0,
   );
-  const previewStatus = studioPanelError
-    ? hasRealArtifact
-      ? '修改失败 · 已保留上一版'
-      : '生成失败 · 尚未产生页面'
+  const studioStatus = studioPanelError
+    ? {
+        state: 'error',
+        label: hasRealArtifact ? '修改失败 · 已保留上一版' : '生成失败',
+      }
     : isViewingHistory && selectedStudioRevision
-      ? `正在预览历史 UI R${selectedStudioRevision.revisionNo} · 只读`
-      : agui.isRunning
-        ? hasRealArtifact
-          ? `正在生成 UI R${(currentRevision?.revisionNo ?? 0) + 1} · 当前版本仍可用`
-          : '正在生成首版 Miniapp'
-        : currentRevision?.verified
-          ? `UI R${currentRevision.revisionNo} · 真实任务已通过`
-          : currentRevision
-            ? `UI R${currentRevision.revisionNo} 已自动保存 · 待试用`
-            : '正在准备首版';
+      ? { state: 'history', label: `R${selectedStudioRevision.revisionNo} · 历史版本` }
+      : currentTestIsRunning
+        ? { state: 'testing', label: `R${currentRevision?.revisionNo ?? '—'} · 测试中` }
+        : agui.isRunning
+          ? {
+              state: 'saving',
+              label: currentRevision
+                ? `正在生成 R${currentRevision.revisionNo + 1}`
+                : '正在生成首版',
+            }
+          : isBootstrapping
+            ? { state: 'saving', label: '正在生成首版' }
+            : currentRevision?.verified
+              ? { state: 'verified', label: `R${currentRevision.revisionNo} · 已验证` }
+              : currentRevision
+                ? { state: 'saved', label: `R${currentRevision.revisionNo} · 已保存` }
+                : { state: 'preparing', label: '正在准备' };
 
   const sendStudioMessage = (text: string, element?: ComboElementSelection): boolean => {
     const prompt = element ? buildContextualStudioPrompt(element, text) : text;
@@ -1317,10 +1332,50 @@ export function ChatPage() {
       data-mode={sessionMode}
       data-mobile-pane={mobilePane}
     >
+      {showDraftStudio && (
+        <header className="rt-studio-header">
+          <div className="rt-studio-header__identity">
+            <button
+              type="button"
+              className="rt-studio-header__back"
+              aria-label="返回能力结果"
+              onClick={() => window.location.assign(publishReturnTo)}
+            >
+              <span aria-hidden="true">←</span>
+            </button>
+            <h1>{capability.name}</h1>
+            <span
+              className="rt-studio-header__status"
+              data-state={studioStatus.state}
+              role="status"
+              aria-label="Studio 状态"
+            >
+              {studioStatus.label}
+            </span>
+          </div>
+          <div className="rt-studio-header__actions">
+            {isViewingHistory ? (
+              <button type="button" onClick={() => setPreviewVersionNumber(null)}>
+                返回 R{currentRevision?.revisionNo ?? '—'}
+              </button>
+            ) : canConfirmDraftTrial ? (
+              <button type="button" className="is-primary" onClick={backToPublish}>
+                发布
+              </button>
+            ) : currentRevision ? (
+              <button
+                type="button"
+                disabled={agui.isRunning || isBootstrapping || currentTestIsRunning}
+                onClick={openStudioTest}
+              >
+                {currentTestIsRunning ? '测试中…' : '测试'}
+              </button>
+            ) : null}
+          </div>
+        </header>
+      )}
       {showDraftStudio ? (
         <DesignAgentPanel
-          title={capability.name}
-          versionLabel={currentRevision ? `UI R${currentRevision.revisionNo}` : '准备 R1'}
           messages={studioMessages}
           revisions={revisions}
           selectedRevisionNo={selectedStudioRevision?.revisionNo}
@@ -1329,23 +1384,16 @@ export function ChatPage() {
           readOnlyHistory={isViewingHistory}
           historyVersion={selectedStudioRevision?.revisionNo}
           latestVersion={currentRevision?.revisionNo}
-          revisionNo={selectedStudioRevision?.revisionNo}
-          verified={Boolean(selectedStudioRevision?.verified)}
-          isTestRunning={currentTestIsRunning}
-          reusableTestPrompt={reusableTestPrompt}
           annotationAvailable={annotationAvailable}
           annotationEnabled={inspectionEnabled}
           selectedElement={selectedStudioElement}
           error={studioPanelError}
-          onBack={() => window.location.assign(publishReturnTo)}
           onSend={sendStudioMessage}
           onInterrupt={agui.interrupt}
           onReturnLatest={() => setPreviewVersionNumber(null)}
           onSelectRevision={selectStudioRevision}
           onToggleAnnotation={toggleStudioAnnotation}
           onClearAnnotation={clearStudioAnnotation}
-          onOpenTest={openStudioTest}
-          onRerunTest={() => (reusableTestPrompt ? startStudioTest(reusableTestPrompt) : false)}
           onOpenArtifact={(ref) => {
             const revision = revisions.find(
               (item) =>
@@ -1362,64 +1410,31 @@ export function ChatPage() {
         />
       )}
       <div className="rt-trial">
-        <header className="rt-trial__toolbar">
-          <div className="rt-trial__title-group">
-            <h1>{toolbarTitle}</h1>
-            <span className="rt-version-chip">
-              {isDraftTrial ? toolbarVersion : `v${toolbarVersion}`}
-            </span>
-            <span className={`rt-mode-chip rt-mode-chip--${sessionMode}`}>
-              {isTrialSession ? (isDraftTrial ? 'Miniapp 编辑' : '试用') : '正式使用'}
-            </span>
-          </div>
-          {isDraftTrial ? (
-            <div className="rt-trial__actions">
-              {isViewingHistory ? (
-                <button
-                  type="button"
-                  className="rt-toolbar-pill"
-                  onClick={() => setPreviewVersionNumber(null)}
-                >
-                  返回 UI R{currentRevision?.revisionNo ?? '—'}
-                </button>
-              ) : canConfirmDraftTrial ? (
+        {!showDraftStudio && (
+          <header className="rt-trial__toolbar">
+            <div className="rt-trial__title-group">
+              <h1>{toolbarTitle}</h1>
+              <span className="rt-version-chip">
+                {isDraftTrial ? toolbarVersion : `v${toolbarVersion}`}
+              </span>
+              <span className={`rt-mode-chip rt-mode-chip--${sessionMode}`}>
+                {isTrialSession ? (isDraftTrial ? 'Miniapp 编辑' : '试用') : '正式使用'}
+              </span>
+            </div>
+            {isTrialSession && hasStarted ? (
+              <div className="rt-trial__actions">
                 <button
                   type="button"
                   className="rt-toolbar-pill rt-toolbar-pill--accent"
-                  onClick={backToPublish}
+                  disabled={productionPending}
+                  onClick={() => void enterProduction()}
                 >
-                  发布任务校验通过的 UI R{currentRevision?.revisionNo} →
+                  {productionPending ? '创建中…' : '满意，进入正式使用'}
                 </button>
-              ) : agui.isRunning || isBootstrapping ? (
-                <button type="button" className="rt-toolbar-pill rt-toolbar-pill--accent" disabled>
-                  {isBootstrapping ? '正在准备首版…' : '正在保存新 Revision…'}
-                </button>
-              ) : currentRevision ? (
-                <button
-                  type="button"
-                  className="rt-toolbar-pill rt-toolbar-pill--accent"
-                  disabled={studioTest.isRunning}
-                  onClick={openStudioTest}
-                >
-                  {studioTest.isRunning
-                    ? '真实任务运行中…'
-                    : `运行真实任务 · UI R${currentRevision.revisionNo} →`}
-                </button>
-              ) : null}
-            </div>
-          ) : isTrialSession && hasStarted ? (
-            <div className="rt-trial__actions">
-              <button
-                type="button"
-                className="rt-toolbar-pill rt-toolbar-pill--accent"
-                disabled={productionPending}
-                onClick={() => void enterProduction()}
-              >
-                {productionPending ? '创建中…' : '满意，进入正式使用'}
-              </button>
-            </div>
-          ) : null}
-        </header>
+              </div>
+            ) : null}
+          </header>
+        )}
 
         <main className={`rt-genui${showDraftStudio ? ' rt-genui--studio' : ''}`}>
           <div
@@ -1438,7 +1453,7 @@ export function ChatPage() {
                       aria-selected={studioView === 'preview'}
                       onClick={() => setStudioView('preview')}
                     >
-                      预览与修改
+                      页面
                     </button>
                     <button
                       type="button"
@@ -1447,69 +1462,28 @@ export function ChatPage() {
                       disabled={!currentRevision}
                       onClick={openStudioTest}
                     >
-                      真实任务
+                      测试
                       {currentRevision?.verified && <span aria-label="任务校验已通过">✓</span>}
                     </button>
                   </div>
-                  <div className="rt-design-preview__identity">
-                    <span
-                      className={
-                        agui.error
-                          ? 'is-error'
-                          : isViewingHistory
-                            ? 'is-history'
-                            : agui.isRunning
-                              ? 'is-running'
-                              : ''
-                      }
-                      aria-live="polite"
-                    >
-                      {previewStatus}
-                    </span>
-                  </div>
-                  <div className="rt-design-preview__tools">
-                    {selectedStudioRevision && (
-                      <span className="rt-design-preview__revision">
-                        UI R{selectedStudioRevision.revisionNo}
-                      </span>
-                    )}
-                    {studioView === 'preview' && (
-                      <>
-                        <button
-                          type="button"
-                          className="rt-design-preview__inspect"
-                          aria-pressed={inspectionEnabled}
-                          disabled={!annotationAvailable && !inspectionEnabled}
-                          onClick={toggleStudioAnnotation}
-                        >
-                          <span aria-hidden="true">⌖</span>
-                          {inspectionEnabled ? '退出标注' : '标注页面'}
-                        </button>
-                        <div
-                          className="rt-design-preview__devices"
-                          role="group"
-                          aria-label="预览尺寸"
-                        >
-                          <button
-                            type="button"
-                            aria-pressed={previewSize === 'desktop'}
-                            onClick={() => setPreviewSize('desktop')}
-                          >
-                            <span aria-hidden="true">▣</span>
-                            桌面
-                          </button>
-                          <button
-                            type="button"
-                            aria-pressed={previewSize === 'mobile'}
-                            onClick={() => setPreviewSize('mobile')}
-                          >
-                            <span aria-hidden="true">▯</span>
-                            手机
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
+                  {studioView === 'preview' && (
+                    <div className="rt-design-preview__devices" role="group" aria-label="预览尺寸">
+                      <button
+                        type="button"
+                        aria-pressed={previewSize === 'desktop'}
+                        onClick={() => setPreviewSize('desktop')}
+                      >
+                        桌面
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={previewSize === 'mobile'}
+                        onClick={() => setPreviewSize('mobile')}
+                      >
+                        手机
+                      </button>
+                    </div>
+                  )}
                 </header>
 
                 {studioView === 'test' && currentRevision ? (
@@ -1519,13 +1493,16 @@ export function ChatPage() {
                         <StudioTestInputReceipt
                           revisionNo={currentRevision.revisionNo}
                           prompt={latestTestPrompt}
-                          isRunning={studioTest.isRunning}
+                          isRunning={currentTestIsRunning}
                           onNewTask={() => setIsEditingTestInput(true)}
+                          onRerun={() => {
+                            startStudioTest(latestTestPrompt);
+                          }}
                         />
                       ) : (
                         <TrialIntakeForm
                           capability={capability}
-                          disabled={studioTest.isRunning}
+                          disabled={currentTestIsRunning}
                           mode="test"
                           revisionNo={currentRevision.revisionNo}
                           onSubmit={startStudioTest}
@@ -1535,8 +1512,8 @@ export function ChatPage() {
                     <div className="rt-studio-test__result" aria-live="polite">
                       <div className="rt-studio-test__result-head">
                         <div>
-                          <span>TEST RESULT</span>
-                          <h2>UI R{currentRevision.revisionNo} 的真实运行</h2>
+                          <span>测试结果 · R{currentRevision.revisionNo}</span>
+                          <h2>运行结果</h2>
                         </div>
                         <em
                           data-status={
@@ -1571,8 +1548,8 @@ export function ChatPage() {
                       ) : (
                         <div className="rt-studio-test__empty">
                           <span aria-hidden="true">◎</span>
-                          <strong>准备一条你真实会交给这个 Agent 的任务</strong>
-                          <p>UI 可以反复预览；只有在这里完成的能力运行才会验证当前 Revision。</p>
+                          <strong>先运行一条真实任务</strong>
+                          <p>确认页面与 Agent 能一起完成任务。</p>
                         </div>
                       )}
                     </div>
@@ -1610,17 +1587,11 @@ export function ChatPage() {
                       ) : (
                         <div className="rt-design-preview__empty">
                           <span aria-hidden="true">✦</span>
-                          <h2>正在恢复首版 Miniapp</h2>
-                          <p>Design Agent 会直接生成首版，你不需要先填写另一张表单。</p>
+                          <h2>正在准备页面</h2>
+                          <p>生成完成后会自动出现在这里。</p>
                           <button type="button" onClick={() => setMobilePane('agent')}>
-                            查看生成状态
+                            查看进度
                           </button>
-                        </div>
-                      )}
-                      {agui.isRunning && hasRealArtifact && (
-                        <div className="rt-design-preview__updating">
-                          <span aria-hidden="true" />
-                          正在生成 UI R{(currentRevision?.revisionNo ?? 0) + 1}；当前版本保持可用
                         </div>
                       )}
                     </div>
