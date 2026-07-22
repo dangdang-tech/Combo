@@ -17,12 +17,30 @@ function props(overrides: Partial<FloatingChatProps> = {}): FloatingChatProps {
 }
 
 describe('FloatingChat conversation rail', () => {
+  it('starts the first studio revision in the same conversation rail', () => {
+    render(<FloatingChat {...props({ messages: [], hasArtifact: false, experience: 'studio' })} />);
+
+    expect(screen.getByRole('complementary', { name: 'UI 设计对话' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: '描述第一版 UI' })).toHaveAttribute(
+      'placeholder',
+      '描述你想要的页面结构、交互和视觉…',
+    );
+    expect(screen.getByRole('button', { name: '生成第一版 UI' })).toBeDisabled();
+  });
+
   it('keeps the composer editable while a page change is running', () => {
     render(<FloatingChat {...props({ isRunning: true })} />);
 
     expect(screen.getByRole('textbox', { name: '描述页面修改' })).toBeEnabled();
     expect(screen.getByRole('button', { name: '停止当前修改' })).toBeEnabled();
     expect(screen.getByRole('status')).toHaveTextContent('正在应用修改');
+  });
+
+  it('uses explicit UI revision language for studio runs', () => {
+    render(<FloatingChat {...props({ isRunning: true, experience: 'studio' })} />);
+
+    expect(screen.getByRole('complementary', { name: 'UI 设计对话' })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('正在应用 UI 修改');
   });
 
   it('uses the same primary action to stop when empty and queue when typed', () => {

@@ -1,6 +1,5 @@
-// 开场表单（首次进入会话时盖在产物画布上）：按能力定义的 inputs 渲染输入字段，
-// 开场提示语一键填入补充要求；提交时把字段拼成第一条 user 消息交给对话流。
-// 定义没给字段时退化为只有「想要什么」一个输入框。
+// 普通试用的开场表单：按能力定义收取一次真实任务输入。
+// Studio 从左侧持续对话直接开始，不在画布里再造第二套输入表单。
 import { useState } from 'react';
 import type { CapabilityInputField, SessionDetail } from '@cb/shared';
 

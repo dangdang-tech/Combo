@@ -1,5 +1,5 @@
 // 会话页（GUI 形态）：产物画布是主界面，聊天是稳定的修改工作区——
-//   - 首次进入（还没有消息）画布上盖开场表单（TrialIntakeForm，按能力定义的字段渲染）；
+//   - consume 首屏按能力输入开始真实任务；studio 从左侧对话直接开始第一版 UI；
 //   - 第一轮生成中且还没有任何产物时显示诚实的页面骨架；
 //   - 有产物后画布渲染产物（多产物顶部 chips 切换），左侧对话负责反复微调；
 //   - 恢复：GET /runtime/sessions/:id（详情真源）；实时：/stream SSE（useSessionStream）。
@@ -8,7 +8,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import type { ArtifactView } from '@cb/shared';
 import { useArtifactContent, useSession } from '../api/runtime.js';
 import { useSessionStream } from '../api/useSessionStream.js';
-import { ArtifactRenderer } from '../components/ArtifactRenderer.js';
+import { ArtifactRenderer, type ComboRunRequest } from '../components/ArtifactRenderer.js';
 import { FloatingChat } from '../components/FloatingChat.js';
 import { GeneratingPageSkeleton } from '../components/GeneratingPageSkeleton.js';
 import { QueryErrorNotice } from '../components/QueryErrorNotice.js';
@@ -20,6 +20,7 @@ import {
   rememberRuntimeReturnTo,
   safeRuntimeReturnTo,
 } from '../navigation/runtimeReturn.js';
+import { resolveSessionExperience } from '../sessionExperience.js';
 import { useDocumentTitle } from '../shell/useDocumentTitle.js';
 
 export type TrialCanvasState = 'intake' | 'running' | 'output';
@@ -48,7 +49,7 @@ export function ChatPage() {
     name: string;
   } | null>(null);
 
-  // 创作端带 ?returnTo= 深链进来：记住它，侧栏「返回发布页」用。
+  // 普通试用记住创作流程 returnTo；Studio 恒定回「我的 Agent」。
   const queryReturnTo = safeRuntimeReturnTo(searchParams.get('returnTo'));
   const returnTo = queryReturnTo ?? readRuntimeReturnTo(sessionId);
   useEffect(() => {
@@ -56,7 +57,12 @@ export function ChatPage() {
   }, [queryReturnTo, sessionId]);
 
   const capability = detail?.capability;
-  useDocumentTitle(capability ? `${capability.name} · Combo 试用` : undefined);
+  const experience = resolveSessionExperience(detail, searchParams.get('mode'));
+  const studioMode = experience === 'studio';
+  const contextualReturnTo = studioMode ? '/capabilities' : returnTo;
+  useDocumentTitle(
+    capability ? `${capability.name} · ${studioMode ? 'UI 设计' : 'Combo 试用'}` : undefined,
+  );
   const sidebarCapability = capability
     ? { id: capability.id, name: capability.name }
     : lastSidebarCapability;
@@ -73,6 +79,8 @@ export function ChatPage() {
     hasArtifact: activeArtifact !== null,
   });
   const hasStarted = canvasState !== 'intake';
+  // Studio 的对话就是设计入口：空会话也保持左对话、右画布，不再切换成另一套首屏表单。
+  const showConversation = hasStarted || studioMode;
   const showIntake = canvasState === 'intake';
   const showGenerating = canvasState === 'running';
   if (stream.running && runStartedAtRef.current === null) runStartedAtRef.current = Date.now();
@@ -107,8 +115,9 @@ export function ChatPage() {
         activeSessionId={sessionId}
         capabilityId={sidebarCapability?.id}
         capabilityName={sidebarCapability?.name}
-        returnTo={returnTo}
+        returnTo={contextualReturnTo}
         runningSessionId={stream.running ? sessionId : undefined}
+        experience={experience}
       />
       <div className="rt-trial">
         {sessionQ.isPending ? (
@@ -119,9 +128,14 @@ export function ChatPage() {
           <>
             <header className="rt-trial__toolbar">
               <div className="rt-trial__title-group">
-                <h1>{activeArtifact?.title ?? capability.name}</h1>
+                <h1>
+                  {activeArtifact?.title ??
+                    (studioMode ? `${capability.name} UI` : capability.name)}
+                </h1>
                 <span className="rt-source-pill">
-                  {capability.name} · {capability.kind}
+                  {studioMode
+                    ? 'UI 设计 · 修改保存在当前会话'
+                    : `${capability.name} · ${capability.kind}`}
                 </span>
               </div>
               <div className="rt-trial__actions">
@@ -134,7 +148,11 @@ export function ChatPage() {
                 >
                   会话管理
                 </button>
-                {returnTo ? (
+                {studioMode ? (
+                  <a className="rt-toolbar-pill" href="/capabilities">
+                    返回我的 Agent
+                  </a>
+                ) : returnTo ? (
                   <button
                     type="button"
                     className="rt-toolbar-pill"
@@ -150,8 +168,8 @@ export function ChatPage() {
               </div>
             </header>
 
-            <main className={`rt-genui${hasStarted ? ' rt-genui--conversation' : ''}`}>
-              {hasStarted && sessionId && (
+            <main className={`rt-genui${showConversation ? ' rt-genui--conversation' : ''}`}>
+              {showConversation && sessionId && (
                 <FloatingChat
                   key={sessionId}
                   sessionId={sessionId}
@@ -160,14 +178,16 @@ export function ChatPage() {
                   isRunning={stream.running}
                   hasArtifact={activeArtifact !== null}
                   error={stream.errorMessage}
-                  onSend={stream.send}
+                  onSend={(text) => {
+                    void stream.send(text).catch(() => undefined);
+                  }}
                   onInterrupt={stream.interrupt}
+                  experience={experience}
                 />
               )}
               <div className="rt-genui__canvas" data-state={canvasState}>
-                {/* 首轮失败时 FloatingChat 尚未挂载（hasStarted=false），错误必须在画布可见，
-                    否则用户只看到生成卡一闪回表单、零解释（A7）。 */}
-                {stream.errorMessage && !hasStarted && (
+                {/* consume 首轮失败时对话尚未挂载，错误必须留在画布；Studio 的错误在左侧对话里。 */}
+                {stream.errorMessage && !showConversation && (
                   <div className="rt-inline-error" role="alert">
                     {stream.errorMessage}
                   </div>
@@ -188,22 +208,56 @@ export function ChatPage() {
                   </div>
                 )}
                 {activeArtifact ? (
-                  <ArtifactStage artifact={activeArtifact} />
+                  <ArtifactStage
+                    artifact={activeArtifact}
+                    onRunRequest={
+                      studioMode
+                        ? undefined
+                        : async ({ prompt }) => {
+                            const message = await stream.send(prompt);
+                            if (!message.turnId) {
+                              throw new Error('运行请求缺少轮次标识，请重试。');
+                            }
+                            return { turnId: message.turnId };
+                          }
+                    }
+                    runActive={!studioMode && stream.running}
+                    activeRunId={studioMode ? null : stream.activeRunId}
+                    terminalRun={studioMode ? null : stream.terminalRun}
+                    runDisabledMessage={
+                      studioMode
+                        ? '当前是 UI 设计预览。请返回「我的 Agent」，从真实试用运行 Agent。'
+                        : undefined
+                    }
+                  />
                 ) : hasStarted && !showGenerating ? (
-                  <div className="rt-empty">这轮还没有生成产物，可以在对话里继续要求。</div>
+                  <div className="rt-empty">
+                    {studioMode
+                      ? '还没有可预览的 UI，继续在左侧描述你想要的页面。'
+                      : '这轮还没有生成产物，可以在对话里继续要求。'}
+                  </div>
                 ) : null}
                 {showIntake && (
                   <div className="rt-genui__overlay">
-                    <TrialIntakeForm
-                      capability={capability}
-                      disabled={stream.running}
-                      onSubmit={(prompt) => stream.send(prompt)}
-                    />
+                    {studioMode ? (
+                      <section className="rt-studio-empty" aria-label="等待 UI 设计要求">
+                        <h2>从左侧开始设计</h2>
+                        <p>描述页面结构、交互和视觉；首版生成后可以继续修改。</p>
+                      </section>
+                    ) : (
+                      <TrialIntakeForm
+                        capability={capability}
+                        disabled={stream.running}
+                        onSubmit={(prompt) => {
+                          void stream.send(prompt).catch(() => undefined);
+                        }}
+                      />
+                    )}
                   </div>
                 )}
                 {showGenerating && (
                   <div className="rt-genui__overlay rt-genui__overlay--plain">
-                    <GeneratingPageSkeleton startedAt={runStartedAt} />
+                    <GeneratingPageSkeleton startedAt={runStartedAt} experience={experience} />
                   </div>
                 )}
               </div>
@@ -240,9 +294,10 @@ export function ChatPage() {
               activeSessionId={sessionId}
               capabilityId={sidebarCapability?.id}
               capabilityName={sidebarCapability?.name}
-              returnTo={returnTo}
+              returnTo={contextualReturnTo}
               runningSessionId={stream.running ? sessionId : undefined}
               instanceId="mobile"
+              experience={experience}
               onNavigate={() => setMobileSessionsOpen(false)}
             />
           </section>
@@ -253,12 +308,33 @@ export function ChatPage() {
 }
 
 /** 产物舞台：内容回读（GET /runtime/artifacts/:id/content）+ 按 kind 渲染，占满画布。 */
-function ArtifactStage({ artifact }: { artifact: ArtifactView }) {
+function ArtifactStage({
+  artifact,
+  onRunRequest,
+  runActive,
+  activeRunId,
+  terminalRun,
+  runDisabledMessage,
+}: {
+  artifact: ArtifactView;
+  onRunRequest?: (request: ComboRunRequest) => Promise<{ turnId: string }>;
+  runActive: boolean;
+  activeRunId: string | null;
+  terminalRun: { runId: string; state: 'completed' | 'failed'; message: string } | null;
+  runDisabledMessage?: string;
+}) {
   const content = useArtifactContent(artifact);
   const title = artifact.title ?? '未命名产物';
+  const [runNotice, setRunNotice] = useState<string | null>(null);
+  useEffect(() => setRunNotice(null), [artifact.id, runDisabledMessage]);
   return (
     <div className="rt-artifact-stage">
       <div className="rt-artifact-stage__actions">
+        {runNotice && (
+          <span className="rt-artifact-run-notice" role="status">
+            {runNotice}
+          </span>
+        )}
         <button
           type="button"
           className="rt-toolbar-pill rt-artifact-download"
@@ -275,7 +351,17 @@ function ArtifactStage({ artifact }: { artifact: ArtifactView }) {
       ) : content.isError ? (
         <div className="rt-empty rt-empty--error">产物内容加载失败，稍后重试。</div>
       ) : (
-        <ArtifactRenderer kind={artifact.kind} title={title} content={content.data} />
+        <ArtifactRenderer
+          kind={artifact.kind}
+          title={title}
+          content={content.data}
+          onRunRequest={onRunRequest}
+          runActive={runActive}
+          activeRunId={activeRunId}
+          terminalRun={terminalRun}
+          runDisabledMessage={runDisabledMessage}
+          onRunBlocked={setRunNotice}
+        />
       )}
     </div>
   );

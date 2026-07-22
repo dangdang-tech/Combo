@@ -4,23 +4,33 @@ import type { FastifyReply, FastifyRequest, RouteHandlerMethod } from 'fastify';
 import { z } from 'zod';
 import {
   CreateSessionBodySchema,
+  CreateStudioSessionBodySchema,
   ErrorCode,
+  SessionModeSchema,
   SendMessageBodySchema,
   UpdateSessionBodySchema,
   type CapabilityInputField,
   type Envelope,
   type MessageView,
   type SessionDetail,
+  type SessionMode,
   type SessionView,
+  type StudioSessionEntry,
+  type StudioSessionView,
 } from '@cb/shared';
 import { sendError } from '../../platform/http/_helpers.js';
 import { loadCapability, readCapabilitySummary } from '../capability/loader.js';
 import { sendLoadFailure } from '../capability/handlers.js';
 import { SessionInactiveError } from '../agent/run-turn.js';
-import { listArtifacts } from '../artifact/repo.js';
+import {
+  adoptLegacyCapabilityUiArtifact,
+  listArtifacts,
+  seedCapabilityUiArtifact,
+} from '../artifact/repo.js';
 import {
   archiveSession,
   createSession,
+  getOrCreateStudioSession,
   getMessages,
   getSession,
   listSessions,
@@ -56,6 +66,63 @@ async function requireOwnedSession(
   return session;
 }
 
+// ───────────────────────────── POST /runtime/studio/sessions ─────────────────────────────
+
+/**
+ * 原子进入一个 Agent 的设计空间：仅创作者本人可用，并复用同一条 active Studio 会话。
+ */
+export function createStudioSessionHandler(): RouteHandlerMethod {
+  return async function (req: FastifyRequest, reply: FastifyReply) {
+    const userId = req.auth?.userId;
+    if (!userId) return sendError(req, reply, ErrorCode.UNAUTHENTICATED);
+    const parsed = CreateStudioSessionBodySchema.safeParse(req.body);
+    if (!parsed.success) return sendError(req, reply, ErrorCode.VALIDATION_FAILED);
+
+    const { db, objectStore } = req.server.infra;
+    let loaded;
+    try {
+      loaded = await loadCapability(db, objectStore, parsed.data.capabilityId, userId, 'owner');
+    } catch (err) {
+      req.log.error({ err, traceId: req.id }, 'load studio capability failed');
+      return sendError(req, reply, ErrorCode.INTERNAL);
+    }
+    if (loaded.kind !== 'ok') return sendLoadFailure(req, reply, loaded);
+
+    let session: SessionRow | undefined;
+    try {
+      session = await getOrCreateStudioSession(db, {
+        capabilityId: loaded.capability.id,
+        ownerUserId: userId,
+      });
+      // Studio 被归档后重新进入时，从 capability 当前 UI 恢复一份可继续修改的会话内副本。
+      // 已有 active Studio 产物时 seed 幂等返回，不制造重复页面。
+      const seeded = await seedCapabilityUiArtifact(db, objectStore, {
+        capabilityId: loaded.capability.id,
+        targetSessionId: session.id,
+      });
+      if (!seeded) {
+        await adoptLegacyCapabilityUiArtifact(db, objectStore, {
+          capabilityId: loaded.capability.id,
+          ownerUserId: userId,
+          targetStudioSessionId: session.id,
+        });
+      }
+    } catch (err) {
+      // getOrCreate 可能返回已有 Studio；seed 的瞬时失败绝不能误归档用户的设计历史。
+      // 会话保持 active，下一次进入会幂等重试恢复/迁移。
+      req.log.error({ err, traceId: req.id }, 'get or create studio session failed');
+      return sendError(req, reply, ErrorCode.INTERNAL);
+    }
+    const data: StudioSessionView = { ...toSessionView(session), mode: 'studio' };
+    const body: Envelope<StudioSessionEntry> = {
+      data: { session: data },
+      meta: { traceId: req.id },
+    };
+    reply.code(200).send(body);
+    return reply;
+  };
+}
+
 // ───────────────────────────── POST /runtime/sessions ─────────────────────────────
 
 export function createSessionHandler(): RouteHandlerMethod {
@@ -76,13 +143,22 @@ export function createSessionHandler(): RouteHandlerMethod {
     }
     if (loaded.kind !== 'ok') return sendLoadFailure(req, reply, loaded);
 
-    let session: SessionRow;
+    let session: SessionRow | undefined;
     try {
       session = await createSession(db, {
         capabilityId: loaded.capability.id,
         ownerUserId: userId,
       });
+      // 每个真实运行会话拿一份创建时的 UI 快照；之后 Studio 再修改不会让旧任务中途漂移。
+      await seedCapabilityUiArtifact(db, objectStore, {
+        capabilityId: loaded.capability.id,
+        targetSessionId: session.id,
+      });
     } catch (err) {
+      if (session) {
+        // 对象存储/复制失败时不把半成品会话留在用户列表里。
+        await archiveSession(db, session.id, userId).catch(() => null);
+      }
       req.log.error({ err, traceId: req.id }, 'create session failed');
       return sendError(req, reply, ErrorCode.INTERNAL);
     }
@@ -99,14 +175,23 @@ export function listSessionsHandler(): RouteHandlerMethod {
     const userId = req.auth?.userId;
     if (!userId) return sendError(req, reply, ErrorCode.UNAUTHENTICATED);
     // 可选按能力过滤（侧栏只列当前能力下的会话）；非 UUID 直接拒（防 SQL uuid cast 报 500）。
-    const { capabilityId } = req.query as { capabilityId?: string };
+    const { capabilityId, mode: rawMode } = req.query as {
+      capabilityId?: string;
+      mode?: string;
+    };
     if (capabilityId !== undefined && !z.string().uuid().safeParse(capabilityId).success) {
       return sendError(req, reply, ErrorCode.VALIDATION_FAILED);
+    }
+    let mode: SessionMode = 'consume';
+    if (rawMode !== undefined) {
+      const parsedMode = SessionModeSchema.safeParse(rawMode);
+      if (!parsedMode.success) return sendError(req, reply, ErrorCode.VALIDATION_FAILED);
+      mode = parsedMode.data;
     }
 
     let sessions: SessionRow[];
     try {
-      sessions = await listSessions(req.server.infra.db, userId, capabilityId);
+      sessions = await listSessions(req.server.infra.db, userId, capabilityId, mode);
     } catch (err) {
       req.log.error({ err, traceId: req.id }, 'list sessions failed');
       return sendError(req, reply, ErrorCode.INTERNAL);

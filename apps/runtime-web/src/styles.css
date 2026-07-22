@@ -1449,6 +1449,7 @@ body {
   box-shadow: inset 0 0 0 1px var(--cb-accent);
 }
 .rt-artifact-stage {
+  position: relative;
   min-height: 100%;
   padding: 24px 32px 20px;
   transition: padding-right 180ms ease;
@@ -1465,6 +1466,18 @@ body {
   min-height: 0;
   margin-bottom: 8px;
   pointer-events: none;
+}
+.rt-artifact-run-notice {
+  margin-right: auto;
+  align-self: center;
+  border: 1px solid var(--cb-border);
+  border-radius: 999px;
+  padding: 7px 11px;
+  background: var(--cb-surface-raised);
+  color: var(--cb-muted);
+  font-size: 12px;
+  box-shadow: var(--cb-shadow-surface);
+  pointer-events: auto;
 }
 .rt-artifact-download {
   min-height: 34px;
@@ -1487,6 +1500,73 @@ body {
 }
 .rt-artifact-stage > .rt-artifact__frame {
   height: min(820px, calc(100dvh - 172px));
+}
+.rt-run-confirm-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: color-mix(in srgb, var(--cb-bg) 68%, transparent);
+  backdrop-filter: blur(8px);
+}
+.rt-run-confirm {
+  width: min(460px, 100%);
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-card);
+  padding: 24px;
+  background: var(--cb-surface-raised);
+  color: var(--cb-body);
+  box-shadow: var(--cb-shadow-float);
+}
+.rt-run-confirm__eyebrow {
+  color: var(--cb-action-link);
+  font-family: var(--cb-font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.rt-run-confirm h2 {
+  margin: 8px 0 6px;
+  color: var(--cb-fg);
+  font-family: var(--cb-font-serif);
+  font-size: 26px;
+  line-height: 1.2;
+}
+.rt-run-confirm p {
+  margin: 0;
+  color: var(--cb-muted);
+  font-size: 13px;
+}
+.rt-run-confirm blockquote {
+  max-height: min(240px, 34dvh);
+  margin: 18px 0;
+  overflow: auto;
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-control);
+  padding: 13px 14px;
+  background: var(--cb-surface-soft);
+  color: var(--cb-fg);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.rt-run-confirm__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.rt-run-confirm__submit {
+  border-color: var(--cb-action-primary);
+  background: var(--cb-action-primary);
+  color: var(--cb-on-action-primary);
+}
+.rt-run-confirm__submit:hover {
+  border-color: var(--cb-action-primary-hover);
+  background: var(--cb-action-primary-hover);
 }
 .rt-intake {
   width: min(600px, calc(100vw - var(--rt-sidebar-w) - 64px));

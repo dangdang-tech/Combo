@@ -12,7 +12,10 @@ import {
   ConnectUploadBodySchema,
   ConnectPrepareBodySchema,
   CapabilityDefinitionSchema,
+  CreateStudioSessionBodySchema,
   MessageViewSchema,
+  SessionViewSchema,
+  StudioSessionEntrySchema,
   SESSION_TITLE_MAX_LENGTH,
   SendMessageBodySchema,
   UpdateSessionBodySchema,
@@ -145,6 +148,30 @@ describe('能力定义契约（生产端写 / 试用端读的唯一缝）', () =
 });
 
 describe('试用域 DTO', () => {
+  it('Studio 建会话只接受 capabilityId，响应明确标记 studio 模式', () => {
+    const capabilityId = '11111111-1111-4111-8111-111111111111';
+    expect(CreateStudioSessionBodySchema.safeParse({ capabilityId }).success).toBe(true);
+    expect(CreateStudioSessionBodySchema.safeParse({ capabilityId, mode: 'consume' }).success).toBe(
+      false,
+    );
+
+    const session = {
+      id: '22222222-2222-4222-8222-222222222222',
+      capabilityId,
+      mode: 'studio',
+      status: 'active',
+      createdAt: '2026-07-23T10:00:00+08:00',
+      updatedAt: '2026-07-23T10:00:00+08:00',
+    };
+    expect(StudioSessionEntrySchema.safeParse({ session }).success).toBe(true);
+    expect(
+      StudioSessionEntrySchema.safeParse({ session: { ...session, mode: 'consume' } }).success,
+    ).toBe(false);
+    // 旧响应不带 mode 仍可解析，便于滚动发布期间新旧前后端共存。
+    const { mode: _mode, ...legacy } = session;
+    expect(SessionViewSchema.safeParse(legacy).success).toBe(true);
+  });
+
   it('消息视图：content 是数组（pi 原生分块），严格校验在 runtime 侧', () => {
     const ok = MessageViewSchema.safeParse({
       id: 'm1',

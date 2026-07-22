@@ -1,7 +1,7 @@
 // 一轮生成的无锁编排：每轮独立持久化与收尾，HTTP 提交后在进程内异步执行。
 import { randomUUID } from 'node:crypto';
 import { EventType } from '@ag-ui/core';
-import type { CapabilityDefinition } from '@cb/shared';
+import type { CapabilityDefinition, SessionMode } from '@cb/shared';
 import { withTransaction, type RuntimeDb } from '../../platform/infra/db.js';
 import type { RuntimeObjectStore } from '../../platform/infra/object-store.js';
 import type { SessionEventBus } from '../../platform/infra/event-bus.js';
@@ -15,6 +15,7 @@ import {
   type SessionRow,
 } from '../session/repo.js';
 import { createArtifactTool, type ArtifactAgentTool } from '../artifact/tool.js';
+import { bindCapabilityUiArtifact } from '../artifact/repo.js';
 import { createTurnEmitter, type TurnEmitter, type TurnLogger } from './turn-emitter.js';
 import {
   createTurn,
@@ -26,6 +27,7 @@ import {
 
 export interface TurnAgentInput {
   definition: CapabilityDefinition;
+  mode: SessionMode;
   history: MessageRecord[];
   tools: ArtifactAgentTool[];
 }
@@ -141,7 +143,9 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
 
   async function executeTurn(args: {
     sessionId: string;
+    capabilityId: string;
     definition: CapabilityDefinition;
+    mode: SessionMode;
     text: string;
     controller: AbortController;
     runId: string;
@@ -158,6 +162,7 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
     const base = { threadId: sessionId, runId };
     let nextIdx = 1;
     let assistantText = '';
+    let lastStudioArtifactId: string | null = null;
     let textOpen = false;
     const openText = (): void => {
       if (!textOpen) {
@@ -237,7 +242,10 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
         db: deps.db,
         objectStore: deps.objectStore,
         sessionId,
-        onArtifact: (artifact) =>
+        capabilityId: args.capabilityId,
+        mode: args.mode,
+        onArtifact: (artifact) => {
+          if (args.mode === 'studio') lastStudioArtifactId = artifact.id;
           emitter.emit({
             type: EventType.STATE_DELTA,
             ...base,
@@ -245,12 +253,13 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
               { op: 'add', path: `/artifacts/${artifact.id}`, value: artifact },
               { op: 'add', path: '/activeArtifactId', value: artifact.id },
             ],
-          }),
+          });
+        },
       }),
     ];
     let agent: TurnAgent;
     try {
-      agent = deps.agentFactory({ definition: args.definition, history, tools });
+      agent = deps.agentFactory({ definition: args.definition, mode: args.mode, history, tools });
     } catch (err) {
       const message =
         err instanceof TurnAgentUnavailableError ? err.message : '对话服务暂时不可用，请重试。';
@@ -333,7 +342,27 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
       await finishFailed('本轮回复未能保存（数据库异常），请重试。');
       return;
     }
-    const ok = await finishTurnCas(deps.db, { id: runId, status: 'completed' });
+    let ok: boolean;
+    try {
+      ok = await withTransaction(deps.db, async (tx) => {
+        // 先 CAS 领取成功终态；若随后的 UI 提升失败，事务整体回滚，旧 current UI 不变。
+        const claimed = await finishTurnCas(tx, { id: runId, status: 'completed' });
+        if (!claimed) return false;
+        if (args.mode === 'studio' && lastStudioArtifactId) {
+          const bound = await bindCapabilityUiArtifact(tx, {
+            capabilityId: args.capabilityId,
+            artifactId: lastStudioArtifactId,
+            studioSessionId: sessionId,
+          });
+          if (!bound) throw new Error('Studio revision could not be promoted');
+        }
+        return true;
+      });
+    } catch (err) {
+      log.error({ err, runId }, 'complete turn and promote Studio revision failed');
+      await finishFailed('本轮页面未能安全保存，请重试。');
+      return;
+    }
     if (!ok) {
       log.error({ runId }, 'turn terminal state already claimed');
       return;
@@ -376,7 +405,9 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
       active.set(sessionId, controller);
       void executeTurn({
         sessionId,
+        capabilityId: input.session.capabilityId,
         definition: input.definition,
+        mode: input.session.mode,
         text: input.text,
         controller,
         runId,

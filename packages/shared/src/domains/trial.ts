@@ -8,6 +8,13 @@ import { CapabilityInputFieldSchema } from './capability.js';
 export const SessionStatusSchema = z.enum(['active', 'closed']);
 export type SessionStatus = z.infer<typeof SessionStatusSchema>;
 
+/**
+ * consume：用户运行 Agent 完成真实任务；studio：创作者反复修改这个 Agent 的 Miniapp。
+ * 两种会话复用同一套消息、产物与流式运行时，但提示词与列表入口必须彼此隔离。
+ */
+export const SessionModeSchema = z.enum(['consume', 'studio']);
+export type SessionMode = z.infer<typeof SessionModeSchema>;
+
 export const MessageRoleSchema = z.enum(['user', 'assistant', 'tool']);
 export type MessageRole = z.infer<typeof MessageRoleSchema>;
 
@@ -17,6 +24,10 @@ export type MessageStatus = z.infer<typeof MessageStatusSchema>;
 // ---------- 请求 ----------
 export const CreateSessionBodySchema = z.object({ capabilityId: IdSchema }).strict();
 export type CreateSessionBody = z.infer<typeof CreateSessionBodySchema>;
+
+/** Studio 使用独立端点，避免客户端伪造 mode 把普通试用切进设计提示词。 */
+export const CreateStudioSessionBodySchema = z.object({ capabilityId: IdSchema }).strict();
+export type CreateStudioSessionBody = z.infer<typeof CreateStudioSessionBodySchema>;
 
 export const SESSION_TITLE_MAX_LENGTH = 60;
 export const UpdateSessionBodySchema = z
@@ -33,12 +44,24 @@ export type SendMessageBody = z.infer<typeof SendMessageBodySchema>;
 export const SessionViewSchema = z.object({
   id: IdSchema,
   capabilityId: IdSchema,
+  /** 旧客户端可不传；runtime 返回的新响应始终包含。 */
+  mode: SessionModeSchema.optional(),
   title: z.string().optional(),
   status: SessionStatusSchema,
   createdAt: IsoDateTimeSchema,
   updatedAt: IsoDateTimeSchema,
 });
 export type SessionView = z.infer<typeof SessionViewSchema>;
+
+export const StudioSessionViewSchema = SessionViewSchema.extend({
+  mode: z.literal('studio'),
+});
+export type StudioSessionView = z.infer<typeof StudioSessionViewSchema>;
+
+export const StudioSessionEntrySchema = z.object({
+  session: StudioSessionViewSchema,
+});
+export type StudioSessionEntry = z.infer<typeof StudioSessionEntrySchema>;
 
 export const MessageViewSchema = z.object({
   id: IdSchema,

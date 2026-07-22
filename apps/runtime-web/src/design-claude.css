@@ -1311,6 +1311,25 @@ body {
   border-left: 1px solid var(--cb-border);
 }
 
+.rt-studio-empty {
+  max-width: 420px;
+  color: var(--cb-muted);
+  text-align: center;
+}
+
+.rt-studio-empty h2 {
+  margin: 0 0 8px;
+  color: var(--cb-fg);
+  font-family: var(--cb-font-serif);
+  font-size: clamp(24px, 2.3vw, 34px);
+  font-weight: 400;
+}
+
+.rt-studio-empty p {
+  margin: 0;
+  line-height: 1.7;
+}
+
 .rt-conversation-panel {
   grid-column: 1;
   grid-row: 1;

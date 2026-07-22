@@ -1,5 +1,5 @@
 // 深链承接页：创作端「去试用」跳 /try/c/:capabilityId，进来即为该能力建会话并转入对话页。
-// 建会话失败（未发布且非本人 / 已删除）→ 提示后回市集页。
+// 建会话失败（未发布且非本人 / 已删除）→ 回「我的 Agent」；市集当前不开放。
 import { useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useCreateSession } from '../api/runtime.js';
@@ -9,7 +9,7 @@ export interface CapabilityDeepLinkGuard {
 }
 
 /**
- * 深链副作用的可测收口：同步占 guard 后只 POST 一次；成功 replace 到会话，失败 replace 回市集。
+ * 深链副作用的可测收口：同步占 guard 后只 POST 一次；成功 replace 到会话，失败回 Agent 列表。
  * React StrictMode 重跑 effect 时复用同一 ref，第二次会在发请求前退出。
  */
 export async function runCapabilityDeepLink(input: {
@@ -24,7 +24,7 @@ export async function runCapabilityDeepLink(input: {
     const session = await input.createSession(input.capabilityId);
     input.navigate(`/session/${session.id}`, { replace: true });
   } catch {
-    input.navigate('/market', { replace: true });
+    input.navigate('/capabilities', { replace: true });
   }
 }
 

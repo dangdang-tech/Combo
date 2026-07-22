@@ -9,6 +9,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
 import type { MessageView } from '@cb/shared';
+import type { RuntimeSessionExperience } from '../sessionExperience.js';
 import { ChatThread } from './ChatThread.js';
 
 export interface FloatingChatProps {
@@ -20,6 +21,7 @@ export interface FloatingChatProps {
   error: string | null;
   onSend: (text: string) => void;
   onInterrupt: () => void;
+  experience?: RuntimeSessionExperience;
 }
 
 export function FloatingChat({
@@ -31,6 +33,7 @@ export function FloatingChat({
   error,
   onSend,
   onInterrupt,
+  experience = 'consume',
 }: FloatingChatProps) {
   const [text, setText] = useState('');
   const [queued, setQueued] = useState<string[]>([]);
@@ -84,15 +87,33 @@ export function FloatingChat({
   };
 
   const hasText = Boolean(text.trim());
+  const isFirstStudioPrompt = experience === 'studio' && messages.length === 0 && !hasArtifact;
   const actionLabel =
-    isRunning && !hasText ? '停止当前修改' : isRunning ? '加入修改队列' : '发送修改';
+    isRunning && !hasText
+      ? '停止当前修改'
+      : isRunning
+        ? '加入修改队列'
+        : isFirstStudioPrompt
+          ? '生成第一版 UI'
+          : '发送修改';
+  const runningLabel =
+    experience === 'studio'
+      ? hasArtifact
+        ? '正在应用 UI 修改'
+        : '正在生成第一版 UI'
+      : hasArtifact
+        ? '正在应用修改'
+        : '正在生成页面';
 
   return (
-    <aside className="rt-conversation-panel" aria-label="页面修改">
+    <aside
+      className="rt-conversation-panel"
+      aria-label={experience === 'studio' ? 'UI 设计对话' : '页面修改'}
+    >
       <ChatThread
         messages={messages}
         streamingText={streamingText}
-        runningLabel={isRunning ? (hasArtifact ? '正在应用修改' : '正在生成页面') : undefined}
+        runningLabel={isRunning ? runningLabel : undefined}
       />
 
       {error && (
@@ -124,8 +145,12 @@ export function FloatingChat({
           <textarea
             value={text}
             rows={4}
-            placeholder="想怎么改这个页面？描述期望的结果…"
-            aria-label="描述页面修改"
+            placeholder={
+              isFirstStudioPrompt
+                ? '描述你想要的页面结构、交互和视觉…'
+                : '想怎么改这个页面？描述期望的结果…'
+            }
+            aria-label={isFirstStudioPrompt ? '描述第一版 UI' : '描述页面修改'}
             aria-keyshortcuts="Enter"
             onChange={(event) => setText(event.target.value)}
             onKeyDown={handleInputKeyDown}
