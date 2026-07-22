@@ -25,15 +25,12 @@ export interface DesignAgentPanelProps {
   isRunning: boolean;
   isBootstrapping: boolean;
   readOnlyHistory: boolean;
-  historyVersion?: number;
-  latestVersion?: number;
   annotationAvailable: boolean;
   annotationEnabled: boolean;
   selectedElement: ComboElementSelection | null;
   error: string | null;
   onSend: (text: string, element?: ComboElementSelection) => boolean;
   onInterrupt: () => void;
-  onReturnLatest: () => void;
   onSelectRevision: (revisionNo: number) => void;
   onOpenArtifact: (ref: ArtifactRef) => void;
   onToggleAnnotation: () => void;
@@ -65,15 +62,12 @@ export function DesignAgentPanel({
   isRunning,
   isBootstrapping,
   readOnlyHistory,
-  historyVersion,
-  latestVersion,
   annotationAvailable,
   annotationEnabled,
   selectedElement,
   error,
   onSend,
   onInterrupt,
-  onReturnLatest,
   onSelectRevision,
   onOpenArtifact,
   onToggleAnnotation,
@@ -216,17 +210,7 @@ export function DesignAgentPanel({
       )}
 
       <div className="rt-design-agent__footer">
-        {readOnlyHistory ? (
-          <div className="rt-design-agent__history-notice">
-            <div>
-              <strong>正在预览历史 UI R{historyVersion}</strong>
-              <small>返回 UI R{latestVersion} 后继续修改。</small>
-            </div>
-            <button type="button" onClick={onReturnLatest}>
-              返回当前版
-            </button>
-          </div>
-        ) : isRunning || isBootstrapping ? (
+        {!readOnlyHistory && (isRunning || isBootstrapping) ? (
           <div className="rt-design-agent__running">
             <span aria-hidden="true" />
             <div>

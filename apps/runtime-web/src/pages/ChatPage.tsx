@@ -1382,15 +1382,12 @@ export function ChatPage() {
           isRunning={agui.isRunning}
           isBootstrapping={isBootstrapping}
           readOnlyHistory={isViewingHistory}
-          historyVersion={selectedStudioRevision?.revisionNo}
-          latestVersion={currentRevision?.revisionNo}
           annotationAvailable={annotationAvailable}
           annotationEnabled={inspectionEnabled}
           selectedElement={selectedStudioElement}
           error={studioPanelError}
           onSend={sendStudioMessage}
           onInterrupt={agui.interrupt}
-          onReturnLatest={() => setPreviewVersionNumber(null)}
           onSelectRevision={selectStudioRevision}
           onToggleAnnotation={toggleStudioAnnotation}
           onClearAnnotation={clearStudioAnnotation}

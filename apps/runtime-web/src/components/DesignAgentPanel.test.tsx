@@ -35,7 +35,6 @@ function props(overrides: Partial<DesignAgentPanelProps> = {}): DesignAgentPanel
     error: null,
     onSend: vi.fn(() => true),
     onInterrupt: vi.fn(),
-    onReturnLatest: vi.fn(),
     onSelectRevision: vi.fn(),
     onOpenArtifact: vi.fn(),
     onToggleAnnotation: vi.fn(),
@@ -56,23 +55,17 @@ describe('DesignAgentPanel', () => {
     expect(onSend).toHaveBeenCalledWith('统一色彩、间距和圆角');
   });
 
-  it('keeps a historical page read-only until the user returns to latest', () => {
-    const onReturnLatest = vi.fn();
+  it('keeps a historical page read-only without repeating the global return action', () => {
     render(
       <DesignAgentPanel
         {...props({
           readOnlyHistory: true,
-          historyVersion: 1,
-          latestVersion: 3,
-          onReturnLatest,
         })}
       />,
     );
 
-    expect(screen.getByText('正在预览历史 UI R1')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: '描述页面修改' })).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: '返回当前版' }));
-    expect(onReturnLatest).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: '返回当前版' })).not.toBeInTheDocument();
   });
 
   it('keeps the composer available while the first Miniapp is being prepared', () => {
@@ -251,8 +244,6 @@ describe('DesignAgentPanel', () => {
       <DesignAgentPanel
         {...props({
           readOnlyHistory: true,
-          historyVersion: 1,
-          latestVersion: 3,
           selectedElement: resultElement,
         })}
       />,

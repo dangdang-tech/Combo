@@ -402,50 +402,6 @@
   color: var(--cb-feedback-live-fg);
 }
 
-.rt-design-agent__history-notice {
-  min-height: 54px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 10px;
-  border: 1px solid color-mix(in srgb, var(--cb-warning) 35%, var(--cb-border));
-  border-radius: var(--cb-radius-control);
-  padding: 8px 10px;
-  background: var(--cb-state-warning-bg);
-  color: var(--cb-state-warning-fg);
-}
-
-.rt-design-agent__history-notice div {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.rt-design-agent__history-notice strong {
-  color: var(--cb-fg);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.rt-design-agent__history-notice small {
-  color: var(--cb-muted);
-  font-size: 10px;
-}
-
-.rt-design-agent__history-notice button {
-  flex: 0 0 auto;
-  min-height: 30px;
-  border: 1px solid color-mix(in srgb, var(--cb-warning) 35%, var(--cb-border));
-  border-radius: var(--cb-radius-control);
-  padding: 0 9px;
-  background: var(--cb-bg);
-  color: var(--cb-fg);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-
 .rt-design-agent__running > span {
   width: 8px;
   height: 8px;
