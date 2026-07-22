@@ -1,557 +1,163 @@
-// 伴随对话窗：桌面端默认吸附右侧、不遮住产物；取消吸附后可拖拽、从右下角缩放，
-// 也可最小化/最大化（Alt+M / Alt+Enter），位置尺寸按会话存 localStorage。
-// 窄屏（≤900px）退化为固定布局不启用拖拽。消息渲染复用 ChatThread（落库消息 + 流式打字机）。
+// Stable conversation rail for repeated page edits. The name is kept for import
+// compatibility, but the component is intentionally no longer a floating window:
+// one history, one composer, and one dynamic primary action.
 import {
   useCallback,
   useEffect,
   useRef,
   useState,
-  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
-  type RefObject,
 } from 'react';
 import type { MessageView } from '@cb/shared';
 import { ChatThread } from './ChatThread.js';
-import { RunningTimer } from './RunningTimer.js';
-
-interface ChatRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-interface ViewportOffset {
-  left: number;
-  top: number;
-}
-
-type ChatWindowMode = 'normal' | 'docked' | 'minimized' | 'maximized';
-type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
-
-const STORAGE_PREFIX = 'combo-runtime-floating-chat';
-const MODE_STORAGE_PREFIX = 'combo-runtime-floating-chat-mode';
-const MARGIN = 16;
-const MIN_WIDTH = 320;
-const MIN_HEIGHT = 280;
-const MINIMIZED_HEIGHT = 42;
-const DEFAULT_WIDTH = 420;
-const DEFAULT_HEIGHT = 360;
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
-
-function validStoredRect(value: unknown): value is ChatRect {
-  if (!value || typeof value !== 'object') return false;
-  const rect = value as ChatRect;
-  return [rect.x, rect.y, rect.width, rect.height].every(Number.isFinite);
-}
-
-function readStoredRect(storageKey: string): ChatRect | null {
-  try {
-    const raw = window.localStorage.getItem(storageKey);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as unknown;
-    return validStoredRect(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredRect(storageKey: string, rect: ChatRect): void {
-  try {
-    window.localStorage.setItem(storageKey, JSON.stringify(rect));
-  } catch {
-    /* 隐私模式等场景 localStorage 可能不可用，静默。 */
-  }
-}
-
-function readStoredMode(storageKey: string): 'normal' | 'docked' {
-  try {
-    return window.localStorage.getItem(storageKey) === 'normal' ? 'normal' : 'docked';
-  } catch {
-    return 'docked';
-  }
-}
-
-function writeStoredMode(storageKey: string, mode: 'normal' | 'docked'): void {
-  try {
-    window.localStorage.setItem(storageKey, mode);
-  } catch {
-    /* 隐私模式等场景 localStorage 可能不可用，静默。 */
-  }
-}
-
-function constrainRect(rect: ChatRect, container: HTMLElement): ChatRect {
-  const bounds = container.getBoundingClientRect();
-  const maxWidth = Math.max(260, bounds.width - MARGIN * 2);
-  const maxHeight = Math.max(240, bounds.height - MARGIN * 2);
-  const width = clamp(rect.width, Math.min(MIN_WIDTH, maxWidth), maxWidth);
-  const height = clamp(rect.height, Math.min(MIN_HEIGHT, maxHeight), maxHeight);
-  const maxX = Math.max(MARGIN, bounds.width - width - MARGIN);
-  const maxY = Math.max(MARGIN, bounds.height - height - MARGIN);
-  return { x: clamp(rect.x, MARGIN, maxX), y: clamp(rect.y, MARGIN, maxY), width, height };
-}
-
-function defaultRect(container: HTMLElement): ChatRect {
-  const bounds = container.getBoundingClientRect();
-  const width = Math.min(DEFAULT_WIDTH, Math.max(260, bounds.width - MARGIN * 2));
-  const height = Math.min(DEFAULT_HEIGHT, Math.max(240, bounds.height - MARGIN * 2));
-  return constrainRect(
-    {
-      x: Math.max(MARGIN, bounds.width - width - 32),
-      y: Math.max(MARGIN, bounds.height - height - 20),
-      width,
-      height,
-    },
-    container,
-  );
-}
-
-function viewportOffsetOf(container: HTMLElement): ViewportOffset {
-  const bounds = container.getBoundingClientRect();
-  return { left: bounds.left, top: bounds.top };
-}
-
-function desktopChatEnabled(): boolean {
-  return !window.matchMedia('(max-width: 900px)').matches;
-}
-
-function resizeRect(
-  rect: ChatRect,
-  direction: ResizeDirection,
-  deltaX: number,
-  deltaY: number,
-): ChatRect {
-  let { x, y, width, height } = rect;
-  if (direction.includes('e')) width += deltaX;
-  if (direction.includes('s')) height += deltaY;
-  if (direction.includes('w')) {
-    x += deltaX;
-    width -= deltaX;
-  }
-  if (direction.includes('n')) {
-    y += deltaY;
-    height -= deltaY;
-  }
-  return { x, y, width, height };
-}
-
-function maximizedRect(container: HTMLElement): ChatRect {
-  const bounds = container.getBoundingClientRect();
-  return {
-    x: MARGIN,
-    y: MARGIN,
-    width: Math.max(260, bounds.width - MARGIN * 2),
-    height: Math.max(240, bounds.height - MARGIN * 2),
-  };
-}
-
-function minimizedRect(rect: ChatRect, container: HTMLElement): ChatRect {
-  const bounds = container.getBoundingClientRect();
-  const maxWidth = Math.max(260, bounds.width - MARGIN * 2);
-  const width = clamp(rect.width, Math.min(MIN_WIDTH, maxWidth), maxWidth);
-  const maxX = Math.max(MARGIN, bounds.width - width - MARGIN);
-  const maxY = Math.max(MARGIN, bounds.height - MINIMIZED_HEIGHT - MARGIN);
-  return {
-    x: clamp(rect.x, MARGIN, maxX),
-    y: clamp(rect.y, MARGIN, maxY),
-    width,
-    height: MINIMIZED_HEIGHT,
-  };
-}
-
-function isTypingTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
-}
 
 export interface FloatingChatProps {
-  /** 画布容器（悬浮窗的活动范围与定位基准）。 */
-  containerRef: RefObject<HTMLDivElement>;
   sessionId: string;
-  title: string;
   messages: MessageView[];
-  /** 流式中的助手正文（打字机）；null = 无进行中文本。 */
   streamingText: string | null;
   isRunning: boolean;
-  runStartedAt?: number;
+  hasArtifact: boolean;
   error: string | null;
-  onDockChange?: (docked: boolean) => void;
   onSend: (text: string) => void;
   onInterrupt: () => void;
 }
 
 export function FloatingChat({
-  containerRef,
   sessionId,
-  title,
   messages,
   streamingText,
   isRunning,
-  runStartedAt,
+  hasArtifact,
   error,
-  onDockChange,
   onSend,
   onInterrupt,
 }: FloatingChatProps) {
   const [text, setText] = useState('');
-  const [rect, setRect] = useState<ChatRect | null>(null);
-  const [viewportOffset, setViewportOffset] = useState<ViewportOffset>({ left: 0, top: 0 });
-  const modeStorageKey = `${MODE_STORAGE_PREFIX}:${sessionId}`;
-  const [windowMode, setWindowMode] = useState<ChatWindowMode>(() =>
-    readStoredMode(modeStorageKey),
-  );
-  const restoreRectRef = useRef<ChatRect | null>(null);
-  const dragRef = useRef<{
-    mode: 'move' | 'resize';
-    direction?: ResizeDirection;
-    startX: number;
-    startY: number;
-    startRect: ChatRect;
-    latestRect: ChatRect;
-  } | null>(null);
-  const storageKey = `${STORAGE_PREFIX}:${sessionId}`;
-
-  const dockChat = useCallback((): void => {
-    if (!desktopChatEnabled()) return;
-    if (windowMode === 'normal' && rect) restoreRectRef.current = rect;
-    writeStoredMode(modeStorageKey, 'docked');
-    setRect(null);
-    setWindowMode('docked');
-    onDockChange?.(true);
-  }, [modeStorageKey, onDockChange, rect, windowMode]);
-
-  const undockChat = useCallback((): void => {
-    const container = containerRef.current;
-    if (!container || !desktopChatEnabled()) return;
-    const next = constrainRect(
-      restoreRectRef.current ?? readStoredRect(storageKey) ?? defaultRect(container),
-      container,
-    );
-    writeStoredMode(modeStorageKey, 'normal');
-    writeStoredRect(storageKey, next);
-    setRect(next);
-    setWindowMode('normal');
-    onDockChange?.(false);
-  }, [containerRef, modeStorageKey, onDockChange, storageKey]);
-
-  const syncViewportOffset = useCallback((): void => {
-    const container = containerRef.current;
-    if (!container || !desktopChatEnabled()) return;
-    const next = viewportOffsetOf(container);
-    setViewportOffset((current) =>
-      current.left === next.left && current.top === next.top ? current : next,
-    );
-  }, [containerRef]);
-
-  const restoreChat = useCallback((): void => {
-    const container = containerRef.current;
-    if (!container || !desktopChatEnabled()) return;
-    syncViewportOffset();
-    const next = constrainRect(
-      restoreRectRef.current ?? readStoredRect(storageKey) ?? defaultRect(container),
-      container,
-    );
-    restoreRectRef.current = next;
-    writeStoredRect(storageKey, next);
-    setRect(next);
-    setWindowMode('normal');
-  }, [containerRef, storageKey, syncViewportOffset]);
-
-  const minimizeChat = useCallback((): void => {
-    const container = containerRef.current;
-    if (!container || !desktopChatEnabled()) return;
-    syncViewportOffset();
-    setRect((current) => {
-      const base =
-        windowMode === 'maximized' && restoreRectRef.current
-          ? restoreRectRef.current
-          : (current ?? defaultRect(container));
-      if (windowMode === 'normal') {
-        restoreRectRef.current = constrainRect(base, container);
-      }
-      return minimizedRect(base, container);
-    });
-    setWindowMode('minimized');
-  }, [containerRef, syncViewportOffset, windowMode]);
-
-  const maximizeChat = useCallback((): void => {
-    const container = containerRef.current;
-    if (!container || !desktopChatEnabled()) return;
-    syncViewportOffset();
-    setRect((current) => {
-      const base = current ?? defaultRect(container);
-      if (windowMode === 'normal') {
-        restoreRectRef.current = constrainRect(base, container);
-      }
-      return maximizedRect(container);
-    });
-    setWindowMode('maximized');
-  }, [containerRef, syncViewportOffset, windowMode]);
+  const [queued, setQueued] = useState<string[]>([]);
+  const wasRunningRef = useRef(false);
 
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    syncViewportOffset();
-    const storedMode = readStoredMode(modeStorageKey);
-    const stored = readStoredRect(storageKey);
-    const next = constrainRect(stored ?? defaultRect(container), container);
-    restoreRectRef.current = next;
-    setWindowMode(storedMode);
-    setRect(storedMode === 'docked' ? null : next);
-    onDockChange?.(storedMode === 'docked');
-  }, [containerRef, modeStorageKey, onDockChange, storageKey, syncViewportOffset]);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return undefined;
-    const observer = new ResizeObserver(() => {
-      syncViewportOffset();
-      setRect((current) => {
-        const base = current ?? defaultRect(container);
-        if (windowMode === 'docked') return current;
-        if (windowMode === 'maximized') return maximizedRect(container);
-        if (windowMode === 'minimized') return minimizedRect(base, container);
-        const next = constrainRect(base, container);
-        restoreRectRef.current = next;
-        writeStoredRect(storageKey, next);
-        return next;
-      });
-    });
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, [containerRef, storageKey, syncViewportOffset, windowMode]);
-
-  useEffect(() => {
-    const handleViewportChange = (): void => syncViewportOffset();
-    window.addEventListener('resize', handleViewportChange);
-    window.addEventListener('scroll', handleViewportChange, true);
-    return () => {
-      window.removeEventListener('resize', handleViewportChange);
-      window.removeEventListener('scroll', handleViewportChange, true);
-    };
-  }, [syncViewportOffset]);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent): void => {
-      if (!desktopChatEnabled() || !event.altKey || event.metaKey || event.ctrlKey) {
-        return;
-      }
-      if (isTypingTarget(event.target)) return;
-
-      if (windowMode === 'docked') {
-        if (event.key.toLowerCase() === 'm' || event.key === 'Enter') {
-          event.preventDefault();
-          undockChat();
-        }
-        return;
-      }
-
-      if (event.key.toLowerCase() === 'm') {
-        event.preventDefault();
-        if (windowMode === 'minimized') restoreChat();
-        else minimizeChat();
-      } else if (event.key === 'Enter') {
-        event.preventDefault();
-        if (windowMode === 'maximized') restoreChat();
-        else maximizeChat();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [maximizeChat, minimizeChat, restoreChat, undockChat, windowMode]);
-
-  const startDrag = (
-    mode: 'move' | 'resize',
-    event: ReactPointerEvent<HTMLElement>,
-    direction?: ResizeDirection,
-  ): void => {
-    if (event.button !== 0 || !desktopChatEnabled()) return;
-    if (mode === 'move' && (event.target as HTMLElement).closest('button')) return;
-    if (mode === 'resize' && windowMode !== 'normal') return;
-    if (mode === 'move' && (windowMode === 'maximized' || windowMode === 'docked')) return;
-    const container = containerRef.current;
-    if (!container) return;
-    syncViewportOffset();
-    const startRect = rect ?? defaultRect(container);
-    dragRef.current = {
-      mode,
-      direction,
-      startX: event.clientX,
-      startY: event.clientY,
-      startRect,
-      latestRect: startRect,
-    };
-    event.preventDefault();
-
-    const handleMove = (pointerEvent: PointerEvent): void => {
-      const drag = dragRef.current;
-      const activeContainer = containerRef.current;
-      if (!drag || !activeContainer) return;
-      const deltaX = pointerEvent.clientX - drag.startX;
-      const deltaY = pointerEvent.clientY - drag.startY;
-      const next =
-        drag.mode === 'move'
-          ? { ...drag.startRect, x: drag.startRect.x + deltaX, y: drag.startRect.y + deltaY }
-          : resizeRect(drag.startRect, drag.direction ?? 'se', deltaX, deltaY);
-      const constrained =
-        windowMode === 'minimized'
-          ? minimizedRect(next, activeContainer)
-          : constrainRect(next, activeContainer);
-      drag.latestRect = constrained;
-      setRect(constrained);
-    };
-
-    const stopDrag = (): void => {
-      const latest = dragRef.current?.latestRect;
-      if (latest && windowMode === 'normal') {
-        restoreRectRef.current = latest;
-        writeStoredRect(storageKey, latest);
-      } else if (latest && windowMode === 'minimized' && restoreRectRef.current) {
-        restoreRectRef.current = { ...restoreRectRef.current, x: latest.x, y: latest.y };
-      }
-      dragRef.current = null;
-      window.removeEventListener('pointermove', handleMove);
-      window.removeEventListener('pointerup', stopDrag);
-      window.removeEventListener('pointercancel', stopDrag);
-    };
-
-    window.addEventListener('pointermove', handleMove);
-    window.addEventListener('pointerup', stopDrag, { once: true });
-    window.addEventListener('pointercancel', stopDrag, { once: true });
-  };
-
-  const submit = () => {
-    const trimmed = text.trim();
-    if (!trimmed || isRunning) return;
-    onSend(trimmed);
     setText('');
+    setQueued([]);
+    wasRunningRef.current = false;
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (isRunning) {
+      wasRunningRef.current = true;
+      return;
+    }
+    if (error) {
+      wasRunningRef.current = false;
+      return;
+    }
+    if (!wasRunningRef.current || queued.length === 0) return;
+    wasRunningRef.current = false;
+    const [next, ...rest] = queued;
+    if (!next) return;
+    setQueued(rest);
+    onSend(next);
+  }, [error, isRunning, onSend, queued]);
+
+  const submit = useCallback((): void => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    if (isRunning) setQueued((current) => [...current, trimmed]);
+    else onSend(trimmed);
+    setText('');
+  }, [isRunning, onSend, text]);
+
+  const sendNextQueued = (): void => {
+    if (isRunning) return;
+    const [next, ...rest] = queued;
+    if (!next) return;
+    setQueued(rest);
+    onSend(next);
   };
-  const handleInputKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+
+  const handleInputKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>): void => {
     if (event.nativeEvent.isComposing || event.key !== 'Enter' || event.shiftKey || event.altKey) {
       return;
     }
     event.preventDefault();
     submit();
   };
-  const chatStyle =
-    rect && windowMode !== 'docked'
-      ? ({
-          '--rt-chat-x': `${viewportOffset.left + rect.x}px`,
-          '--rt-chat-y': `${viewportOffset.top + rect.y}px`,
-          '--rt-chat-w': `${rect.width}px`,
-          '--rt-chat-h': `${rect.height}px`,
-        } as CSSProperties)
-      : undefined;
+
+  const hasText = Boolean(text.trim());
+  const actionLabel =
+    isRunning && !hasText ? '停止当前修改' : isRunning ? '加入修改队列' : '发送修改';
 
   return (
-    <section
-      className={`rt-floating-chat${rect && windowMode !== 'docked' ? ' is-positioned' : ''}${isRunning ? ' is-running' : ''} is-${windowMode}`}
-      style={chatStyle}
-      aria-label="微调对话"
-    >
-      <header
-        className="rt-floating-chat__head"
-        onPointerDown={(event) => startDrag('move', event)}
-      >
-        <span className="rt-floating-chat__title" title={title}>
-          {title}
-        </span>
-        <div className="rt-floating-chat__window-controls">
-          <RunningTimer
-            active={isRunning}
-            startedAt={runStartedAt}
-            className="rt-floating-chat__running"
-          />
-          <button
-            type="button"
-            className="rt-floating-chat__window-btn rt-floating-chat__dock-btn"
-            aria-label={windowMode === 'docked' ? '取消吸附对话框' : '吸附对话框到右侧'}
-            title={windowMode === 'docked' ? '取消吸附' : '吸附到右侧'}
-            onClick={windowMode === 'docked' ? undockChat : dockChat}
-          >
-            <span aria-hidden="true">{windowMode === 'docked' ? '↗' : '▥'}</span>
-          </button>
-          {windowMode !== 'docked' && (
-            <>
-              <button
-                type="button"
-                className="rt-floating-chat__window-btn"
-                aria-label={windowMode === 'minimized' ? '还原对话框' : '最小化对话框'}
-                title={windowMode === 'minimized' ? '还原对话框 (Alt+M)' : '最小化对话框 (Alt+M)'}
-                onClick={windowMode === 'minimized' ? restoreChat : minimizeChat}
-              >
-                <span
-                  className={`rt-floating-chat__window-icon rt-floating-chat__window-icon--${
-                    windowMode === 'minimized' ? 'restore' : 'minimize'
-                  }`}
-                  aria-hidden="true"
-                />
-              </button>
-              <button
-                type="button"
-                className="rt-floating-chat__window-btn"
-                aria-label={windowMode === 'maximized' ? '还原对话框' : '最大化对话框'}
-                title={
-                  windowMode === 'maximized' ? '还原对话框 (Alt+Enter)' : '最大化对话框 (Alt+Enter)'
-                }
-                onClick={windowMode === 'maximized' ? restoreChat : maximizeChat}
-              >
-                <span
-                  className={`rt-floating-chat__window-icon rt-floating-chat__window-icon--${
-                    windowMode === 'maximized' ? 'restore' : 'maximize'
-                  }`}
-                  aria-hidden="true"
-                />
-              </button>
-            </>
-          )}
-          {isRunning && (
-            <button type="button" className="rt-icon-btn" onClick={onInterrupt}>
-              打断
-            </button>
-          )}
+    <aside className="rt-conversation-panel" aria-label="页面修改">
+      <ChatThread
+        messages={messages}
+        streamingText={streamingText}
+        runningLabel={isRunning ? (hasArtifact ? '正在应用修改' : '正在生成页面') : undefined}
+      />
+
+      {error && (
+        <div className="rt-conversation-panel__error" role="alert">
+          {error}
         </div>
-      </header>
-      {windowMode !== 'minimized' && (
-        <>
-          <ChatThread messages={messages} streamingText={streamingText} />
-          {error && <div className="rt-error rt-error--inline">{error}</div>}
-          <div className="rt-floating-chat__input">
-            <textarea
-              value={text}
-              disabled={isRunning}
-              rows={1}
-              placeholder="继续调整这个产物…"
-              aria-keyshortcuts="Enter"
-              onChange={(event) => setText(event.target.value)}
-              onKeyDown={handleInputKeyDown}
-            />
-            <button
-              type="button"
-              className="rt-chat-send"
-              aria-label="发送"
-              title="发送 (Enter)"
-              disabled={isRunning || !text.trim()}
-              onClick={submit}
-            >
-              ↑
-            </button>
+      )}
+
+      <div className="rt-conversation-panel__footer">
+        <div className="rt-conversation-composer" role="group" aria-label="页面修改输入">
+          {queued.length > 0 && (
+            <details className="rt-conversation-queue">
+              <summary>
+                <span>{queued.length} 条修改待执行</span>
+                <small>按发送顺序应用</small>
+              </summary>
+              <ol>
+                {queued.map((item, index) => (
+                  <li key={item + '-' + index}>{item}</li>
+                ))}
+              </ol>
+              {!isRunning && (
+                <button type="button" onClick={sendNextQueued}>
+                  继续执行
+                </button>
+              )}
+            </details>
+          )}
+          <textarea
+            value={text}
+            rows={4}
+            placeholder="想怎么改这个页面？描述期望的结果…"
+            aria-label="描述页面修改"
+            aria-keyshortcuts="Enter"
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={handleInputKeyDown}
+          />
+          <div className="rt-conversation-composer__actions">
+            <small>{isRunning ? '发送后接着修改' : 'Enter 发送 · Shift + Enter 换行'}</small>
+            <div className="rt-conversation-composer__buttons">
+              {isRunning && hasText && (
+                <button
+                  type="button"
+                  className="rt-conversation-stop"
+                  aria-label="停止当前修改"
+                  title="停止当前修改"
+                  onClick={onInterrupt}
+                >
+                  <span aria-hidden="true">■</span>
+                </button>
+              )}
+              <button
+                type="button"
+                className={'rt-conversation-send' + (isRunning && !hasText ? ' is-stop' : '')}
+                aria-label={actionLabel}
+                title={actionLabel}
+                disabled={!isRunning && !hasText}
+                onClick={isRunning && !hasText ? onInterrupt : submit}
+              >
+                <span aria-hidden="true">{isRunning && !hasText ? '■' : '↑'}</span>
+              </button>
+            </div>
           </div>
-        </>
-      )}
-      {windowMode === 'normal' && (
-        <button
-          type="button"
-          className="rt-floating-chat__resize rt-floating-chat__resize--se"
-          aria-label="从右下角调整对话框大小"
-          onPointerDown={(event) => startDrag('resize', event, 'se')}
-        />
-      )}
-    </section>
+        </div>
+      </div>
+    </aside>
   );
 }

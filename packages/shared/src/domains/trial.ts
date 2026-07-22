@@ -43,6 +43,8 @@ export type SessionView = z.infer<typeof SessionViewSchema>;
 export const MessageViewSchema = z.object({
   id: IdSchema,
   seq: z.number().int(),
+  /** 同一轮 user / assistant / tool 消息的稳定归组标识；历史消息可能没有。 */
+  turnId: IdSchema.optional(),
   role: MessageRoleSchema,
   /** pi 原生分块内容（文本/工具调用/工具结果块数组），严格校验在 runtime 侧。 */
   content: z.array(z.unknown()),

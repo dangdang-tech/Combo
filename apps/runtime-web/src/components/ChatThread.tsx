@@ -1,61 +1,165 @@
-// 聊天流：按 seq 渲染落库消息（MessageView，content 为 pi 原生块数组——
-// 文本块渲染 markdown，其余块类型显示占位），末尾追加流式打字机文本。
-import { useEffect, useMemo, useRef } from 'react';
+// Codex-style conversation thread: messages are grouped by the real runtime turn id.
+// The final assistant message is the conclusion; real tool/thinking blocks remain
+// available in a compact disclosure instead of competing with the result.
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MessageView } from '@cb/shared';
 import { renderMarkdown } from '../lib/markdown.js';
 
-const BLOCK_PLACEHOLDER: Record<string, string> = {
-  toolCall: '正在使用工具…',
-  toolResult: '工具结果',
-  thinking: '思考过程',
-  image: '图片',
-};
-
-interface ContentParts {
-  text: string;
-  placeholders: string[];
+export interface ThreadActivity {
+  label: string;
+  detail?: string;
+  failed?: boolean;
+  /** Stable key lets one tool call collapse into one final outcome. */
+  key?: string;
 }
 
-/** pi 原生块数组 → 可渲染文本 + 非文本块占位标签。 */
+export interface ContentParts {
+  text: string;
+  activities: ThreadActivity[];
+}
+
+function humanizeToolName(name: string): string {
+  if (name === 'upsert_artifact') return '更新页面';
+  return name.replace(/[_-]+/g, ' ').trim() || '调用工具';
+}
+
+/** pi native blocks -> user-facing text + truthful, compact activity metadata. */
 export function splitContentBlocks(content: unknown[]): ContentParts {
   const texts: string[] = [];
-  const placeholders: string[] = [];
+  const activities: ThreadActivity[] = [];
   for (const raw of content) {
     if (!raw || typeof raw !== 'object') continue;
-    const block = raw as { type?: unknown; text?: unknown };
+    const block = raw as {
+      type?: unknown;
+      text?: unknown;
+      name?: unknown;
+      toolName?: unknown;
+      id?: unknown;
+      toolCallId?: unknown;
+      isError?: unknown;
+    };
     if (block.type === 'text' && typeof block.text === 'string') {
       texts.push(block.text);
       continue;
     }
-    if (typeof block.type === 'string') {
-      placeholders.push(BLOCK_PLACEHOLDER[block.type] ?? `${block.type} 内容`);
+    if (block.type === 'toolCall') {
+      const label = typeof block.name === 'string' ? humanizeToolName(block.name) : '调用工具';
+      activities.push({
+        label,
+        key: 'tool:' + (typeof block.id === 'string' ? block.id : label),
+      });
+      continue;
+    }
+    if (block.type === 'toolResult') {
+      const label =
+        typeof block.toolName === 'string' ? humanizeToolName(block.toolName) : '工具执行';
+      const failed = block.isError === true;
+      activities.push({
+        label: label + (failed ? '失败' : '已完成'),
+        failed,
+        key: 'tool:' + (typeof block.toolCallId === 'string' ? block.toolCallId : label),
+      });
+      continue;
+    }
+    if (block.type === 'thinking') {
+      // Do not expose private reasoning; show only the truthful fact that analysis happened.
+      activities.push({ label: '分析页面与任务' });
+      continue;
+    }
+    if (block.type === 'image') activities.push({ label: '读取图片' });
+  }
+  return { text: texts.join('\n\n'), activities };
+}
+
+/** A call and its result are one user-visible action; the terminal result wins. */
+export function compactActivities(activities: ThreadActivity[]): ThreadActivity[] {
+  const compacted: ThreadActivity[] = [];
+  const indexByKey = new Map<string, number>();
+  for (const activity of activities) {
+    if (!activity.key) {
+      compacted.push(activity);
+      continue;
+    }
+    const existingIndex = indexByKey.get(activity.key);
+    if (existingIndex === undefined) {
+      indexByKey.set(activity.key, compacted.length);
+      compacted.push(activity);
+      continue;
+    }
+    // A tool result carries the truthful terminal status and replaces the call placeholder.
+    if (activity.failed || /(?:已完成|失败)$/.test(activity.label)) {
+      compacted[existingIndex] = activity;
     }
   }
-  return { text: texts.join('\n\n'), placeholders };
+  return compacted;
+}
+
+interface MessageTurn {
+  key: string;
+  messages: MessageView[];
+}
+
+/** Legacy messages have no turnId and deliberately remain one-message turns. */
+export function groupMessagesByTurn(messages: MessageView[]): MessageTurn[] {
+  const turns: MessageTurn[] = [];
+  const byId = new Map<string, MessageTurn>();
+  for (const message of [...messages].sort((a, b) => a.seq - b.seq)) {
+    const key = message.turnId ?? 'message:' + message.id;
+    let turn = byId.get(key);
+    if (!turn) {
+      turn = { key, messages: [] };
+      byId.set(key, turn);
+      turns.push(turn);
+    }
+    turn.messages.push(message);
+  }
+  return turns;
 }
 
 export interface ChatThreadProps {
   messages: MessageView[];
-  /** 流式中的助手正文（未落库前的实时打字机）；null = 无进行中文本。 */
+  /** Live assistant text before the turn is persisted. */
   streamingText: string | null;
+  /** Honest activity label used only while no streaming text is available yet. */
+  runningLabel?: string;
 }
 
-export function ChatThread({ messages, streamingText }: ChatThreadProps) {
+export function ChatThread({ messages, streamingText, runningLabel }: ChatThreadProps) {
   const endRef = useRef<HTMLDivElement>(null);
-  const ordered = useMemo(() => [...messages].sort((a, b) => a.seq - b.seq), [messages]);
+  const stickToLatestRef = useRef(true);
+  const turns = useMemo(() => groupMessagesByTurn(messages), [messages]);
+
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [ordered, streamingText]);
+    if (!stickToLatestRef.current) return;
+    window.requestAnimationFrame(() =>
+      endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }),
+    );
+  }, [messages.at(-1)?.id, runningLabel, streamingText]);
 
   return (
-    <div className="rt-thread">
-      {ordered.map((m) => (
-        <MessageBubble key={m.id} message={m} />
+    <div
+      className="rt-thread"
+      role="log"
+      aria-label="对话记录"
+      onScroll={(event) => {
+        const target = event.currentTarget;
+        stickToLatestRef.current =
+          target.scrollHeight - target.scrollTop - target.clientHeight < 72;
+      }}
+    >
+      {turns.map((turn) => (
+        <TurnBlock key={turn.key} turn={turn} />
       ))}
       {streamingText !== null && (
-        <div className="rt-msg rt-msg--assistant">
-          <div className="rt-msg__role">能力</div>
+        <div className="rt-msg rt-msg--assistant rt-msg--streaming">
+          <div className="rt-msg__role">Combo</div>
           <AssistantBody text={streamingText} streaming />
+        </div>
+      )}
+      {runningLabel && streamingText === null && (
+        <div className="rt-msg rt-msg--activity" role="status" aria-live="polite">
+          <span className="rt-msg__activity-dot" aria-hidden="true" />
+          <span>{runningLabel}</span>
         </div>
       )}
       <div ref={endRef} />
@@ -63,36 +167,83 @@ export function ChatThread({ messages, streamingText }: ChatThreadProps) {
   );
 }
 
-function MessageBubble({ message }: { message: MessageView }) {
-  const parts = splitContentBlocks(message.content);
+function TurnBlock({ turn }: { turn: MessageTurn }) {
+  const users = turn.messages.filter((message) => message.role === 'user');
+  const assistants = turn.messages.filter((message) => message.role === 'assistant');
+  const finalAssistant = assistants.at(-1);
+  const finalParts = finalAssistant ? splitContentBlocks(finalAssistant.content) : null;
+  const activities: ThreadActivity[] = [];
 
-  if (message.role === 'user') {
-    return (
-      <div className="rt-msg rt-msg--user">
-        <div className="rt-msg__bubble">{parts.text}</div>
-      </div>
-    );
+  for (const message of turn.messages) {
+    if (message === finalAssistant || message.role === 'user') continue;
+    const parts = splitContentBlocks(message.content);
+    activities.push(...parts.activities);
+    if (message.role === 'assistant' && parts.text) {
+      activities.push({ label: '中间说明', detail: parts.text });
+    }
   }
-
-  // tool 角色（工具结果整条消息）：一行淡占位，不进正文流。
-  if (message.role === 'tool') {
-    return <div className="rt-msg rt-msg--assistant rt-msg__placeholder">⚙ 工具结果</div>;
-  }
+  if (finalParts) activities.push(...finalParts.activities);
+  const compactedActivities = compactActivities(activities);
 
   return (
-    <div className="rt-msg rt-msg--assistant">
-      <div className="rt-msg__role">能力</div>
-      {message.status === 'failed' && !parts.text ? (
-        <div className="rt-msg__body rt-error rt-error--inline">这轮回复失败了。</div>
-      ) : (
-        <AssistantBody text={parts.text} failed={message.status === 'failed'} />
-      )}
-      {parts.placeholders.map((label, i) => (
-        <div key={i} className="rt-msg__placeholder">
-          ⚙ {label}
+    <section className="rt-thread__turn" data-turn-id={turn.key}>
+      {users.map((message) => {
+        const parts = splitContentBlocks(message.content);
+        return (
+          <div key={message.id} className="rt-msg rt-msg--user">
+            <div className="rt-msg__bubble">{parts.text}</div>
+          </div>
+        );
+      })}
+      {finalAssistant && finalParts && (
+        <div className="rt-msg rt-msg--assistant">
+          <div className="rt-msg__role">Combo</div>
+          {finalAssistant.status === 'failed' && !finalParts.text ? (
+            <div className="rt-msg__body rt-error rt-error--inline">这轮处理没有完成。</div>
+          ) : (
+            <AssistantBody text={finalParts.text} failed={finalAssistant.status === 'failed'} />
+          )}
+          {compactedActivities.length > 0 && (
+            <ActivityDisclosure activities={compactedActivities} />
+          )}
         </div>
-      ))}
-    </div>
+      )}
+      {!finalAssistant && compactedActivities.length > 0 && (
+        <ActivityDisclosure activities={compactedActivities} />
+      )}
+    </section>
+  );
+}
+
+function ActivityDisclosure({ activities }: { activities: ThreadActivity[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <details
+      className="rt-msg__activity-details"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
+      <summary>
+        <span aria-hidden="true">{open ? '⌄' : '›'}</span>
+        {open ? '收起执行详情' : '展开执行详情 · ' + activities.length}
+      </summary>
+      <ol>
+        {activities.map((activity, index) => (
+          <li
+            key={(activity.key ?? activity.label) + '-' + index}
+            data-failed={activity.failed ? 'true' : 'false'}
+          >
+            <span className="rt-msg__activity-icon" aria-hidden="true">
+              {activity.failed ? '!' : '✓'}
+            </span>
+            <div>
+              <strong>{activity.label}</strong>
+              {activity.detail && <p>{activity.detail}</p>}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </details>
   );
 }
 
@@ -107,14 +258,14 @@ function AssistantBody({
 }) {
   const html = useMemo(() => (text ? renderMarkdown(text) : ''), [text]);
   return (
-    <div className={`rt-msg__body rt-md${failed ? ' rt-msg__body--failed' : ''}`}>
+    <div className={'rt-msg__body rt-md' + (failed ? ' rt-msg__body--failed' : '')}>
       {text ? (
         <div dangerouslySetInnerHTML={{ __html: html }} />
       ) : streaming ? (
-        <span className="rt-typing">
-          <span></span>
-          <span></span>
-          <span></span>
+        <span className="rt-typing" aria-label="正在回复">
+          <span />
+          <span />
+          <span />
         </span>
       ) : null}
       {streaming && text && <span className="rt-caret" />}

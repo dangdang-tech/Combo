@@ -149,12 +149,14 @@ describe('试用域 DTO', () => {
     const ok = MessageViewSchema.safeParse({
       id: 'm1',
       seq: 1,
+      turnId: '11111111-1111-4111-8111-111111111111',
       role: 'assistant',
       content: [{ type: 'text', text: 'hi' }],
       status: 'completed',
       createdAt: '2026-07-04T10:00:00+08:00',
     });
     expect(ok.success).toBe(true);
+    expect(ok.success && ok.data.turnId).toBe('11111111-1111-4111-8111-111111111111');
     expect(
       MessageViewSchema.safeParse({
         id: 'm1',
