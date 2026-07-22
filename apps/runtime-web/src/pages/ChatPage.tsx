@@ -1,7 +1,7 @@
-// 会话页（GUI 形态）：产物画布是主界面，聊天是悬浮伴随窗——
+// 会话页（GUI 形态）：产物画布是主界面，聊天是稳定的修改工作区——
 //   - 首次进入（还没有消息）画布上盖开场表单（TrialIntakeForm，按能力定义的字段渲染）；
-//   - 第一轮生成中且还没有任何产出时显示生成进度卡；
-//   - 有产物后画布渲染产物（多产物顶部 chips 切换），FloatingChat 负责继续微调；
+//   - 第一轮生成中且还没有任何产物时显示诚实的页面骨架；
+//   - 有产物后画布渲染产物（多产物顶部 chips 切换），左侧对话负责反复微调；
 //   - 恢复：GET /runtime/sessions/:id（详情真源）；实时：/stream SSE（useSessionStream）。
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
@@ -10,8 +10,8 @@ import { useArtifactContent, useSession } from '../api/runtime.js';
 import { useSessionStream } from '../api/useSessionStream.js';
 import { ArtifactRenderer } from '../components/ArtifactRenderer.js';
 import { FloatingChat } from '../components/FloatingChat.js';
+import { GeneratingPageSkeleton } from '../components/GeneratingPageSkeleton.js';
 import { QueryErrorNotice } from '../components/QueryErrorNotice.js';
-import { RunningTimer } from '../components/RunningTimer.js';
 import { SessionSidebar } from '../components/SessionSidebar.js';
 import { TrialIntakeForm } from '../components/TrialIntakeForm.js';
 import { downloadArtifact } from '../components/artifactDownload.js';
@@ -22,14 +22,25 @@ import {
 } from '../navigation/runtimeReturn.js';
 import { useDocumentTitle } from '../shell/useDocumentTitle.js';
 
+export type TrialCanvasState = 'intake' | 'running' | 'output';
+
+/** Pure state contract: streamed prose never counts as a rendered artifact. */
+export function resolveTrialCanvasState(input: {
+  messageCount: number;
+  running: boolean;
+  hasArtifact: boolean;
+}): TrialCanvasState {
+  if (input.running && !input.hasArtifact) return 'running';
+  if (input.messageCount === 0 && !input.hasArtifact) return 'intake';
+  return 'output';
+}
+
 export function ChatPage() {
   const { sessionId } = useParams();
   const [searchParams] = useSearchParams();
   const sessionQ = useSession(sessionId);
   const detail = sessionQ.data;
   const stream = useSessionStream(sessionId, detail?.artifacts);
-  const canvasRef = useRef<HTMLDivElement>(null);
-  const [chatDocked, setChatDocked] = useState(true);
   const [mobileSessionsOpen, setMobileSessionsOpen] = useState(false);
   const runStartedAtRef = useRef<number | null>(null);
   const [lastSidebarCapability, setLastSidebarCapability] = useState<{
@@ -55,14 +66,15 @@ export function ChatPage() {
     : (stream.artifactList.at(-1) ?? null);
 
   // 画布状态机：intake（还没开始）→ running（第一轮生成、尚无任何产出）→ output。
-  const hasStarted = messages.length > 0 || stream.running;
-  const hasAssistantOutput =
-    messages.some((m) => m.role === 'assistant') ||
-    stream.streamingText !== null ||
-    activeArtifact !== null;
-  const showIntake = !hasStarted;
-  const showGenerating = stream.running && !hasAssistantOutput;
-  const canvasState = showIntake ? 'intake' : showGenerating ? 'running' : 'output';
+  // 流式解释不是产物：第一段文字到达后也要继续保留页面骨架，直到真正产物出现。
+  const canvasState = resolveTrialCanvasState({
+    messageCount: messages.length,
+    running: stream.running,
+    hasArtifact: activeArtifact !== null,
+  });
+  const hasStarted = canvasState !== 'intake';
+  const showIntake = canvasState === 'intake';
+  const showGenerating = canvasState === 'running';
   if (stream.running && runStartedAtRef.current === null) runStartedAtRef.current = Date.now();
   if (!stream.running && runStartedAtRef.current !== null) runStartedAtRef.current = null;
   const runStartedAt = runStartedAtRef.current ?? undefined;
@@ -138,13 +150,21 @@ export function ChatPage() {
               </div>
             </header>
 
-            <main className="rt-genui">
-              <div
-                ref={canvasRef}
-                className="rt-genui__canvas"
-                data-state={canvasState}
-                data-chat-docked={chatDocked ? 'true' : 'false'}
-              >
+            <main className={`rt-genui${hasStarted ? ' rt-genui--conversation' : ''}`}>
+              {hasStarted && sessionId && (
+                <FloatingChat
+                  key={sessionId}
+                  sessionId={sessionId}
+                  messages={messages}
+                  streamingText={stream.streamingText}
+                  isRunning={stream.running}
+                  hasArtifact={activeArtifact !== null}
+                  error={stream.errorMessage}
+                  onSend={stream.send}
+                  onInterrupt={stream.interrupt}
+                />
+              )}
+              <div className="rt-genui__canvas" data-state={canvasState}>
                 {/* 首轮失败时 FloatingChat 尚未挂载（hasStarted=false），错误必须在画布可见，
                     否则用户只看到生成卡一闪回表单、零解释（A7）。 */}
                 {stream.errorMessage && !hasStarted && (
@@ -183,23 +203,8 @@ export function ChatPage() {
                 )}
                 {showGenerating && (
                   <div className="rt-genui__overlay rt-genui__overlay--plain">
-                    <GeneratingCard name={capability.name} startedAt={runStartedAt} />
+                    <GeneratingPageSkeleton startedAt={runStartedAt} />
                   </div>
-                )}
-                {hasStarted && !showGenerating && sessionId && (
-                  <FloatingChat
-                    containerRef={canvasRef}
-                    sessionId={sessionId}
-                    title={activeArtifact?.title ?? detail.session.title ?? capability.name}
-                    messages={messages}
-                    streamingText={stream.streamingText}
-                    isRunning={stream.running}
-                    runStartedAt={runStartedAt}
-                    error={stream.errorMessage}
-                    onDockChange={setChatDocked}
-                    onSend={stream.send}
-                    onInterrupt={stream.interrupt}
-                  />
                 )}
               </div>
             </main>
@@ -273,43 +278,5 @@ function ArtifactStage({ artifact }: { artifact: ArtifactView }) {
         <ArtifactRenderer kind={artifact.kind} title={title} content={content.data} />
       )}
     </div>
-  );
-}
-
-/** 第一轮生成进度卡（装饰性固定步骤，真实进展看画布上出现的产物与聊天流）。 */
-function GeneratingCard({ name, startedAt }: { name: string; startedAt?: number }) {
-  const steps = [
-    { key: 'load', label: `读取「${name}」的能力定义`, status: 'completed' },
-    { key: 'draft', label: '生成第一版产物', status: 'running' },
-    { key: 'compose', label: '整理产物结构', status: 'pending' },
-  ];
-  return (
-    <section className="rt-generating-card" aria-label="正在生成">
-      <div className="rt-generating-card__head">
-        <h2>正在生成 · {name}…</h2>
-        <RunningTimer active startedAt={startedAt} className="rt-running-timer" />
-      </div>
-      <p>第一版产物正在路上，完成后会直接出现在这块画布上。</p>
-      <div className="rt-generating-card__steps">
-        {steps.map((row) => (
-          <div key={row.key} className="rt-generating-card__step" data-status={row.status}>
-            <span className="rt-generating-card__dot" />
-            <span>{row.label}</span>
-          </div>
-        ))}
-      </div>
-      <div className="rt-generating-card__skeletons" aria-hidden="true">
-        <div className="rt-skeleton-card">
-          <span />
-          <i />
-          <b />
-        </div>
-        <div className="rt-skeleton-card">
-          <span />
-          <i />
-          <b />
-        </div>
-      </div>
-    </section>
   );
 }

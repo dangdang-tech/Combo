@@ -12,8 +12,8 @@ import {
 } from '../modules/session/handlers.js';
 import { CAPABILITY_BUCKET } from '../modules/capability/loader.js';
 import { artifactContentHandler } from '../modules/artifact/handlers.js';
-import { createSession } from '../modules/session/repo.js';
-import { createTurn } from '../modules/agent/turn-repo.js';
+import { appendTurnMessage, createSession } from '../modules/session/repo.js';
+import { createTurn, finishTurnCas } from '../modules/agent/turn-repo.js';
 import { createTurnRunner } from '../modules/agent/run-turn.js';
 import { createSessionEventBus } from '../platform/infra/event-bus.js';
 import { createInterruptBus } from '../platform/infra/redis-interrupt-bus.js';
@@ -147,6 +147,31 @@ describe('session 端点 owner 守卫', () => {
     expect(body.error && 'code' in body.error).toBe(false);
   });
 
+  it('GET /runtime/sessions/:id：透出消息 turnId 供前端按轮展示', async () => {
+    const db = new FakeDb();
+    const sessionId = await seedOwnedSession(db, ME);
+    const turnId = '11111111-1111-4111-8111-111111111111';
+    await createTurn(db, { id: turnId, sessionId });
+    await appendTurnMessage(db, {
+      sessionId,
+      turnId,
+      idx: 0,
+      role: 'user',
+      content: [{ type: 'text', text: '收紧页面间距' }],
+    });
+    await finishTurnCas(db, { id: turnId, status: 'completed' });
+
+    const reply = await call(
+      getSessionDetailHandler(),
+      makeReq({ db, userId: ME, params: { id: sessionId } }),
+    );
+
+    expect(reply.statusCode).toBe(200);
+    expect(
+      (reply.body as { data: { messages: Array<{ turnId?: string }> } }).data.messages[0],
+    ).toMatchObject({ turnId });
+  });
+
   it('POST /runtime/sessions/:id/messages：非本人 404，且不落 user 消息', async () => {
     const db = new FakeDb();
     const sessionId = await seedOwnedSession(db, ME);
@@ -156,6 +181,42 @@ describe('session 端点 owner 守卫', () => {
     );
     expect(reply.statusCode).toBe(404);
     expect(db.messages).toHaveLength(0);
+  });
+
+  it('POST /runtime/sessions/:id/messages：202 user 消息同步透出 turnId', async () => {
+    const db = new FakeDb();
+    const store = new FakeObjectStore();
+    const cap = db.seedCapability({ owner_user_id: ME });
+    store.seedText(
+      CAPABILITY_BUCKET,
+      cap.storage_key,
+      JSON.stringify({
+        version: 1,
+        name: cap.name,
+        summary: cap.summary,
+        kind: cap.kind,
+        instructions: '执行任务',
+        inputs: [],
+        starterPrompts: [],
+      }),
+    );
+    const session = await createSession(db, { capabilityId: cap.id, ownerUserId: ME });
+
+    const reply = await call(
+      sendMessageHandler(),
+      makeReq({
+        db,
+        objectStore: store,
+        userId: ME,
+        params: { id: session.id },
+        body: { text: '收紧页面间距' },
+      }),
+    );
+
+    expect(reply.statusCode).toBe(202);
+    expect(
+      (reply.body as { data: { message: { turnId?: string } } }).data.message.turnId,
+    ).toBeTruthy();
   });
 
   it('POST /runtime/sessions/:id/interrupt：非本人 404', async () => {

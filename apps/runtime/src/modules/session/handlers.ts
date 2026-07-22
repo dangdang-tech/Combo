@@ -219,6 +219,7 @@ export function getSessionDetailHandler(): RouteHandlerMethod {
         messages: messages.map((m) => ({
           id: m.id,
           seq: m.seq,
+          ...(m.turnId ? { turnId: m.turnId } : {}),
           role: m.role,
           content: m.content,
           status: m.status,
@@ -277,6 +278,7 @@ export function sendMessageHandler(): RouteHandlerMethod {
     const message: MessageView = {
       id: result.userMessage.id,
       seq: result.userMessage.seq,
+      ...(result.userMessage.turnId ? { turnId: result.userMessage.turnId } : {}),
       role: result.userMessage.role,
       content: result.userMessage.content,
       status: result.userMessage.status,
