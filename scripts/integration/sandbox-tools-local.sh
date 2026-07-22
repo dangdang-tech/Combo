@@ -401,9 +401,13 @@ await assertDetachedGone(disconnectedMatch[1], disconnectedMatch[2], 'HTTP disco
 
 const logMarker = 'workspace-secret-exfiltration-marker';
 const loopback = await command(
-  `exec 3<>/dev/tcp/127.0.0.1/8080; printf 'POST /v1/files/read HTTP/1.1\\r\\nHost: localhost\\r\\nX-Request-Id: ${logMarker}\\r\\nContent-Length: 2\\r\\nConnection: close\\r\\n\\r\\n{}' >&3; cat <&3`,
+  `exec 3<>/dev/tcp/127.0.0.1/8080; printf 'POST /v1/files/read HTTP/1.1\\r\\nHost: localhost\\r\\nX-Request-Id: ${logMarker}\\r\\nContent-Length: 2\\r\\nConnection: close\\r\\n\\r\\n{}' >&3; cat <&3 || true`,
 );
-assert(loopback.result.exitCode === 0, 'loopback authentication probe failed');
+assert(
+  loopback.output.includes('401 Unauthorized') && loopback.output.includes('"unauthorized"'),
+  'loopback authentication probe did not receive the expected rejection',
+);
+assert(!loopback.output.includes(logMarker), 'unauthenticated request id was echoed');
 
 const fdLogMarker = 'workspace-fd-log-exfiltration-marker';
 const fdProbe = await command(
