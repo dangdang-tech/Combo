@@ -6,11 +6,9 @@
 import { useEffect, useReducer } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ArtifactView, MessageView, SessionDetail } from '@cb/shared';
-import { ApiError, isUnauthenticated } from './client.js';
-import { loginUrl } from '../navigation/login.js';
+import { ApiError } from './client.js';
 import { interruptSession, sendSessionMessage } from './runtime.js';
 import { reportClientEvent } from './telemetry.js';
-import { refreshSession } from './sessionRefresh.js';
 import {
   initialStreamUiState,
   isTerminalEvent,
@@ -32,46 +30,27 @@ interface SessionEventSubscription {
   onFatal: () => void;
 }
 
-/** 原生 EventSource 无法读取 HTTP 状态；CLOSED 时只做一次续期并重建，避免无限循环。 */
+/** 原生 EventSource 关闭后直接进入可见错误态；固定会话不续期，也不透明重建请求。 */
 export function subscribeSessionEvents(
   url: string,
   callbacks: SessionEventSubscription,
 ): () => void {
-  let source: EventSource | null = null;
   let stopped = false;
-  let refreshAttempted = false;
-
-  const connect = () => {
-    if (stopped) return;
-    source?.close();
-    const current = new EventSource(url, { withCredentials: true });
-    source = current;
-    current.onopen = () => {
-      if (current === source) refreshAttempted = false;
-    };
-    current.onmessage = (raw) => {
-      if (current === source) callbacks.onMessage(raw.data as string);
-    };
-    current.onerror = () => {
-      if (current !== source || current.readyState !== EventSource.CLOSED) return;
-      current.close();
-      if (refreshAttempted) {
-        callbacks.onFatal();
-        return;
-      }
-      refreshAttempted = true;
-      void refreshSession().then((result) => {
-        if (stopped) return;
-        if (result === 'refreshed') connect();
-        else callbacks.onFatal();
-      });
-    };
+  let fatalReported = false;
+  const source = new EventSource(url, { withCredentials: true });
+  source.onmessage = (raw) => {
+    if (!stopped) callbacks.onMessage(raw.data as string);
+  };
+  source.onerror = () => {
+    if (stopped || fatalReported || source.readyState !== EventSource.CLOSED) return;
+    fatalReported = true;
+    source.close();
+    callbacks.onFatal();
   };
 
-  connect();
   return () => {
     stopped = true;
-    source?.close();
+    source.close();
   };
 }
 
@@ -120,12 +99,7 @@ export function useSessionStream(
         );
       })
       .catch((err: unknown) => {
-        // 登录态失效：跳创作端登录（回来落在当前会话页）。
-        if (isUnauthenticated(err)) {
-          window.location.assign(loginUrl());
-          return;
-        }
-        // 服务端错误信封中的 userMessage 已是人话，直接展示。
+        // 401 已由 API 客户端统一导航；这里仅收口不会离开页面的非认证错误。
         const message = err instanceof ApiError ? err.userMessage : '发送失败，请重试。';
         dispatch({ kind: 'error', message });
       });

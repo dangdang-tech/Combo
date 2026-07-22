@@ -1,4 +1,4 @@
-// 查询失败的统一提示：401 显示「请先登录」并给创作端登录入口，其余展示人话 + 重试。
+// 查询失败的统一提示：401 显示「请先登录」并进入同站自定义登录页，其余展示人话与重试。
 import { ApiError, isUnauthenticated } from '../api/client.js';
 import { loginUrl } from '../navigation/login.js';
 

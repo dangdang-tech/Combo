@@ -1,13 +1,13 @@
 # platform/config —— 环境变量
 
-这个目录负责进程环境变量的定义、加载与校验，是全服务配置的唯一入口。
+这个目录负责 runtime 进程环境变量的定义、加载与校验，是服务配置的唯一入口。
 
 ## 文件
 
-- `env.ts` 用 zod schema 定义全部环境变量及默认值（端口、日志级别、数据库连接串、对象存储地址与密钥、登录服务地址、模型密钥、跨域来源、开发登录开关等），并导出 loadEnv 函数：结果带缓存；生产模式缺关键配置直接抛错拒绝启动，开发与测试模式回落默认值并打警告；模型密钥不在生产必填之列，缺了只让对话轮次降级报错；开发登录开关在生产模式被无条件强制关闭。
+- `env.ts` 使用 zod 定义端口、日志、数据库、Redis、对象存储、模型、公开站点来源和观测配置。`loadEnv` 会缓存解析结果；生产模式缺少数据库、Redis、对象存储或 `PUBLIC_APP_ORIGIN` 时直接拒绝启动，并要求公开站点是 HTTPS origin。开发与测试模式可以使用本地默认值并输出缺失配置名。模型密钥不是启动必填项，缺失时只让对话轮次降级。浏览器认证只读 PostgreSQL 会话，因此这里没有远端身份服务、令牌验签、开发登录或会话签名配置。
 
 ## 上下游
 
-被谁使用：`processes/api.ts` 和 `bootstrap/app.ts` 在启动时调 loadEnv；`platform/infra/` 各文件、`platform/observability/node.ts`、`modules/agent/build-agent.ts` 都消费这里导出的 Env 类型。
+`processes/api.ts` 和 `bootstrap/app.ts` 在启动时调用 `loadEnv`。`platform/infra/`、`platform/observability/node.ts` 与 `modules/agent/build-agent.ts` 消费导出的 `Env` 类型。
 
-依赖什么：只依赖 zod 做校验和 process.env，本目录不引用项目内任何其他目录。
+这个目录只依赖 zod 和 `process.env`，不引用其他项目源码目录。

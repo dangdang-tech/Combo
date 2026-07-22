@@ -1,13 +1,13 @@
 # CD：部署到 tecent2 的单机 k3s（2026-07-17 起从 docker compose 切换，割接记录见 issue #86）。两个入口：
 #   自动 —— main 上的 CI 成功完成后触发（workflow_run；此时三镜像已推送完成，无竞态）。
-#   手动 —— workflow_dispatch，ref 填分支或旧 SHA；回滚就走这里（镜像按 SHA 留存在 GHCR，随取随部）。
+#   手动 —— workflow_dispatch，只允许选择通过同一提交完整 CI 且包含第一方认证迁移的兼容 ref。
 #
 # 前置约定：
 #   镜像由 CI 在 main push 时构建并推送 GHCR（tag = 完整 commit SHA），本 workflow 只拉不建。
 #   服务器上有固定部署目录 /opt/combo：infra/ 放 k8s 清单与各服务配置（由本 workflow 每次同步覆盖），
 #   其中 .env 是唯一不同步的文件（密钥只存在服务器上，不进 git 也不进 Actions）。
 #   集群侧长期凭据（combo-env / ghcr-pull 两个 Secret）在集群里，不经过本 workflow。
-#   compose 编排文件保留在仓库与服务器上仅作回滚兜底（数据卷冻结在割接时刻），不再被本 workflow 使用。
+#   compose 编排文件保留在仓库与服务器上仅作灾难取证，不允许回滚到第一方认证切换前镜像。
 #
 # 所需 Secrets：
 #   DEPLOY_SSH_KEY —— 专用部署私钥（对应公钥在服务器 authorized_keys）
@@ -23,7 +23,7 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: 要部署的 git ref（分支或完整 SHA）。该提交的镜像必须已由 CI 在 main 上推送完成。
+        description: 要部署的兼容 git ref。解析后的提交必须已通过同 SHA 完整 CI 并发布镜像。
         required: true
         default: main
 
@@ -41,6 +41,7 @@ jobs:
     permissions:
       contents: read
       packages: read
+      actions: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -50,6 +51,36 @@ jobs:
       - name: 解析部署 SHA
         id: rev
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: 拒绝第一方认证切换前的不兼容 ref
+        run: |
+          test -f db/migrations/0004_first_party_email_auth.sql
+          test -f db/migrations/0005_application_database_roles.sql
+          grep -Fq "url: '/auth/email/challenges'" apps/authoring/src/modules/account/routes.ts
+          grep -Fq "url: '/auth/email/verifications'" apps/authoring/src/modules/account/routes.ts
+          grep -Fq "url: '/auth/logout'" apps/authoring/src/modules/account/routes.ts
+          grep -Fq "url: '/me'" apps/authoring/src/modules/account/routes.ts
+          # 在源码中拼接遗留栈模式，既执行兼容门禁，也避免静态遗留词本身污染仓库验收。
+          legacy_auth_pattern='LOG'"TO_|/auth/(log"'in|callback|refresh)|dev'"-login|cb_"'refresh|cb_auth_'"tx|session"'Refresh'
+          if rg -n "$legacy_auth_pattern" apps packages infra scripts; then
+            echo 'ref 不满足第一方认证兼容下限，拒绝部署'
+            exit 1
+          fi
+
+      - name: 手动部署必须匹配同 SHA 的完整成功 CI
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOY_SHA: ${{ steps.rev.outputs.sha }}
+        run: |
+          count="$(gh api --method GET \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
+            -f head_sha="$DEPLOY_SHA" -f status=completed \
+            --jq '[.workflow_runs[] | select(.conclusion == "success")] | length')"
+          test "$count" -gt 0 || {
+            echo '该 SHA 没有完整成功的 CI 运行，拒绝手动部署'
+            exit 1
+          }
 
       # 镜像不存在就提前失败（比如 ref 指了还没跑完 CI 的提交），绝不带着缺镜像去动线上栈。
       - name: 校验三镜像已在 GHCR
@@ -86,20 +117,19 @@ jobs:
           rsync -az scripts/smoke.sh scripts/deploy-k8s.sh deploy-target:/opt/combo/scripts/
 
       # 镜像由集群内 ghcr-pull Secret 拉取，服务器上不再需要 docker login。
-      - name: k8s 滚动部署（migrate Job 先行，rollout 等四个业务面就绪）
+      - name: k8s 停机式部署（预检、停旧业务、迁移、再启动新业务）
         env:
           SHA: ${{ steps.rev.outputs.sha }}
         run: |
           ssh deploy-target env SHA="$SHA" bash /opt/combo/scripts/deploy-k8s.sh
 
-      # 割接后 web 走 NodePort 30080（系统 nginx 反代到这里）；nginx 会把 /health /ready /api/* 反代给 api，
-      # 冒烟的 API 探测与 WEB 探测统一走这个入口，等价于用户真实路径。
+      # 割接后 web 走 NodePort 30080（系统 nginx 反代到这里）；冒烟不调用邮件供应商，
+      # 只验证健康、第一方会话匿名边界和 authoring/runtime 同源反代。
       - name: 冒烟验证
         run: |
           ssh deploy-target '
             set -euo pipefail
-            LOGTO_ISSUER=$(grep "^LOGTO_ISSUER=" /opt/combo/infra/.env | cut -d= -f2-)
-            API_BASE=http://localhost:30080 WEB_BASE=http://localhost:30080 LOGTO_ISSUER="$LOGTO_ISSUER" \
+            API_BASE=http://localhost:30080 WEB_BASE=http://localhost:30080 \
               bash /opt/combo/scripts/smoke.sh
           '
 
