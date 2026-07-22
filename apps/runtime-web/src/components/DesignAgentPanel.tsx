@@ -39,15 +39,6 @@ export interface DesignAgentPanelProps {
   onClearAnnotation: () => void;
 }
 
-function revisionTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return new Intl.DateTimeFormat('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
-}
-
 function clipped(value: string, maxLength: number): string {
   const normalized = value.replace(/\s+/g, ' ').trim();
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}…` : normalized;
@@ -60,7 +51,6 @@ function elementRole(element: ComboElementSelection): string {
 export function DesignAgentPanel({
   messages,
   revisions,
-  selectedRevisionNo,
   isRunning,
   isBootstrapping,
   readOnlyHistory,
@@ -70,13 +60,11 @@ export function DesignAgentPanel({
   error,
   onSend,
   onInterrupt,
-  onSelectRevision,
   onOpenArtifact,
   onToggleAnnotation,
   onClearAnnotation,
 }: DesignAgentPanelProps) {
   const [text, setText] = useState('');
-  const [view, setView] = useState<'conversation' | 'versions'>('conversation');
   const [showEarlierMessages, setShowEarlierMessages] = useState(false);
   const [queued, setQueued] = useState<QueuedEdit[]>([]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -107,7 +95,6 @@ export function DesignAgentPanel({
 
   useEffect(() => {
     if (!selectedElement) return;
-    setView('conversation');
     window.requestAnimationFrame(() => inputRef.current?.focus());
   }, [selectedElement?.key]);
 
@@ -143,89 +130,30 @@ export function DesignAgentPanel({
 
   return (
     <aside className="rt-design-agent" aria-label="页面修改">
-      <div className="rt-design-agent__tabs" role="tablist" aria-label="页面修改面板">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={view === 'conversation'}
-          onClick={() => setView('conversation')}
-        >
-          修改
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={view === 'versions'}
-          onClick={() => setView('versions')}
-        >
-          版本
-          {revisions.length > 0 && <span>{revisions.length}</span>}
-        </button>
+      <div className="rt-design-agent__thread" role="log" aria-label="页面修改记录">
+        {hiddenMessageCount > 0 && (
+          <button
+            type="button"
+            className="rt-design-agent__earlier"
+            aria-expanded={showEarlierMessages}
+            onClick={() => setShowEarlierMessages((current) => !current)}
+          >
+            {showEarlierMessages ? '收起较早对话' : `查看更早的 ${hiddenMessageCount} 条对话`}
+          </button>
+        )}
+        {messages.length > 0 && (
+          <ChatThread
+            messages={visibleMessages}
+            streamingText={null}
+            assistantLabel="Combo"
+            artifactPresentation="event"
+            onOpenArtifact={onOpenArtifact}
+          />
+        )}
+        {messages.length === 0 && !isBootstrapping && !bootstrapFailed && (
+          <div className="rt-design-agent__empty">描述修改，或从页面中选择一个位置。</div>
+        )}
       </div>
-
-      {view === 'versions' ? (
-        <div className="rt-design-agent__versions" role="tabpanel">
-          <div className="rt-version-list__head">
-            <strong>版本</strong>
-          </div>
-          {revisions.length === 0 ? (
-            <div className="rt-version-list__empty">第一个版本生成后会出现在这里。</div>
-          ) : (
-            <ol className="rt-version-list">
-              {[...revisions].reverse().map((revision) => {
-                const selected = selectedRevisionNo === revision.revisionNo;
-                const current = revision.revisionNo === revisions.at(-1)?.revisionNo;
-                return (
-                  <li key={revision.id}>
-                    <button
-                      type="button"
-                      className={selected ? 'is-selected' : ''}
-                      onClick={() => onSelectRevision(revision.revisionNo)}
-                    >
-                      <span className="rt-version-list__line" aria-hidden="true" />
-                      <span className="rt-version-list__body">
-                        <span className="rt-version-list__title">
-                          <strong>R{revision.revisionNo}</strong>
-                          {current && <em>当前</em>}
-                          {revision.verified && <em className="is-verified">已验证</em>}
-                        </span>
-                        <span className="rt-version-list__summary">
-                          {revision.summary || '页面修改已保存'}
-                        </span>
-                        <time>{revisionTime(revision.createdAt)}</time>
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ol>
-          )}
-        </div>
-      ) : (
-        <div className="rt-design-agent__thread" role="tabpanel">
-          {hiddenMessageCount > 0 && (
-            <button
-              type="button"
-              className="rt-design-agent__earlier"
-              aria-expanded={showEarlierMessages}
-              onClick={() => setShowEarlierMessages((current) => !current)}
-            >
-              {showEarlierMessages ? '收起较早对话' : `查看更早的 ${hiddenMessageCount} 条对话`}
-            </button>
-          )}
-          {messages.length > 0 && (
-            <ChatThread
-              messages={visibleMessages}
-              streamingText={null}
-              assistantLabel="Combo"
-              onOpenArtifact={onOpenArtifact}
-            />
-          )}
-          {messages.length === 0 && !isBootstrapping && !bootstrapFailed && (
-            <div className="rt-design-agent__empty">描述修改，或从页面中选择一个位置。</div>
-          )}
-        </div>
-      )}
 
       <div className="rt-design-agent__footer">
         {!readOnlyHistory && (isRunning || isBootstrapping) ? (

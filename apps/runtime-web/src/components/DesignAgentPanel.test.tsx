@@ -131,13 +131,42 @@ describe('DesignAgentPanel', () => {
     expect(onInterrupt).toHaveBeenCalledTimes(1);
   });
 
-  it('shows immutable revision history and previews the selected revision', () => {
-    const onSelectRevision = vi.fn();
-    render(<DesignAgentPanel {...props({ onSelectRevision })} />);
+  it('keeps one continuous conversation and renders artifact changes as light events', () => {
+    const onOpenArtifact = vi.fn();
+    render(
+      <DesignAgentPanel
+        {...props({
+          messages: [
+            {
+              id: 'message-artifact',
+              runId: '33333333-3333-4333-8333-333333333333',
+              seq: 1,
+              role: 'assistant',
+              text: '首版页面已经准备好了。',
+              artifacts: [
+                {
+                  artifactKey: 'main',
+                  version: 1,
+                  kind: 'html',
+                  title: '每日待办管家',
+                },
+              ],
+              createdAt: '2026-07-21T10:00:00.000Z',
+            },
+          ],
+          onOpenArtifact,
+        })}
+      />,
+    );
 
-    fireEvent.click(screen.getByRole('tab', { name: /版本/ }));
-    fireEvent.click(screen.getByRole('button', { name: /R1/ }));
-    expect(onSelectRevision).toHaveBeenCalledWith(1);
+    expect(screen.getByRole('log', { name: '页面修改记录' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+    const event = screen.getByRole('button', { name: /已创建页面.*每日待办管家.*查看/ });
+    fireEvent.click(event);
+    expect(onOpenArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({ artifactKey: 'main', version: 1 }),
+    );
   });
 
   it('offers an explicit retry when the first Miniapp fails', () => {

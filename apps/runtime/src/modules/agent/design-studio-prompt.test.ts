@@ -20,6 +20,8 @@ describe('withDesignStudioInstructions', () => {
     expect(prompt).toContain('data-combo-key="run-primary"');
     expect(prompt).toContain("type: 'combo:run'");
     expect(prompt).toContain('version: 1');
+    expect(prompt).toContain('保持当前 Miniapp 可见');
+    expect(prompt).toContain('不要解释 HTML、bridge、artifactKey');
     expect(prompt).toContain('禁止使用 setTimeout、setInterval、Math.random');
   });
 
