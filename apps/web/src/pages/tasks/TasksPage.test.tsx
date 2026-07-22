@@ -221,10 +221,12 @@ describe('TasksPage — 新建上传任务', () => {
         pairingExpiresAt: '2026-07-14T12:00:00.000Z',
       },
     });
+    const createdUpload = created.upload;
+    if (!createdUpload) throw new Error('cloud task fixture needs upload state');
     const started = makeTask({
       ...created,
       upload: {
-        ...created.upload,
+        ...createdUpload,
         partsExpected: 8,
         partsLanded: 1,
       },
