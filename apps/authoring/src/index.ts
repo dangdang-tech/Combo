@@ -1,2 +1,2 @@
-// 默认入口 = api 进程（dev/start 用）。worker/consumer/sweeper 各有独立 processes/*.ts 入口。
+// 默认入口是 api 进程；worker 使用 processes/worker.ts 独立启动。
 import './processes/api.js';

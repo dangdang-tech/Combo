@@ -4,7 +4,7 @@
 
 ## 文件
 
-- `routes.ts` 声明会话域全部六个端点：开会话、会话列表、会话详情、发消息、打断，这五个挂 requireAuth；流式事件端点挂 requireSseAuth（只认同源 Cookie），其处理器来自 agent 模块的 `stream.ts`。
+- `routes.ts` 声明会话域的八个端点。开会话、改名、归档、发消息和打断先校验精确浏览器来源，再校验 Cookie 会话；会话列表与详情只校验会话；流式事件端点挂 `requireSseAuth`，其处理器来自 agent 模块的 `stream.ts`。
 - `handlers.ts` 实现前五个端点的处理器：校验入参、做会话归属校验、调 loader 和编排器、包响应信封；开会话与发消息前都完整加载一次能力定义，发消息成功返回 202 表示用户消息已落库而生成在异步进行。
 - `repo.ts` 封装 sessions 和 messages 两表的 SQL。appendTurnMessage 按调用方给定的轮内位置直接写入，不加锁也不分配跨轮序号。读取会合并存量消息与轮次消息，按轮次创建时间和轮内位置排序，再派生连续的对外序号。
 - `message-content.ts` 定义消息正文的严格校验 schema：按 user、assistant、tool 三种角色各自允许的内容块结构校验，写入前必过，坏块直接拒写，保证历史能无损喂回模型代理。

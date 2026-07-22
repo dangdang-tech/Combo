@@ -2,7 +2,7 @@
   "name": "@cb/scripts",
   "version": "0.0.0",
   "private": true,
-  "description": "运维/开发脚本（O-05）：bootstrap、健康冒烟等。",
+  "description": "运维、健康冒烟、部署与第一方邮箱认证端到端脚本。",
   "type": "module",
   "scripts": {
     "start": "./start.sh",
@@ -10,7 +10,7 @@
     "smoke": "./smoke.sh",
     "acceptance:smoke": "./acceptance-smoke.sh",
     "typecheck": "tsc -b",
-    "test": "node --test publish-logto-branding.test.mjs"
+    "test": "node --test deployment-order.test.mjs"
   },
   "dependencies": {
     "@cb/shared": "workspace:*"

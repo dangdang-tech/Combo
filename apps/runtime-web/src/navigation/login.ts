@@ -1,16 +1,22 @@
-// 创作端登录入口（同源 Cookie cb_session 由创作端签发；登录完成跳回当前页）。
-export const AUTH_LOGIN_PATH = '/api/v1/auth/login';
+import { sanitizeAuthReturnTo } from '@cb/shared';
 
-function safeLoginReturnTo(value: string): string {
-  return value.startsWith('/') && !value.startsWith('//') ? value : '/try/';
-}
+/** 同站 React 登录页；authoring 在该页签发 authoring 与 runtime 共用的 HttpOnly Cookie。 */
+export const AUTH_LOGIN_PATH = '/login';
 
 /**
- * 登录后回到当前 runtime 深链（含 query），从 /try/c/:capabilityId 发起认证时不会丢能力。
- * 可注入 returnTo 便于单测；生产调用不传值时读取浏览器当前位置。
+ * 未登录时整页进入自定义登录页，并只携带共享白名单允许的 runtime 深链。
+ * 可注入 returnTo 便于单测；生产默认读取当前 path 与 query。
  */
 export function loginUrl(returnTo?: string): string {
   const current = returnTo ?? `${window.location.pathname}${window.location.search}`;
-  const target = safeLoginReturnTo(current || '/try/');
+  const target = sanitizeAuthReturnTo(current);
   return `${AUTH_LOGIN_PATH}?returnTo=${encodeURIComponent(target)}`;
+}
+
+/** 单次写请求收到 401 时整页进入自定义登录页，不重放原请求。 */
+export function goToLogin(
+  returnTo?: string,
+  navigate: (url: string) => void = (url) => window.location.assign(url),
+): void {
+  navigate(loginUrl(returnTo));
 }

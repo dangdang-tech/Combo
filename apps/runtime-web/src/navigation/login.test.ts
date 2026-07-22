@@ -1,19 +1,31 @@
-import { describe, expect, it } from 'vitest';
-import { AUTH_LOGIN_PATH, loginUrl } from './login.js';
+import { describe, expect, it, vi } from 'vitest';
+import { AUTH_LOGIN_PATH, goToLogin, loginUrl } from './login.js';
 
 describe('runtime login navigation', () => {
-  it('preserves the exact capability deep link as the authentication returnTo', () => {
-    const returnTo = '/try/c/11111111-1111-4111-8111-111111111111?returnTo=%2Fa%2Fcap-wskatc';
-
+  it('preserves an allowed capability deep link on the custom login route', () => {
+    const returnTo = '/try/c/11111111-1111-4111-8111-111111111111?from=market';
     expect(loginUrl(returnTo)).toBe(`${AUTH_LOGIN_PATH}?returnTo=${encodeURIComponent(returnTo)}`);
   });
 
-  it('rejects external and protocol-relative return targets', () => {
-    expect(loginUrl('https://evil.example/path')).toBe(
-      `${AUTH_LOGIN_PATH}?returnTo=${encodeURIComponent('/try/')}`,
+  it('navigates a failed mutation to login while preserving its runtime deep link', () => {
+    const navigate = vi.fn<(url: string) => void>();
+    const returnTo = '/try/session/11111111-1111-4111-8111-111111111111?tab=artifact';
+    goToLogin(returnTo, navigate);
+    expect(navigate).toHaveBeenCalledWith(
+      `${AUTH_LOGIN_PATH}?returnTo=${encodeURIComponent(returnTo)}`,
     );
-    expect(loginUrl('//evil.example/path')).toBe(
-      `${AUTH_LOGIN_PATH}?returnTo=${encodeURIComponent('/try/')}`,
-    );
+  });
+
+  it('falls external, encoded slash and non-MVP paths back to /tasks', () => {
+    for (const returnTo of [
+      'https://evil.example/path',
+      '//evil.example/path',
+      '/try/%2f%2fevil.example',
+      '/settings/security',
+    ]) {
+      expect(loginUrl(returnTo)).toBe(
+        `${AUTH_LOGIN_PATH}?returnTo=${encodeURIComponent('/tasks')}`,
+      );
+    }
   });
 });

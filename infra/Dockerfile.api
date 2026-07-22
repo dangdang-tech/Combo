@@ -1,9 +1,7 @@
-# 一镜像四入口（O-01）：api/worker/consumer/sweeper 共用同一镜像，按 PROCESS=api|worker|consumer|sweeper 在 entrypoint 分叉。
-# 同镜像也用于一次性「业务迁移」容器（compose 覆盖 entrypoint 跑 db/scripts/migrate.ts）。
-# 本期【只写不构建】（无 Docker）；结构按多阶段：build 阶段装全依赖 + tsc -b，runtime 阶段只带产物 + 生产依赖。
-#
-# web 取舍：web 用独立镜像（Dockerfile.web，nginx 托管静态产物 + 反代）。理由——前端是 nginx 静态服务、
-# 与 Node 业务进程运行时不同，分镜像更小更清晰；故本镜像只负责 api/worker/consumer/sweeper + migrate。
+# authoring 的 api 与 worker 共用一个镜像，按 PROCESS=api|worker 在 entrypoint 分叉。
+# 同一镜像也供一次性业务迁移容器覆盖入口运行 db/scripts/migrate.ts。
+# 镜像使用多阶段构建；build 阶段安装完整依赖并编译，runtime 阶段只保留产物与生产依赖。
+# web 使用独立的 Nginx 静态镜像，因此本镜像只负责 api、worker 与 migrate。
 
 # Go 交叉编译阶段（B-21）：把本机导入助手编译成 4 个平台二进制（纯 Go、CGO_ENABLED=0 → 静态、可交叉编译）。
 #   引导脚本据 uname 选 combo-import-{os}-{arch}，来 GET /import/connect/bin/:asset 下载、校验 sha256 后 exec。
@@ -28,7 +26,7 @@ COPY pnpm-workspace.yaml package.json pnpm-lock.yaml* tsconfig.base.json tsconfi
 COPY packages ./packages
 COPY apps ./apps
 COPY db ./db
-RUN pnpm install --frozen-lockfile=false
+RUN pnpm install --frozen-lockfile
 # shared 先 build（apps 依赖其 dist + .d.ts），再 build api
 RUN pnpm -F @cb/shared build && pnpm -F @cb/authoring build
 
@@ -45,11 +43,13 @@ COPY --from=build /app/pnpm-workspace.yaml /app/package.json /app/pnpm-lock.yaml
 COPY --from=build /app/packages/shared/package.json ./packages/shared/package.json
 COPY --from=build /app/apps/authoring/package.json ./apps/authoring/package.json
 COPY --from=build /app/db/package.json ./db/package.json
-RUN pnpm install --prod --frozen-lockfile=false
+RUN pnpm install --prod --frozen-lockfile
 # 产物：shared dist + api dist + db 迁移源（migrate 容器用 --experimental-strip-types 直跑 TS）
 COPY --from=build /app/packages/shared/dist ./packages/shared/dist
 COPY --from=build /app/apps/authoring/dist ./apps/authoring/dist
-COPY --from=build /app/db ./db
+# 迁移入口需要运行器、应用角色配置器和 SQL；测试、README 与 TypeScript 配置不进入生产镜像。
+COPY --from=build /app/db/scripts/migrate.ts /app/db/scripts/provision-app-roles.ts ./db/scripts/
+COPY --from=build /app/db/migrations ./db/migrations
 # B-21 引导二进制 + 各自的 .sha256（importbins 阶段产出，bin 路由据 IMPORT_BIN_DIR 白名单只读流式下发）。
 COPY --from=importbins /out/ /app/import-bins/
 # entrypoint 分叉脚本
