@@ -12,7 +12,9 @@ usage() {
   echo 'run as root on the selected sandbox node' >&2
   exit 77
 }
-[ "$#" -ge 1 ] && [ "$#" -le 2 ] || usage
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+  usage
+fi
 
 data_dir="$1"
 slot_count="${2:-4}"
@@ -46,10 +48,10 @@ done
 
 data_dir="$(realpath -e "$data_dir")"
 data_mount="$(findmnt -n -o TARGET --target "$data_dir")"
-[ -n "$data_mount" ] && [ "$data_mount" != '/' ] || {
+if [ -z "$data_mount" ] || [ "$data_mount" = '/' ]; then
   echo 'data directory must be on a separately mounted data disk, not the root filesystem' >&2
   exit 78
-}
+fi
 
 mount_root='/var/lib/combo-sandbox-slots'
 install -d -m 0755 "$mount_root"

@@ -356,7 +356,7 @@ test('the loopback preparation helper is explicit, data-disk-only and never chan
     'utf8',
   );
   assert.match(script, /expected_bytes=1073741824/);
-  assert.match(script, /data_mount.*!= '\/'/);
+  assert.match(script, /\[ -z "\$data_mount" \] \|\| \[ "\$data_mount" = '\/' \]/);
   assert.match(script, /mkfs\.ext4/);
   assert.match(script, /Options=loop,nodev,nosuid,noatime/);
   assert.match(script, /blockdev --getsize64/);
