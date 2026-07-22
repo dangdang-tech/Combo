@@ -1,7 +1,7 @@
 // 路由 / 导航单一真源（D14：恒定结构）。Shell 侧栏、面包屑、<Routes> 都读这里，不各写一套。
 //
 // 侧栏分两组（开工总纲 §2.1）：
-//   「创作」→ 工作台 / 我的 Agent / 创建 Agent / 数据分析 / 收益
+//   「创作」→ 工作台 / 我的 Agent / 数据分析 / 收益
 //   「我的」→ 个人主页
 // 上传流程收敛为 PRD 的 2 个用户步（上传 → 能力页）+ 1 个自动过程态（提取，寄生在能力页内，不占路由）：
 //   /create/import（上传，传完自动进入能力页）、/create/capabilities（能力页：过程态提取 → 候选卡 → 一键发布）。
@@ -30,6 +30,8 @@ export interface NavItem {
   icon: ComponentType<SVGProps<SVGSVGElement>>;
   /** 暂未开放的功能入口：侧栏置灰且不可点击。 */
   disabled?: boolean;
+  /** false 时只作为路由/面包屑区段，不在常驻侧栏重复展示。 */
+  inSidebar?: boolean;
 }
 
 /** 分组小标题（展开态显示；收起态以分隔线区分，外壳首页-03/04）。 */
@@ -42,7 +44,13 @@ export const NAV_GROUPS: { key: NavGroupKey; label: string }[] = [
 export const CREATOR_NAV: NavItem[] = [
   { path: '/creator', label: '工作台', group: 'create', icon: IconWorkbench },
   { path: '/capabilities', label: '我的 Agent', group: 'create', icon: IconCapabilities },
-  { path: '/create', label: '创建 Agent', group: 'create', icon: IconUpload },
+  {
+    path: '/create',
+    label: '创建 Agent',
+    group: 'create',
+    icon: IconUpload,
+    inSidebar: false,
+  },
   { path: '/analytics', label: '数据分析', group: 'create', icon: IconAnalytics, disabled: true },
   { path: '/earnings', label: '收益', group: 'create', icon: IconEarnings, disabled: true },
   { path: '/profile', label: '个人主页', group: 'mine', icon: IconProfile, disabled: true },

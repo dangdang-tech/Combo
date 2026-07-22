@@ -84,7 +84,9 @@ function toTest(row: TestDbRow): StudioTest {
  *
  * The caller has already creator-loaded both authoring versions. This write
  * still repeats owner/capability/version/hash guards at the runtime boundary so
- * a forged sourceVersionId cannot cross tenants or capabilities.
+ * a forged sourceVersionId cannot cross tenants or capabilities. For the
+ * narrowly scoped same-semantic-version recovery path, sourceManifestHash may
+ * be omitted so a harmless draft metadata edit does not strand a durable UI.
  *
  * No Studio test row is copied. A forked R1 must be tested again in its new
  * draft/version context.
@@ -98,12 +100,15 @@ export async function forkLatestStudioRevision(
     targetVersion: string;
     targetManifestHash: string;
     sourceVersion: string;
-    sourceManifestHash: string;
+    sourceManifestHash?: string;
+    /** 由上层原子化 Studio 恢复流程持有的事务连接。 */
+    transactionClient?: PoolClient;
   },
 ): Promise<StudioForkResult | null> {
-  const client: PoolClient = await pool.connect();
+  const ownsTransaction = !input.transactionClient;
+  const client: PoolClient = input.transactionClient ?? (await pool.connect());
   try {
-    await client.query('BEGIN');
+    if (ownsTransaction) await client.query('BEGIN');
 
     // The destination must be the untouched draft trial session just created
     // for this owner/version. Refuse to graft into an existing conversation.
@@ -140,6 +145,10 @@ export async function forkLatestStudioRevision(
     // A revision only qualifies when its design run completed, the exact HTML
     // version exists, and a persisted assistant message references it. This is
     // the same durability boundary used by getStudioState/finalizeRevision.
+    const sourceParams: unknown[] = [input.ownerId, input.capabilityId, input.sourceVersion];
+    const sourceManifestGuard = input.sourceManifestHash
+      ? `AND source_session.manifest_hash = $${sourceParams.push(input.sourceManifestHash)}`
+      : '';
     const sourceResult = await client.query<StudioForkSourceRow>(
       `SELECT source_session.id AS source_session_id,
               source_session.transcript,
@@ -192,7 +201,7 @@ export async function forkLatestStudioRevision(
         WHERE source_session.owner_id = $1
           AND source_session.capability_id = $2
           AND source_session.version = $3
-          AND source_session.manifest_hash = $4
+          ${sourceManifestGuard}
           AND source_session.mode = 'trial'
           AND revision.artifact_key = 'main'
           AND artifact.kind = 'html'
@@ -203,16 +212,11 @@ export async function forkLatestStudioRevision(
           )
         ORDER BY revision.created_at DESC, revision.revision_no DESC, source_session.updated_at DESC
         LIMIT 1`,
-      [
-        input.ownerId,
-        input.capabilityId,
-        input.sourceVersion,
-        input.sourceManifestHash,
-      ],
+      sourceParams,
     );
     const source = sourceResult.rows[0];
     if (!source) {
-      await client.query('COMMIT');
+      if (ownsTransaction) await client.query('COMMIT');
       return null;
     }
 
@@ -285,7 +289,7 @@ export async function forkLatestStudioRevision(
       ],
     );
 
-    await client.query('COMMIT');
+    if (ownsTransaction) await client.query('COMMIT');
     return {
       sourceSessionId: source.source_session_id,
       sourceRevisionId: source.source_revision_id,
@@ -293,10 +297,10 @@ export async function forkLatestStudioRevision(
       targetRunId,
     };
   } catch (error) {
-    await client.query('ROLLBACK').catch(() => undefined);
+    if (ownsTransaction) await client.query('ROLLBACK').catch(() => undefined);
     throw error;
   } finally {
-    client.release();
+    if (ownsTransaction) client.release();
   }
 }
 

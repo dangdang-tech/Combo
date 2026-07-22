@@ -77,12 +77,13 @@ describe('侧栏导航分两组且菜单项齐全（外壳首页-03）', () => {
     expect(screen.getByText('我的')).toBeInTheDocument();
   });
 
-  it('六个导航项齐全（工作台/我的 Agent/创建 Agent/数据分析/收益/个人主页）', () => {
+  it('侧栏只保留常驻入口，创建 Agent 由列表页承接', () => {
     renderShell();
     const nav = screen.getByRole('navigation', { name: '主导航' });
-    for (const label of ['工作台', '我的 Agent', '创建 Agent', '数据分析', '收益', '个人主页']) {
+    for (const label of ['工作台', '我的 Agent', '数据分析', '收益', '个人主页']) {
       expect(within(nav).getByText(label)).toBeInTheDocument();
     }
+    expect(within(nav).queryByText('创建 Agent')).toBeNull();
   });
 
   it('暂未开放项置灰且不可点击（数据分析/收益/个人主页）', () => {
@@ -199,7 +200,7 @@ describe('当前页高亮（外壳首页-28）', () => {
     expect(within(nav).getByRole('link', { name: '工作台' })).toHaveClass(
       'cb-shell__navlink--active',
     );
-    expect(within(nav).getAllByRole('link')).toHaveLength(3);
+    expect(within(nav).getAllByRole('link')).toHaveLength(2);
 
     await user.click(within(nav).getByRole('link', { name: '我的 Agent' }));
     expect(within(nav).getByRole('link', { name: '我的 Agent' })).toHaveClass(
@@ -210,13 +211,7 @@ describe('当前页高亮（外壳首页-28）', () => {
       .filter((el) => el.classList.contains('cb-shell__navlink--active'));
     expect(actives0).toHaveLength(1);
 
-    await user.click(within(nav).getByRole('link', { name: '创建 Agent' }));
-    expect(within(nav).getByRole('link', { name: '创建 Agent' })).toHaveClass(
-      'cb-shell__navlink--active',
-    );
-    expect(within(nav).getByRole('link', { name: '我的 Agent' })).not.toHaveClass(
-      'cb-shell__navlink--active',
-    );
+    expect(within(nav).queryByRole('link', { name: '创建 Agent' })).toBeNull();
   });
 });
 
@@ -232,9 +227,8 @@ describe('五步流程外壳不重建（外壳首页-07，批注 D14）', () => 
     const accountAvatarBefore = within(asideBefore).getByRole('img', { name: 'Wayne · CGO' });
     expect(screen.getByTestId('page')).toHaveTextContent('上传 import');
 
-    // 离开再回，验证外壳不随内容重建。
+    // 离开创作流程，验证外壳不随内容重建。
     await user.click(screen.getByRole('link', { name: '我的 Agent' }));
-    await user.click(screen.getByRole('link', { name: '创建 Agent' }));
 
     // 同一外壳 DOM 节点（toBe 引用相等 → 没有被卸载重建）。
     expect(screen.getByRole('complementary', { name: '侧边导航' })).toBe(asideBefore);

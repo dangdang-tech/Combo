@@ -2,6 +2,7 @@ import type { Pool } from 'pg';
 import { describe, expect, it } from 'vitest';
 import {
   findEmptyTrialSession,
+  findStudioTrialSessionForVersion,
   findTrialSessionForVersion,
   getSessionMode,
   getSessionRow,
@@ -32,6 +33,49 @@ describe('findEmptyTrialSession', () => {
     expect(captured?.sql).toContain('s.version = $3');
     expect(captured?.sql).toContain('s.manifest_hash = $4');
     expect(captured?.params).toEqual(['user-1', 'cap-1', '0.1.0', 'manifest-1']);
+  });
+});
+
+describe('findStudioTrialSessionForVersion', () => {
+  it('only resumes an exact frozen Studio with a durable main revision', async () => {
+    let captured:
+      | {
+          sql: string;
+          params: unknown[];
+        }
+      | undefined;
+    const pool = {
+      query: async (sql: string, params: unknown[]) => {
+        captured = { sql, params };
+        return { rows: [] };
+      },
+    } as unknown as Pool;
+
+    await expect(
+      findStudioTrialSessionForVersion(pool, {
+        ownerId: 'creator-1',
+        capabilityId: 'cap-1',
+        version: '0.1.0',
+        manifestHash: 'manifest-1',
+      }),
+    ).resolves.toBeNull();
+
+    expect(captured?.sql).toContain('s.owner_id = $1');
+    expect(captured?.sql).toContain('s.capability_id = $2');
+    expect(captured?.sql).toContain('s.version = $3');
+    expect(captured?.sql).toContain('s.manifest_hash = $4');
+    expect(captured?.sql).toContain("s.mode = 'trial'");
+    expect(captured?.sql).toContain('EXISTS (');
+    expect(captured?.sql).toContain('rt_studio_revisions revision');
+    expect(captured?.sql).toContain("source_run.status = 'completed'");
+    expect(captured?.sql).toContain("source_run.input ->> 'intent' = 'design'");
+    expect(captured?.sql).toContain('rt_chat_artifacts artifact');
+    expect(captured?.sql).toContain('rt_chat_artifact_versions artifact_version');
+    expect(captured?.sql).toContain('rt_chat_messages assistant_message');
+    expect(captured?.sql).toContain('assistant_message.artifacts @>');
+    expect(captured?.sql).toContain("revision.artifact_key = 'main'");
+    expect(captured?.sql).toContain('rt_studio_tests child');
+    expect(captured?.params).toEqual(['creator-1', 'cap-1', '0.1.0', 'manifest-1']);
   });
 });
 

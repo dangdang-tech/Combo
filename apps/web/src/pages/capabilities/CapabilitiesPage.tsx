@@ -2,8 +2,7 @@
 //
 // Agent 项目列表（按状态筛选 + cursor 分页）：
 //   - 复用 CapabilityTable 的 manage 模式，聚焦身份、状态、更新时间和真实创作动作。
-//   - 完整草稿先恢复 latest trial session，缺省才创建，然后进入真实 UI Studio。
-//   - 历史脏名称通过 manifest name regenerate + SSE 真正写回，不做显示层假别名。
+//   - Studio 入口走原子化恢复/创建端点，避免把普通试用误当成 UI 设计会话。
 //   - 加载用 4A 加载件（Skeleton），错误用 ErrorState（只 userMessage + action）。
 //   - 空态友好（区分「确实没有」与「该筛选下没有」），不裸转圈、不空白。
 //   - 渲染在 4A Shell 主区（侧栏「我的 Agent」对应项），页面自身不重搭外壳。
@@ -20,7 +19,6 @@ import {
   type Meta,
   type PageMeta,
   type Range,
-  type RegenerateFieldResult,
 } from '@cb/shared';
 import { apiGetEnvelope, apiPost } from '../../api/index.js';
 import { useSSE } from '../../api/useSSE.js';
@@ -28,8 +26,7 @@ import { ErrorState, LoadingState } from '../../components/index.js';
 import { CapabilityTable } from '../dashboard/CapabilityTable.js';
 import { dedupeByCapabilityId } from '../dashboard/dedupe.js';
 import {
-  createRuntimeTrialSession,
-  fetchLatestRuntimeTrialSession,
+  createRuntimeStudioSession,
   openRuntimeTrial,
   resolveTrialAuthenticationError,
   startStructureForTrial,
@@ -65,20 +62,12 @@ interface StudioVersionTarget {
 }
 
 async function launchStudioVersion(target: StudioVersionTarget): Promise<void> {
-  const latest = await fetchLatestRuntimeTrialSession({
+  const { session } = await createRuntimeStudioSession({
     capabilityId: target.capabilityId,
     versionId: target.versionId,
+    ...(target.sourceVersionId ? { sourceVersionId: target.sourceVersionId } : {}),
+    title: target.title,
   });
-  const session =
-    latest.session ??
-    (
-      await createRuntimeTrialSession({
-        capabilityId: target.capabilityId,
-        versionId: target.versionId,
-        ...(target.sourceVersionId ? { sourceVersionId: target.sourceVersionId } : {}),
-        title: target.title,
-      })
-    ).session;
   openRuntimeTrial(
     `/try/session/${encodeURIComponent(session.id)}?returnTo=${encodeURIComponent(target.returnPath)}`,
   );
@@ -114,17 +103,13 @@ export function CapabilitiesPage(): ReactElement {
   const location = useLocation();
   const [status, setStatus] = useState<CapabilityStatusFilter>('all');
   const [openingCapabilityId, setOpeningCapabilityId] = useState<string | null>(null);
-  const [renamingCapabilityId, setRenamingCapabilityId] = useState<string | null>(null);
-  const [renameTask, setRenameTask] = useState<{
-    capabilityId: string;
-    jobId: string;
-    eventsUrl: string;
-  } | null>(null);
   const [studioTask, setStudioTask] = useState<
     (StudioVersionTarget & { jobId: string; eventsUrl: string }) | null
   >(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const renameObservedJobRef = useRef<string | null>(null);
+  const [studioError, setStudioError] = useState<{
+    capabilityId: string;
+    message: string;
+  } | null>(null);
   const studioObservedJobRef = useRef<string | null>(null);
   const actionLockRef = useRef(false);
   const range: Range = '30d';
@@ -148,39 +133,9 @@ export function CapabilitiesPage(): ReactElement {
   const rows = useMemo(() => dedupeByCapabilityId(pages.flatMap((p) => p.rows)), [pages]);
   const lastPage = pages.length > 0 ? pages[pages.length - 1] : undefined;
   const lastMeta = lastPage?.meta ?? {};
-  const renameSse = useSSE(renameTask?.eventsUrl ?? null, 'structure', {
-    enabled: renameTask !== null,
-  });
   const studioSse = useSSE(studioTask?.eventsUrl ?? null, 'structure', {
     enabled: studioTask !== null,
   });
-
-  useEffect(() => {
-    if (!renameTask) return;
-    if (['connecting', 'open', 'reconnecting'].includes(renameSse.status)) {
-      renameObservedJobRef.current = renameTask.jobId;
-    }
-    if (renameObservedJobRef.current !== renameTask.jobId) return;
-    if (renameSse.status === 'error') {
-      setActionError(renameSse.error?.userMessage ?? '名称没有整理成功，请稍后重试。');
-      setRenameTask(null);
-      setRenamingCapabilityId(null);
-      actionLockRef.current = false;
-      return;
-    }
-    if (renameSse.status !== 'done') return;
-    if (renameSse.done?.status !== 'completed') {
-      setActionError(renameSse.done?.error?.error.userMessage ?? '名称没有整理成功，请稍后重试。');
-      setRenameTask(null);
-      setRenamingCapabilityId(null);
-      actionLockRef.current = false;
-      return;
-    }
-    setRenameTask(null);
-    setRenamingCapabilityId(null);
-    actionLockRef.current = false;
-    void query.refetch();
-  }, [query, renameSse.done, renameSse.error?.userMessage, renameSse.status, renameTask]);
 
   useEffect(() => {
     if (!studioTask) return;
@@ -189,7 +144,10 @@ export function CapabilitiesPage(): ReactElement {
     }
     if (studioObservedJobRef.current !== studioTask.jobId) return;
     if (studioSse.status === 'error') {
-      setActionError(studioSse.error?.userMessage ?? 'UI 没有准备成功，请稍后重试。');
+      setStudioError({
+        capabilityId: studioTask.capabilityId,
+        message: studioSse.error?.userMessage ?? 'UI 没有准备成功，请稍后重试。',
+      });
       setStudioTask(null);
       setOpeningCapabilityId(null);
       actionLockRef.current = false;
@@ -197,7 +155,10 @@ export function CapabilitiesPage(): ReactElement {
     }
     if (studioSse.status !== 'done') return;
     if (studioSse.done?.status !== 'completed') {
-      setActionError(studioSse.done?.error?.error.userMessage ?? 'UI 没有准备成功，请稍后重试。');
+      setStudioError({
+        capabilityId: studioTask.capabilityId,
+        message: studioSse.done?.error?.error.userMessage ?? 'UI 没有准备成功，请稍后重试。',
+      });
       setStudioTask(null);
       setOpeningCapabilityId(null);
       actionLockRef.current = false;
@@ -212,11 +173,13 @@ export function CapabilitiesPage(): ReactElement {
       } catch (error) {
         const resolution = await resolveTrialAuthenticationError(error, target.returnPath);
         if (resolution.kind === 'render') {
-          setActionError(
-            resolution.error instanceof Error
-              ? resolution.error.message
-              : '暂时没能打开 UI Studio，请稍后重试。',
-          );
+          setStudioError({
+            capabilityId: target.capabilityId,
+            message:
+              resolution.error instanceof Error
+                ? resolution.error.message
+                : '暂时没能打开设计空间，请稍后重试。',
+          });
         }
       } finally {
         setOpeningCapabilityId(null);
@@ -253,7 +216,7 @@ export function CapabilitiesPage(): ReactElement {
   async function openStudio(row: DashboardCapabilityRow): Promise<void> {
     if (actionLockRef.current) return;
     actionLockRef.current = true;
-    setActionError(null);
+    setStudioError(null);
     setOpeningCapabilityId(row.capabilityId);
     const returnPath = `${location.pathname}${location.search}${location.hash}`;
     const sourceVersionId = row.studioSourceVersionId ?? undefined;
@@ -290,11 +253,13 @@ export function CapabilitiesPage(): ReactElement {
     } catch (error) {
       const resolution = await resolveTrialAuthenticationError(error, returnPath);
       if (resolution.kind === 'render') {
-        setActionError(
-          resolution.error instanceof Error
-            ? resolution.error.message
-            : '暂时没能打开设计界面，请稍后重试。',
-        );
+        setStudioError({
+          capabilityId: row.capabilityId,
+          message:
+            resolution.error instanceof Error
+              ? resolution.error.message
+              : '暂时没能打开设计空间，请稍后重试。',
+        });
       }
     } finally {
       if (!actionContinuesInSse) {
@@ -304,83 +269,41 @@ export function CapabilitiesPage(): ReactElement {
     }
   }
 
-  async function regenerateName(row: DashboardCapabilityRow): Promise<void> {
-    if (actionLockRef.current) return;
-    actionLockRef.current = true;
-    setActionError(null);
-    setRenamingCapabilityId(row.capabilityId);
-    try {
-      let versionId = row.versionId;
-      if (!row.studioAvailable && (row.studioDraftable || row.retryEditable)) {
-        const draft = await createEditableDraft(row);
-        versionId = draft.versionId;
-      }
-      const result = await apiPost<RegenerateFieldResult>(
-        `/versions/${encodeURIComponent(versionId)}/manifest/fields/name/regenerate`,
-        { reason: 'manual' },
-        {
-          scope: IdempotencyScope.MANIFEST_REGENERATE_FIELD,
-          idempotencyKey: `manifest:rename:${versionId}:${Date.now()}`,
-        },
-      );
-      setRenameTask({
-        capabilityId: row.capabilityId,
-        jobId: result.jobId,
-        eventsUrl: result.eventsUrl,
-      });
-    } catch (error) {
-      setActionError(error instanceof Error ? error.message : '名称没有整理成功，请稍后重试。');
-      setRenamingCapabilityId(null);
-      actionLockRef.current = false;
-    }
-  }
-
   const hasFilter = status !== 'all';
   const hasLoaded = query.data !== undefined;
 
   return (
     <section className="cb-page cb-capabilities" aria-labelledby="cb-capabilities-title">
-      <header className="cb-page__head cb-page__head--split">
-        <div className="cb-page__head-copy">
-          <h2 className="cb-page__title" id="cb-capabilities-title">
-            我的 Agent
-          </h2>
-          <p className="cb-page__lead">
-            进入设计空间修改页面、交互与视觉效果；已发布 Agent 会从当前页面创建一个新版本。
-          </p>
-        </div>
+      <header className="cb-page__head">
+        <h2 className="cb-page__title" id="cb-capabilities-title">
+          我的 Agent
+        </h2>
+      </header>
+
+      <div className="cb-capabilities__list-toolbar">
         <button
           type="button"
           className="cb-btn cb-btn--primary"
+          aria-label="创建 Agent"
           onClick={() => navigate('/create/import')}
         >
-          创建 Agent
+          <span aria-hidden="true">＋</span> 创建 Agent
         </button>
-      </header>
-
-      {/* 状态筛选段控（当前档有选中标识）。 */}
-      <div className="cb-capabilities__filters" role="group" aria-label="按状态筛选">
-        {STATUS_FILTERS.map((f) => (
-          <button
-            key={f.key}
-            type="button"
-            className={`cb-filter-chip${status === f.key ? ' cb-filter-chip--active' : ''}`}
-            aria-pressed={status === f.key}
-            onClick={() => changeFilter(f.key)}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
-
-      {actionError && (
-        <div className="cb-capabilities__action-error" role="alert">
-          <span>{actionError}</span>
-          <button type="button" onClick={() => setActionError(null)}>
-            关闭
-          </button>
+        {/* 状态筛选段控（当前档有选中标识）。 */}
+        <div className="cb-capabilities__filters" role="group" aria-label="按状态筛选">
+          {STATUS_FILTERS.map((f) => (
+            <button
+              key={f.key}
+              type="button"
+              className={`cb-filter-chip${status === f.key ? ' cb-filter-chip--active' : ''}`}
+              aria-pressed={status === f.key}
+              onClick={() => changeFilter(f.key)}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
-      )}
+      </div>
 
       {/* 首屏加载（无任何已渲染数据）→ 骨架，永不裸转圈。 */}
       {query.isPending ? (
@@ -408,10 +331,9 @@ export function CapabilitiesPage(): ReactElement {
             meta={lastMeta}
             mode="manage"
             onOpenStudio={(row) => void openStudio(row)}
-            onRegenerateName={(row) => void regenerateName(row)}
             openingCapabilityId={openingCapabilityId}
-            renamingCapabilityId={renamingCapabilityId}
-            actionsBusy={Boolean(openingCapabilityId || renamingCapabilityId)}
+            studioError={studioError}
+            actionsBusy={Boolean(openingCapabilityId)}
           />
 
           {/* 翻页：cursor 分页，hasMore 时给「加载更多」（追加，不替换；不做 total）。 */}

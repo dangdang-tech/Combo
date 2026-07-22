@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DESIGN_STUDIO_REPAIR_PROMPT,
   hasDesignStudioPage,
   hasDesignStudioRuntimeBridge,
+  hasValidDesignStudioResult,
   isCompleteDesignStudioHtml,
   withDesignStudioInstructions,
 } from './design-studio-prompt.js';
@@ -55,6 +57,34 @@ describe('withDesignStudioInstructions', () => {
       ]),
     ).toBe(false);
     expect(hasDesignStudioPage([])).toBe(false);
+  });
+
+  it('requires the fresh main ref, complete document and Runtime bridge as one result', () => {
+    const ref = [{ artifactKey: 'main', version: 2, kind: 'html' as const, title: 'Miniapp' }];
+    const validHtml = `<!doctype html><html><body>
+      <button data-combo-key="run-primary">运行</button>
+      <script>const prompt = '真实输入'; parent.postMessage({type:'combo:run',version:1,prompt}, '*')</script>
+    </body></html>`;
+
+    expect(hasValidDesignStudioResult(ref, validHtml)).toBe(true);
+    expect(hasValidDesignStudioResult([], validHtml)).toBe(false);
+    expect(hasValidDesignStudioResult(ref, '<div>fragment</div>')).toBe(false);
+    expect(
+      hasValidDesignStudioResult(
+        ref,
+        '<!doctype html><html><body><button data-combo-key="run-primary">运行</button></body></html>',
+      ),
+    ).toBe(false);
+  });
+
+  it('provides one strict repair instruction that requires the accepted main page contract', () => {
+    expect(DESIGN_STUDIO_REPAIR_PROMPT).toContain('系统自动修复');
+    expect(DESIGN_STUDIO_REPAIR_PROMPT).toContain('立即调用 upsert_artifact');
+    expect(DESIGN_STUDIO_REPAIR_PROMPT).toContain('artifactKey="main"');
+    expect(DESIGN_STUDIO_REPAIR_PROMPT).toContain('kind="html"');
+    expect(DESIGN_STUDIO_REPAIR_PROMPT).toContain('data-combo-key="run-primary"');
+    expect(DESIGN_STUDIO_REPAIR_PROMPT).toContain("type: 'combo:run'");
+    expect(DESIGN_STUDIO_REPAIR_PROMPT).toContain('version: 1');
   });
 
   it('rejects HTML labels that do not contain a complete document', () => {

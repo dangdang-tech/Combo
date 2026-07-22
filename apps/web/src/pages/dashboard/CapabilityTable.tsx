@@ -1,5 +1,5 @@
 // 共享 Agent 列表：analytics 模式保留经营列；manage 模式是项目列表。
-// 管理页用稳定身份标识帮助识别，并只展示真实可执行动作：继续 UI Studio、自动命名、公开页。
+// 管理页用稳定身份标识帮助识别，并只展示真实可执行动作：继续 UI Studio、公开页。
 // 创建新 Agent 由页面级 CTA 承担；被拒态继续显示后端拒绝原因。
 import type { ReactElement } from 'react';
 import { Link } from 'react-router-dom';
@@ -11,9 +11,8 @@ export interface CapabilityTableProps {
   meta: Meta | undefined;
   mode?: 'analytics' | 'manage';
   onOpenStudio?: (row: DashboardCapabilityRow) => void;
-  onRegenerateName?: (row: DashboardCapabilityRow) => void;
   openingCapabilityId?: string | null;
-  renamingCapabilityId?: string | null;
+  studioError?: { capabilityId: string; message: string } | null;
   actionsBusy?: boolean;
 }
 
@@ -82,7 +81,6 @@ function AgentIdentity({ row }: { row: DashboardCapabilityRow }): ReactElement {
       <span className="cb-agent-identity__copy">
         <span className="cb-cap-row__title">{row.name}</span>
         <span className="cb-cap-row__tagline">{row.tagline}</span>
-        {row.nameNeedsReview && <span className="cb-agent-name-review">名称可优化</span>}
       </span>
     </div>
   );
@@ -100,36 +98,26 @@ function CapabilityRow({
   meta,
   mode,
   onOpenStudio,
-  onRegenerateName,
   openingCapabilityId,
-  renamingCapabilityId,
+  studioError,
   actionsBusy,
 }: {
   row: DashboardCapabilityRow;
   meta: Meta | undefined;
   mode: 'analytics' | 'manage';
   onOpenStudio?: (row: DashboardCapabilityRow) => void;
-  onRegenerateName?: (row: DashboardCapabilityRow) => void;
   openingCapabilityId?: string | null;
-  renamingCapabilityId?: string | null;
+  studioError?: { capabilityId: string; message: string } | null;
   actionsBusy: boolean;
 }): ReactElement {
   const opening = openingCapabilityId === row.capabilityId;
-  const renaming = renamingCapabilityId === row.capabilityId;
+  const rowError = studioError?.capabilityId === row.capabilityId ? studioError.message : null;
   const canPrepareDraft = row.reviewStatus === 'draft' && !row.studioAvailable;
   const canRetryRejected = row.retryEditable && Boolean(row.retryVersionId);
   const canOpenStudio =
     mode === 'manage' &&
     (row.studioAvailable || row.studioDraftable || canRetryRejected || canPrepareDraft) &&
     Boolean(onOpenStudio);
-  const canRegenerateName =
-    mode === 'manage' &&
-    row.nameNeedsReview &&
-    (row.studioAvailable ||
-      row.studioDraftable ||
-      canRetryRejected ||
-      row.reviewStatus === 'draft') &&
-    Boolean(onRegenerateName);
   const designAction = studioAction(row);
   const publicPage = row.publicPageAvailable ? (
     <Link
@@ -141,7 +129,7 @@ function CapabilityRow({
     </Link>
   ) : null;
 
-  const hasActions = canOpenStudio || canRegenerateName || publicPage !== null;
+  const hasActions = canOpenStudio || publicPage !== null;
 
   return (
     <tr className="cb-cap-row" data-capability={row.capabilityId}>
@@ -188,7 +176,11 @@ function CapabilityRow({
           <time dateTime={row.updatedAt}>{updatedLabel(row.updatedAt)}</time>
         </td>
       )}
-      <td className="cb-cap-row__actions" aria-label={hasActions ? undefined : '暂无可用操作'}>
+      <td
+        className="cb-cap-row__actions"
+        aria-busy={opening || undefined}
+        aria-label={hasActions ? undefined : '暂无可用操作'}
+      >
         {hasActions && (
           <span className="cb-cap-row__action-list">
             {canOpenStudio && onOpenStudio && (
@@ -198,22 +190,17 @@ function CapabilityRow({
                 disabled={actionsBusy}
                 onClick={() => onOpenStudio(row)}
                 aria-label={`${designAction.ariaPrefix}「${row.name}」UI 版本`}
+                aria-busy={opening || undefined}
               >
-                {opening ? '正在准备…' : designAction.label}
-              </button>
-            )}
-            {canRegenerateName && onRegenerateName && (
-              <button
-                type="button"
-                className="cb-cap-action cb-cap-action--rename"
-                disabled={actionsBusy}
-                onClick={() => onRegenerateName(row)}
-                aria-label={`自动整理「${row.name}」名称`}
-              >
-                {renaming ? '命名中…' : '自动命名'}
+                {opening ? '正在打开…' : designAction.label}
               </button>
             )}
             {publicPage}
+          </span>
+        )}
+        {rowError && (
+          <span className="cb-cap-row__action-error" role="alert">
+            {rowError}
           </span>
         )}
       </td>
@@ -226,7 +213,7 @@ function EmptyRow({ colSpan }: { colSpan: number }): ReactElement {
   return (
     <tr className="cb-cap-row cb-cap-row--empty">
       <td colSpan={colSpan} className="cb-cap-row__empty">
-        还没有 Agent，点右上「创建 Agent」开始第一个。
+        还没有 Agent，使用上方「创建 Agent」开始第一个。
       </td>
     </tr>
   );
@@ -237,9 +224,8 @@ export function CapabilityTable({
   meta,
   mode = 'analytics',
   onOpenStudio,
-  onRegenerateName,
   openingCapabilityId,
-  renamingCapabilityId,
+  studioError,
   actionsBusy = false,
 }: CapabilityTableProps): ReactElement {
   return (
@@ -274,9 +260,8 @@ export function CapabilityTable({
               meta={meta}
               mode={mode}
               onOpenStudio={onOpenStudio}
-              onRegenerateName={onRegenerateName}
               openingCapabilityId={openingCapabilityId}
-              renamingCapabilityId={renamingCapabilityId}
+              studioError={studioError}
               actionsBusy={actionsBusy}
             />
           ))

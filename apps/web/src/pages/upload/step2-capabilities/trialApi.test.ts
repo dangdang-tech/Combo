@@ -5,6 +5,7 @@ import {
   TrialAuthenticationServiceError,
   __setOpenTrialLoginForTests,
   createCapabilityForTrial,
+  createRuntimeStudioSession,
   createRuntimeTrialSession,
   fetchLatestRuntimeTrialSession,
   fetchRuntimeTrialSession,
@@ -77,6 +78,39 @@ describe('runtime trial authentication recovery', () => {
       method: 'POST',
       credentials: 'include',
       body: { versionId: 'ver-1', sourceVersionId: 'source-ver-1', title: '试用' },
+    });
+  });
+
+  it('设计空间入口走独立的原子化恢复/创建端点', async () => {
+    const session = {
+      id: 'studio-session-1',
+      capabilityId: 'cap-1',
+      slug: 'agent',
+      version: '0.2.0',
+      mode: 'trial',
+      title: 'Agent 页面设计',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:01:00.000Z',
+    };
+    mock = installFetchMock({ status: 200, json: { session, capability: {} } });
+
+    await expect(
+      createRuntimeStudioSession({
+        capabilityId: 'cap-1',
+        versionId: 'ver-2',
+        sourceVersionId: 'ver-1',
+        title: 'Agent 页面设计',
+      }),
+    ).resolves.toMatchObject({ session });
+    expect(mock.calls[0]).toMatchObject({
+      url: '/api/v1/runtime/studio/trial-chains/cap-1/session',
+      method: 'POST',
+      credentials: 'include',
+      body: {
+        versionId: 'ver-2',
+        sourceVersionId: 'ver-1',
+        title: 'Agent 页面设计',
+      },
     });
   });
 

@@ -11,6 +11,8 @@ import type {
   RuntimeSessionMode,
 } from '@cb/shared';
 
+type SessionQueryClient = Pick<Pool, 'query'>;
+
 export interface CreateSessionInput {
   ownerId: string;
   capabilityId: string;
@@ -100,7 +102,7 @@ function toMeta(r: SessionRow): RuntimeSessionMeta {
 }
 
 export async function createSession(
-  pool: Pool,
+  pool: SessionQueryClient,
   input: CreateSessionInput,
 ): Promise<RuntimeSessionMeta> {
   const res = await pool.query<SessionDbRow>(
@@ -265,6 +267,70 @@ export async function findTrialSessionForVersion(
   );
   const row = res.rows[0];
   return row ? { row: toRow(row), verified: row.trial_verified } : null;
+}
+
+/**
+ * 恢复指定冻结快照下的 Design Studio，不将普通试用会话当作 UI 工作区。
+ *
+ * Studio 的可持久边界是已完成 design run 生成的 Revision：
+ * - owner / capability / semantic version / manifest hash 必须与当前创作版本完全一致；
+ * - 没有 Revision 的普通 trial 或失败 Design 不恢复，让调用方可以创建干净工作区；
+ * - Studio test 子会话始终排除。
+ */
+export async function findStudioTrialSessionForVersion(
+  pool: SessionQueryClient,
+  input: { ownerId: string; capabilityId: string; version: string; manifestHash: string },
+): Promise<RuntimeSessionMeta | null> {
+  const res = await pool.query<SessionDbRow>(
+    `SELECT s.*
+       FROM rt_chat_sessions s
+      WHERE s.owner_id = $1
+        AND s.capability_id = $2
+        AND s.version = $3
+        AND s.manifest_hash = $4
+        AND s.mode = 'trial'
+        AND s.status = 'active'
+        AND EXISTS (
+          SELECT 1
+            FROM rt_studio_revisions revision
+            JOIN rt_chat_runs source_run
+              ON source_run.id = revision.source_run_id
+             AND source_run.session_id = s.id
+             AND source_run.owner_id = s.owner_id
+             AND source_run.status = 'completed'
+             AND source_run.input ->> 'intent' = 'design'
+            JOIN rt_chat_artifacts artifact
+              ON artifact.session_id = s.id
+             AND artifact.artifact_key = revision.artifact_key
+             AND artifact.kind = 'html'
+            JOIN rt_chat_artifact_versions artifact_version
+              ON artifact_version.artifact_id = artifact.id
+             AND artifact_version.version = revision.artifact_version
+             AND artifact_version.kind = 'html'
+            JOIN rt_chat_messages assistant_message
+              ON assistant_message.session_id = s.id
+             AND assistant_message.run_id = source_run.id
+             AND assistant_message.role = 'assistant'
+             AND assistant_message.artifacts @> jsonb_build_array(
+               jsonb_build_object(
+                 'artifactKey', revision.artifact_key,
+                 'version', revision.artifact_version,
+                 'kind', 'html',
+                 'title', artifact_version.title
+               )
+             )
+           WHERE revision.studio_session_id = s.id
+             AND revision.artifact_key = 'main'
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM rt_studio_tests child WHERE child.test_session_id = s.id
+        )
+      ORDER BY s.updated_at DESC, s.id DESC
+      LIMIT 1`,
+    [input.ownerId, input.capabilityId, input.version, input.manifestHash],
+  );
+  const row = res.rows[0];
+  return row ? toMeta(toRow(row)) : null;
 }
 
 /** owner-scoped 取会话内部行（含 instructions/transcript），不存在或非本人 → null。 */

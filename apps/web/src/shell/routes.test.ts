@@ -3,9 +3,15 @@ import { describe, it, expect } from 'vitest';
 import { CREATOR_NAV, NAV_GROUPS, CREATE_STEPS, BREADCRUMB_ROOT, breadcrumbFor } from './routes.js';
 
 describe('CREATOR_NAV 分组结构（外壳首页-03）', () => {
-  it('创作组含 工作台/我的 Agent/创建 Agent/数据分析/收益 五项，顺序对', () => {
-    const createLabels = CREATOR_NAV.filter((n) => n.group === 'create').map((n) => n.label);
-    expect(createLabels).toEqual(['工作台', '我的 Agent', '创建 Agent', '数据分析', '收益']);
+  it('创作组侧栏只显示常驻入口，创建 Agent 保留为非侧栏路由', () => {
+    const createLabels = CREATOR_NAV.filter(
+      (n) => n.group === 'create' && n.inSidebar !== false,
+    ).map((n) => n.label);
+    expect(createLabels).toEqual(['工作台', '我的 Agent', '数据分析', '收益']);
+    expect(CREATOR_NAV.find((n) => n.path === '/create')).toMatchObject({
+      label: '创建 Agent',
+      inSidebar: false,
+    });
   });
 
   it('我的组含 个人主页 一项', () => {

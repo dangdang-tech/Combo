@@ -1553,12 +1553,6 @@ body {
   white-space: nowrap;
 }
 
-.cb-agent-name-review {
-  margin-top: 3px;
-  color: var(--cb-muted);
-  font-size: 11px;
-}
-
 .cb-cap-row__draft-note {
   display: block;
   margin-top: 5px;
@@ -1598,38 +1592,39 @@ button.cb-cap-action {
   background: var(--cb-action-primary-hover);
 }
 
-.cb-cap-action--rename {
-  border-color: var(--cb-border);
-  background: transparent;
-  color: var(--cb-body);
-}
-
 .cb-cap-action:disabled {
   opacity: 0.58;
   cursor: wait;
 }
 
-.cb-capabilities__action-error {
+.cb-capabilities__list-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  margin: -8px 0 18px;
-  padding: 10px 12px;
+  gap: 16px;
+  margin: 4px 0 20px;
+}
+
+.cb-capabilities__list-toolbar > .cb-btn {
+  flex: 0 0 auto;
+  min-height: 38px;
+  white-space: nowrap;
+}
+
+.cb-capabilities__list-toolbar .cb-capabilities__filters {
+  margin: 0;
+}
+
+.cb-cap-row__action-error {
+  display: block;
+  max-width: 240px;
+  margin-top: 8px;
+  padding: 7px 9px;
   border: 1px solid var(--cb-state-error-border);
   border-radius: var(--cb-radius-control);
   background: var(--cb-state-error-bg);
   color: var(--cb-state-error-fg);
-  font-size: 13px;
-}
-
-.cb-capabilities__action-error button {
-  flex: 0 0 auto;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .cb-draft-strip {
@@ -2415,6 +2410,17 @@ button.cb-cap-action {
 }
 
 @media (max-width: 760px) {
+  .cb-capabilities__list-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .cb-capabilities__list-toolbar > .cb-btn {
+    width: 100%;
+    min-height: 44px;
+  }
+
   .cb-cap-table--manage,
   .cb-cap-table--manage tbody,
   .cb-cap-table--manage tr,
@@ -2486,5 +2492,9 @@ button.cb-cap-action {
   .cb-cap-table--manage .cb-cap-action {
     justify-content: center;
     min-height: 44px;
+  }
+
+  .cb-cap-table--manage .cb-cap-row__action-error {
+    max-width: none;
   }
 }

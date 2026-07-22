@@ -60,7 +60,7 @@ export function Shell(): ReactElement {
 
         <nav className="cb-shell__nav" aria-label="主导航">
           {NAV_GROUPS.map((g) => {
-            const items = CREATOR_NAV.filter((n) => n.group === g.key);
+            const items = CREATOR_NAV.filter((n) => n.group === g.key && n.inSidebar !== false);
             if (items.length === 0) return null;
             return (
               <div className="cb-shell__navgroup" key={g.key} data-group={g.key}>

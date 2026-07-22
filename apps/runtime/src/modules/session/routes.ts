@@ -34,6 +34,7 @@ import {
   archiveSession,
   createSession,
   findEmptyTrialSession,
+  findStudioTrialSessionForVersion,
   findTrialSessionForVersion,
   getMessages,
   getMessagesPage,
@@ -260,6 +261,120 @@ export async function registerSessionRoutes(
     return { session: meta, capability: loaded.publicView };
   }
 
+  /**
+   * 为列表页打开 Design Studio 提供单一原子语义入口。
+   *
+   * 与通用 trial 创建不同，这里只恢复已有持久化 Revision 的 Studio；
+   * 普通试用、失败的首版生成与 test 子会话都不会被误用。当 draft
+   * manifest 变化时，新快照会从同一语义版本的最新可用 UI 开始 R1。
+   */
+  async function createRuntimeStudioSession(input: {
+    ownerId: string;
+    capabilityId: string;
+    versionId: string;
+    sourceVersionId?: string;
+    title?: string;
+  }) {
+    const loaded = await getCreatorCapabilityVersionForTrial(ctx.pool, {
+      capabilityId: input.capabilityId,
+      versionId: input.versionId,
+      creatorUserId: input.ownerId,
+    });
+    if (!loaded) return null;
+
+    let forkSource: Awaited<ReturnType<typeof getCreatorCapabilityVersionForStudioSource>> = null;
+    if (input.sourceVersionId) {
+      if (loaded.view.status === 'draft') {
+        forkSource = await getCreatorCapabilityVersionForStudioSource(ctx.pool, {
+          capabilityId: input.capabilityId,
+          versionId: input.sourceVersionId,
+          creatorUserId: input.ownerId,
+        });
+      }
+    }
+    const validForkSource =
+      forkSource &&
+      ['published', 'review_rejected'].includes(forkSource.view.status) &&
+      forkSource.view.capabilityId === loaded.view.capabilityId
+        ? forkSource
+        : null;
+
+    const client = await ctx.pool.connect();
+    try {
+      await client.query('BEGIN');
+      // 同一 owner / Agent / 语义版本只允许一条恢复/创建链路进入临界区。
+      await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [
+        `studio:${input.ownerId}:${loaded.view.capabilityId}:${loaded.view.version}`,
+      ]);
+
+      const existing = await findStudioTrialSessionForVersion(client, {
+        ownerId: input.ownerId,
+        capabilityId: loaded.view.capabilityId,
+        version: loaded.view.version,
+        manifestHash: loaded.view.manifestHash,
+      });
+      if (existing) {
+        await client.query('COMMIT');
+        return { session: existing, capability: loaded.publicView, resumed: true };
+      }
+
+      // 显式 source 只在真正创建新 Studio 时校验；已有精确 Studio 不会被过期 URL 参数阻断。
+      if (input.sourceVersionId && !validForkSource) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+
+      const systemPrompt = composeSystemPrompt(loaded.view);
+      const meta = await createSession(client, {
+        ownerId: input.ownerId,
+        capabilityId: loaded.view.capabilityId,
+        slug: loaded.publicView.slug,
+        version: loaded.view.version,
+        mode: 'trial',
+        title: input.title?.trim() || `${loaded.publicView.name} 设计`,
+        instructions: systemPrompt,
+        manifestHash: loaded.view.manifestHash,
+        publicView: loaded.publicView,
+      });
+
+      // 先尝试同语义 draft 的跨 manifest 恢复，避免自动命名或元数据编辑导致 UI 丢失。
+      // 只有 draft 可以接收 shallow fork；published 会话仍可以从精确快照恢复。
+      const restored =
+        loaded.view.status === 'draft'
+          ? await forkLatestStudioRevision(ctx.pool, {
+              ownerId: input.ownerId,
+              capabilityId: loaded.view.capabilityId,
+              targetSessionId: meta.id,
+              targetVersion: loaded.view.version,
+              targetManifestHash: loaded.view.manifestHash,
+              sourceVersion: loaded.view.version,
+              transactionClient: client,
+            })
+          : null;
+
+      // 新 draft 还没有本地 UI 时，保留原有的显式已发布/被退回版本继承。
+      if (!restored && validForkSource) {
+        await forkLatestStudioRevision(ctx.pool, {
+          ownerId: input.ownerId,
+          capabilityId: loaded.view.capabilityId,
+          targetSessionId: meta.id,
+          targetVersion: loaded.view.version,
+          targetManifestHash: loaded.view.manifestHash,
+          sourceVersion: validForkSource.view.version,
+          sourceManifestHash: validForkSource.view.manifestHash,
+          transactionClient: client,
+        });
+      }
+      await client.query('COMMIT');
+      return { session: meta, capability: loaded.publicView, resumed: false };
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   // POST /runtime/sessions — 开会话
   app.post('/runtime/sessions', async (req, reply) => {
     const ownerId = await resolveRuntimeOwnerId(req, reply, ctx.pool, ctx.env);
@@ -295,6 +410,28 @@ export async function registerSessionRoutes(
       });
       if (!created) return notFound(reply, req.id);
       return reply.code(201).send(created);
+    },
+  );
+
+  // POST /runtime/studio/trial-chains/:capabilityId/session — 列表页原子恢复/创建 Design Studio。
+  app.post<{ Params: { capabilityId: string } }>(
+    '/runtime/studio/trial-chains/:capabilityId/session',
+    async (req, reply) => {
+      const identity = await requireCreatorIdentity(req, reply, ctx.pool, ctx.env);
+      if (!identity) return reply;
+      const parsed = CreateTrialChainSessionBodySchema.safeParse(req.body ?? {});
+      if (!parsed.success || !parsed.data.versionId) return badRequest(reply, req.id);
+
+      const created = await createRuntimeStudioSession({
+        ownerId: identity.userId,
+        capabilityId: req.params.capabilityId,
+        versionId: parsed.data.versionId,
+        sourceVersionId: parsed.data.sourceVersionId,
+        title: parsed.data.title,
+      });
+      if (!created) return notFound(reply, req.id);
+      const { resumed, ...response } = created;
+      return reply.code(resumed ? 200 : 201).send(response);
     },
   );
 

@@ -49,7 +49,7 @@ function fakePool(source: ReturnType<typeof sourceRow> | null, targetExists = tr
   const release = vi.fn();
   const client = { query, release } as unknown as PoolClient;
   const pool = { connect: vi.fn(async () => client) } as unknown as Pool;
-  return { pool, calls, release };
+  return { pool, client, calls, release };
 }
 
 describe('forkLatestStudioRevision', () => {
@@ -67,6 +67,16 @@ describe('forkLatestStudioRevision', () => {
     const sourceQuery = db.calls.find((call) =>
       call.sql.includes('SELECT source_session.id AS source_session_id'),
     );
+    const targetQuery = db.calls.find(
+      (call) => call.sql.includes('SELECT s.id') && call.sql.includes('FOR UPDATE'),
+    );
+    expect(targetQuery?.params).toEqual([
+      input.targetSessionId,
+      input.ownerId,
+      input.capabilityId,
+      input.targetVersion,
+      input.targetManifestHash,
+    ]);
     expect(sourceQuery?.sql).toContain('source_session.owner_id = $1');
     expect(sourceQuery?.sql).toContain('source_session.capability_id = $2');
     expect(sourceQuery?.sql).toContain('source_session.version = $3');
@@ -114,6 +124,37 @@ describe('forkLatestStudioRevision', () => {
     expect(db.calls.some((call) => call.sql.startsWith('INSERT INTO'))).toBe(false);
     expect(db.calls.at(-1)?.sql).toBe('COMMIT');
     expect(db.release).toHaveBeenCalledOnce();
+  });
+
+  it('recovers the latest UI from the same semantic version after its manifest hash changes', async () => {
+    const db = fakePool(sourceRow());
+
+    await forkLatestStudioRevision(db.pool, {
+      ...input,
+      sourceVersion: input.targetVersion,
+      sourceManifestHash: undefined,
+    });
+
+    const sourceQuery = db.calls.find((call) =>
+      call.sql.includes('SELECT source_session.id AS source_session_id'),
+    );
+    expect(sourceQuery?.sql).toContain('source_session.owner_id = $1');
+    expect(sourceQuery?.sql).toContain('source_session.capability_id = $2');
+    expect(sourceQuery?.sql).toContain('source_session.version = $3');
+    expect(sourceQuery?.sql).not.toContain('source_session.manifest_hash');
+    expect(sourceQuery?.params).toEqual([input.ownerId, input.capabilityId, input.targetVersion]);
+    expect(db.calls.some((call) => call.sql.includes('INSERT INTO rt_studio_tests'))).toBe(false);
+  });
+
+  it('participates in the caller transaction for atomic resume-or-create', async () => {
+    const db = fakePool(sourceRow());
+
+    await forkLatestStudioRevision(db.pool, { ...input, transactionClient: db.client });
+
+    expect(db.calls.some((call) => call.sql === 'BEGIN')).toBe(false);
+    expect(db.calls.some((call) => call.sql === 'COMMIT')).toBe(false);
+    expect(db.calls.some((call) => call.sql === 'ROLLBACK')).toBe(false);
+    expect(db.release).not.toHaveBeenCalled();
   });
 
   it('refuses to graft into a non-empty or mismatched target session', async () => {

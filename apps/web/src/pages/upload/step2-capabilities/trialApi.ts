@@ -154,6 +154,57 @@ export async function createRuntimeTrialSession(input: {
 }
 
 /**
+ * 为 UI 设计空间原子化恢复或创建会话。
+ * 与普通 trial-chain 分开，避免列表入口误恢复到一次真实任务试用。
+ */
+export async function createRuntimeStudioSession(input: {
+  capabilityId: string;
+  versionId: string;
+  sourceVersionId?: string;
+  title: string;
+}): Promise<CreateTrialSessionResult> {
+  let res: Response;
+  try {
+    res = await fetch(
+      `/api/v1/runtime/studio/trial-chains/${encodeURIComponent(input.capabilityId)}/session`,
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          versionId: input.versionId,
+          ...(input.sourceVersionId ? { sourceVersionId: input.sourceVersionId } : {}),
+          title: input.title,
+        }),
+      },
+    );
+  } catch {
+    throw new Error('网络好像不太稳，检查连接后重试。');
+  }
+
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch {
+    body = undefined;
+  }
+
+  if (!res.ok) {
+    const userMessage =
+      body &&
+      typeof body === 'object' &&
+      'error' in body &&
+      typeof (body as { error?: { userMessage?: unknown } }).error?.userMessage === 'string'
+        ? (body as { error: { userMessage: string } }).error.userMessage
+        : '没能打开设计空间，请稍后重试。';
+    if (res.status === 401) throw new TrialAuthenticationRequiredError(userMessage);
+    throw new Error(userMessage);
+  }
+
+  return body as CreateTrialSessionResult;
+}
+
+/**
  * Runtime 的详情端点返回裸 SessionDetail（不是 authoring 的 {data} 包络），因此这里走专用 raw fetch。
  * 保留给需要完整消息/产物的兼容调用；结果页恢复只取 latest-session 的轻量 SessionMeta。
  */

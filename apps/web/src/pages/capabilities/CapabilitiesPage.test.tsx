@@ -1,4 +1,4 @@
-// 我的 Agent 页测试（F-07）：项目识别 / 设计入口 / 自动命名 / 精简筛选 / 空态 / 分页 / 错误。
+// 我的 Agent 页测试（F-07）：项目识别 / 设计入口 / 精简筛选 / 空态 / 分页 / 错误。
 import { useState, type ReactElement } from 'react';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { act, screen, waitFor, within } from '@testing-library/react';
@@ -118,7 +118,10 @@ describe('我的 Agent 页', () => {
 
     await screen.findByText('保险话术助手');
     expect(screen.queryByRole('region', { name: '继续上次创作' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '创建 Agent' })).toBeInTheDocument();
+    const create = screen.getByRole('button', { name: '创建 Agent' });
+    expect(create).toBeInTheDocument();
+    expect(create.closest('.cb-capabilities__list-toolbar')).not.toBeNull();
+    expect(screen.queryByText(/进入设计空间修改页面/)).toBeNull();
   });
 
   it('管理页只呈现识别、状态、更新时间与创作动作，不混入分析数据列', async () => {
@@ -225,7 +228,6 @@ describe('我的 Agent 页', () => {
           },
         },
       },
-      { status: 200, json: { session: null, verified: false } },
       {
         status: 201,
         json: {
@@ -245,10 +247,14 @@ describe('我的 Agent 页', () => {
     renderPage(<ControlledCapabilitiesPage />, '/capabilities');
 
     await screen.findByText('保险话术助手');
-    await userEvent.click(screen.getByRole('button', { name: /生成.*UI 版本/ }));
+    const generate = screen.getByRole('button', { name: /生成.*UI 版本/ });
+    await userEvent.click(generate);
     await waitFor(() => expect(mock!.calls).toHaveLength(2));
     expect(mock.calls[1]?.url).toContain('/api/v1/versions/v-1/structure');
-    expect(screen.getByRole('button', { name: /生成.*UI 版本/ })).toBeDisabled();
+    expect(generate).toBeDisabled();
+    expect(generate).toHaveAttribute('aria-busy', 'true');
+    expect(generate).toHaveTextContent('正在打开…');
+    expect(generate.closest('td')).toHaveAttribute('aria-busy', 'true');
 
     await act(async () => {
       sseMock.status = 'done';
@@ -256,8 +262,9 @@ describe('我的 Agent 页', () => {
       forceCapabilitiesPageRender?.();
     });
     await waitFor(() => expect(opened).toHaveLength(1));
-    expect(mock.calls[2]?.url).toContain('versionId=v-1');
-    expect(mock.calls[3]?.body).toEqual({
+    expect(mock.calls[2]?.url).toContain('/api/v1/runtime/studio/trial-chains/cap-1/session');
+    expect(mock.calls[2]?.method).toBe('POST');
+    expect(mock.calls[2]?.body).toEqual({
       versionId: 'v-1',
       title: '保险话术助手 页面设计',
     });
@@ -303,10 +310,52 @@ describe('我的 Agent 页', () => {
     await userEvent.click(screen.getByRole('button', { name: /编辑.*UI 版本/ }));
     await waitFor(() => expect(opened).toHaveLength(1));
     expect(opened[0]).toContain('/try/session/rt-1?returnTo=%2Fcapabilities');
-    expect(mock.calls[1]?.url).toContain(
-      '/api/v1/runtime/trial-chains/cap-1/latest-session?versionId=v-1',
+    expect(mock.calls[1]?.url).toContain('/api/v1/runtime/studio/trial-chains/cap-1/session');
+    expect(mock.calls[1]?.method).toBe('POST');
+    expect(mock.calls[1]?.body).toEqual({
+      versionId: 'v-1',
+      title: '保险话术助手 页面设计',
+    });
+  });
+
+  it('设计空间打开失败时，错误回到对应 Agent 行内并恢复按钮', async () => {
+    mock = installFetchMock([
+      {
+        status: 200,
+        json: pageBody([
+          row({
+            reviewStatus: 'draft',
+            statusLabel: '草稿',
+            publishedAt: null,
+            publicPageAvailable: false,
+            studioAvailable: true,
+          }),
+        ]),
+      },
+      {
+        status: 503,
+        json: {
+          error: {
+            userMessage: '设计空间暂时没有准备好，请稍后重试。',
+            retriable: true,
+            action: 'retry',
+            traceId: 'studio-open',
+          },
+        },
+      },
+    ]);
+    renderPage(<CapabilitiesPage />, '/capabilities');
+
+    const name = await screen.findByText('保险话术助手');
+    await userEvent.click(screen.getByRole('button', { name: /编辑.*UI 版本/ }));
+
+    const capabilityRow = name.closest('tr');
+    expect(capabilityRow).not.toBeNull();
+    expect(await within(capabilityRow!).findByRole('alert')).toHaveTextContent(
+      '设计空间暂时没有准备好，请稍后重试。',
     );
-    expect(mock.calls.filter((call) => call.method === 'POST')).toHaveLength(0);
+    expect(within(capabilityRow!).getByRole('button', { name: /编辑.*UI 版本/ })).toBeEnabled();
+    expect(document.querySelector('.cb-capabilities__action-error')).toBeNull();
   });
 
   it('已发布且没有草稿时，先复制为新草稿，再进入对应版本的 UI Studio', async () => {
@@ -335,7 +384,6 @@ describe('我的 Agent 页', () => {
           },
         },
       },
-      { status: 200, json: { session: null, verified: false } },
       {
         status: 201,
         json: {
@@ -361,8 +409,8 @@ describe('我的 Agent 页', () => {
     expect(mock.calls[1]?.url).toContain('/api/v1/capabilities');
     expect(mock.calls[1]?.body).toEqual({ capabilityId: 'cap-1' });
     expect(mock.calls[1]?.headers['Idempotency-Key']).toBe('studio:draft:cap-1:v-1');
-    expect(mock.calls[2]?.url).toContain('versionId=v-draft');
-    expect(mock.calls[3]?.body).toEqual({
+    expect(mock.calls[2]?.url).toContain('/api/v1/runtime/studio/trial-chains/cap-1/session');
+    expect(mock.calls[2]?.body).toEqual({
       versionId: 'v-draft',
       sourceVersionId: '11111111-1111-4111-8111-111111111111',
       title: '保险话术助手 页面设计',
@@ -401,7 +449,6 @@ describe('我的 Agent 页', () => {
           },
         },
       },
-      { status: 200, json: { session: null, verified: false } },
       {
         status: 201,
         json: {
@@ -428,8 +475,8 @@ describe('我的 Agent 页', () => {
     expect(mock.calls[1]?.headers['Idempotency-Key']).toBe(
       `studio:retry:cap-1:${rejectedVersionId}`,
     );
-    expect(mock.calls[2]?.url).toContain('versionId=v-repair');
-    expect(mock.calls[3]?.body).toEqual({
+    expect(mock.calls[2]?.url).toContain('/api/v1/runtime/studio/trial-chains/cap-1/session');
+    expect(mock.calls[2]?.body).toEqual({
       versionId: 'v-repair',
       sourceVersionId: rejectedVersionId,
       title: '保险话术助手 页面设计',
@@ -437,154 +484,7 @@ describe('我的 Agent 页', () => {
     expect(opened[0]).toContain('/try/session/rt-repair?returnTo=%2Fcapabilities');
   });
 
-  it('旧系统式名称可在列表触发真实 manifest 自动命名任务', async () => {
-    mock = installFetchMock([
-      {
-        status: 200,
-        json: pageBody([
-          row({
-            reviewStatus: 'draft',
-            statusLabel: '草稿',
-            publishedAt: null,
-            publicPageAvailable: false,
-            name: '<recommended_plugins>',
-            nameNeedsReview: true,
-            studioAvailable: true,
-          }),
-        ]),
-      },
-      {
-        status: 202,
-        json: {
-          data: {
-            jobId: 'job-1',
-            field: 'name',
-            eventsUrl: '/api/v1/versions/v-1/structure/events',
-          },
-        },
-      },
-    ]);
-    renderPage(<CapabilitiesPage />);
-
-    await screen.findByText('<recommended_plugins>');
-    await userEvent.dblClick(screen.getByRole('button', { name: /自动整理.*名称/ }));
-
-    await waitFor(() => expect(mock!.calls).toHaveLength(2));
-    const request = mock!.calls[1]!;
-    expect(request.url).toContain('/api/v1/versions/v-1/manifest/fields/name/regenerate');
-    expect(request.method).toBe('POST');
-    expect(request.body).toEqual({ reason: 'manual' });
-    expect(request.headers['X-Idempotency-Scope']).toBe('manifest.regenerate_field');
-    expect(screen.getByRole('button', { name: /自动整理.*名称/ })).toBeDisabled();
-  });
-
-  it('公开版旧名称会先创建可编辑草稿，再对新版本执行自动命名', async () => {
-    mock = installFetchMock([
-      {
-        status: 200,
-        json: pageBody([
-          row({
-            name: '<recommended_plugins>',
-            nameNeedsReview: true,
-            studioDraftable: true,
-          }),
-        ]),
-      },
-      {
-        status: 201,
-        json: {
-          data: {
-            capabilityId: 'cap-1',
-            versionId: 'v-name-draft',
-            slug: 'demo',
-            version: '0.2.0',
-            manifest: { name: '<recommended_plugins>' },
-            structureState: {},
-          },
-        },
-      },
-      {
-        status: 202,
-        json: {
-          data: {
-            jobId: 'job-published-name',
-            field: 'name',
-            eventsUrl: '/api/v1/versions/v-name-draft/structure/events',
-          },
-        },
-      },
-    ]);
-    renderPage(<CapabilitiesPage />);
-
-    await screen.findByText('<recommended_plugins>');
-    await userEvent.click(screen.getByRole('button', { name: /自动整理.*名称/ }));
-    await waitFor(() => expect(mock!.calls).toHaveLength(3));
-
-    expect(mock.calls[1]?.body).toEqual({ capabilityId: 'cap-1' });
-    expect(mock.calls[2]?.url).toContain(
-      '/api/v1/versions/v-name-draft/manifest/fields/name/regenerate',
-    );
-  });
-
-  it('同一版本连续自动命名时以 jobId 区分新旧任务，不被相同 SSE URL 的旧终态吞掉', async () => {
-    const dirty = row({
-      reviewStatus: 'draft',
-      statusLabel: '草稿',
-      publishedAt: null,
-      publicPageAvailable: false,
-      name: '<recommended_plugins>',
-      nameNeedsReview: true,
-      studioAvailable: true,
-    });
-    const eventsUrl = '/api/v1/versions/v-1/structure/events';
-    mock = installFetchMock([
-      { status: 200, json: pageBody([dirty]) },
-      {
-        status: 202,
-        json: { data: { jobId: 'job-1', field: 'name', eventsUrl } },
-      },
-      { status: 200, json: pageBody([dirty]) },
-      {
-        status: 202,
-        json: { data: { jobId: 'job-2', field: 'name', eventsUrl } },
-      },
-      { status: 200, json: pageBody([dirty]) },
-    ]);
-    renderPage(<ControlledCapabilitiesPage />);
-
-    await screen.findByText('<recommended_plugins>');
-    const renameButton = () => screen.getByRole('button', { name: /自动整理.*名称/ });
-    await userEvent.click(renameButton());
-    await waitFor(() => expect(mock!.calls).toHaveLength(2));
-
-    await act(async () => {
-      sseMock.status = 'done';
-      sseMock.done = { status: 'completed' };
-      forceCapabilitiesPageRender?.();
-    });
-    await waitFor(() => expect(mock!.calls.length).toBeGreaterThanOrEqual(3));
-    await waitFor(() => expect(renameButton()).toBeEnabled());
-
-    // 第二次任务复用同一 eventsUrl；此时 hook 还保留上次 done。
-    await userEvent.click(renameButton());
-    await waitFor(() => expect(mock!.calls.length).toBeGreaterThanOrEqual(4));
-    expect(renameButton()).toBeDisabled();
-
-    await act(async () => {
-      sseMock.status = 'connecting';
-      sseMock.done = null;
-      forceCapabilitiesPageRender?.();
-    });
-    await act(async () => {
-      sseMock.status = 'done';
-      sseMock.done = { status: 'completed' };
-      forceCapabilitiesPageRender?.();
-    });
-    await waitFor(() => expect(mock!.calls.length).toBeGreaterThanOrEqual(5));
-    await waitFor(() => expect(renameButton()).toBeEnabled());
-  });
-
-  it('自动命名任务以 done=failed 收口时保留错误，不误报成功', async () => {
+  it('名称需要优化时也不暴露手动自动命名入口', async () => {
     mock = installFetchMock([
       {
         status: 200,
@@ -599,34 +499,12 @@ describe('我的 Agent 页', () => {
           }),
         ]),
       },
-      {
-        status: 202,
-        json: {
-          data: {
-            jobId: 'job-failed',
-            field: 'name',
-            eventsUrl: '/api/v1/versions/v-1/structure/events',
-          },
-        },
-      },
     ]);
-    renderPage(<ControlledCapabilitiesPage />);
+    renderPage(<CapabilitiesPage />);
 
     await screen.findByText('<recommended_plugins>');
-    await userEvent.click(screen.getByRole('button', { name: /自动整理.*名称/ }));
-    await waitFor(() => expect(mock!.calls).toHaveLength(2));
-    await act(async () => {
-      sseMock.status = 'done';
-      sseMock.done = {
-        status: 'failed',
-        error: { error: { userMessage: '名称生成失败，请重试。' } },
-      };
-      forceCapabilitiesPageRender?.();
-    });
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('名称生成失败，请重试。');
-    expect(mock.calls).toHaveLength(2);
-    expect(screen.getByRole('button', { name: /自动整理.*名称/ })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: /自动整理.*名称/ })).toBeNull();
+    expect(screen.queryByText('名称可优化')).toBeNull();
   });
 
   it('空态（无 Agent）→ 友好空态，不裸空表', async () => {

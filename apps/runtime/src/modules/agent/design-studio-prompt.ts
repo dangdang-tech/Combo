@@ -22,6 +22,25 @@ const DESIGN_STUDIO_RULES = `
 `.trim();
 
 /**
+ * One bounded recovery instruction for a normal model turn that returned
+ * without a renderable page. This is deliberately a prompt (rather than a
+ * second Agent) so the repair keeps the original request, tool errors and
+ * capability context in view.
+ */
+export const DESIGN_STUDIO_REPAIR_PROMPT = `
+系统自动修复：你刚才正常结束了回复，但没有成功写入可预览的 main HTML 页面。
+
+现在不要道歉、不要解释、不要只给建议，也不要先创建辅助产物。请立即调用 upsert_artifact，使用 artifactKey="main"、kind="html" 写入一份完整、自包含的 HTML 文档，并确保：
+- 包含 <!doctype html>、html、body 及完整闭合标签；
+- 实际落实用户本轮要求，同时保留当前能力的业务边界；
+- 主操作带 data-combo-key="run-primary"，从用户当前填写内容生成非空 prompt；
+- 只通过 window.parent.postMessage({ type: 'combo:run', version: 1, prompt }, '*') 调用真实 Runtime；
+- 不使用 setTimeout、setInterval、Math.random、mock 或硬编码结果伪造执行。
+
+工具成功后，只用一句面向用户的话说明页面已经按要求更新。
+`.trim();
+
+/**
  * Per-run Design Agent overlay. It preserves the frozen capability contract
  * while forcing the main deliverable into the persistent HTML version chain.
  */
@@ -32,6 +51,18 @@ export function withDesignStudioInstructions(baseInstructions: string): string {
 /** Design runs only count as completed after producing a fresh main HTML page. */
 export function hasDesignStudioPage(artifacts: readonly ArtifactRef[]): boolean {
   return artifacts.some((artifact) => artifact.artifactKey === 'main' && artifact.kind === 'html');
+}
+
+/** A design turn is durable only when its fresh ref and stored page both pass the contract. */
+export function hasValidDesignStudioResult(
+  artifacts: readonly ArtifactRef[],
+  mainHtml: string | null | undefined,
+): boolean {
+  return (
+    hasDesignStudioPage(artifacts) &&
+    isCompleteDesignStudioHtml(mainHtml) &&
+    hasDesignStudioRuntimeBridge(mainHtml)
+  );
 }
 
 /** Lightweight document guard; visual and interaction checks remain a separate concern. */

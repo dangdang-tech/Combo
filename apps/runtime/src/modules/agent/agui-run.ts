@@ -17,8 +17,9 @@ import { saveTurn, type SessionRow } from '../session/repo.js';
 import type { AguiEmitter } from './agui-emitter.js';
 import { buildAgent } from './build-agent.js';
 import {
-  hasDesignStudioPage,
+  DESIGN_STUDIO_REPAIR_PROMPT,
   hasDesignStudioRuntimeBridge,
+  hasValidDesignStudioResult,
   isCompleteDesignStudioHtml,
 } from './design-studio-prompt.js';
 import { hasLlmCredential } from './model.js';
@@ -179,8 +180,50 @@ export async function runAgui(input: RunAguiInput): Promise<RunAguiResult> {
     }
   });
 
+  const runtimeFailureMessage = (): string | null => {
+    // pi 把一部分供应商/运行时失败编码进最终消息，而不是从 prompt() 抛出。
+    const msgs = agent.state.messages;
+    const lastAssistant = [...msgs]
+      .reverse()
+      .find((m) => (m as { role?: string }).role === 'assistant') as
+      | { stopReason?: string; errorMessage?: string }
+      | undefined;
+    if (lastAssistant?.stopReason !== 'error' && agent.state.errorMessage == null) return null;
+    return agent.state.errorMessage ?? lastAssistant?.errorMessage ?? 'unknown runtime failure';
+  };
+
+  const failRuntime = async (errorMessage: string): Promise<RunAguiResult> => {
+    log.error({ errorMessage }, 'runAgui: LLM runtime failure (encoded in message)');
+    closeTextIfOpen();
+    const interrupted = emitter.signal.aborted;
+    if (!interrupted) {
+      emitStage(currentStage, 'failed');
+      emitter.runError('模型调用失败（额度/网络/服务波动），请重试。');
+      await emitter.flush();
+      emitter.end();
+    }
+    return interrupted ? 'interrupted' : 'failed';
+  };
+
   try {
     await agent.prompt(userText);
+
+    // A provider/runtime error is terminal. Only a normal, artifact-less design
+    // response is eligible for the single repair attempt below.
+    const firstRuntimeFailure = runtimeFailureMessage();
+    if (firstRuntimeFailure) {
+      unsubscribe();
+      return await failRuntime(firstRuntimeFailure);
+    }
+    if (emitter.signal.aborted) {
+      unsubscribe();
+      emitter.end();
+      return 'interrupted';
+    }
+
+    if (input.intent === 'design' && !hasValidDesignStudioResult(collected, designPageContent)) {
+      await agent.prompt(DESIGN_STUDIO_REPAIR_PROMPT);
+    }
   } catch (err) {
     unsubscribe();
     if (emitter.signal.aborted) {
@@ -197,37 +240,13 @@ export async function runAgui(input: RunAguiInput): Promise<RunAguiResult> {
   }
   unsubscribe();
 
-  // pi 把运行时失败编码进最终消息（stopReason='error'）而非抛错，显式探测。
-  const msgs = agent.state.messages;
-  const lastAssistant = [...msgs]
-    .reverse()
-    .find((m) => (m as { role?: string }).role === 'assistant') as
-    | { stopReason?: string; errorMessage?: string }
-    | undefined;
-  if (lastAssistant?.stopReason === 'error' || agent.state.errorMessage != null) {
-    log.error(
-      { errorMessage: agent.state.errorMessage ?? lastAssistant?.errorMessage },
-      'runAgui: LLM runtime failure (encoded in message)',
-    );
-    closeTextIfOpen();
-    if (!emitter.signal.aborted) {
-      emitStage(currentStage, 'failed');
-      emitter.runError('模型调用失败（额度/网络/服务波动），请重试。');
-      await emitter.flush();
-      emitter.end();
-    }
-    return emitter.signal.aborted ? 'interrupted' : 'failed';
-  }
+  const finalRuntimeFailure = runtimeFailureMessage();
+  if (finalRuntimeFailure) return await failRuntime(finalRuntimeFailure);
 
-  if (
-    input.intent === 'design' &&
-    (!hasDesignStudioPage(collected) ||
-      !isCompleteDesignStudioHtml(designPageContent) ||
-      !hasDesignStudioRuntimeBridge(designPageContent))
-  ) {
+  if (input.intent === 'design' && !hasValidDesignStudioResult(collected, designPageContent)) {
     closeTextIfOpen();
     emitStage(stageTemplates.length - 1, 'failed');
-    emitter.runError('这次修改没有生成可预览页面，请重试或换一种描述。');
+    emitter.runError('页面暂时没有生成成功，请重试。');
     await emitter.flush();
     emitter.end();
     return 'failed';

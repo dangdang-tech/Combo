@@ -125,9 +125,8 @@ describe('CapabilityTable 操作入口', () => {
     expect(screen.queryByRole('link', { name: /公开页/ })).toBeNull();
   });
 
-  it('管理页：稳定 Agent 标识 + 草稿可编辑 UI，旧名称可自动整理', async () => {
+  it('管理页：稳定 Agent 标识 + 草稿可编辑 UI，不暴露命名维护动作', async () => {
     const openStudio = vi.fn();
-    const regenerateName = vi.fn();
     const draft = row({
       reviewStatus: 'draft',
       statusLabel: '草稿',
@@ -138,34 +137,21 @@ describe('CapabilityTable 操作入口', () => {
       name: '<recommended_plugins>',
     });
     const { container, rerender } = renderTable(
-      <CapabilityTable
-        rows={[draft]}
-        meta={undefined}
-        mode="manage"
-        onOpenStudio={openStudio}
-        onRegenerateName={regenerateName}
-      />,
+      <CapabilityTable rows={[draft]} meta={undefined} mode="manage" onOpenStudio={openStudio} />,
     );
 
     const mark = container.querySelector('.cb-agent-mark') as HTMLElement;
     const variant = mark.getAttribute('data-variant');
     expect(mark).toHaveTextContent('RP');
     expect(variant).toMatch(/^[1-8]$/);
-    expect(screen.getByText('名称可优化')).toBeInTheDocument();
+    expect(screen.queryByText('名称可优化')).toBeNull();
+    expect(screen.queryByRole('button', { name: /自动整理.*名称/ })).toBeNull();
 
     await userEvent.click(screen.getByRole('button', { name: /编辑.*UI 版本/ }));
     expect(openStudio).toHaveBeenCalledWith(draft);
-    await userEvent.click(screen.getByRole('button', { name: /自动整理.*名称/ }));
-    expect(regenerateName).toHaveBeenCalledWith(draft);
 
     rerender(
-      <CapabilityTable
-        rows={[draft]}
-        meta={undefined}
-        mode="manage"
-        onOpenStudio={openStudio}
-        onRegenerateName={regenerateName}
-      />,
+      <CapabilityTable rows={[draft]} meta={undefined} mode="manage" onOpenStudio={openStudio} />,
     );
     expect(container.querySelector('.cb-agent-mark')).toHaveAttribute('data-variant', variant);
   });
@@ -263,6 +249,37 @@ describe('CapabilityTable 操作入口', () => {
     for (const button of screen.getAllByRole('button', { name: /编辑.*UI 版本/ })) {
       expect(button).toBeDisabled();
     }
+  });
+
+  it('管理页：正在打开与失败反馈都归属对应 Agent 行', () => {
+    const first = row({ capabilityId: 'cap-1', studioAvailable: true, publicPageAvailable: false });
+    const second = row({
+      capabilityId: 'cap-2',
+      name: '第二个 Agent',
+      studioAvailable: true,
+      publicPageAvailable: false,
+    });
+    const { container } = renderTable(
+      <CapabilityTable
+        rows={[first, second]}
+        meta={undefined}
+        mode="manage"
+        onOpenStudio={vi.fn()}
+        openingCapabilityId="cap-1"
+        studioError={{ capabilityId: 'cap-2', message: '暂时没能打开设计空间。' }}
+        actionsBusy
+      />,
+    );
+
+    const firstRow = container.querySelector('[data-capability="cap-1"]') as HTMLElement;
+    const secondRow = container.querySelector('[data-capability="cap-2"]') as HTMLElement;
+    expect(within(firstRow).getByRole('button', { name: /编辑.*UI 版本/ })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    );
+    expect(within(firstRow).getByRole('button')).toHaveTextContent('正在打开…');
+    expect(within(secondRow).getByRole('alert')).toHaveTextContent('暂时没能打开设计空间。');
+    expect(within(firstRow).queryByRole('alert')).toBeNull();
   });
 
   it('空 rows → 友好空态，不裸空表', () => {
