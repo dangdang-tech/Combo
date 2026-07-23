@@ -141,6 +141,45 @@ jobs:
           rsync -az --delete infra/k8s/ cloud-review-target:/opt/combo-preview/infra/k8s/
           rsync -az scripts/deploy-cloud-review.sh scripts/cloud-review-smoke.sh cloud-review-target:/opt/combo-preview/scripts/
 
+      - name: Restore preview-only secrets if missing
+        run: |
+          ssh cloud-review-target 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+          namespace=combo-preview
+          secret_root=/opt/combo-preview/secrets
+
+          kubectl apply -f /opt/combo-preview/infra/k8s/overlays/cloud-review/platform/namespace.yaml
+
+          if ! kubectl -n "$namespace" get secret combo-preview-env >/dev/null 2>&1; then
+            test -s "$secret_root/app.env" || {
+              echo "[cloud-review] 缺少预览专属配置备份 $secret_root/app.env" >&2
+              exit 78
+            }
+            kubectl -n "$namespace" create secret generic combo-preview-env \
+              --from-env-file="$secret_root/app.env"
+          fi
+
+          if ! kubectl -n "$namespace" get secret combo-preview-bootstrap >/dev/null 2>&1; then
+            test -s "$secret_root/dev-session-secret" || {
+              echo "[cloud-review] 缺少预览专属 dev session 密钥备份" >&2
+              exit 78
+            }
+            test -s "$secret_root/review-access-token" || {
+              echo "[cloud-review] 缺少预览专属 Review token 备份" >&2
+              exit 78
+            }
+            kubectl -n "$namespace" create secret generic combo-preview-bootstrap \
+              --from-file=DEV_SESSION_SECRET="$secret_root/dev-session-secret" \
+              --from-file=REVIEW_ACCESS_TOKEN="$secret_root/review-access-token"
+          fi
+
+          kubectl -n "$namespace" get secret combo-preview-ghcr-pull >/dev/null 2>&1 || {
+            echo "[cloud-review] 缺少预览专属 GHCR pull Secret，拒绝使用生产凭据回退" >&2
+            exit 78
+          }
+          REMOTE
+
       - name: Sync preview LLM configuration
         env:
           OPENROUTER_API_KEY: ${{ secrets.CLOUD_REVIEW_OPENROUTER_API_KEY }}
