@@ -321,9 +321,9 @@ capture_preview_environment() {
       'LOGTO_AUDIENCE=https://api.buildwithcombo.com'
   } >> "$merged_env_file"
 
-  cp "$merged_env_file" "$raw_env_file"
+  cp "$merged_env_file" "$raw_env_file" || return 1
   if raw_environment_has_required_app_keys; then
-    validate_public_oidc_metadata
+    validate_public_oidc_metadata || return 1
     preview_environment_captured=true
     echo "[cloud-review] 已从 $fragment_count 个预览工作负载聚合恢复配置"
     return 0
@@ -452,7 +452,7 @@ restore_app_secret() {
 extract_environment_value() {
   local key_name="$1"
   local target_file="$2"
-  python3 - "$raw_env_file" "$target_file" "$key_name" <<'PY'
+  if ! python3 - "$raw_env_file" "$target_file" "$key_name" <<'PY'
 import sys
 
 source, target, wanted = sys.argv[1:]
@@ -470,7 +470,11 @@ if not value:
 with open(target, "w", encoding="utf-8") as handle:
     handle.write(value)
 PY
-  chmod 600 "$target_file"
+  then
+    rm -f "$target_file"
+    return 1
+  fi
+  chmod 600 "$target_file" || return 1
 }
 
 capture_bootstrap_backups() {

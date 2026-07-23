@@ -22,7 +22,6 @@ concurrency:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   resolve:
@@ -61,6 +60,9 @@ jobs:
     name: build + push ${{ matrix.image }}
     runs-on: ubuntu-latest
     needs: resolve
+    permissions:
+      contents: read
+      packages: write
     strategy:
       matrix:
         include:
@@ -114,6 +116,9 @@ jobs:
     needs: [resolve, images]
     environment: cloud-review
     timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -148,6 +153,49 @@ jobs:
             scripts/recover-cloud-review-secrets.sh \
             scripts/cloud-review-smoke.sh \
             cloud-review-target:/opt/combo-preview/scripts/
+
+      - name: Refresh preview image pull credential
+        env:
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          test -n "$GHCR_USERNAME"
+          test -n "$GHCR_TOKEN"
+          ssh cloud-review-target \
+            'kubectl apply -f /opt/combo-preview/infra/k8s/overlays/cloud-review/platform/namespace.yaml >/dev/null'
+          python3 - <<'PY' | ssh cloud-review-target 'kubectl apply -f - >/dev/null'
+          import base64
+          import json
+          import os
+
+          username = os.environ["GHCR_USERNAME"]
+          token = os.environ["GHCR_TOKEN"]
+          auth = base64.b64encode(f"{username}:{token}".encode("utf-8")).decode("ascii")
+          docker_config = {
+              "auths": {
+                  "ghcr.io": {
+                      "username": username,
+                      "password": token,
+                      "auth": auth,
+                  }
+              }
+          }
+          manifest = {
+              "apiVersion": "v1",
+              "kind": "Secret",
+              "metadata": {
+                  "name": "combo-preview-ghcr-pull",
+                  "namespace": "combo-preview",
+              },
+              "type": "kubernetes.io/dockerconfigjson",
+              "data": {
+                  ".dockerconfigjson": base64.b64encode(
+                      json.dumps(docker_config, separators=(",", ":")).encode("utf-8")
+                  ).decode("ascii")
+              },
+          }
+          print(json.dumps(manifest, separators=(",", ":")))
+          PY
 
       - name: Restore preview-only secrets if missing
         env:
