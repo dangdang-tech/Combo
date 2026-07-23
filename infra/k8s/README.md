@@ -80,3 +80,5 @@ kubectl apply -f infra/k8s/api.yaml -f infra/k8s/worker.yaml -f infra/k8s/runtim
 ## combo-dev 覆盖层
 
 开发组合环境的固定覆盖层位于 `overlays/combo-dev/`。它只复用 `combo-preview` 命名空间，并用 Kubernetes 内置的静态卷模式把三个 PVC 预绑定到独立有界挂载中的三个本地 PV，不包含自定义存储 provisioner。共享 k3s 只依赖生产所需父数据盘，开发工作负载只挂载 PVC，不使用 `hostPath`。主机 bootstrap 会先完成全部只读检查，再写入持久阻断、关闭转发器并验证所有写入者停止，随后才清理通过精确绑定验证的旧 Cloud Review 三卷数据、创建固定目录或应用平台对象。额外、部分或路径漂移的旧存储不会被自动删除。Namespace、集群 RBAC、StorageClass 和三个 PV 必须与 bootstrap 保存的规范契约完整一致。应用清单只能由手工触发的受保护工作流处理；工作流要求当前 `main` 的完整 SHA 与成功 CI，并与生产 CD 共用 `cd-tecent2` 并发组。它注入镜像摘要后，从五个固定阶段的已验证字节按覆盖层 README 的顺序部署，不能直接应用仓库模板。
+
+Sandbox Tools 的 PR 合并前现场验收清单位于 `overlays/sandbox-tools/review/`。它把动态沙箱放入独立的 `combo-review-sandbox` 命名空间，并为 `combo-review` Runtime 提供默认关闭的单独补丁。这个目录固定测试节点、四个测试专用静态本地卷和当前测试镜像摘要，不属于生产部署入口。使用前必须按目录 README 完成主机 loopback 准备、测试 Runtime 镜像部署和分阶段启用。
