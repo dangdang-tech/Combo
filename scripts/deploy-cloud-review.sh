@@ -82,11 +82,20 @@ kubectl -n "$NAMESPACE" wait --for=condition=complete job/migrate --timeout=300s
 
 echo "[cloud-review] 3/3 迁移成功后滚动固定单副本业务面"
 kubectl kustomize --load-restrictor=LoadRestrictionsNone "$WORK_ROOT/overlays/cloud-review/apps" | kubectl apply -f -
-# ConfigMap 与 Secret 使用稳定名称；即使同一 SHA 下只轮换凭据，也要显式重启
-# 使用 Secret 的运行面，以及持有 Nginx envsubst 结果的 Web。
-kubectl -n "$NAMESPACE" rollout restart deployment/worker deployment/runtime deployment/web
-for deployment in api worker consumer sweeper runtime web; do
-  kubectl -n "$NAMESPACE" rollout status "deployment/$deployment" --timeout=300s
+# 固定槽位也承担人工“重新启动”职责。同一 SHA 重新部署时镜像引用不会变化，
+# 因此必须显式滚动全部业务 Deployment，避免已 NotReady 的旧 Pod 被 apply 判为 unchanged。
+deployments=(api worker consumer sweeper runtime web)
+kubectl -n "$NAMESPACE" rollout restart "${deployments[@]/#/deployment/}"
+for deployment in "${deployments[@]}"; do
+  if ! kubectl -n "$NAMESPACE" rollout status "deployment/$deployment" --timeout=300s; then
+    echo "[cloud-review] $deployment rollout 失败；输出诊断信息" >&2
+    kubectl -n "$NAMESPACE" get deployment "$deployment" -o wide >&2 || true
+    kubectl -n "$NAMESPACE" get pods -l "app=$deployment" -o wide >&2 || true
+    kubectl -n "$NAMESPACE" describe deployment "$deployment" >&2 || true
+    kubectl -n "$NAMESPACE" logs "deployment/$deployment" --all-containers --tail=200 >&2 || true
+    kubectl -n "$NAMESPACE" get events --sort-by=.lastTimestamp | tail -n 80 >&2 || true
+    exit 1
+  fi
 done
 
 # Cloud Review 必须能真实运行 Agent；readiness 允许 LLM degraded，部署验收不能允许。

@@ -131,6 +131,8 @@ jobs:
             echo "  User $DEPLOY_USER"
             echo '  IdentityFile ~/.ssh/cloud_review_key'
             echo '  StrictHostKeyChecking yes'
+            echo '  ServerAliveInterval 30'
+            echo '  ServerAliveCountMax 20'
           } >> ~/.ssh/config
 
       - name: Sync review-only manifests and scripts
