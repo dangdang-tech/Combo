@@ -123,7 +123,7 @@ verify_k3s_mount_dependencies() {
 headroom_ok() {
   local free inodes
   free=$(df -B1 --output=avail "$STORAGE_POOL" 2>/dev/null | awk 'NR==2 {print $1}') || return 1
-  inodes=$(df -i --output=iavail "$STORAGE_POOL" 2>/dev/null | awk 'NR==2 {print $1}') || return 1
+  inodes=$(df --output=iavail "$STORAGE_POOL" 2>/dev/null | awk 'NR==2 {print $1}') || return 1
   [[ "$free" =~ ^[0-9]+$ && "$inodes" =~ ^[0-9]+$ ]] || return 1
   (( free >= MIN_FREE_BYTES && inodes >= MIN_FREE_INODES ))
 }

@@ -408,7 +408,7 @@ test('static local PV bindings are complete, canonical, and cannot fall back out
   }
   if (process.platform === 'linux') {
     assert.equal(spawnSync('df', ['-B1', '--output=size', '/'], { stdio: 'ignore' }).status, 0);
-    assert.equal(spawnSync('df', ['-i', '--output=iavail', '/'], { stdio: 'ignore' }).status, 0);
+    assert.equal(spawnSync('df', ['--output=iavail', '/'], { stdio: 'ignore' }).status, 0);
   }
 
   for (const scriptPath of [
