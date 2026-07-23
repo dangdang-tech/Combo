@@ -25,6 +25,7 @@ import { SessionInactiveError } from '../agent/run-turn.js';
 import {
   adoptLegacyCapabilityUiArtifact,
   listArtifacts,
+  readCapabilityUiArtifact,
   seedCapabilityUiArtifact,
 } from '../artifact/repo.js';
 import {
@@ -268,10 +269,13 @@ export function getSessionDetailHandler(): RouteHandlerMethod {
     const { db, objectStore } = req.server.infra;
 
     try {
-      const [capability, messages, artifacts] = await Promise.all([
+      const [capability, messages, artifacts, currentUiArtifact] = await Promise.all([
         readCapabilitySummary(db, session.capabilityId),
         getMessages(db, session.id),
         listArtifacts(db, session.id),
+        session.mode === 'studio'
+          ? readCapabilityUiArtifact(db, session.capabilityId)
+          : Promise.resolve(null),
       ]);
       // 能力行被删属于数据异常（会话仍指着它），按 500 收口而不是装作没会话。
       if (!capability) {
@@ -281,6 +285,14 @@ export function getSessionDetailHandler(): RouteHandlerMethod {
         );
         return sendError(req, reply, ErrorCode.INTERNAL);
       }
+      const sessionCurrentUiArtifactId =
+        currentUiArtifact === null
+          ? null
+          : (artifacts.find(
+              (artifact) =>
+                artifact.id === currentUiArtifact.id ||
+                artifact.sourceArtifactId === currentUiArtifact.id,
+            )?.id ?? null);
       // 开场表单字段与提示语在 MinIO 定义里；定义读不出不阻塞详情（退化为空数组，自由输入仍可用）。
       let inputs: CapabilityInputField[] = [];
       let starterPrompts: string[] = [];
@@ -311,6 +323,7 @@ export function getSessionDetailHandler(): RouteHandlerMethod {
           createdAt: m.createdAt,
         })),
         artifacts,
+        currentUiArtifactId: sessionCurrentUiArtifactId,
       };
       const body: Envelope<SessionDetail> = { data: detail, meta: { traceId: req.id } };
       reply.code(200).send(body);

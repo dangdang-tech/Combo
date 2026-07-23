@@ -1286,6 +1286,9 @@ body {
   grid-template-columns: var(--rt-sidebar-w) minmax(0, 1fr);
   background: var(--cb-bg);
 }
+.rt-trial-app--studio {
+  grid-template-columns: minmax(0, 1fr);
+}
 .rt-trial {
   min-width: 0;
   min-height: 0;
@@ -1358,6 +1361,44 @@ body {
   font-weight: 700;
   color: var(--cb-fg);
 }
+.rt-studio-status {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.rt-save-pill {
+  min-height: 22px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-pill);
+  padding: 0 9px;
+  background: var(--cb-surface-raised);
+  color: var(--cb-muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.rt-save-pill__dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: currentColor;
+}
+.rt-save-pill.is-progress {
+  color: var(--cb-warn);
+}
+.rt-save-pill.is-success {
+  color: var(--cb-ok);
+}
+.rt-save-pill.is-error {
+  border-color: var(--cb-danger-line);
+  background: var(--cb-danger-soft);
+  color: var(--cb-danger);
+}
 .rt-toolbar-pill {
   padding: 4px 10px;
   color: var(--cb-accent);
@@ -1396,6 +1437,8 @@ body {
 .rt-genui__canvas {
   min-height: 0;
   position: relative;
+  display: flex;
+  flex-direction: column;
   overflow: auto;
   background: var(--cb-bg);
 }
@@ -1435,6 +1478,7 @@ body {
   position: sticky;
   top: 10px;
   z-index: 5;
+  flex: 0 0 auto;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -1453,6 +1497,12 @@ body {
   min-height: 100%;
   padding: 24px 32px 20px;
   transition: padding-right 180ms ease;
+}
+.rt-artifact-stage--html {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 .rt-genui__canvas[data-chat-docked='true'] .rt-artifact-stage {
   padding-right: calc(var(--rt-docked-chat-w) + 48px);
@@ -1500,6 +1550,10 @@ body {
 }
 .rt-artifact-stage > .rt-artifact__frame {
   height: min(820px, calc(100dvh - 172px));
+}
+.rt-artifact-stage--html > .rt-artifact__frame {
+  height: 100%;
+  min-height: 0;
 }
 .rt-run-confirm-backdrop {
   position: absolute;

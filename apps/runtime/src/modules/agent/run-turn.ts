@@ -342,6 +342,11 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
       await finishFailed('本轮回复未能保存（数据库异常），请重试。');
       return;
     }
+    if (args.mode === 'studio' && !lastStudioArtifactId) {
+      log.error({ runId }, 'Studio turn completed without an artifact revision');
+      await finishFailed('本轮没有生成可保存的页面，请重试。');
+      return;
+    }
     let ok: boolean;
     try {
       ok = await withTransaction(deps.db, async (tx) => {

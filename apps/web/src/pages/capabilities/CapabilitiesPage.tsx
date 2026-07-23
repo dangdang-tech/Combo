@@ -62,7 +62,7 @@ function defaultNavigateToStudio(url: string): void {
 }
 
 function studioUrl(sessionId: string): string {
-  return `/try/session/${encodeURIComponent(sessionId)}?returnTo=${encodeURIComponent('/capabilities')}`;
+  return `/try/session/${encodeURIComponent(sessionId)}?mode=studio&returnTo=${encodeURIComponent('/capabilities')}`;
 }
 
 export function CapabilitiesPage({
