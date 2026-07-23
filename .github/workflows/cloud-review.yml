@@ -186,8 +186,9 @@ jobs:
           test -n "$GHCR_USERNAME"
           test -n "$GHCR_TOKEN"
           ssh cloud-review-target \
-            "kubectl apply -f $REVIEW_ROOT/infra/k8s/overlays/cloud-review/platform/namespace.yaml >/dev/null"
-          python3 - <<'PY' | ssh cloud-review-target 'kubectl apply -f - >/dev/null'
+            "KUBECONFIG=\$HOME/.kube/config kubectl apply -f $REVIEW_ROOT/infra/k8s/overlays/cloud-review/platform/namespace.yaml >/dev/null"
+          python3 - <<'PY' | ssh cloud-review-target \
+            'KUBECONFIG="$HOME/.kube/config" kubectl apply -f - >/dev/null'
           import base64
           import json
           import os
@@ -242,7 +243,7 @@ jobs:
           test "$RUNTIME_LLM_PROVIDER" = openrouter
           test -n "$RUNTIME_LLM_MODEL"
           python3 - <<'PY' | ssh cloud-review-target \
-            'kubectl -n combo-review patch secret combo-preview-env --type merge --patch-file /dev/stdin'
+            'KUBECONFIG="$HOME/.kube/config" kubectl -n combo-review patch secret combo-preview-env --type merge --patch-file /dev/stdin'
           import base64
           import json
           import os
