@@ -286,7 +286,9 @@ host_preflight() {
   [[ $(cat /etc/combo-dev/journal-retention.approved 2>/dev/null || true) == 'journald=native-retention-bounded' ]] || blocked '缺少原生日志保留上限证据。'
   [[ $(cat "$STORAGE_APPROVAL" 2>/dev/null || true) == 'combo-dev-storage=dedicated-hard-18GiB-max' ]] || blocked '缺少独立有界存储池批准。'
   [[ $(cat "$HOST_BOUNDARY_APPROVAL" 2>/dev/null || true) == 'combo-dev-host-boundary=audited-and-active' ]] || blocked '缺少 Pod 到节点的主机级隔离批准。'
-  root_owned_not_writable "$HOST_BOUNDARY_CHECK" && [[ -x "$HOST_BOUNDARY_CHECK" ]] || blocked '主机级隔离检查器不可用或可被非 root 修改。'
+  if ! root_owned_not_writable "$HOST_BOUNDARY_CHECK" || [[ ! -x "$HOST_BOUNDARY_CHECK" ]]; then
+    blocked '主机级隔离检查器不可用或可被非 root 修改。'
+  fi
   timeout 30 "$HOST_BOUNDARY_CHECK" --check >/dev/null 2>&1 || blocked '主机级 Pod 到节点隔离未生效。'
   findmnt -rn -M "$DATA_MOUNT" >/dev/null 2>&1 || blocked '固定数据盘尚未挂载。'
   verify_bounded_storage_pool || blocked 'combo-dev 没有使用独立且硬限制为 18 GiB 以内的挂载。'

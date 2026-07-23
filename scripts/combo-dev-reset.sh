@@ -214,7 +214,9 @@ preflight() {
   local cmd
   for cmd in kubectl jq python3 openssl base64 sha256sum flock findmnt systemctl timeout stat dirname readlink df awk install find chown chmod rm; do command -v "$cmd" >/dev/null 2>&1 || blocked "缺少主机工具：$cmd"; done
   root_owned_not_writable /opt/combo-dev/bin || blocked '调度器目录可被非 root 修改。'
-  root_owned_not_writable /opt/combo-dev/bin/combo-dev-production-safety && [[ -x /opt/combo-dev/bin/combo-dev-production-safety ]] || blocked '共享生产安全检查器不可用。'
+  if ! root_owned_not_writable /opt/combo-dev/bin/combo-dev-production-safety || [[ ! -x /opt/combo-dev/bin/combo-dev-production-safety ]]; then
+    blocked '共享生产安全检查器不可用。'
+  fi
   root_owned_not_writable /var/lib/combo-dev || blocked '持久失败收敛目录可被非 root 修改。'
   root_owned_not_writable "${BASH_SOURCE[0]}" || blocked '当前 reset 调度器可被非 root 修改。'
   if ! private_file "$KUBECONFIG_PATH" || ! private_file "$PRODUCTION_KUBECONFIG"; then blocked '缺少 owner-only 的调度或生产只读凭据。'; fi

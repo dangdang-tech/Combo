@@ -49,7 +49,9 @@ root_owned_not_writable() {
 
 verify_host_boundary_control() {
   [[ $(cat "$HOST_BOUNDARY_APPROVAL" 2>/dev/null || true) == 'combo-dev-host-boundary=audited-and-active' ]] || blocked '缺少主机级 Pod 到节点隔离批准。'
-  root_owned_not_writable "$HOST_BOUNDARY_CHECK" && [[ -x "$HOST_BOUNDARY_CHECK" ]] || blocked '主机级隔离检查器不可用或可被非 root 修改。'
+  if ! root_owned_not_writable "$HOST_BOUNDARY_CHECK" || [[ ! -x "$HOST_BOUNDARY_CHECK" ]]; then
+    blocked '主机级隔离检查器不可用或可被非 root 修改。'
+  fi
   timeout 30 "$HOST_BOUNDARY_CHECK" --check >/dev/null 2>&1 || blocked '主机级 Pod 到节点隔离未生效。'
 }
 

@@ -196,7 +196,9 @@ host_preflight() {
   root_owned_not_writable /etc/combo-dev || blocked '开发配置目录可被非 root 修改。'
   root_owned_not_writable "$INSTALL_ROOT" || blocked '安装根目录可被非 root 修改。'
   root_owned_not_writable "$INSTALL_ROOT/bin" || blocked '调度器目录可被非 root 修改。'
-  root_owned_not_writable "$INSTALL_ROOT/bin/combo-dev-production-safety" && [[ -x "$INSTALL_ROOT/bin/combo-dev-production-safety" ]] || blocked '共享生产安全检查器不可用。'
+  if ! root_owned_not_writable "$INSTALL_ROOT/bin/combo-dev-production-safety" || [[ ! -x "$INSTALL_ROOT/bin/combo-dev-production-safety" ]]; then
+    blocked '共享生产安全检查器不可用。'
+  fi
   root_owned_not_writable /var/lib/combo-dev || blocked '持久失败收敛目录可被非 root 修改。'
   root_owned_not_writable "$INSTALL_ROOT/releases" || blocked '发布目录可被非 root 修改。'
   root_owned_not_writable "$INSTALL_ROOT/acceptance" || blocked '验收器目录可被非 root 修改。'
@@ -212,7 +214,9 @@ host_preflight() {
   [[ $(cat "$JOURNAL_APPROVAL" 2>/dev/null || true) == 'journald=native-retention-bounded' ]] || blocked '缺少原生日志保留上限证据。'
   [[ $(cat "$STORAGE_APPROVAL" 2>/dev/null || true) == 'combo-dev-storage=dedicated-hard-18GiB-max' ]] || blocked '缺少独立有界存储池批准。'
   [[ $(cat "$HOST_BOUNDARY_APPROVAL" 2>/dev/null || true) == 'combo-dev-host-boundary=audited-and-active' ]] || blocked '缺少 Pod 到节点的主机级隔离批准。'
-  root_owned_not_writable "$HOST_BOUNDARY_CHECK" && [[ -x "$HOST_BOUNDARY_CHECK" ]] || blocked '主机级隔离检查器不可用或可被非 root 修改。'
+  if ! root_owned_not_writable "$HOST_BOUNDARY_CHECK" || [[ ! -x "$HOST_BOUNDARY_CHECK" ]]; then
+    blocked '主机级隔离检查器不可用或可被非 root 修改。'
+  fi
   timeout 30 "$HOST_BOUNDARY_CHECK" --check >/dev/null 2>&1 || blocked '主机级 Pod 到节点隔离未生效。'
   findmnt -rn -M "$DATA_MOUNT" >/dev/null 2>&1 || blocked '数据盘没有挂载在固定路径。'
   verify_bounded_storage_pool || blocked 'combo-dev 没有使用独立且硬限制为 18 GiB 以内的挂载。'
