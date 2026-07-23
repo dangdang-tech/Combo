@@ -80,6 +80,8 @@ export const ArtifactViewSchema = z.object({
   id: IdSchema,
   kind: z.string(),
   title: z.string().optional(),
+  /** 从 Agent 当前 UI 克隆到新会话的快照来源；普通 revision 不带。 */
+  sourceArtifactId: IdSchema.optional(),
   updatedAt: IsoDateTimeSchema,
 });
 export type ArtifactView = z.infer<typeof ArtifactViewSchema>;
@@ -98,5 +100,10 @@ export const SessionDetailSchema = z.object({
   }),
   messages: z.array(MessageViewSchema),
   artifacts: z.array(ArtifactViewSchema),
+  /**
+   * 当前 Studio 会话内与 Agent 生效 UI 对应的 artifact；新 Studio 的克隆快照
+   * 会映射为本会话 clone id。consume 会话为 null；旧服务端缺字段时前端安全降级。
+   */
+  currentUiArtifactId: IdSchema.nullable().optional(),
 });
 export type SessionDetail = z.infer<typeof SessionDetailSchema>;

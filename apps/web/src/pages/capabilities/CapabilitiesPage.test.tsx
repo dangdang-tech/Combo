@@ -114,7 +114,7 @@ describe('CapabilitiesPage — Agent 项目列表', () => {
     expect(request?.url).toBe('/api/v1/runtime/studio/sessions');
     expect(request?.body).toEqual({ capabilityId: 'cap-a' });
     expect(navigateToStudio).toHaveBeenCalledWith(
-      '/try/session/studio-session-1?returnTo=%2Fcapabilities',
+      '/try/session/studio-session-1?mode=studio&returnTo=%2Fcapabilities',
     );
   });
 

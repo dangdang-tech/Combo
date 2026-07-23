@@ -5,7 +5,7 @@
 //   - 恢复：GET /runtime/sessions/:id（详情真源）；实时：/stream SSE（useSessionStream）。
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import type { ArtifactView } from '@cb/shared';
+import type { ArtifactView, SessionDetail } from '@cb/shared';
 import { useArtifactContent, useSession } from '../api/runtime.js';
 import { useSessionStream } from '../api/useSessionStream.js';
 import { ArtifactRenderer, type ComboRunRequest } from '../components/ArtifactRenderer.js';
@@ -14,7 +14,11 @@ import { GeneratingPageSkeleton } from '../components/GeneratingPageSkeleton.js'
 import { QueryErrorNotice } from '../components/QueryErrorNotice.js';
 import { SessionSidebar } from '../components/SessionSidebar.js';
 import { TrialIntakeForm } from '../components/TrialIntakeForm.js';
-import { downloadArtifact } from '../components/artifactDownload.js';
+import {
+  artifactDownloadLabel,
+  artifactDownloadTitle,
+  downloadArtifact,
+} from '../components/artifactDownload.js';
 import {
   readRuntimeReturnTo,
   rememberRuntimeReturnTo,
@@ -24,6 +28,12 @@ import { resolveSessionExperience } from '../sessionExperience.js';
 import { useDocumentTitle } from '../shell/useDocumentTitle.js';
 
 export type TrialCanvasState = 'intake' | 'running' | 'output';
+export type StudioSaveTone = 'idle' | 'progress' | 'success' | 'error';
+
+export interface StudioSaveStatus {
+  label: string;
+  tone: StudioSaveTone;
+}
 
 /** Pure state contract: streamed prose never counts as a rendered artifact. */
 export function resolveTrialCanvasState(input: {
@@ -34,6 +44,41 @@ export function resolveTrialCanvasState(input: {
   if (input.running && !input.hasArtifact) return 'running';
   if (input.messageCount === 0 && !input.hasArtifact) return 'intake';
   return 'output';
+}
+
+/** Studio 只有完整轮次成功后才会把 revision 提升为 Agent 当前 UI。 */
+export function resolveStudioSaveStatus(input: {
+  running: boolean;
+  hasArtifact: boolean;
+  hasError: boolean;
+  activeArtifactId: string | null;
+  currentUiArtifactId: string | null | undefined;
+  terminalState: 'completed' | 'failed' | null;
+}): StudioSaveStatus {
+  if (input.running) return { label: '正在生成并保存…', tone: 'progress' };
+  if (input.terminalState === 'failed') {
+    return { label: '本轮未保存', tone: 'error' };
+  }
+  if (input.hasError) {
+    return { label: '保存状态待确认', tone: 'error' };
+  }
+  if (input.activeArtifactId !== null && input.currentUiArtifactId === input.activeArtifactId) {
+    return { label: '已自动保存', tone: 'success' };
+  }
+  if (input.terminalState === 'completed' && !input.hasArtifact) {
+    return { label: '本轮未生成 UI', tone: 'error' };
+  }
+  if (
+    input.hasArtifact &&
+    input.currentUiArtifactId !== undefined &&
+    input.currentUiArtifactId !== input.activeArtifactId
+  ) {
+    return input.terminalState === 'completed'
+      ? { label: '保存状态待确认', tone: 'progress' }
+      : { label: '当前版本未设为 Agent UI', tone: 'error' };
+  }
+  if (input.hasArtifact) return { label: '自动保存已开启', tone: 'idle' };
+  return { label: '尚未生成', tone: 'idle' };
 }
 
 export function ChatPage() {
@@ -70,6 +115,14 @@ export function ChatPage() {
   const activeArtifact = stream.activeArtifactId
     ? (stream.artifacts[stream.activeArtifactId] ?? null)
     : (stream.artifactList.at(-1) ?? null);
+  const studioSaveStatus = resolveStudioSaveStatus({
+    running: stream.running,
+    hasArtifact: activeArtifact !== null,
+    hasError: stream.errorMessage !== null,
+    activeArtifactId: activeArtifact?.id ?? null,
+    currentUiArtifactId: detail?.currentUiArtifactId,
+    terminalState: stream.terminalRun?.state ?? null,
+  });
 
   // 画布状态机：intake（还没开始）→ running（第一轮生成、尚无任何产出）→ output。
   // 流式解释不是产物：第一段文字到达后也要继续保留页面骨架，直到真正产物出现。
@@ -83,6 +136,7 @@ export function ChatPage() {
   const showConversation = hasStarted || studioMode;
   const showIntake = canvasState === 'intake';
   const showGenerating = canvasState === 'running';
+  const showStudioDefault = studioMode && activeArtifact === null && !showGenerating;
   if (stream.running && runStartedAtRef.current === null) runStartedAtRef.current = Date.now();
   if (!stream.running && runStartedAtRef.current !== null) runStartedAtRef.current = null;
   const runStartedAt = runStartedAtRef.current ?? undefined;
@@ -110,15 +164,17 @@ export function ChatPage() {
   }, [mobileSessionsOpen]);
 
   return (
-    <div className="rt-app rt-trial-app">
-      <SessionSidebar
-        activeSessionId={sessionId}
-        capabilityId={sidebarCapability?.id}
-        capabilityName={sidebarCapability?.name}
-        returnTo={contextualReturnTo}
-        runningSessionId={stream.running ? sessionId : undefined}
-        experience={experience}
-      />
+    <div className={`rt-app rt-trial-app${studioMode ? ' rt-trial-app--studio' : ''}`}>
+      {!studioMode && (
+        <SessionSidebar
+          activeSessionId={sessionId}
+          capabilityId={sidebarCapability?.id}
+          capabilityName={sidebarCapability?.name}
+          returnTo={contextualReturnTo}
+          runningSessionId={stream.running ? sessionId : undefined}
+          experience={experience}
+        />
+      )}
       <div className="rt-trial">
         {sessionQ.isPending ? (
           <div className="rt-loading">加载会话…</div>
@@ -132,22 +188,41 @@ export function ChatPage() {
                   {activeArtifact?.title ??
                     (studioMode ? `${capability.name} UI` : capability.name)}
                 </h1>
-                <span className="rt-source-pill">
-                  {studioMode
-                    ? 'UI 设计 · 修改保存在当前会话'
-                    : `${capability.name} · ${capability.kind}`}
-                </span>
+                {studioMode ? (
+                  <div className="rt-studio-status">
+                    <span className="rt-source-pill">UI 设计</span>
+                    <span id="rt-studio-save-help" className="rt-sr-only">
+                      每次生成成功后会自动设为 Agent 当前 UI，无需手动保存。
+                    </span>
+                    <span
+                      className={`rt-save-pill is-${studioSaveStatus.tone}`}
+                      role="status"
+                      aria-live="polite"
+                      aria-label={`保存状态：${studioSaveStatus.label}`}
+                      aria-describedby="rt-studio-save-help"
+                    >
+                      <span className="rt-save-pill__dot" aria-hidden="true" />
+                      {studioSaveStatus.label}
+                    </span>
+                  </div>
+                ) : (
+                  <span className="rt-source-pill">
+                    {capability.name} · {capability.kind}
+                  </span>
+                )}
               </div>
               <div className="rt-trial__actions">
-                <button
-                  type="button"
-                  className="rt-toolbar-pill rt-mobile-sessions-trigger"
-                  aria-expanded={mobileSessionsOpen}
-                  aria-controls="rt-mobile-session-panel"
-                  onClick={() => setMobileSessionsOpen(true)}
-                >
-                  会话管理
-                </button>
+                {!studioMode && (
+                  <button
+                    type="button"
+                    className="rt-toolbar-pill rt-mobile-sessions-trigger"
+                    aria-expanded={mobileSessionsOpen}
+                    aria-controls="rt-mobile-session-panel"
+                    onClick={() => setMobileSessionsOpen(true)}
+                  >
+                    会话管理
+                  </button>
+                )}
                 {studioMode ? (
                   <a className="rt-toolbar-pill" href="/capabilities">
                     返回我的 Agent
@@ -229,21 +304,19 @@ export function ChatPage() {
                         ? '当前是 UI 设计预览。请返回「我的 Agent」，从真实试用运行 Agent。'
                         : undefined
                     }
+                    studioMode={studioMode}
                   />
-                ) : hasStarted && !showGenerating ? (
-                  <div className="rt-empty">
-                    {studioMode
-                      ? '还没有可预览的 UI，继续在左侧描述你想要的页面。'
-                      : '这轮还没有生成产物，可以在对话里继续要求。'}
-                  </div>
+                ) : !studioMode && hasStarted && !showGenerating ? (
+                  <div className="rt-empty">这轮还没有生成产物，可以在对话里继续要求。</div>
                 ) : null}
-                {showIntake && (
-                  <div className="rt-genui__overlay">
+                {(showStudioDefault || (!studioMode && showIntake)) && (
+                  <div
+                    className={`rt-genui__overlay${
+                      studioMode ? ' rt-genui__overlay--studio-default' : ''
+                    }`}
+                  >
                     {studioMode ? (
-                      <section className="rt-studio-empty" aria-label="等待 UI 设计要求">
-                        <h2>从左侧开始设计</h2>
-                        <p>描述页面结构、交互和视觉；首版生成后可以继续修改。</p>
-                      </section>
+                      <StudioDefaultPreview capability={capability} />
                     ) : (
                       <TrialIntakeForm
                         capability={capability}
@@ -265,7 +338,7 @@ export function ChatPage() {
           </>
         )}
       </div>
-      {mobileSessionsOpen && (
+      {!studioMode && mobileSessionsOpen && (
         <div
           className="rt-mobile-session-layer"
           onPointerDown={(event) => {
@@ -307,6 +380,31 @@ export function ChatPage() {
   );
 }
 
+function StudioDefaultPreview({
+  capability,
+}: {
+  capability: NonNullable<SessionDetail['capability']>;
+}) {
+  return (
+    <section className="rt-studio-default" aria-label="当前系统默认页面">
+      <div className="rt-studio-default__notice">
+        <span className="rt-studio-default__eyebrow">系统默认页面</span>
+        <h2>这个 Agent 还没有专属 UI</h2>
+        <p>消费者当前会看到下面的默认页面。在对话区描述要求后，会生成专属 UI 并自动替换。</p>
+      </div>
+      <div className="rt-studio-default__preview">
+        <span className="rt-studio-default__preview-badge">仅预览 · 消费者默认页</span>
+        <TrialIntakeForm
+          capability={capability}
+          disabled={false}
+          preview
+          onSubmit={() => undefined}
+        />
+      </div>
+    </section>
+  );
+}
+
 /** 产物舞台：内容回读（GET /runtime/artifacts/:id/content）+ 按 kind 渲染，占满画布。 */
 function ArtifactStage({
   artifact,
@@ -315,6 +413,7 @@ function ArtifactStage({
   activeRunId,
   terminalRun,
   runDisabledMessage,
+  studioMode,
 }: {
   artifact: ArtifactView;
   onRunRequest?: (request: ComboRunRequest) => Promise<{ turnId: string }>;
@@ -322,28 +421,44 @@ function ArtifactStage({
   activeRunId: string | null;
   terminalRun: { runId: string; state: 'completed' | 'failed'; message: string } | null;
   runDisabledMessage?: string;
+  studioMode: boolean;
 }) {
   const content = useArtifactContent(artifact);
   const title = artifact.title ?? '未命名产物';
+  const htmlStage =
+    artifact.kind === 'html' ||
+    Boolean(
+      content.data &&
+      ['<!doctype html', '<html'].some((prefix) =>
+        content.data.trimStart().slice(0, 64).toLowerCase().startsWith(prefix),
+      ),
+    );
   const [runNotice, setRunNotice] = useState<string | null>(null);
+  const downloadHelpId = `rt-artifact-download-help-${artifact.id}`;
+  const downloadTitle = artifactDownloadTitle(artifact.kind, studioMode);
   useEffect(() => setRunNotice(null), [artifact.id, runDisabledMessage]);
   return (
-    <div className="rt-artifact-stage">
+    <div className={`rt-artifact-stage${htmlStage ? ' rt-artifact-stage--html' : ''}`}>
       <div className="rt-artifact-stage__actions">
         {runNotice && (
           <span className="rt-artifact-run-notice" role="status">
             {runNotice}
           </span>
         )}
+        <span id={downloadHelpId} className="rt-sr-only">
+          {downloadTitle}
+        </span>
         <button
           type="button"
           className="rt-toolbar-pill rt-artifact-download"
           disabled={content.data === undefined || content.isPending || content.isError}
+          title={downloadTitle}
+          aria-describedby={downloadHelpId}
           onClick={() => {
             if (content.data !== undefined) downloadArtifact(title, artifact.kind, content.data);
           }}
         >
-          {content.isPending ? '准备下载…' : '下载产物'}
+          {content.isPending ? '正在准备…' : artifactDownloadLabel(artifact.kind, studioMode)}
         </button>
       </div>
       {content.isPending ? (
