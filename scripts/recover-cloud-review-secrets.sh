@@ -25,7 +25,7 @@ raw_env_file="$(mktemp)"
 filtered_env_file="$(mktemp)"
 inspect_file="$(mktemp)"
 review_access_token="$(cat)"
-api_environment_captured=false
+preview_environment_captured=false
 cleanup() {
   rm -f "$raw_env_file" "$filtered_env_file" "$inspect_file"
   unset review_access_token
@@ -60,38 +60,45 @@ if any(not values.get(name) for name in required):
 PY
 }
 
-capture_api_environment() {
-  local pod_name container_id
+capture_preview_environment() {
+  local workload_name pod_name container_id
 
-  if "$api_environment_captured" && test -s "$raw_env_file"; then
+  if "$preview_environment_captured" && test -s "$raw_env_file"; then
     return 0
   fi
 
-  pod_name="$(
-    kubectl -n "$NAMESPACE" get pods \
-      -l app=api \
-      --field-selector=status.phase=Running \
-      -o 'jsonpath={.items[0].metadata.name}' 2>/dev/null || true
-  )"
-  if test -n "$pod_name" &&
-    kubectl -n "$NAMESPACE" exec "$pod_name" -c api -- env > "$raw_env_file" 2>/dev/null &&
-    raw_environment_has_required_app_keys; then
-    api_environment_captured=true
-    echo "[cloud-review] 从仍在运行的预览 API Pod 恢复配置"
-    return 0
-  fi
+  for workload_name in api runtime; do
+    pod_name="$(
+      kubectl -n "$NAMESPACE" get pods \
+        -l app="$workload_name" \
+        --field-selector=status.phase=Running \
+        -o 'jsonpath={.items[0].metadata.name}' 2>/dev/null || true
+    )"
+    if test -n "$pod_name" &&
+      kubectl -n "$NAMESPACE" exec "$pod_name" -c "$workload_name" -- env > "$raw_env_file" 2>/dev/null &&
+      raw_environment_has_required_app_keys; then
+      preview_environment_captured=true
+      echo "[cloud-review] 从仍在运行的预览 $workload_name Pod 恢复配置"
+      return 0
+    fi
+  done
 
   command -v k3s >/dev/null 2>&1 || return 1
-  while IFS= read -r container_id; do
-    test -n "$container_id" || continue
-    if ! k3s crictl inspect "$container_id" > "$inspect_file" 2>/dev/null; then
-      continue
-    fi
-    if python3 - "$inspect_file" "$raw_env_file" "$NAMESPACE" <<'PY'
+  for workload_name in api runtime; do
+    while IFS= read -r container_id; do
+      test -n "$container_id" || continue
+      if ! k3s crictl inspect "$container_id" > "$inspect_file" 2>/dev/null; then
+        continue
+      fi
+      if python3 - \
+        "$inspect_file" \
+        "$raw_env_file" \
+        "$NAMESPACE" \
+        "$workload_name" <<'PY'
 import json
 import sys
 
-source, target, expected_namespace = sys.argv[1:]
+source, target, expected_namespace, expected_container = sys.argv[1:]
 with open(source, encoding="utf-8") as handle:
     payload = json.load(handle)
 labels = {}
@@ -103,7 +110,7 @@ for candidate in (
         labels.update(candidate)
 if labels.get("io.kubernetes.pod.namespace") != expected_namespace:
     raise SystemExit(1)
-if labels.get("io.kubernetes.container.name") != "api":
+if labels.get("io.kubernetes.container.name") != expected_container:
     raise SystemExit(1)
 env = (
     payload.get("info", {})
@@ -119,15 +126,16 @@ with open(target, "w", encoding="utf-8") as handle:
             handle.write(item)
             handle.write("\n")
 PY
-    then
-      if ! raw_environment_has_required_app_keys; then
-        continue
+      then
+        if ! raw_environment_has_required_app_keys; then
+          continue
+        fi
+        preview_environment_captured=true
+        echo "[cloud-review] 从 K3s 保留的上一代预览 $workload_name 容器恢复配置"
+        return 0
       fi
-      api_environment_captured=true
-      echo "[cloud-review] 从 K3s 保留的上一代预览 API 容器恢复配置"
-      return 0
-    fi
-  done < <(k3s crictl ps -a --name api -q 2>/dev/null || true)
+    done < <(k3s crictl ps -a --name "$workload_name" -q 2>/dev/null || true)
+  done
 
   return 1
 }
@@ -238,8 +246,8 @@ restore_app_secret() {
   if test -s "$SECRET_ROOT/app.env"; then
     cp "$SECRET_ROOT/app.env" "$raw_env_file"
     echo "[cloud-review] 从预览主机备份恢复 $ENV_SECRET"
-  elif ! capture_api_environment; then
-    echo "[cloud-review] 找不到预览 app.env、运行中 API Pod或历史 API 容器；拒绝生产回退" >&2
+  elif ! capture_preview_environment; then
+    echo "[cloud-review] 找不到预览 app.env、运行中业务 Pod 或历史预览容器；拒绝生产回退" >&2
     exit 78
   fi
 
@@ -342,12 +350,12 @@ restore_bootstrap_secret() {
   fi
 
   if ! test -s "$dev_session_secret_file"; then
-    if ! capture_api_environment ||
+    if ! capture_preview_environment ||
       ! extract_environment_value DEV_SESSION_SECRET "$dev_session_secret_file"; then
-      echo "[cloud-review] 缺少预览专属 dev session 密钥备份，历史 API 环境也不可恢复" >&2
+      echo "[cloud-review] 缺少预览专属 dev session 密钥备份，历史预览环境也不可恢复" >&2
       exit 78
     fi
-    echo "[cloud-review] 从历史预览 API 环境恢复 dev session 密钥"
+    echo "[cloud-review] 从历史预览环境恢复 dev session 密钥"
   fi
 
   if ! review_token_is_valid "$review_access_token" &&
