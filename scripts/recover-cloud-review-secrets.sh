@@ -3,7 +3,11 @@
 # 只接受 combo-review 自己的主机备份或工作负载环境；绝不读取生产或 combo-dev namespace。
 set -euo pipefail
 
-KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
+default_kubeconfig=/etc/rancher/k3s/k3s.yaml
+if [[ -r "$HOME/.kube/config" ]]; then
+  default_kubeconfig="$HOME/.kube/config"
+fi
+KUBECONFIG="${KUBECONFIG:-$default_kubeconfig}"
 # 主机备份路径保持不变，以便把现有 Cloud Review 凭据安全迁入新 namespace。
 NAMESPACE=combo-review
 SECRET_ROOT="${SECRET_ROOT:-/opt/combo-preview/secrets}"

@@ -4,8 +4,13 @@ set -euo pipefail
 
 SHA="${SHA:?SHA 必填（40 位提交 SHA；三镜像必须已在 GHCR）}"
 # GitHub Actions uses a non-interactive SSH shell, so profile-exported KUBECONFIG is absent.
-# The managed single-node K3s host keeps its authoritative admin config here.
-KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
+# Prefer the deploy user's managed kubeconfig; dedicated review accounts can
+# still fall back to the node-level K3s config when it is readable.
+default_kubeconfig=/etc/rancher/k3s/k3s.yaml
+if [[ -r "$HOME/.kube/config" ]]; then
+  default_kubeconfig="$HOME/.kube/config"
+fi
+KUBECONFIG="${KUBECONFIG:-$default_kubeconfig}"
 SRC_ROOT="${SRC_ROOT:-/opt/combo-preview/infra/k8s}"
 WORK_ROOT="${WORK_ROOT:-$HOME/combo-preview-k8s-deploy}"
 NAMESPACE=combo-review

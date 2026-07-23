@@ -4,7 +4,11 @@
 # 不删除 Service、Pod、PVC 或任何数据。
 set -euo pipefail
 
-KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
+default_kubeconfig=/etc/rancher/k3s/k3s.yaml
+if [[ -r "$HOME/.kube/config" ]]; then
+  default_kubeconfig="$HOME/.kube/config"
+fi
+KUBECONFIG="${KUBECONFIG:-$default_kubeconfig}"
 COMBO_DEV_NAMESPACE=combo-preview
 export KUBECONFIG
 
