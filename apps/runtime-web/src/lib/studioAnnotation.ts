@@ -1,4 +1,5 @@
 import type { ComboElementSelection } from '../components/ArtifactRenderer.js';
+import { formatStudioDesignOperationMessage } from './studioDesignOperations.js';
 
 const CONTEXT_PREFIX = '请只围绕当前选中的页面元素「';
 const CONTEXT_SUFFIX = '」进行修改。';
@@ -30,6 +31,9 @@ export function buildContextualStudioPrompt(
 
 /** Keep the locator protocol in model context without exposing it in the creator conversation. */
 export function formatStudioAnnotationMessage(value: string): string {
+  const operationMessage = formatStudioDesignOperationMessage(value);
+  if (operationMessage) return operationMessage;
+
   const lines = value.split('\n');
   const firstLine = lines[0] ?? '';
   if (
@@ -45,5 +49,5 @@ export function formatStudioAnnotationMessage(value: string): string {
   const label = firstLine.slice(CONTEXT_PREFIX.length, -CONTEXT_SUFFIX.length).trim();
   const instruction = lines.slice(2, -1).join('\n').trim();
   if (!label || !instruction) return hideLocatorProtocol(value);
-  return `标注「${label}」\n${instruction}`;
+  return `标注「${label}」\n${formatStudioDesignOperationMessage(instruction) ?? instruction}`;
 }

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DESIGN_STUDIO_CRAFT_REPAIR_PROMPT,
   DESIGN_STUDIO_REPAIR_PROMPT,
+  designStudioCraftIssues,
   hasDesignStudioPage,
   hasDesignStudioRuntimeBridge,
   hasValidDesignStudioResult,
@@ -29,6 +31,9 @@ describe('withDesignStudioInstructions', () => {
     expect(prompt).toContain('禁止使用 setTimeout、setInterval、Math.random');
     expect(prompt).toContain('# 视觉连续性（普通 Revision）');
     expect(prompt).toContain('只修改用户点名的区域、状态或元素');
+    expect(prompt).toContain('Operate 型工作界面');
+    expect(prompt).toContain('只选择最影响使用的 1–3 个问题修复');
+    expect(prompt).toContain('在本轮作用域内完成相应的 harden 与 polish');
     expect(prompt).not.toContain('Profile：Calm Editorial');
   });
 
@@ -164,10 +169,18 @@ describe('withDesignStudioInstructions', () => {
 
   it('requires the fresh main ref, complete document and Runtime bridge as one result', () => {
     const ref = [{ artifactKey: 'main', version: 2, kind: 'html' as const, title: 'Miniapp' }];
-    const validHtml = `<!doctype html><html><body>
+    const validHtml = `<!doctype html><html><head>
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <style>
+        :root { --space: 1rem; --focus: #315f7d; }
+        main { padding: var(--space); }
+        button:focus-visible { outline: 2px solid var(--focus); }
+        @media (max-width: 40rem) { main { padding: calc(var(--space) / 2); } }
+      </style>
+    </head><body><main>
       <button data-combo-key="run-primary">运行</button>
       <script>const prompt = '真实输入'; parent.postMessage({type:'combo:run',version:1,prompt}, '*')</script>
-    </body></html>`;
+    </main></body></html>`;
 
     expect(hasValidDesignStudioResult(ref, validHtml)).toBe(true);
     expect(hasValidDesignStudioResult([], validHtml)).toBe(false);
@@ -178,9 +191,61 @@ describe('withDesignStudioInstructions', () => {
         '<!doctype html><html><body><button data-combo-key="run-primary">运行</button></body></html>',
       ),
     ).toBe(false);
+
+    const legacyHtml = `<!doctype html><html><body>
+      <button data-combo-key="run-primary">运行</button>
+      <script>const prompt = '真实输入'; parent.postMessage({type:'combo:run',version:1,prompt}, '*')</script>
+    </body></html>`;
+    expect(hasValidDesignStudioResult(ref, legacyHtml)).toBe(true);
+    expect(hasValidDesignStudioResult(ref, legacyHtml, true)).toBe(false);
   });
 
-  it('provides one strict repair instruction that requires the accepted main page contract', () => {
+  it('keeps the deterministic craft floor small and objective', () => {
+    const bare = `<!doctype html><html><body>
+      <button data-combo-key="run-primary">运行</button>
+    </body></html>`;
+    expect(designStudioCraftIssues(bare)).toEqual([
+      '缺少 viewport meta',
+      '缺少实际复用的 :root Design Tokens',
+      '缺少可见的键盘焦点样式',
+      '缺少响应式布局策略',
+    ]);
+
+    const crafted = `<!doctype html><html><head>
+      <meta name="viewport" content="width=device-width">
+      <style>
+        :root { --gap: 1rem; }
+        main { display: grid; gap: var(--gap); grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
+        button:focus-visible { outline: 2px solid currentColor; }
+      </style>
+    </head><body></body></html>`;
+    expect(designStudioCraftIssues(crafted)).toEqual([]);
+  });
+
+  it('accepts common legal syntax variants and ignores detector hints in comments', () => {
+    const fluid = `<!doctype html><html><head>
+      <meta name=viewport content="width=device-width">
+      <style>
+        :root[data-theme="light"], html { --gap: 1rem; }
+        main { width: 92vw; max-width: 60rem; gap: var(--gap); }
+        button:focus-visible { outline: 2px solid currentColor; }
+      </style>
+    </head><body></body></html>`;
+    expect(designStudioCraftIssues(fluid)).toEqual([]);
+
+    const commentsOnly = `<!doctype html><html><head>
+      <!-- <meta name="viewport"> -->
+      <style>/* :root { --gap: 1rem; } var(--gap) :focus-visible @media */</style>
+    </head><body></body></html>`;
+    expect(designStudioCraftIssues(commentsOnly)).toEqual([
+      '缺少 viewport meta',
+      '缺少实际复用的 :root Design Tokens',
+      '缺少可见的键盘焦点样式',
+      '缺少响应式布局策略',
+    ]);
+  });
+
+  it('keeps ordinary and scoped repairs inside the original edit boundary', () => {
     expect(DESIGN_STUDIO_REPAIR_PROMPT).toContain('系统自动修复');
     expect(DESIGN_STUDIO_REPAIR_PROMPT).toContain('立即调用 upsert_artifact');
     expect(DESIGN_STUDIO_REPAIR_PROMPT).toContain('artifactKey="main"');
@@ -190,6 +255,16 @@ describe('withDesignStudioInstructions', () => {
     expect(DESIGN_STUDIO_REPAIR_PROMPT).not.toContain('textContent 安全注入');
     expect(DESIGN_STUDIO_REPAIR_PROMPT).toContain("type: 'combo:run'");
     expect(DESIGN_STUDIO_REPAIR_PROMPT).toContain('version: 1');
+    expect(DESIGN_STUDIO_REPAIR_PROMPT).toContain('严格保持用户本轮的原始作用域');
+    expect(DESIGN_STUDIO_REPAIR_PROMPT).not.toContain('viewport meta');
+    expect(DESIGN_STUDIO_REPAIR_PROMPT).not.toContain(':focus-visible');
+  });
+
+  it('adds the deterministic craft floor only to bootstrap and page-wide repairs', () => {
+    expect(DESIGN_STUDIO_CRAFT_REPAIR_PROMPT).toContain('首版或全页设计操作');
+    expect(DESIGN_STUDIO_CRAFT_REPAIR_PROMPT).toContain('viewport meta');
+    expect(DESIGN_STUDIO_CRAFT_REPAIR_PROMPT).toContain(':focus-visible');
+    expect(DESIGN_STUDIO_CRAFT_REPAIR_PROMPT).not.toContain('严格保持用户本轮的原始作用域');
   });
 
   it('rejects HTML labels that do not contain a complete document', () => {

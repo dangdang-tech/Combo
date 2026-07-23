@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { buildContextualStudioPrompt, formatStudioAnnotationMessage } from './studioAnnotation.js';
+import {
+  buildStudioDesignOperationPrompt,
+  STUDIO_DESIGN_OPERATIONS,
+} from './studioDesignOperations.js';
 
 const element = {
   key: 'result-main',
@@ -50,6 +54,16 @@ describe('studio annotation protocol', () => {
 
   it('leaves normal conversation messages untouched', () => {
     expect(formatStudioAnnotationMessage('统一页面的色彩和圆角')).toBe('统一页面的色彩和圆角');
+  });
+
+  it('hides operation routing for whole-page and annotated edits', () => {
+    const operationPrompt = buildStudioDesignOperationPrompt(STUDIO_DESIGN_OPERATIONS[0]);
+    expect(formatStudioAnnotationMessage(operationPrompt)).toBe('设计操作「检查并修好」');
+
+    const scopedPrompt = buildContextualStudioPrompt(element, operationPrompt);
+    expect(formatStudioAnnotationMessage(scopedPrompt)).toBe(
+      '标注「今日安排结果」\n设计操作「检查并修好」',
+    );
   });
 
   it('keeps locator keys out of Design Agent replies', () => {

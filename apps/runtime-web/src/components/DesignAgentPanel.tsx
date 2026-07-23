@@ -1,7 +1,18 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from 'react';
 import type { ArtifactRef, RuntimeMessage, StudioRevision } from '@cb/shared';
 import type { ComboElementSelection } from './ArtifactRenderer.js';
 import { ChatThread } from './ChatThread.js';
+import {
+  buildStudioDesignOperationPrompt,
+  STUDIO_DESIGN_OPERATIONS,
+  type StudioDesignOperation,
+} from '../lib/studioDesignOperations.js';
 
 const ROLE_LABELS: Record<string, string> = {
   button: '操作按钮',
@@ -66,7 +77,10 @@ export function DesignAgentPanel({
 }: DesignAgentPanelProps) {
   const [text, setText] = useState('');
   const [queued, setQueued] = useState<QueuedEdit[]>([]);
+  const [operationMenuOpen, setOperationMenuOpen] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const operationTriggerRef = useRef<HTMLButtonElement>(null);
+  const firstOperationRef = useRef<HTMLButtonElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
   const stickToLatestRef = useRef(true);
@@ -75,6 +89,7 @@ export function DesignAgentPanel({
   const wasRunningRef = useRef(false);
   const bootstrapFailed = revisions.length === 0 && !isBootstrapping && Boolean(error);
   const isWorking = isRunning || isBootstrapping;
+  const operationMenuId = useId();
 
   useEffect(() => {
     if (isRunning || isBootstrapping) {
@@ -99,32 +114,75 @@ export function DesignAgentPanel({
   }, [selectedElement?.key]);
 
   useEffect(() => {
+    if (readOnlyHistory || (annotationEnabled && !selectedElement)) {
+      setOperationMenuOpen(false);
+    }
+  }, [annotationEnabled, readOnlyHistory, selectedElement]);
+
+  useEffect(() => {
+    if (!operationMenuOpen) return;
+    firstOperationRef.current?.focus();
+  }, [operationMenuOpen]);
+
+  useEffect(() => {
     if (!stickToLatestRef.current) return;
     window.requestAnimationFrame(() =>
       threadEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }),
     );
   }, [error, isBootstrapping, isRunning, messages.at(-1)?.id, queued.length]);
 
-  const submit = (): void => {
-    const trimmed = text.trim();
-    if (!trimmed || readOnlyHistory) return;
-    const element = selectedElement ? { ...selectedElement } : null;
-    const accepted = isRunning || isBootstrapping;
-    if (accepted) {
+  const dispatchEdit = (
+    value: string,
+    label: string,
+    element: ComboElementSelection | null,
+  ): boolean => {
+    if (!value.trim() || readOnlyHistory) return false;
+    if (isWorking) {
       setQueued((current) => [
         ...current,
         {
-          text: trimmed,
-          label: element ? `标注「${clipped(element.label, 40)}」：${trimmed}` : trimmed,
+          text: value,
+          label,
           element,
         },
       ]);
     } else {
-      const sent = element ? onSend(trimmed, element) : onSend(trimmed);
-      if (!sent) return;
+      const sent = element ? onSend(value, element) : onSend(value);
+      if (!sent) return false;
     }
-    setText('');
     if (element) onClearAnnotation();
+    return true;
+  };
+
+  const submit = (): void => {
+    const trimmed = text.trim();
+    if (!trimmed || readOnlyHistory) return;
+    const element = selectedElement ? { ...selectedElement } : null;
+    const label = element ? `标注「${clipped(element.label, 40)}」：${trimmed}` : trimmed;
+    if (!dispatchEdit(trimmed, label, element)) return;
+    setText('');
+  };
+
+  const applyDesignOperation = (operation: StudioDesignOperation): void => {
+    const element = selectedElement ? { ...selectedElement } : null;
+    const prompt = buildStudioDesignOperationPrompt(operation, element ? 'element' : 'page');
+    const label = element
+      ? `标注「${clipped(element.label, 40)}」：${operation.label}`
+      : `设计操作：${operation.label}`;
+    if (!dispatchEdit(prompt, label, element)) return;
+    setOperationMenuOpen(false);
+  };
+
+  const handleOperationKeyDown = (event: ReactKeyboardEvent<HTMLElement>): void => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    setOperationMenuOpen(false);
+    operationTriggerRef.current?.focus();
+  };
+
+  const toggleAnnotation = (): void => {
+    setOperationMenuOpen(false);
+    onToggleAnnotation();
   };
 
   const handleInputKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>): void => {
@@ -258,10 +316,36 @@ export function DesignAgentPanel({
           {annotationEnabled && !selectedElement && (
             <div className="rt-design-agent__selection-guide" role="status">
               <span>点击右侧页面，选择要修改的位置</span>
-              <button type="button" onClick={onToggleAnnotation}>
+              <button type="button" onClick={toggleAnnotation}>
                 取消
               </button>
             </div>
+          )}
+          {operationMenuOpen && (
+            <section
+              id={operationMenuId}
+              className="rt-design-agent__operations"
+              aria-label="设计操作"
+              onKeyDown={handleOperationKeyDown}
+            >
+              <header>
+                <strong>{selectedElement ? '调整选中位置' : '快速整理页面'}</strong>
+                <small>会直接生成一个新版本</small>
+              </header>
+              <div>
+                {STUDIO_DESIGN_OPERATIONS.map((operation, index) => (
+                  <button
+                    key={operation.id}
+                    ref={index === 0 ? firstOperationRef : undefined}
+                    type="button"
+                    onClick={() => applyDesignOperation(operation)}
+                  >
+                    <strong>{operation.label}</strong>
+                    <span>{operation.description}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
           )}
           <textarea
             ref={inputRef}
@@ -282,6 +366,20 @@ export function DesignAgentPanel({
           <div className="rt-design-agent__composer-actions">
             <div className="rt-design-agent__composer-tools">
               <button
+                ref={operationTriggerRef}
+                type="button"
+                className="rt-design-agent__operation-control"
+                aria-label={operationMenuOpen ? '关闭设计操作' : '打开设计操作'}
+                aria-expanded={operationMenuOpen}
+                aria-controls={operationMenuId}
+                title="快速检查、整理或加固当前页面"
+                disabled={readOnlyHistory || (annotationEnabled && !selectedElement)}
+                onClick={() => setOperationMenuOpen((current) => !current)}
+              >
+                <span aria-hidden="true">✦</span>
+                设计操作
+              </button>
+              <button
                 type="button"
                 className="rt-design-agent__annotation-control"
                 aria-label={annotationEnabled ? '取消标注页面' : '标注页面'}
@@ -294,7 +392,7 @@ export function DesignAgentPanel({
                     : '页面准备好后即可选择'
                 }
                 disabled={(!annotationAvailable && !annotationEnabled) || readOnlyHistory}
-                onClick={onToggleAnnotation}
+                onClick={toggleAnnotation}
               >
                 <span aria-hidden="true">⌖</span>
                 选择页面

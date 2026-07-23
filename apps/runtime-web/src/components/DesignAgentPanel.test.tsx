@@ -334,6 +334,95 @@ describe('DesignAgentPanel', () => {
     expect(screen.getAllByRole('textbox')).toHaveLength(1);
   });
 
+  it('keeps design operations hidden until the creator asks for them', () => {
+    render(<DesignAgentPanel {...props()} />);
+
+    expect(screen.queryByRole('region', { name: '设计操作' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '打开设计操作' }));
+
+    expect(screen.getByRole('region', { name: '设计操作' })).toBeInTheDocument();
+    for (const operation of ['检查并修好', '理清重点', '补全状态', '最终润色']) {
+      expect(screen.getByRole('button', { name: new RegExp(operation) })).toBeInTheDocument();
+    }
+    expect(screen.getByRole('button', { name: '关闭设计操作' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: /检查并修好/ })).toHaveFocus();
+  });
+
+  it('closes design operations with Escape and restores focus to its trigger', () => {
+    render(<DesignAgentPanel {...props()} />);
+
+    const trigger = screen.getByRole('button', { name: '打开设计操作' });
+    fireEvent.click(trigger);
+    const firstOperation = screen.getByRole('button', { name: /检查并修好/ });
+    fireEvent.keyDown(firstOperation, { key: 'Escape' });
+
+    expect(screen.queryByRole('region', { name: '设计操作' })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it('closes design operations before waiting for a page selection', () => {
+    const onToggleAnnotation = vi.fn();
+    const { rerender } = render(<DesignAgentPanel {...props({ onToggleAnnotation })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '打开设计操作' }));
+    fireEvent.click(screen.getByRole('button', { name: '标注页面' }));
+    rerender(<DesignAgentPanel {...props({ annotationEnabled: true, onToggleAnnotation })} />);
+
+    expect(screen.queryByRole('region', { name: '设计操作' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '打开设计操作' })).toBeDisabled();
+  });
+
+  it('runs a design operation through the same send path without exposing its protocol', () => {
+    const onSend = vi.fn(() => true);
+    render(<DesignAgentPanel {...props({ onSend })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '打开设计操作' }));
+    fireEvent.click(screen.getByRole('button', { name: /理清重点/ }));
+
+    expect(onSend).toHaveBeenCalledWith(
+      expect.stringMatching(/^\[COMBO_DESIGN_OPERATION:clarify]\n/),
+    );
+    expect(screen.queryByRole('region', { name: '设计操作' })).not.toBeInTheDocument();
+  });
+
+  it('scopes a design operation to the selected page element', () => {
+    const onSend = vi.fn<DesignAgentPanelProps['onSend']>(() => true);
+    const onClearAnnotation = vi.fn();
+    render(
+      <DesignAgentPanel
+        {...props({ selectedElement: resultElement, onSend, onClearAnnotation })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '打开设计操作' }));
+    fireEvent.click(screen.getByRole('button', { name: /最终润色/ }));
+
+    expect(onSend).toHaveBeenCalledWith(
+      expect.stringMatching(/^\[COMBO_DESIGN_OPERATION:polish]\n/),
+      resultElement,
+    );
+    expect(onSend.mock.calls[0]?.[0]).toContain('只润色当前选中区域');
+    expect(onClearAnnotation).toHaveBeenCalledTimes(1);
+  });
+
+  it('queues a design operation behind the active revision', () => {
+    const onSend = vi.fn(() => true);
+    const { rerender } = render(<DesignAgentPanel {...props({ isRunning: true, onSend })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '打开设计操作' }));
+    fireEvent.click(screen.getByRole('button', { name: /补全状态/ }));
+    expect(onSend).not.toHaveBeenCalled();
+    expect(screen.getByText('设计操作：补全状态')).toBeInTheDocument();
+
+    rerender(<DesignAgentPanel {...props({ onSend })} />);
+    expect(onSend).toHaveBeenCalledWith(
+      expect.stringMatching(/^\[COMBO_DESIGN_OPERATION:harden]\n/),
+    );
+  });
+
   it('attaches a selected page element to the main composer and clears it after sending', () => {
     const onSend = vi.fn(() => true);
     const onClearAnnotation = vi.fn();
@@ -409,6 +498,7 @@ describe('DesignAgentPanel', () => {
     );
 
     expect(screen.getByRole('button', { name: '标注页面' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '打开设计操作' })).toBeDisabled();
     expect(screen.getByRole('textbox', { name: '描述页面修改' })).toBeDisabled();
   });
 

@@ -17,11 +17,14 @@ import { saveTurn, type SessionRow } from '../session/repo.js';
 import type { AguiEmitter } from './agui-emitter.js';
 import { buildAgent } from './build-agent.js';
 import {
+  DESIGN_STUDIO_CRAFT_REPAIR_PROMPT,
   DESIGN_STUDIO_REPAIR_PROMPT,
+  designStudioCraftIssues,
   hasDesignStudioRuntimeBridge,
   hasValidDesignStudioResult,
   isCompleteDesignStudioHtml,
 } from './design-studio-prompt.js';
+import { DESIGN_STUDIO_BOOTSTRAP_MARKER } from './design-visual-profile.js';
 import { hasLlmCredential } from './model.js';
 
 export interface TurnLogger {
@@ -116,6 +119,11 @@ export async function runAgui(input: RunAguiInput): Promise<RunAguiResult> {
   let designPageContent: string | null = null;
   let textOpen = false;
   let assistantText = '';
+  const isScopedDesignEdit = userText.startsWith('请只围绕当前选中的页面元素「');
+  const enforceCraftFloor =
+    input.intent === 'design' &&
+    (userText.includes(DESIGN_STUDIO_BOOTSTRAP_MARKER) ||
+      (userText.includes('[COMBO_DESIGN_OPERATION:') && !isScopedDesignEdit));
 
   const closeTextIfOpen = (): void => {
     if (textOpen) {
@@ -137,6 +145,12 @@ export async function runAgui(input: RunAguiInput): Promise<RunAguiResult> {
             }
             if (!hasDesignStudioRuntimeBridge(artifact.content)) {
               return 'Design Agent 的 main 页面必须使用 version 1 的 combo:run bridge 调用真实 Runtime，且不得使用定时器或随机数模拟结果。';
+            }
+            if (enforceCraftFloor) {
+              const craftIssues = designStudioCraftIssues(artifact.content);
+              if (craftIssues.length > 0) {
+                return `Design Agent 的 main 页面还未达到基础可用标准：${craftIssues.join('；')}。请修正后重新提交。`;
+              }
             }
             return null;
           },
@@ -221,8 +235,13 @@ export async function runAgui(input: RunAguiInput): Promise<RunAguiResult> {
       return 'interrupted';
     }
 
-    if (input.intent === 'design' && !hasValidDesignStudioResult(collected, designPageContent)) {
-      await agent.prompt(DESIGN_STUDIO_REPAIR_PROMPT);
+    if (
+      input.intent === 'design' &&
+      !hasValidDesignStudioResult(collected, designPageContent, enforceCraftFloor)
+    ) {
+      await agent.prompt(
+        enforceCraftFloor ? DESIGN_STUDIO_CRAFT_REPAIR_PROMPT : DESIGN_STUDIO_REPAIR_PROMPT,
+      );
     }
   } catch (err) {
     unsubscribe();
@@ -243,7 +262,10 @@ export async function runAgui(input: RunAguiInput): Promise<RunAguiResult> {
   const finalRuntimeFailure = runtimeFailureMessage();
   if (finalRuntimeFailure) return await failRuntime(finalRuntimeFailure);
 
-  if (input.intent === 'design' && !hasValidDesignStudioResult(collected, designPageContent)) {
+  if (
+    input.intent === 'design' &&
+    !hasValidDesignStudioResult(collected, designPageContent, enforceCraftFloor)
+  ) {
     closeTextIfOpen();
     emitStage(stageTemplates.length - 1, 'failed');
     emitter.runError('页面暂时没有生成成功，请重试。');

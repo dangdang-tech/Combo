@@ -751,6 +751,79 @@ button.rt-artifact-chip--event:hover {
   line-height: 1.45;
 }
 
+.rt-design-agent__operations {
+  margin: 10px 10px 0;
+  border: 1px solid var(--cb-border);
+  border-radius: 12px;
+  padding: 10px;
+  background: var(--cb-surface-soft);
+}
+
+.rt-design-agent__operations > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 0 2px;
+}
+
+.rt-design-agent__operations > header strong {
+  color: var(--cb-fg);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.rt-design-agent__operations > header small {
+  color: var(--cb-muted-soft);
+  font-size: 9px;
+}
+
+.rt-design-agent__operations > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.rt-design-agent__operations button {
+  min-width: 0;
+  min-height: 54px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  flex-direction: column;
+  gap: 3px;
+  border: 1px solid var(--cb-border);
+  border-radius: 9px;
+  padding: 8px 9px;
+  background: var(--cb-bg);
+  color: var(--cb-fg);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.rt-design-agent__operations button:hover {
+  border-color: var(--cb-border-control);
+  background: var(--cb-selection-bg);
+}
+
+.rt-design-agent__operations button:focus-visible {
+  outline: 2px solid var(--cb-focus-ring);
+  outline-offset: 1px;
+}
+
+.rt-design-agent__operations button strong {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.rt-design-agent__operations button span {
+  color: var(--cb-muted);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
 .rt-design-agent__composer textarea {
   width: 100%;
   min-height: 96px;
@@ -795,7 +868,8 @@ button.rt-artifact-chip--event:hover {
   font-size: 9px;
 }
 
-.rt-design-agent__annotation-control {
+.rt-design-agent__annotation-control,
+.rt-design-agent__operation-control {
   min-height: 32px;
   display: inline-flex;
   align-items: center;
@@ -811,12 +885,15 @@ button.rt-artifact-chip--event:hover {
 }
 
 .rt-design-agent__annotation-control:hover:not(:disabled),
-.rt-design-agent__annotation-control[aria-pressed='true'] {
+.rt-design-agent__annotation-control[aria-pressed='true'],
+.rt-design-agent__operation-control:hover:not(:disabled),
+.rt-design-agent__operation-control[aria-expanded='true'] {
   background: var(--cb-selection-bg);
   color: var(--cb-action-link);
 }
 
-.rt-design-agent__annotation-control:disabled {
+.rt-design-agent__annotation-control:disabled,
+.rt-design-agent__operation-control:disabled {
   opacity: 0.38;
   cursor: not-allowed;
 }
