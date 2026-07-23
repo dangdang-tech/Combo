@@ -3,6 +3,7 @@ import { createSession, SessionBusyError } from '../modules/session/repo.js';
 import {
   createTurn,
   finishTurnCas,
+  getLatestTerminalTurn,
   hasRunningTurn,
   sweepExpiredTurns,
 } from '../modules/agent/turn-repo.js';
@@ -88,7 +89,17 @@ describe('turn repo', () => {
         queriesBeforeFinish = [...db.queries];
       },
     });
-    expect(swept).toEqual([{ id: 'old', sessionId }]);
+    expect(swept).toEqual([
+      {
+        id: 'old',
+        sessionId,
+        status: 'failed',
+        lastError: {
+          code: 'TURN_ABANDONED',
+          message: '轮次运行超时，已由清扫器终止。',
+        },
+      },
+    ]);
     expect(statusBeforeFinish).toBe('running');
     expect(queriesBeforeFinish).toEqual(
       expect.arrayContaining([
@@ -114,6 +125,23 @@ describe('turn repo', () => {
     );
     expect(sessionLock).toBeGreaterThan(-1);
     expect(terminalUpdate).toBeGreaterThan(sessionLock);
+  });
+
+  it('Session 锁内可读取最近已提交终态及其持久错误', async () => {
+    const db = new FakeDb();
+    const sessionId = await seedSession(db);
+    await createTurn(db, { id: 'turn-1', sessionId });
+    await finishTurnCas(db, {
+      id: 'turn-1',
+      status: 'interrupted',
+      lastError: { code: 'TURN_FAILED', message: '本轮生成已打断。' },
+    });
+    expect(await getLatestTerminalTurn(db, sessionId)).toEqual({
+      id: 'turn-1',
+      sessionId,
+      status: 'interrupted',
+      lastError: { code: 'TURN_FAILED', message: '本轮生成已打断。' },
+    });
   });
 
   it('迟到收尾与清扫交错时只有 CAS 胜者生效且消息不重复', async () => {

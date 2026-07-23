@@ -3,7 +3,7 @@
 #
 # 四个 job：
 #   gate —— install / lint / typecheck / build / test / compose 配置自查。
-#   integration —— 起 PG/Redis 双实例，跑数据库迁移与 Redis 分工断言。
+#   integration —— 起 PG/Redis 双实例，跑数据库迁移、Runtime 终态栅栏与 Redis 分工断言。
 #   sandbox-integration —— 在 Docker internal network 内跑真实 Pi 工具与 sandboxd 竖切。
 #   image —— 构建三个现有生产镜像；不发布可选 sandboxd。
 name: CI
@@ -153,6 +153,12 @@ jobs:
         env:
           DATABASE_URL: postgres://agora:agora@localhost:5432/agora
         run: bash scripts/integration/db-migrate.sh
+
+      - name: Integration · runtime terminal fence
+        env:
+          RUNTIME_TERMINAL_FENCE_DATABASE_URL: postgres://agora:agora@localhost:5432/agora
+          RUNTIME_TERMINAL_FENCE_REDIS_URL: redis://localhost:6380
+        run: pnpm --dir apps/runtime exec vitest run src/__tests__/terminal-fence.integration.test.ts
 
       - name: Integration · redis dual
         env:

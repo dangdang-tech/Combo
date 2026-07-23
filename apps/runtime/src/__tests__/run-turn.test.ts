@@ -26,6 +26,7 @@ import {
 import { createInterruptBus } from '../platform/infra/redis-interrupt-bus.js';
 import { createArtifactTool } from '../modules/artifact/tool.js';
 import { ARTIFACT_BUCKET, bindCapabilityUiArtifact } from '../modules/artifact/repo.js';
+import { compareStreamIds } from '../modules/agent/event-log.js';
 import { type SandboxBackend, SandboxBackendError } from '../platform/infra/sandbox-backend.js';
 
 const ME = 'user-me';
@@ -268,8 +269,12 @@ describe('run-turn 成功路径', () => {
     expect([...db.turns.values()][0]?.status).toBe('interrupted');
   });
 
-  it('在释放单运行索引前先持锁写入终态 Redis 事件', async () => {
-    const terminalSnapshots: Array<{ status: string | undefined; queries: string[] }> = [];
+  it('PostgreSQL 终态与消息提交后才追加终态 Redis 事件', async () => {
+    const terminalSnapshots: Array<{
+      status: string | undefined;
+      queries: string[];
+      txLog: string[];
+    }> = [];
     const { db, runner, session } = await setup(
       { finalMessages: [{ role: 'assistant', content: [{ type: 'text', text: 'ok' }] }] },
       60_000,
@@ -280,12 +285,14 @@ describe('run-turn 成功路径', () => {
         terminalSnapshots.push({
           status: [...currentDb.turns.values()][0]?.status,
           queries: [...currentDb.queries],
+          txLog: [...currentDb.txLog],
         });
       },
     );
     await runToIdle(runner, db, session);
     expect(terminalSnapshots).toHaveLength(1);
-    expect(terminalSnapshots[0]?.status).toBe('running');
+    expect(terminalSnapshots[0]?.status).toBe('completed');
+    expect(terminalSnapshots[0]?.txLog.at(-1)).toBe('COMMIT');
     expect(terminalSnapshots[0]?.queries).toEqual(
       expect.arrayContaining([
         'SELECT id FROM sessions WHERE id = $1 FOR UPDATE',
@@ -296,7 +303,7 @@ describe('run-turn 成功路径', () => {
       terminalSnapshots[0]?.queries.some((query) =>
         query.startsWith('UPDATE turns SET status = $2'),
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('Studio 会话把设计模式传给 agent 工厂', async () => {
@@ -646,7 +653,7 @@ describe('run-turn 空闲看门狗（issue #51：流中途停滞永无终态）'
 });
 
 describe('run-turn 失败路径（失败落 failed 消息 + RUN_ERROR）', () => {
-  it('终态 Redis 结果不明确时保留 running，迟到完成也不会再追加 RUN_ERROR', async () => {
+  it('终态 Redis 超时不回滚 DB，下一轮先修复旧终态且迟到完成保持幂等', async () => {
     const { db, eventLog, runner, session } = await setup(
       { finalMessages: [{ role: 'assistant', content: [{ type: 'text', text: 'ok' }] }] },
       60_000,
@@ -656,40 +663,72 @@ describe('run-turn 失败路径（失败落 failed 消息 + RUN_ERROR）', () =>
       20,
     );
     const appendTerminal = eventLog.appendTerminal.bind(eventLog);
+    const repairTerminal = eventLog.repairTerminal.bind(eventLog);
     let release!: () => void;
     const blocked = new Promise<void>((resolve) => {
       release = resolve;
     });
-    eventLog.appendTerminal = async (sessionId, runId, event) => {
-      await blocked;
-      return appendTerminal(sessionId, runId, event);
+    let terminalCalls = 0;
+    const statusAtAppend: Array<string | undefined> = [];
+    const appendObserved = async (
+      mode: 'strict' | 'repair',
+      sessionId: string,
+      runId: string,
+      event: Record<string, unknown>,
+    ): Promise<string> => {
+      terminalCalls += 1;
+      statusAtAppend.push(db.turns.get(runId)?.status);
+      if (terminalCalls === 1) await blocked;
+      return mode === 'repair'
+        ? repairTerminal(sessionId, runId, event)
+        : appendTerminal(sessionId, runId, event);
     };
-    const started = Date.now();
+    eventLog.appendTerminal = (sessionId, runId, event) =>
+      appendObserved('strict', sessionId, runId, event);
+    eventLog.repairTerminal = (sessionId, runId, event) =>
+      appendObserved('repair', sessionId, runId, event);
+
     await runner.startTurn({
       session,
       definition: DEFINITION,
       text: '终态事件会超时的一轮',
       log: silentLog,
     });
-    await waitFor(() => db.txLog.includes('ROLLBACK'));
-    expect(Date.now() - started).toBeLessThan(1_000);
-    expect([...db.turns.values()].some((turn) => turn.status === 'running')).toBe(true);
+    await waitFor(() => [...db.turns.values()][0]?.status === 'completed');
+    const firstRunId = [...db.turns.values()][0]!.id;
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(eventLog.entries(session.id).map((entry) => entry.event.type)).toEqual([
+      EventType.RUN_STARTED,
+    ]);
+
+    await runner.startTurn({
+      session,
+      definition: DEFINITION,
+      text: '紧接着的新一轮',
+      log: silentLog,
+    });
+    await waitFor(() => [...db.turns.values()].every((turn) => turn.status !== 'running'));
+    const secondRunId = [...db.turns.values()].find((turn) => turn.id !== firstRunId)!.id;
 
     release();
-    await waitFor(() =>
-      eventLog.entries(session.id).some((entry) => entry.event.type === EventType.RUN_FINISHED),
+    await waitFor(() => terminalCalls >= 3);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const entries = eventLog.entries(session.id);
+    const firstTerminals = entries.filter(
+      (entry) => entry.event.runId === firstRunId && entry.event.type === EventType.RUN_FINISHED,
     );
-    const terminals = eventLog
-      .entries(session.id)
-      .filter((entry) =>
-        [EventType.RUN_FINISHED, EventType.RUN_ERROR].includes(entry.event.type as never),
-      );
-    expect(terminals.map((entry) => entry.event.type)).toEqual([EventType.RUN_FINISHED]);
-    expect([...db.turns.values()].some((turn) => turn.status === 'running')).toBe(true);
+    const secondStarted = entries.find(
+      (entry) => entry.event.runId === secondRunId && entry.event.type === EventType.RUN_STARTED,
+    );
+    expect(statusAtAppend.every((status) => status === 'completed')).toBe(true);
+    expect(firstTerminals).toHaveLength(1);
+    expect(secondStarted).toBeTruthy();
+    expect(compareStreamIds(firstTerminals[0]!.id, secondStarted!.id)).toBeLessThan(0);
+    expect(entries.filter((entry) => entry.event.type === EventType.RUN_ERROR)).toHaveLength(0);
     await runner.dispose();
   });
 
-  it('RUN_FINISHED 已追加后数据库失败时不再尝试竞争 RUN_ERROR', async () => {
+  it('completed 的数据库提交失败时只由已提交的 failed 终态追加 RUN_ERROR', async () => {
     const { db, eventLog, runner, session } = await setup({
       finalMessages: [{ role: 'assistant', content: [{ type: 'text', text: 'ok' }] }],
     });
@@ -697,7 +736,7 @@ describe('run-turn 失败路径（失败落 failed 消息 + RUN_ERROR）', () =>
     db.query = async <R = Record<string, unknown>>(sql: string, params: unknown[] = []) => {
       const normalized = sql.replace(/\s+/g, ' ').trim();
       if (normalized.startsWith('UPDATE turns SET status = $2') && params[1] === 'completed') {
-        throw new Error('database write failed after terminal append');
+        throw new Error('database write failed before terminal commit');
       }
       return query<R>(sql, params);
     };
@@ -705,17 +744,48 @@ describe('run-turn 失败路径（失败落 failed 消息 + RUN_ERROR）', () =>
     await runner.startTurn({
       session,
       definition: DEFINITION,
-      text: '终态之后数据库失败的一轮',
+      text: '数据库提交前失败的一轮',
       log: silentLog,
     });
-    await waitFor(() => db.txLog.includes('ROLLBACK'));
+    await waitFor(() => [...db.turns.values()][0]?.status === 'failed');
     const terminals = eventLog
       .entries(session.id)
       .filter((entry) =>
         [EventType.RUN_FINISHED, EventType.RUN_ERROR].includes(entry.event.type as never),
       );
-    expect(terminals.map((entry) => entry.event.type)).toEqual([EventType.RUN_FINISHED]);
+    expect(terminals.map((entry) => entry.event.type)).toEqual([EventType.RUN_ERROR]);
+    expect([...db.turns.values()][0]?.status).toBe('failed');
+    await runner.dispose();
+  });
+
+  it('所有终态数据库提交都失败时保留 running 且不提前创建 Redis 终态', async () => {
+    const { db, eventLog, runner, session } = await setup({
+      finalMessages: [{ role: 'assistant', content: [{ type: 'text', text: 'ok' }] }],
+    });
+    const query = db.query.bind(db);
+    db.query = async <R = Record<string, unknown>>(sql: string, params: unknown[] = []) => {
+      const normalized = sql.replace(/\s+/g, ' ').trim();
+      if (normalized.startsWith('UPDATE turns SET status = $2')) {
+        throw new Error('database terminal commit unavailable');
+      }
+      return query<R>(sql, params);
+    };
+
+    await runner.startTurn({
+      session,
+      definition: DEFINITION,
+      text: '数据库始终失败的一轮',
+      log: silentLog,
+    });
+    await waitFor(() => db.txLog.filter((entry) => entry === 'ROLLBACK').length >= 2);
     expect([...db.turns.values()][0]?.status).toBe('running');
+    expect(
+      eventLog
+        .entries(session.id)
+        .filter((entry) =>
+          [EventType.RUN_FINISHED, EventType.RUN_ERROR].includes(entry.event.type as never),
+        ),
+    ).toHaveLength(0);
     await runner.dispose();
   });
 

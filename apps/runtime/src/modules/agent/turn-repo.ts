@@ -10,10 +10,16 @@ export const TURN_ABANDON_AFTER_MS = 1_800_000;
 export const TURN_SWEEP_INTERVAL_MS = 60_000;
 
 type TurnStatus = 'running' | 'completed' | 'failed' | 'interrupted';
+export type TerminalTurnStatus = Exclude<TurnStatus, 'running'>;
+export interface TurnLastError {
+  code: string;
+  message: string;
+}
 interface TurnDbRow {
   id: string;
   session_id: string;
   status: TurnStatus;
+  last_error: unknown;
   created_at: string | Date;
   finished_at: string | Date | null;
 }
@@ -23,6 +29,12 @@ export interface TurnRow {
   status: TurnStatus;
   createdAt: string;
   finishedAt: string | null;
+}
+export interface TerminalTurn {
+  id: string;
+  sessionId: string;
+  status: TerminalTurnStatus;
+  lastError: TurnLastError | null;
 }
 
 function toTurnRow(row: TurnDbRow): TurnRow {
@@ -35,6 +47,24 @@ function toTurnRow(row: TurnDbRow): TurnRow {
   };
 }
 
+function toLastError(value: unknown): TurnLastError | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const error = value as { code?: unknown; message?: unknown };
+  return typeof error.code === 'string' && typeof error.message === 'string'
+    ? { code: error.code, message: error.message }
+    : null;
+}
+
+function toTerminalTurn(row: TurnDbRow): TerminalTurn {
+  if (row.status === 'running') throw new Error('expected a terminal Turn');
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    status: row.status,
+    lastError: toLastError(row.last_error),
+  };
+}
+
 export async function createTurn(
   db: Queryable,
   input: { id: string; sessionId: string },
@@ -44,7 +74,7 @@ export async function createTurn(
     result = await db.query<TurnDbRow>(
       `INSERT INTO turns (id, session_id, status)
        VALUES ($1, $2, 'running')
-       RETURNING id, session_id, status, created_at, finished_at`,
+       RETURNING id, session_id, status, last_error, created_at, finished_at`,
       [input.id, input.sessionId],
     );
   } catch (error) {
@@ -154,20 +184,37 @@ export async function getRunningTurnId(db: Queryable, sessionId: string): Promis
   return result.rows[0]?.id ?? null;
 }
 
+/** Session 行锁持有者用它恢复最近一次已提交终态的 Redis 事件。 */
+export async function getLatestTerminalTurn(
+  db: Queryable,
+  sessionId: string,
+): Promise<TerminalTurn | null> {
+  const result = await db.query<TurnDbRow>(
+    `SELECT id, session_id, status, last_error, created_at, finished_at
+       FROM turns
+      WHERE session_id = $1 AND status <> 'running'
+      ORDER BY finished_at DESC NULLS LAST, created_at DESC, id DESC
+      LIMIT 1`,
+    [sessionId],
+  );
+  const row = result.rows[0];
+  return row ? toTerminalTurn(row) : null;
+}
+
 export async function sweepExpiredTurns(
   db: RuntimeDb,
   cutoff: Date,
   options: {
     beforeFinish?: (turn: { id: string; sessionId: string }) => Promise<void>;
   } = {},
-): Promise<{ id: string; sessionId: string }[]> {
+): Promise<TerminalTurn[]> {
   const candidates = await db.query<{ id: string; session_id: string }>(
     `SELECT id, session_id FROM turns
       WHERE status = 'running' AND created_at < $1
       ORDER BY created_at, id`,
     [cutoff],
   );
-  const swept: { id: string; sessionId: string }[] = [];
+  const swept: TerminalTurn[] = [];
   for (const candidate of candidates.rows) {
     const won = await withTransaction(db, async (tx) => {
       // All terminal paths that write a Message lock Session before Turn. This
@@ -175,14 +222,15 @@ export async function sweepExpiredTurns(
       await lockTurnSession(tx, candidate.session_id);
       if (!(await lockRunningTurn(tx, candidate.id, candidate.session_id))) return false;
       await options.beforeFinish?.({ id: candidate.id, sessionId: candidate.session_id });
+      const lastError: TurnLastError = {
+        code: 'TURN_ABANDONED',
+        message: '轮次运行超时，已由清扫器终止。',
+      };
       const updated = await tx.query(
         `UPDATE turns SET status = 'failed', finished_at = now(),
                 last_error = $2::jsonb
           WHERE id = $1 AND status = 'running'`,
-        [
-          candidate.id,
-          JSON.stringify({ code: 'TURN_ABANDONED', message: '轮次运行超时，已由清扫器终止。' }),
-        ],
+        [candidate.id, JSON.stringify(lastError)],
       );
       if (updated.rowCount !== 1) return false;
       await tx.query(
@@ -197,7 +245,17 @@ export async function sweepExpiredTurns(
       );
       return true;
     });
-    if (won) swept.push({ id: candidate.id, sessionId: candidate.session_id });
+    if (won) {
+      swept.push({
+        id: candidate.id,
+        sessionId: candidate.session_id,
+        status: 'failed',
+        lastError: {
+          code: 'TURN_ABANDONED',
+          message: '轮次运行超时，已由清扫器终止。',
+        },
+      });
+    }
   }
   return swept;
 }

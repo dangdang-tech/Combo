@@ -91,6 +91,15 @@ export class FakeSessionEventLog implements SessionEventLog {
   ) {}
 
   async append(sessionId: string, event: Record<string, unknown>): Promise<string> {
+    const runId = typeof event.runId === 'string' ? event.runId : undefined;
+    if (runId && this.terminals.has(`${sessionId}:${runId}`)) {
+      throw new Error('TERMINAL_ALREADY_APPENDED');
+    }
+    return this.appendUnfencedForTest(sessionId, event);
+  }
+
+  /** 只用于构造旧副本绕过终态 marker 的历史交错。 */
+  appendUnfencedForTest(sessionId: string, event: Record<string, unknown>): string {
     const milliseconds = Math.max(this.now(), this.lastMilliseconds);
     this.sequence = milliseconds === this.lastMilliseconds ? this.sequence + 1 : 0;
     this.lastMilliseconds = milliseconds;
@@ -117,6 +126,52 @@ export class FakeSessionEventLog implements SessionEventLog {
     const id = await this.append(sessionId, event);
     this.terminals.set(key, { encoded, id });
     return id;
+  }
+
+  async repairTerminal(
+    sessionId: string,
+    runId: string,
+    event: Record<string, unknown>,
+  ): Promise<string> {
+    const key = `${sessionId}:${runId}`;
+    const encoded = JSON.stringify(event);
+    const stream = this.streams.get(sessionId) ?? [];
+    const terminals = stream.filter(
+      (entry) =>
+        entry.event.runId === runId &&
+        (entry.event.type === 'RUN_FINISHED' || entry.event.type === 'RUN_ERROR'),
+    );
+    const conflicts = terminals.some((entry) => JSON.stringify(entry.event) !== encoded);
+    const retained = terminals.at(-1);
+    const retainedIndex = retained ? stream.indexOf(retained) : -1;
+    const ordinaryAfterTerminal =
+      retainedIndex >= 0 &&
+      stream
+        .slice(retainedIndex + 1)
+        .some(
+          (entry) =>
+            entry.event.runId === runId &&
+            entry.event.type !== 'RUN_FINISHED' &&
+            entry.event.type !== 'RUN_ERROR',
+        );
+    if (conflicts || ordinaryAfterTerminal) {
+      this.streams.set(
+        sessionId,
+        stream.filter((entry) => !terminals.includes(entry)),
+      );
+      this.terminals.delete(key);
+      return this.appendTerminal(sessionId, runId, event);
+    }
+    if (retained) {
+      this.streams.set(
+        sessionId,
+        stream.filter((entry) => !terminals.includes(entry) || entry === retained),
+      );
+      this.terminals.set(key, { encoded, id: retained.id });
+      return retained.id;
+    }
+    this.terminals.delete(key);
+    return this.appendTerminal(sessionId, runId, event);
   }
 
   async rangeAfter(sessionId: string, afterId: string, count: number): Promise<StreamEventEntry[]> {
@@ -405,6 +460,22 @@ export class FakeDb implements Queryable, TxPool {
         (row) => row.session_id === params[0] && row.status === 'running',
       );
       return { rows: [{ exists }] as R[], rowCount: 1 };
+    }
+    if (
+      s.startsWith(
+        'SELECT id, session_id, status, last_error, created_at, finished_at FROM turns',
+      ) &&
+      s.includes("status <> 'running'")
+    ) {
+      const row = [...this.turns.values()]
+        .filter((candidate) => candidate.session_id === params[0] && candidate.status !== 'running')
+        .sort(
+          (a, b) =>
+            (b.finished_at ?? '').localeCompare(a.finished_at ?? '') ||
+            b.created_at.localeCompare(a.created_at) ||
+            b.id.localeCompare(a.id),
+        )[0];
+      return row ? { rows: [{ ...row }] as R[], rowCount: 1 } : { rows: [], rowCount: 0 };
     }
     if (s.startsWith('SELECT id, session_id FROM turns')) {
       const cutoff = (params[0] as Date).getTime();

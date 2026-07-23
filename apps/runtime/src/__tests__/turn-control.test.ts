@@ -36,9 +36,10 @@ async function setup(
   const cap = db.seedCapability({ owner_user_id: 'me' });
   const session = await createSession(db, { capabilityId: cap.id, ownerUserId: 'me' });
   const eventLog = new FakeSessionEventLog();
+  const objectStore = new FakeObjectStore();
   const runner = createTurnRunner({
     db,
-    objectStore: new FakeObjectStore(),
+    objectStore,
     bus: createSessionEventBus(),
     eventLog,
     agentFactory: factory,
@@ -47,7 +48,7 @@ async function setup(
     sweepIntervalMs,
     log: silentLog,
   });
-  return { db, session, eventLog, runner };
+  return { db, session, eventLog, objectStore, runner };
 }
 
 const waitDone = (db: FakeDb) =>
@@ -165,6 +166,112 @@ describe('单会话单运行轮次控制', () => {
     await runner.dispose();
   });
 
+  it('关闭会栅栏已过入口但尚未发布 active 句柄的开轮事务', async () => {
+    const handle = makeFakeAgentFactory({ hangUntilAbort: true });
+    const { db, session, eventLog, runner } = await setup(handle.factory);
+    const originalConnect = db.connect.bind(db);
+    let markTurnInsertReached!: () => void;
+    const turnInsertReached = new Promise<void>((resolve) => {
+      markTurnInsertReached = resolve;
+    });
+    let releaseTurnInsert!: () => void;
+    const turnInsertReleased = new Promise<void>((resolve) => {
+      releaseTurnInsert = resolve;
+    });
+    let blocked = false;
+    db.connect = async () => {
+      const connection = await originalConnect();
+      return {
+        query: async <R = Record<string, unknown>>(
+          sql: string,
+          params?: unknown[],
+          signal?: AbortSignal,
+        ) => {
+          const normalized = sql.replace(/\s+/g, ' ').trim();
+          if (!blocked && normalized.startsWith('INSERT INTO turns')) {
+            blocked = true;
+            markTurnInsertReached();
+            await turnInsertReleased;
+          }
+          return connection.query<R>(sql, params, signal);
+        },
+        release: (destroy?: boolean) => connection.release(destroy),
+      };
+    };
+
+    const starting = runner.startTurn({ session, definition, text: 'go', log: silentLog });
+    await turnInsertReached;
+    let disposed = false;
+    const disposing = runner.dispose().then(() => {
+      disposed = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(disposed).toBe(false);
+
+    releaseTurnInsert();
+    const [startResult] = await Promise.allSettled([starting]);
+    await disposing;
+    expect(startResult?.status).toBe('rejected');
+    expect(startResult?.status === 'rejected' ? String(startResult.reason) : undefined).toContain(
+      'turn runner is shutting down',
+    );
+    expect(handle.calls).toHaveLength(0);
+    expect([...db.turns.values()].every((turn) => turn.status !== 'running')).toBe(true);
+    expect(
+      eventLog.entries(session.id).some((entry) => entry.event.type === EventType.RUN_STARTED),
+    ).toBe(false);
+  });
+
+  it('关闭会接管已经提交但尚未返回的开轮，并且不会启动 Pi', async () => {
+    const handle = makeFakeAgentFactory({ hangUntilAbort: true });
+    const { db, session, eventLog, runner } = await setup(handle.factory);
+    const originalConnect = db.connect.bind(db);
+    let markCommitApplied!: () => void;
+    const commitApplied = new Promise<void>((resolve) => {
+      markCommitApplied = resolve;
+    });
+    let releaseCommitResponse!: () => void;
+    const commitResponseReleased = new Promise<void>((resolve) => {
+      releaseCommitResponse = resolve;
+    });
+    let blocked = false;
+    db.connect = async () => {
+      const connection = await originalConnect();
+      return {
+        query: async <R = Record<string, unknown>>(
+          sql: string,
+          params?: unknown[],
+          signal?: AbortSignal,
+        ) => {
+          const normalized = sql.replace(/\s+/g, ' ').trim();
+          const result = await connection.query<R>(sql, params, signal);
+          if (!blocked && normalized === 'COMMIT') {
+            blocked = true;
+            markCommitApplied();
+            await commitResponseReleased;
+          }
+          return result;
+        },
+        release: (destroy?: boolean) => connection.release(destroy),
+      };
+    };
+
+    const starting = runner.startTurn({ session, definition, text: 'go', log: silentLog });
+    await commitApplied;
+    const disposing = runner.dispose();
+    releaseCommitResponse();
+    const [startResult] = await Promise.allSettled([starting]);
+    await disposing;
+
+    expect(startResult?.status).toBe('rejected');
+    expect(handle.calls).toHaveLength(0);
+    expect([...db.turns.values()].map((turn) => turn.status)).toEqual(['interrupted']);
+    expect(
+      eventLog.entries(session.id).some((entry) => entry.event.type === EventType.RUN_STARTED),
+    ).toBe(false);
+    expect(eventLog.entries(session.id).at(-1)?.event.type).toBe(EventType.RUN_ERROR);
+  });
+
   it('成功收尾写 completed、连续 idx 与 RUN_FINISHED', async () => {
     const handle = makeFakeAgentFactory({
       finalMessages: [{ role: 'assistant', content: [{ type: 'text', text: 'ok' }] }],
@@ -175,6 +282,88 @@ describe('单会话单运行轮次控制', () => {
     expect([...db.turns.values()][0]?.status).toBe('completed');
     expect(db.messages.map((message) => message.idx)).toEqual([0, 1]);
     expect(eventLog.entries(session.id).at(-1)?.event.type).toBe(EventType.RUN_FINISHED);
+    await runner.dispose();
+  });
+
+  it('下一轮会用持久错误码幂等确认历史清扫终态后再写 RUN_STARTED', async () => {
+    const handle = makeFakeAgentFactory({
+      finalMessages: [{ role: 'assistant', content: [{ type: 'text', text: 'ok' }] }],
+    });
+    const { db, session, eventLog, runner } = await setup(handle.factory);
+    await createTurn(db, { id: 'swept-before-upgrade', sessionId: session.id });
+    await finishTurnCas(db, {
+      id: 'swept-before-upgrade',
+      status: 'failed',
+      lastError: { code: 'TURN_ABANDONED', message: '轮次运行超时，已由清扫器终止。' },
+    });
+    const oldTerminalId = await eventLog.appendTerminal(session.id, 'swept-before-upgrade', {
+      type: EventType.RUN_ERROR,
+      threadId: session.id,
+      runId: 'swept-before-upgrade',
+      message: '服务异常中断,本轮已终止,请重试。',
+    });
+
+    await runner.startTurn({ session, definition, text: 'next', log: silentLog });
+    await waitDone(db);
+    const entries = eventLog.entries(session.id);
+    expect(entries.filter((entry) => entry.event.runId === 'swept-before-upgrade')).toHaveLength(1);
+    const nextStarted = entries.find(
+      (entry) =>
+        entry.event.runId !== 'swept-before-upgrade' && entry.event.type === EventType.RUN_STARTED,
+    );
+    expect(nextStarted).toBeTruthy();
+    expect(entries.findIndex((entry) => entry.id === oldTerminalId)).toBeLessThan(
+      entries.findIndex((entry) => entry.id === nextStarted!.id),
+    );
+    await runner.dispose();
+  });
+
+  it('下一轮以数据库终态修正遗留冲突标记，未知错误码不会泄露内部消息', async () => {
+    const handle = makeFakeAgentFactory({
+      finalMessages: [{ role: 'assistant', content: [{ type: 'text', text: 'ok' }] }],
+    });
+    const { db, session, eventLog, runner } = await setup(handle.factory);
+    const legacyRunId = 'legacy-conflicting-terminal';
+    await createTurn(db, { id: legacyRunId, sessionId: session.id });
+    const wrongTerminalId = await eventLog.appendTerminal(session.id, legacyRunId, {
+      type: EventType.RUN_FINISHED,
+      threadId: session.id,
+      runId: legacyRunId,
+    });
+    const internalMessage = 'duplicate key value violates secret_internal_index';
+    await finishTurnCas(db, {
+      id: legacyRunId,
+      status: 'failed',
+      lastError: { code: 'SUBMIT_FAILED', message: internalMessage },
+    });
+
+    await runner.startTurn({ session, definition, text: 'next', log: silentLog });
+    await waitDone(db);
+    const entries = eventLog.entries(session.id);
+    const repaired = entries.filter((entry) => entry.event.runId === legacyRunId);
+    expect(repaired).toHaveLength(1);
+    expect(repaired[0]?.id).not.toBe(wrongTerminalId);
+    expect(repaired[0]?.event).toMatchObject({
+      type: EventType.RUN_ERROR,
+      threadId: session.id,
+      runId: legacyRunId,
+      message: '服务异常中断,本轮已终止,请重试。',
+    });
+    expect(JSON.stringify(repaired)).not.toContain(internalMessage);
+    await expect(
+      eventLog.appendTerminal(session.id, legacyRunId, {
+        type: EventType.RUN_FINISHED,
+        threadId: session.id,
+        runId: legacyRunId,
+      }),
+    ).rejects.toThrow('TERMINAL_EVENT_CONFLICT');
+    const nextStarted = entries.find(
+      (entry) => entry.event.runId !== legacyRunId && entry.event.type === EventType.RUN_STARTED,
+    );
+    expect(nextStarted).toBeTruthy();
+    expect(entries.findIndex((entry) => entry.id === repaired[0]!.id)).toBeLessThan(
+      entries.findIndex((entry) => entry.id === nextStarted!.id),
+    );
     await runner.dispose();
   });
 
@@ -271,6 +460,92 @@ describe('单会话单运行轮次控制', () => {
     expect(types).toContain(EventType.RUN_ERROR);
     expect(types).not.toContain(EventType.TEXT_MESSAGE_START);
     expect(types).not.toContain(EventType.TEXT_MESSAGE_CONTENT);
+    await peer.dispose();
+    await owner.runner.dispose();
+  });
+
+  it('跨副本终态后，丢失广播的迟到 Artifact 与文本都不能提交', async () => {
+    let markUploadStarted!: () => void;
+    const uploadStarted = new Promise<void>((resolve) => {
+      markUploadStarted = resolve;
+    });
+    let releaseUpload!: () => void;
+    const uploadReleased = new Promise<void>((resolve) => {
+      releaseUpload = resolve;
+    });
+    let markPromptFinished!: () => void;
+    const promptFinished = new Promise<void>((resolve) => {
+      markPromptFinished = resolve;
+    });
+    const listeners = new Set<(delta: string) => void>();
+    const ownerFactory: TurnAgentFactory = (input) => ({
+      subscribeTextDelta(fn) {
+        listeners.add(fn);
+        return () => listeners.delete(fn);
+      },
+      async prompt() {
+        const artifact = input.tools.find((tool) => tool.name === 'upsert_artifact') as unknown as {
+          execute(callId: string, params: Record<string, unknown>): Promise<unknown>;
+        };
+        try {
+          await artifact.execute('late-artifact', {
+            kind: 'markdown',
+            title: '迟到产物',
+            content: 'secret',
+          });
+        } catch {
+          // 终态守卫应把迟到工具收口成 AbortError；继续模拟旧 Pi 的迟到文本。
+        }
+        for (const listener of listeners) listener('不应出现');
+        markPromptFinished();
+      },
+      abort: () => undefined,
+      transcript: () => [
+        { role: 'user', content: [{ type: 'text', text: 'go' }] },
+        { role: 'assistant', content: [{ type: 'text', text: '不应出现' }] },
+      ],
+      runtimeError: () => undefined,
+    });
+    const owner = await setup(ownerFactory, createInterruptBus());
+    const putObject = owner.objectStore.putObject.bind(owner.objectStore);
+    owner.objectStore.putObject = async (bucket, key, body, options) => {
+      markUploadStarted();
+      await uploadReleased;
+      return putObject(bucket, key, body, options);
+    };
+    await owner.runner.startTurn({
+      session: owner.session,
+      definition,
+      text: 'go',
+      log: silentLog,
+    });
+    await uploadStarted;
+
+    const peer = createTurnRunner({
+      db: owner.db,
+      objectStore: new FakeObjectStore(),
+      bus: createSessionEventBus(),
+      eventLog: owner.eventLog,
+      agentFactory: makeFakeAgentFactory().factory,
+      idleTimeoutMs: 60_000,
+      // 独立总线故意丢掉对 owner 的中断广播。
+      interrupts: createInterruptBus(),
+      sandbox: cleanupSandbox(),
+      log: silentLog,
+    });
+    expect(await peer.interrupt(owner.session.id)).toBe(true);
+    expect([...owner.db.turns.values()][0]?.status).toBe('interrupted');
+
+    releaseUpload();
+    await promptFinished;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(owner.db.artifacts.size).toBe(0);
+    const types = owner.eventLog.entries(owner.session.id).map((entry) => entry.event.type);
+    expect(types.at(-1)).toBe(EventType.RUN_ERROR);
+    expect(types).not.toContain(EventType.STATE_DELTA);
+    expect(types).not.toContain(EventType.TEXT_MESSAGE_START);
+    expect(types).not.toContain(EventType.TEXT_MESSAGE_CONTENT);
+
     await peer.dispose();
     await owner.runner.dispose();
   });

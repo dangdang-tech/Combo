@@ -6,7 +6,7 @@
 
 - `index.ts` 组装数据库、对象存储、Redis 事件设施和 SandboxBackend。
 - `db.ts` 封装 PostgreSQL 连接池、可取消事务、事务级锁等待与语句超时、就绪探针和关闭逻辑。
-- `redis.ts`、`redis-interrupt-bus.ts`、`redis-event-log.ts` 和 `event-bus.ts` 负责 Redis 连接、跨实例打断、事件日志和实时直播。终态事件使用 Redis 脚本按 `runId` 幂等追加。
+- `redis.ts`、`redis-interrupt-bus.ts`、`redis-event-log.ts` 和 `event-bus.ts` 负责 Redis 连接、跨实例打断、事件日志和实时直播。普通事件与带最后编号的开放标记由同一个 Redis 脚本写入；终态脚本把标记封闭并按 `runId` 幂等追加。标记缺失或仍是旧版 `OPEN` 时，脚本会先扫描保留的 Stream，发现终态后恢复标记并拒绝迟到普通事件。受 Session 行锁保护的修复模式可以用已提交的 PostgreSQL 终态替换升级前遗留的冲突事件；标记已经匹配但终态后仍有同一 Turn 普通事件时，它也会把数据库终态重放到 Stream 尾部。
 - `object-store.ts` 封装 MinIO 或 S3 的对象读写，并让 Artifact 写入把中止信号传给 S3 客户端。
 - `logto.ts` 和 `dev-session.ts` 负责生产登录验签与受限开发登录。
 - `llm.ts` 负责模型来源、模型编号和 Runtime 内凭据选择。

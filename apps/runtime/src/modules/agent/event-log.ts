@@ -9,10 +9,15 @@ export interface StreamEventEntry {
 export interface SessionEventLog {
   append(sessionId: string, event: Record<string, unknown>): Promise<string>;
   /**
-   * 每个 runId 只允许一个终态事件。相同事件重试返回原 id，不同终态重试必须失败，
-   * 从而让超时后仍在 Redis 侧执行的 XADD 不会再被另一个 RUN_ERROR 覆盖。
+   * 每个 runId 只允许一个终态事件。相同事件重试返回仍保留的原 id，不同终态重试
+   * 必须失败；标记过期但 Stream 仍保留事件时，生产实现会恢复原标记与编号。
    */
   appendTerminal(sessionId: string, runId: string, event: Record<string, unknown>): Promise<string>;
+  /**
+   * 只供持有 Session 行锁的调用方用 PostgreSQL 已提交终态修复 Redis。它会清除遗留
+   * 冲突终态并把数据库终态放到 Stream 尾部；普通竞争终态仍必须使用 appendTerminal。
+   */
+  repairTerminal(sessionId: string, runId: string, event: Record<string, unknown>): Promise<string>;
   rangeAfter(sessionId: string, afterId: string, count: number): Promise<StreamEventEntry[]>;
 }
 

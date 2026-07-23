@@ -1,6 +1,6 @@
 # Runtime 源码测试
 
-这个目录保存 Runtime 的单元测试和忠实假件。测试不连接生产数据库、Redis、对象存储或 Kubernetes 集群；需要真实 PostgreSQL、Redis 或 Docker 的验证由仓库集成脚本负责。
+这个目录保存 Runtime 的单元测试、忠实假件和显式启用的集成测试。默认测试不会连接外部服务；只有同时提供终态栅栏测试专用的 PostgreSQL 与 Redis 地址时，真实资源用例才会运行。两个地址必须指向已经迁移的临时测试实例，不能使用生产资源。所有用例都不连接对象存储或 Kubernetes 集群。
 
 ## 文件职责
 
@@ -12,8 +12,9 @@
 - `run-turn.test.ts` 验证 Turn 创建、模型执行、Studio 成功提升、事件顺序、终态收尾、打断、超时和关闭截止时间。
 - `session-repo.test.ts` 验证 Session 与 Message 的归属条件、排序和状态处理。
 - `stream-events.test.ts` 验证 Redis Stream 编号、断线补发、实时缓冲和去重。
-- `turn-control.test.ts` 验证单 Session 单运行 Turn、开轮提交窗口、跨副本终态栅栏、功能启停混合副本和超时清扫。
-- `turn-repo.test.ts` 验证 Turn 仓储的唯一冲突映射、条件收尾和锁序。
+- `turn-control.test.ts` 验证单 Session 单运行 Turn、开轮提交窗口、关闭期间的开轮事务栅栏、遗留终态修复、公开错误文案、跨副本终态栅栏、功能启停混合副本和超时清扫。
+- `turn-repo.test.ts` 验证 Turn 仓储的唯一冲突映射、条件收尾、最近持久终态读取和锁序。
+- `terminal-fence.integration.test.ts` 在显式提供的真实 PostgreSQL 与 Redis 上验证双副本广播丢失、提交回滚、终态超时、迟到文本、迟到 Artifact、下一轮排序、冲突终态修复、匹配标记后的终态重排、逐字终态幂等、错误文案脱敏、旧版开放标记和有效期边界。
 - `sandbox-backend.test.ts` 验证 Kubernetes Pod 身份、安全规格、PVC 原子分配、强制删除后的槽位隔离、节点终止 finalizer、迟到创建协调和有界关闭。
 - `sandbox-capability.test.ts` 验证沙箱能力令牌的签名材料、声明绑定和有效期。
 - `sandbox-client.test.ts` 验证 sandboxd 的认证请求、线路限制、命令流、取消和协议错误。

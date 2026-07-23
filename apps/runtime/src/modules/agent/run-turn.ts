@@ -27,11 +27,15 @@ import {
   createTurn,
   finishTurnCas,
   finishTurnWithMessage,
+  getLatestTerminalTurn,
   getRunningTurnId,
   lockRunningTurn,
   lockTurnSession,
   sweepExpiredTurns,
   TURN_ABANDON_AFTER_MS,
+  type TerminalTurn,
+  type TerminalTurnStatus,
+  type TurnLastError,
 } from './turn-repo.js';
 
 export type RuntimeAgentTool = ArtifactAgentTool | SandboxAgentTool;
@@ -126,6 +130,40 @@ class TerminalEventAppendTimeoutError extends Error {
   }
 }
 
+function terminalTurn(
+  id: string,
+  sessionId: string,
+  status: TerminalTurnStatus,
+  lastError: TurnLastError | null,
+): TerminalTurn {
+  return { id, sessionId, status, lastError };
+}
+
+const PUBLIC_TERMINAL_ERROR_MESSAGES: Readonly<Record<string, string>> = {
+  TURN_ABANDONED: '服务异常中断,本轮已终止,请重试。',
+  TURN_HISTORY_LOAD_FAILED: '服务开小差了，请重试。',
+  TURN_AGENT_UNAVAILABLE: '对话服务暂时不可用，请重试。',
+  TURN_IDLE_TIMEOUT: '模型响应停滞，本轮已终止，请重试。',
+  TURN_PROMPT_FAILED: '对话生成失败，请重试。',
+  TURN_RUNTIME_ERROR: '模型调用失败（额度/网络/服务波动），请重试。',
+  TURN_PERSIST_FAILED: '本轮回复未能保存（数据库异常），请重试。',
+  TURN_INTERRUPTED: '本轮生成已打断。',
+  TURN_SHUTDOWN: 'Runtime 正在关闭，本轮已终止，请重试。',
+};
+
+function terminalEventForTurn(turn: TerminalTurn): Record<string, unknown> {
+  const base = { threadId: turn.sessionId, runId: turn.id };
+  if (turn.status === 'completed') return { type: EventType.RUN_FINISHED, ...base };
+  const fallback =
+    turn.status === 'interrupted' ? '本轮生成已打断。' : '服务异常中断,本轮已终止,请重试。';
+  // last_error can contain diagnostic text written by older deployments. Only a
+  // fixed code-to-public-message allow-list is allowed to cross the SSE boundary.
+  const message = turn.lastError
+    ? (PUBLIC_TERMINAL_ERROR_MESSAGES[turn.lastError.code] ?? fallback)
+    : fallback;
+  return { type: EventType.RUN_ERROR, ...base, message };
+}
+
 function remainingMilliseconds(deadline: number): number {
   return Math.max(0, deadline - Date.now());
 }
@@ -156,7 +194,14 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
     runId: string;
     completion: Promise<void>;
   }
+  interface StartingTurn {
+    sessionId: string;
+    running: ActiveTurn;
+    transactionController: AbortController;
+    settled: Promise<void>;
+  }
   const active = new Map<string, ActiveTurn>();
+  const starting = new Set<StartingTurn>();
   const sandboxStops = new Map<string, Promise<void>>();
   const shutdownOwnedRuns = new Set<string>();
   const shutdownTimeoutMs = deps.shutdownTimeoutMs ?? 15_000;
@@ -179,12 +224,16 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
     runId: string,
     event: Record<string, unknown>,
     signal?: AbortSignal,
+    mode: 'strict' | 'repair' = 'strict',
   ): Promise<PublishedStreamEvent> => {
     if (signal?.aborted) throw new TerminalEventAppendTimeoutError();
     const timeout = terminalEventTimeoutMs;
     let timer: NodeJS.Timeout | undefined;
     let onAbort: (() => void) | undefined;
-    const append = deps.eventLog.appendTerminal(sessionId, runId, event);
+    const append =
+      mode === 'repair'
+        ? deps.eventLog.repairTerminal(sessionId, runId, event)
+        : deps.eventLog.appendTerminal(sessionId, runId, event);
     try {
       const id = await Promise.race([
         append,
@@ -203,6 +252,19 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
       clearTimeout(timer);
       if (onAbort) signal?.removeEventListener('abort', onAbort);
     }
+  };
+  const appendCommittedTerminal = async (
+    turn: TerminalTurn,
+    signal?: AbortSignal,
+  ): Promise<PublishedStreamEvent> => {
+    const terminal = await appendTerminalEvent(
+      turn.sessionId,
+      turn.id,
+      terminalEventForTurn(turn),
+      signal,
+    );
+    if (!signal?.aborted) deps.bus.publish(turn.sessionId, terminal);
+    return terminal;
   };
   const stopSandboxCommands = (
     sessionId: string,
@@ -261,7 +323,6 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
           if (sweepInFlight) return;
           const run = (async () => {
             try {
-              const terminalEvents = new Map<string, PublishedStreamEvent>();
               const swept = await sweepExpiredTurns(
                 deps.db,
                 new Date(Date.now() - TURN_ABANDON_AFTER_MS),
@@ -273,25 +334,16 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
                     await stopSandboxCommands(turn.sessionId, 'turn-sweep', {
                       localExecution: active.get(turn.sessionId)?.runId === turn.id,
                     });
-                    const event = {
-                      type: EventType.RUN_ERROR,
-                      threadId: turn.sessionId,
-                      runId: turn.id,
-                      message: '服务异常中断,本轮已终止,请重试。',
-                    };
-                    terminalEvents.set(
-                      turn.id,
-                      await appendTerminalEvent(turn.sessionId, turn.id, event),
-                    );
                   },
                 },
               );
-              // XADD happens while the Session row is locked; live publication
-              // waits for the terminal DB transaction to commit. A newer Turn's
-              // RUN_STARTED therefore always has a larger Redis Stream id.
+              // PostgreSQL is the terminal truth. Redis is appended only after each
+              // terminal transaction commits; startTurn repairs a missing event
+              // under the same Session lock before a successor can be created.
               for (const turn of swept) {
-                const terminal = terminalEvents.get(turn.id);
-                if (terminal) deps.bus.publish(turn.sessionId, terminal);
+                await appendCommittedTerminal(turn).catch((err) => {
+                  deps.log.error({ err, runId: turn.id }, 'swept terminal event append failed');
+                });
               }
             } catch (err) {
               deps.log.error({ err }, 'turn sweep failed');
@@ -361,80 +413,74 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
       }
     };
 
-    const finishFailed = async (userMessage: string, failedContent?: unknown[]): Promise<void> => {
+    const finishFailed = async (
+      code: string,
+      userMessage: string,
+      failedContent?: unknown[],
+    ): Promise<void> => {
       if (shutdownOwnedRuns.has(runId)) return;
       closeText();
       if (shutdownOwnedRuns.has(runId)) return;
-      const event = { type: EventType.RUN_ERROR, ...base, message: userMessage };
-      let terminal: PublishedStreamEvent | undefined;
+      const lastError = { code, message: userMessage };
       let ok: boolean;
       try {
         await emitter.flush();
         if (shutdownOwnedRuns.has(runId)) return;
-        ok = await finishTurnWithMessage(
-          deps.db,
-          {
-            id: runId,
-            sessionId,
-            idx: nextIdx++,
-            status: 'failed',
-            content: failedContent ?? [{ type: 'text', text: userMessage }],
-            lastError: { code: 'TURN_FAILED', message: userMessage },
-          },
-          {
-            beforeFinish: async () => {
-              terminal = await appendTerminalEvent(sessionId, runId, event);
-            },
-          },
-        );
+        ok = await finishTurnWithMessage(deps.db, {
+          id: runId,
+          sessionId,
+          idx: nextIdx++,
+          status: 'failed',
+          content: failedContent ?? [{ type: 'text', text: userMessage }],
+          lastError,
+        });
       } catch (err) {
         log.error({ err }, 'persist failed terminal state failed');
         return;
       }
-      if (!ok || !terminal) {
+      if (!ok) {
         log.error({ runId }, 'turn terminal state already claimed');
         return;
       }
-      deps.bus.publish(sessionId, terminal);
+      await appendCommittedTerminal(terminalTurn(runId, sessionId, 'failed', lastError)).catch(
+        (err) => {
+          log.error({ err, runId }, 'failed terminal event append failed');
+        },
+      );
     };
     const finishInterrupted = async (): Promise<void> => {
       if (shutdownOwnedRuns.has(runId)) return;
       closeText();
       if (shutdownOwnedRuns.has(runId)) return;
       const message = '本轮生成已打断。';
-      const event = { type: EventType.RUN_ERROR, ...base, message };
-      let terminal: PublishedStreamEvent | undefined;
+      const lastError = { code: 'TURN_INTERRUPTED', message };
       let ok: boolean;
       try {
         await emitter.flush();
         if (shutdownOwnedRuns.has(runId)) return;
-        ok = await finishTurnWithMessage(
-          deps.db,
-          {
-            id: runId,
-            sessionId,
-            idx: nextIdx++,
-            status: 'interrupted',
-            content: assistantText
-              ? [{ type: 'text', text: assistantText }]
-              : [{ type: 'text', text: message }],
-            lastError: { code: 'TURN_FAILED', message },
-          },
-          {
-            beforeFinish: async () => {
-              terminal = await appendTerminalEvent(sessionId, runId, event);
-            },
-          },
-        );
+        ok = await finishTurnWithMessage(deps.db, {
+          id: runId,
+          sessionId,
+          idx: nextIdx++,
+          status: 'interrupted',
+          content: assistantText
+            ? [{ type: 'text', text: assistantText }]
+            : [{ type: 'text', text: message }],
+          lastError,
+        });
       } catch (err) {
         log.error({ err }, 'persist interrupted terminal state failed');
         return;
       }
-      if (!ok || !terminal) {
+      if (!ok) {
         log.error({ runId }, 'turn terminal state already claimed');
         return;
       }
-      deps.bus.publish(sessionId, terminal);
+      await appendCommittedTerminal(terminalTurn(runId, sessionId, 'interrupted', lastError)).catch(
+        (err) => {
+          log.error({ err, runId }, 'interrupted terminal event append failed');
+        },
+      );
     };
 
     // An interrupt can win immediately after startTurn commits but before this
@@ -464,7 +510,7 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
       );
     } catch (err) {
       log.error({ err }, 'load history failed');
-      await finishFailed('服务开小差了，请重试。');
+      await finishFailed('TURN_HISTORY_LOAD_FAILED', '服务开小差了，请重试。');
       return;
     }
     const tools: RuntimeAgentTool[] = [
@@ -508,7 +554,7 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
       const message =
         err instanceof TurnAgentUnavailableError ? err.message : '对话服务暂时不可用，请重试。';
       log.error({ err }, 'agent factory failed');
-      await finishFailed(message);
+      await finishFailed('TURN_AGENT_UNAVAILABLE', message);
       return;
     }
 
@@ -552,6 +598,7 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
     const finishAborted = (): Promise<void> =>
       idleTimedOut
         ? finishFailed(
+            'TURN_IDLE_TIMEOUT',
             `模型响应停滞超过 ${Math.round(deps.idleTimeoutMs / 1000)} 秒，本轮已终止，请重试。`,
             assistantText ? [{ type: 'text', text: assistantText }] : undefined,
           )
@@ -623,19 +670,17 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
     }
     if (promptOutcome.status === 'failed') {
       log.error({ err: promptOutcome.error }, 'agent.prompt failed');
-      await finishFailed('对话生成失败，请重试。');
+      await finishFailed('TURN_PROMPT_FAILED', '对话生成失败，请重试。');
       return;
     }
     const runtimeError = agent.runtimeError();
     if (runtimeError !== undefined) {
       log.error({ runtimeError }, 'llm runtime failure (encoded in message)');
-      await finishFailed('模型调用失败（额度/网络/服务波动），请重试。');
+      await finishFailed('TURN_RUNTIME_ERROR', '模型调用失败（额度/网络/服务波动），请重试。');
       return;
     }
     if (shutdownOwnedRuns.has(runId)) return;
     closeText();
-    const completedEvent = { type: EventType.RUN_FINISHED, ...base };
-    let completedTerminal: PublishedStreamEvent | undefined;
     let completedNextIdx: number | null;
     try {
       const rows = agent
@@ -650,9 +695,8 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
       completedNextIdx = await withTransaction(deps.db, async (transaction) => {
         await lockTurnSession(transaction, sessionId);
         if (!(await lockRunningTurn(transaction, runId, sessionId))) return null;
-        // Studio promotion is validated before creating the Redis terminal marker.
-        // A deterministic binding failure can still become one ordered RUN_ERROR;
-        // any failure after RUN_FINISHED keeps this runId fenced as outcome-unknown.
+        // Studio promotion, Turn CAS and transcript messages commit atomically.
+        // Redis is not touched until this whole PostgreSQL transaction commits.
         if (args.mode === 'studio' && lastStudioArtifactId) {
           const bound = await bindCapabilityUiArtifact(transaction, {
             capabilityId: args.capabilityId,
@@ -661,7 +705,6 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
           });
           if (!bound) throw new Error('Studio revision could not be promoted');
         }
-        completedTerminal = await appendTerminalEvent(sessionId, runId, completedEvent);
         const won = await finishTurnCas(transaction, { id: runId, status: 'completed' });
         if (!won) return null;
         let idx = nextIdx;
@@ -678,21 +721,22 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
       });
     } catch (err) {
       log.error({ err }, 'persist completed terminal state failed');
-      if (err instanceof TerminalEventAppendTimeoutError || completedTerminal) {
-        // The RUN_FINISHED append either has an unknown outcome or already returned
-        // before a later database statement failed. Keep the DB Turn running and
-        // never race that runId with a different RUN_ERROR terminal.
-        return;
-      }
-      await finishFailed('本轮回复未能保存（数据库异常），请重试。');
+      // If COMMIT had an unknown outcome, this guarded fallback either wins the
+      // still-running Turn or observes the already-committed completed status. It
+      // never writes Redis before its own terminal transaction commits.
+      await finishFailed('TURN_PERSIST_FAILED', '本轮回复未能保存（数据库异常），请重试。');
       return;
     }
-    if (completedNextIdx === null || !completedTerminal) {
+    if (completedNextIdx === null) {
       log.error({ runId }, 'turn terminal state already claimed');
       return;
     }
     nextIdx = completedNextIdx;
-    deps.bus.publish(sessionId, completedTerminal);
+    await appendCommittedTerminal(terminalTurn(runId, sessionId, 'completed', null)).catch(
+      (err) => {
+        log.error({ err, runId }, 'completed terminal event append failed');
+      },
+    );
   }
 
   return {
@@ -701,54 +745,102 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
       const sessionId = input.session.id;
       const runId = randomUUID();
       const controller = new AbortController();
+      const transactionController = new AbortController();
       const running: ActiveTurn = {
         controller,
         runId,
         completion: Promise.resolve(),
       };
+      let markStartingSettled!: () => void;
+      const startingTurn: StartingTurn = {
+        sessionId,
+        running,
+        transactionController,
+        settled: new Promise<void>((resolve) => {
+          markStartingSettled = resolve;
+        }),
+      };
+      // There is no await between the shutdown check and this registration, so
+      // dispose either rejects this start or owns its complete transaction window.
+      starting.add(startingTurn);
       let userMessage: MessageRecord;
+      let repairedTerminal: PublishedStreamEvent | undefined;
       try {
-        userMessage = await withTransaction(deps.db, async (tx) => {
-          const lockedSession = await lockActiveSession(tx, sessionId, input.session.ownerUserId);
-          if (!lockedSession) throw new SessionInactiveError();
-          await createTurn(tx, { id: runId, sessionId });
-          const message = await appendTurnMessage(tx, {
-            sessionId,
-            turnId: runId,
-            idx: 0,
-            role: 'user',
-            content: [{ type: 'text', text: input.text }],
-            status: 'completed',
+        userMessage = await withTransaction(
+          deps.db,
+          async (tx) => {
+            const lockedSession = await lockActiveSession(tx, sessionId, input.session.ownerUserId);
+            if (!lockedSession) throw new SessionInactiveError();
+            // PostgreSQL is authoritative for a previous committed terminal. Under
+            // this Session lock, repair can replace a conflicting pre-fix marker;
+            // ordinary terminal races still use strict appendTerminal semantics.
+            const previous = await getLatestTerminalTurn(tx, sessionId);
+            if (previous) {
+              repairedTerminal = await appendTerminalEvent(
+                previous.sessionId,
+                previous.id,
+                terminalEventForTurn(previous),
+                transactionController.signal,
+                'repair',
+              );
+            }
+            await createTurn(tx, { id: runId, sessionId });
+            const message = await appendTurnMessage(tx, {
+              sessionId,
+              turnId: runId,
+              idx: 0,
+              role: 'user',
+              content: [{ type: 'text', text: input.text }],
+              status: 'completed',
+            });
+            // Publish the local handle before COMMIT. A concurrent interrupt waits on
+            // the Session row, then can verify this exact runId instead of falling
+            // through the post-commit/pre-handle gap.
+            active.set(sessionId, running);
+            return message;
+          },
+          { signal: transactionController.signal },
+        );
+        if (disposing || transactionController.signal.aborted || shutdownOwnedRuns.has(runId)) {
+          throw new Error('turn runner is shutting down');
+        }
+        // Publish the repaired id before executeTurn can append RUN_STARTED. Redis
+        // Stream id filtering makes this safe when the original terminal publisher
+        // also wakes up and publishes the same id later.
+        if (repairedTerminal) deps.bus.publish(sessionId, repairedTerminal);
+        // A synchronous bus subscriber can initiate disposal, so fence once more
+        // immediately before the only place that starts Pi execution.
+        if (disposing || transactionController.signal.aborted || shutdownOwnedRuns.has(runId)) {
+          throw new Error('turn runner is shutting down');
+        }
+        running.completion = executeTurn({
+          sessionId,
+          capabilityId: input.session.capabilityId,
+          definition: input.definition,
+          mode: input.session.mode,
+          text: input.text,
+          controller,
+          runId,
+          ownerUserId: input.session.ownerUserId,
+          log: input.log,
+        })
+          .catch((err) => input.log.error({ err }, 'turn crashed'))
+          .finally(() => {
+            if (active.get(sessionId) === running) active.delete(sessionId);
           });
-          // Publish the local handle before COMMIT. A concurrent interrupt waits on
-          // the Session row, then can verify this exact runId instead of falling
-          // through the post-commit/pre-handle gap.
-          active.set(sessionId, running);
-          return message;
-        });
+        return { status: 'started', userMessage };
       } catch (err) {
         if (active.get(sessionId) === running) active.delete(sessionId);
-        // A failed or outcome-unknown COMMIT must not be followed by an unlocked
-        // terminal CAS. If the Turn actually committed, keep it running so the
-        // normal locked sweeper can reconcile it without unordered SSE events.
+        // dispose retains this StartingTurn record even when COMMIT had an unknown
+        // outcome, so a committed row joins the same cleanup and terminal fallback.
+        if (disposing || transactionController.signal.aborted) {
+          throw new Error('turn runner is shutting down');
+        }
         throw err;
+      } finally {
+        starting.delete(startingTurn);
+        markStartingSettled();
       }
-      running.completion = executeTurn({
-        sessionId,
-        capabilityId: input.session.capabilityId,
-        definition: input.definition,
-        mode: input.session.mode,
-        text: input.text,
-        controller,
-        runId,
-        ownerUserId: input.session.ownerUserId,
-        log: input.log,
-      })
-        .catch((err) => input.log.error({ err }, 'turn crashed'))
-        .finally(() => {
-          if (active.get(sessionId) === running) active.delete(sessionId);
-        });
-      return { status: 'started', userMessage };
     },
     async interrupt(sessionId) {
       const runId = await withTransaction(deps.db, async (transaction) => {
@@ -768,13 +860,7 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
         return true;
       }
       const message = '本轮生成已打断。';
-      const event = {
-        type: EventType.RUN_ERROR,
-        threadId: sessionId,
-        runId,
-        message,
-      };
-      let terminal: PublishedStreamEvent | undefined;
+      const lastError = { code: 'TURN_INTERRUPTED', message };
       const won = await finishTurnWithMessage(
         deps.db,
         {
@@ -783,19 +869,24 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
           idx: 1,
           status: 'interrupted',
           content: [{ type: 'text', text: message }],
-          lastError: { code: 'TURN_FAILED', message },
+          lastError,
         },
         {
           beforeFinish: async () => {
-            // The Session and running Turn rows stay locked until the remote
-            // process namespace is gone and the ordered terminal event exists.
+            // Keep the Session and running Turn rows locked until the remote
+            // process namespace is gone. Redis is appended only after COMMIT.
             deps.interrupts.publish(sessionId);
             await stopSandboxCommands(sessionId, 'cross-replica-interrupt');
-            terminal = await appendTerminalEvent(sessionId, runId, event);
           },
         },
       );
-      if (won && terminal) deps.bus.publish(sessionId, terminal);
+      if (won) {
+        await appendCommittedTerminal(
+          terminalTurn(runId, sessionId, 'interrupted', lastError),
+        ).catch((err) => {
+          deps.log.error({ err, runId }, 'cross-replica terminal event append failed');
+        });
+      }
       return won;
     },
     dispose(externalSignal) {
@@ -806,79 +897,131 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
       const shutdownSignal = externalSignal
         ? AbortSignal.any([externalSignal, localDeadline])
         : localDeadline;
-      disposePromise = (async () => {
+      // Snapshot synchronously with the disposal fence. A committed opener can
+      // remove itself from both registries in the next microtask, but it must stay
+      // owned by this shutdown once it passed the initial startTurn check.
+      const startsAtShutdown = [...starting];
+      const activeAtShutdown = [...active.entries()];
+      let settleDispose!: () => void;
+      let failDispose!: (reason: unknown) => void;
+      // Install the shared Promise before firing any abort callback so re-entrant
+      // disposal observes the same lifecycle without delaying the shutdown fence.
+      disposePromise = new Promise<void>((resolve, reject) => {
+        settleDispose = resolve;
+        failDispose = reject;
+      });
+      const disposal = (async () => {
         clearInterval(sweepTimer);
         unsubscribeInterrupts();
-        const runningTurns = [...active.entries()];
-        const cleanupStates = new Map<string, 'pending' | 'safe' | 'failed'>();
-        const stopping: Promise<unknown>[] = sweepInFlight ? [sweepInFlight] : [];
-        for (const [sessionId, running] of runningTurns) {
+        const shutdownRuns = new Map<string, { sessionId: string; running: ActiveTurn }>();
+        for (const [sessionId, running] of activeAtShutdown) {
+          shutdownRuns.set(running.runId, { sessionId, running });
+        }
+        for (const start of startsAtShutdown) {
+          shutdownRuns.set(start.running.runId, {
+            sessionId: start.sessionId,
+            running: start.running,
+          });
+        }
+
+        // Fence every opener before cancelling its transaction. Even an unknown
+        // COMMIT outcome remains represented in shutdownRuns for the DB fallback.
+        for (const { running } of shutdownRuns.values()) {
           shutdownOwnedRuns.add(running.runId);
-          cleanupStates.set(sessionId, 'pending');
+        }
+        const abortOpeningTransactions = (): void => {
+          for (const start of startsAtShutdown) start.transactionController.abort();
+        };
+        if (shutdownSignal.aborted) {
+          abortOpeningTransactions();
+        } else {
+          shutdownSignal.addEventListener('abort', abortOpeningTransactions, { once: true });
+          for (const start of startsAtShutdown) {
+            // Before active.set no COMMIT can have started, so cancellation is a
+            // definite rollback. A published handle is allowed to finish COMMIT;
+            // the Pi fence and the fallback below then terminalize its durable row.
+            if (active.get(start.sessionId) !== start.running) {
+              start.transactionController.abort();
+            }
+          }
+        }
+
+        const cleanupStates = new Map<string, 'pending' | 'safe' | 'failed'>();
+        const firstPhase: Promise<unknown>[] = sweepInFlight ? [sweepInFlight] : [];
+        firstPhase.push(...startsAtShutdown.map((start) => start.settled));
+        for (const { sessionId, running } of shutdownRuns.values()) {
+          cleanupStates.set(running.runId, 'pending');
           running.controller.abort();
           const cleanup = stopSandboxCommands(sessionId, 'runtime-shutdown', {
             localExecution: true,
           }).then(
-            () => cleanupStates.set(sessionId, 'safe'),
+            () => cleanupStates.set(running.runId, 'safe'),
             (err: unknown) => {
-              cleanupStates.set(sessionId, 'failed');
+              cleanupStates.set(running.runId, 'failed');
               deps.log.error({ err, sessionId }, 'runtime shutdown sandbox cleanup failed');
             },
           );
-          stopping.push(cleanup, running.completion);
+          firstPhase.push(cleanup);
         }
-        await waitUntilSignal(Promise.allSettled(stopping), shutdownSignal);
+        await waitUntilSignal(Promise.allSettled(firstPhase), shutdownSignal);
 
         if (!shutdownSignal.aborted) {
-          const terminalFallbacks = runningTurns.map(async ([sessionId, running]) => {
-            if (cleanupStates.get(sessionId) !== 'safe') {
-              deps.log.error(
-                { sessionId, runId: running.runId },
-                'shutdown kept Turn running because sandbox cleanup was unconfirmed',
-              );
-              return;
-            }
-            const remaining = remainingMilliseconds(deadline);
-            if (remaining <= 0 || shutdownSignal.aborted) return;
-            const message = 'Runtime 正在关闭，本轮已终止，请重试。';
-            const event = {
-              type: EventType.RUN_ERROR,
-              threadId: sessionId,
-              runId: running.runId,
-              message,
-            };
-            let terminal: PublishedStreamEvent | undefined;
-            const won = await finishTurnWithMessage(
-              deps.db,
-              {
-                id: running.runId,
-                sessionId,
-                idx: 1,
-                status: 'interrupted',
-                content: [{ type: 'text', text: message }],
-                lastError: { code: 'TURN_FAILED', message },
-              },
-              {
-                transaction: { signal: shutdownSignal, timeoutMs: remaining },
-                beforeFinish: async () => {
-                  terminal = await appendTerminalEvent(
-                    sessionId,
-                    running.runId,
-                    event,
-                    shutdownSignal,
-                  );
+          // StartingTurn.settled is resolved only after startTurn has either
+          // installed its final completion Promise or fenced Pi from starting.
+          await waitUntilSignal(
+            Promise.allSettled([...shutdownRuns.values()].map(({ running }) => running.completion)),
+            shutdownSignal,
+          );
+        }
+
+        if (!shutdownSignal.aborted) {
+          const terminalFallbacks = [...shutdownRuns.values()].map(
+            async ({ sessionId, running }) => {
+              if (cleanupStates.get(running.runId) !== 'safe') {
+                deps.log.error(
+                  { sessionId, runId: running.runId },
+                  'shutdown kept Turn running because sandbox cleanup was unconfirmed',
+                );
+                return;
+              }
+              const remaining = remainingMilliseconds(deadline);
+              if (remaining <= 0 || shutdownSignal.aborted) return;
+              const message = 'Runtime 正在关闭，本轮已终止，请重试。';
+              const lastError = { code: 'TURN_SHUTDOWN', message };
+              const won = await finishTurnWithMessage(
+                deps.db,
+                {
+                  id: running.runId,
+                  sessionId,
+                  idx: 1,
+                  status: 'interrupted',
+                  content: [{ type: 'text', text: message }],
+                  lastError,
                 },
-              },
-            ).catch((err) => {
-              deps.log.error({ err, runId: running.runId }, 'shutdown terminal fallback failed');
-              return false;
-            });
-            if (won && terminal && !shutdownSignal.aborted) deps.bus.publish(sessionId, terminal);
-          });
+                { transaction: { signal: shutdownSignal, timeoutMs: remaining } },
+              ).catch((err) => {
+                deps.log.error({ err, runId: running.runId }, 'shutdown terminal fallback failed');
+                return false;
+              });
+              if (won) {
+                await appendCommittedTerminal(
+                  terminalTurn(running.runId, sessionId, 'interrupted', lastError),
+                  shutdownSignal,
+                ).catch((err) => {
+                  deps.log.error(
+                    { err, runId: running.runId },
+                    'shutdown terminal event append failed',
+                  );
+                });
+              }
+            },
+          );
           await waitUntilSignal(Promise.allSettled(terminalFallbacks), shutdownSignal);
         }
+        shutdownSignal.removeEventListener('abort', abortOpeningTransactions);
         active.clear();
       })();
+      void disposal.then(settleDispose, failDispose);
       return disposePromise;
     },
   };

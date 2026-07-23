@@ -22,11 +22,11 @@ Runtime 读取 Capability 定义，并在 Studio Turn 成功时更新 Capability
 
 Turn 创建受数据库部分唯一索引保护。两个 Runtime 副本同时为一个 Session 提交消息时，只有一个副本能插入 `running` Turn。只有目标索引的 PostgreSQL 唯一冲突会映射为 `SessionBusyError`。
 
-每个非终态 Redis 事件都会先锁住 Session，并确认同一个 Turn 仍为 `running`。终态路径使用相同锁序，因此任一副本提交终态后，旧 Pi 的文本、产物状态和新的 `RUN_STARTED` 都不能再进入 Redis Stream。终态追加按 `runId` 幂等；相同终态重试返回原编号，不同终态重试失败。
+每个非终态 Redis 事件都会先锁住 Session，并确认同一个 Turn 仍为 `running`。终态状态、错误和消息先在 PostgreSQL 事务中提交，随后才按 `runId` 幂等追加 Redis 终态。数据库终态一旦提交，旧 Pi 的文本与产物状态就不能再通过运行态守卫；Redis 的终态标记还会拒绝同一 Turn 的迟到普通事件和不同终态。终态标记缺失或仍是旧版 `OPEN` 时，普通事件脚本会先扫描保留的 Stream 并恢复终态标记，不会把已终止的 Turn 重新开放。
 
-终态 Redis 写入有硬超时。超时表示结果不明确时，数据库事务回滚并继续保留 `running` 状态，也不会再追加替代 `RUN_ERROR`。终态数据库事务提交后才发布实时通知，因此正常路径中新 Turn 的 `RUN_STARTED` 晚于旧 Turn 的终态。
+终态 Redis 写入有硬超时，但超时或结果不明确不会回滚已经提交的 PostgreSQL 终态。下一轮创建前会在 Session 行锁内读取最近的持久终态，并确保对应 Redis 事件存在，然后才插入新 Turn。数据库修复路径可以替换升级前遗留的冲突终态；即使现有标记已经匹配，只要同一 Turn 在旧终态后还有迟到普通事件，修复也会删除旧终态并在 Stream 尾部重放数据库终态。普通竞争终态仍会失败。恢复 `RUN_ERROR` 时只按受信错误码生成固定公开文案，不会把历史 `last_error.message` 的内部诊断发送到 SSE。因此新一轮的 `RUN_STARTED` 一定排在修复后的旧终态之后。
 
-Runtime 关闭时会中止 Pi，并让 Turn、PostgreSQL 查询、Kubernetes 后端和基础设施连接共用一个绝对截止时间。关闭事务设置 PostgreSQL 锁等待与语句超时。只有远程清理已经确认且截止时间尚未耗尽的 Turn 才会认领终态；其他 Turn 保留 `running` 唯一约束。对象存储写入在中止后才返回时不会提交 Artifact。
+Runtime 关闭时会中止 Pi，并让 Turn、PostgreSQL 查询、Kubernetes 后端和基础设施连接共用一个绝对截止时间。关闭流程同时跟踪尚未发布活动句柄的开轮事务；未进入提交阶段的事务会被取消，已经提交的 Turn 会加入同一轮远程清理和终态收口。关闭事务设置 PostgreSQL 锁等待与语句超时。只有远程清理已经确认且截止时间尚未耗尽的 Turn 才会认领终态；其他 Turn 保留 `running` 唯一约束。对象存储写入在中止后才返回时不会提交 Artifact。
 
 Studio Session 会给 Pi 注入界面设计协议。`upsert_artifact` 只接受符合 Miniapp 运行契约的 HTML revision；只有完整 Turn 成功后，本轮最后一个 revision 才会在同一终态事务中成为 Capability 当前 UI。新普通 Session 会复制创建时的 UI 快照，已有 Session 不随之后的 Studio 修改漂移。
 
@@ -62,6 +62,10 @@ pnpm -F @cb/shared build
 pnpm -F @cb/runtime typecheck
 pnpm -F @cb/runtime typecheck:test
 pnpm -F @cb/runtime test
+DATABASE_URL=<测试库地址> pnpm -F @cb/db migrate
+RUNTIME_TERMINAL_FENCE_DATABASE_URL=<测试库地址> \
+RUNTIME_TERMINAL_FENCE_REDIS_URL=<测试 Redis 地址> \
+pnpm --dir apps/runtime exec vitest run src/__tests__/terminal-fence.integration.test.ts
 bash scripts/integration/sandbox-tools-local.sh
 ```
 

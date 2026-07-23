@@ -9,10 +9,10 @@
 - `processes/` 保存进程入口，目前只有一个 API 进程。
 - `modules/` 保存 capability、session、artifact 和 agent 四个业务模块，其中 Studio 模式复用同一套 Turn 与事件机制。
 - `platform/` 保存配置、数据库、Redis、对象存储、登录验签、模型选择、沙箱后端、HTTP 公共设施和观测接线。
-- `__tests__/` 保存 Runtime 单元测试以及数据库、事件日志、对象存储和 Pi Agent 忠实假件。
+- `__tests__/` 保存 Runtime 单元测试、数据库与 Redis 终态栅栏集成测试，以及数据库、事件日志、对象存储和 Pi Agent 忠实假件。
 
 ## 消息提交路径
 
 用户提交消息后，Session 处理器会重新校验归属并加载 CapabilityDefinition。TurnRunner 在事务中锁定 active Session，插入一个 `running` Turn 和轮内用户消息。数据库部分唯一索引保证同一 Session 只有一个运行轮次；冲突会映射为现有 `SESSION_BUSY` 信封。
 
-异步执行开始后，TurnRunner 读取已完成历史，先挂载可信的 `upsert_artifact`，再在功能开启时追加 `read`、`write`、`edit`、`bash` 四个串行工具。Studio Turn 会校验 HTML revision，并只在整轮成功时原子更新 Capability 当前 UI。模型文本和产物状态继续写入 Redis 事件日志并直播给 SSE 连接，完成消息继续落入 PostgreSQL。
+异步执行开始后，TurnRunner 读取已完成历史，先挂载可信的 `upsert_artifact`，再在功能开启时追加 `read`、`write`、`edit`、`bash` 四个串行工具。Studio Turn 会校验 HTML revision，并只在整轮成功时原子更新 Capability 当前 UI。模型文本和产物状态写入 Redis 事件日志并直播给 SSE 连接；终态状态与完成消息先提交 PostgreSQL，再追加可修复且按 Turn 幂等的 Redis 终态事件。下一轮开轮事务以持久终态修正升级前遗留的冲突标记，并在关闭期间由 TurnRunner 显式跟踪和取消。
