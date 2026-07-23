@@ -931,6 +931,11 @@ export function ChatPage() {
         revision.artifactVersion === previewVersion.version,
     ) ??
     currentRevision;
+  const isViewingHistory = Boolean(
+    selectedStudioRevision &&
+    currentRevision &&
+    selectedStudioRevision.revisionNo !== currentRevision.revisionNo,
+  );
 
   useEffect(() => {
     setPreviewArtifactKey(null);
@@ -943,8 +948,8 @@ export function ChatPage() {
   }, [sessionId]);
 
   useEffect(() => {
-    if (currentTestIsRunning) setRunDrawerOpen(true);
-  }, [currentTestIsRunning]);
+    if (currentTestIsRunning && !isViewingHistory) setRunDrawerOpen(true);
+  }, [currentTestIsRunning, isViewingHistory]);
 
   useEffect(() => {
     setInspectionEnabled(false);
@@ -1131,11 +1136,6 @@ export function ChatPage() {
     : !hasStarted || !activeArtifact
       ? capability.version
       : String(activeArtifact.latestVersion);
-  const isViewingHistory = Boolean(
-    selectedStudioRevision &&
-    currentRevision &&
-    selectedStudioRevision.revisionNo !== currentRevision.revisionNo,
-  );
   const canStartCurrentTest = Boolean(
     currentRevision && !isViewingHistory && !studioIsBusy && !currentTestIsRunning,
   );
@@ -1174,15 +1174,11 @@ export function ChatPage() {
               : currentRevision?.verified
                 ? { state: 'verified', label: '已试用' }
                 : currentRevision
-                  ? { state: 'saved', label: '已保存' }
+                  ? { state: 'pending', label: '待试用' }
                   : { state: 'preparing', label: '正在准备' };
   const canOpenRunDrawer = Boolean(
     hasCurrentTestRecord && !isViewingHistory && !studioPanelError && !studioIsBusy,
   );
-  const studioRevisionOptions = [...revisions].sort(
-    (left, right) => right.revisionNo - left.revisionNo,
-  );
-
   const sendStudioMessage = (text: string, element?: ComboElementSelection): boolean => {
     const prompt = element ? buildContextualStudioPrompt(element, text) : text;
     const started = agui.send(prompt, undefined, 'design');
@@ -1279,6 +1275,7 @@ export function ChatPage() {
       )}
       {showDraftStudio ? (
         <DesignAgentPanel
+          key={sessionId}
           messages={studioMessages}
           revisions={revisions}
           selectedRevisionNo={selectedStudioRevision?.revisionNo}
@@ -1350,28 +1347,6 @@ export function ChatPage() {
                     <strong className="rt-artifact-shell__title">
                       {activeArtifact?.title ?? capability.name}
                     </strong>
-                    {selectedStudioRevision && (
-                      <label className="rt-artifact-shell__meta">
-                        <span className="rt-sr-only">版本</span>
-                        <select
-                          className="rt-artifact-shell__version-select"
-                          aria-label="页面版本"
-                          value={selectedStudioRevision.revisionNo}
-                          onChange={(event) => selectStudioRevision(Number(event.target.value))}
-                        >
-                          {studioRevisionOptions.map((revision) => (
-                            <option key={revision.id} value={revision.revisionNo}>
-                              版本 {revision.revisionNo}
-                              {revision.id === currentRevision?.id
-                                ? ' · 当前'
-                                : revision.verified
-                                  ? ' · 已试用'
-                                  : ''}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    )}
                     {canOpenRunDrawer ? (
                       <button
                         type="button"
@@ -1410,6 +1385,14 @@ export function ChatPage() {
                         手机
                       </button>
                     </div>
+                    {currentRevision &&
+                      !currentRevision.verified &&
+                      !currentTestIsRunning &&
+                      !isViewingHistory && (
+                        <span className="rt-artifact-shell__publish-hint">
+                          完成前先运行一次真实任务
+                        </span>
+                      )}
                     <button
                       type="button"
                       className="rt-artifact-shell__publish"
@@ -1423,7 +1406,7 @@ export function ChatPage() {
                       }
                       onClick={backToPublish}
                     >
-                      完成编辑
+                      {currentRevision?.verified ? '完成编辑' : '先在页面试用一次'}
                     </button>
                   </div>
                 </header>
@@ -1463,7 +1446,11 @@ export function ChatPage() {
                       </div>
                     ) : showInitialGenerating ? (
                       <div className="rt-genui__stage rt-genui__stage--generating">
-                        <GeneratingPageSkeleton showStatus={false} />
+                        <GeneratingPageSkeleton
+                          title="正在创建第一版"
+                          description="页面内容准备好后会直接呈现在这块画布里"
+                          onStop={() => agui.interrupt(studioState?.activeDesignRunId ?? undefined)}
+                        />
                       </div>
                     ) : (
                       <div className="rt-design-preview__empty">
@@ -1476,7 +1463,7 @@ export function ChatPage() {
                       </div>
                     )}
                   </div>
-                  {runDrawerOpen && currentRevision && (
+                  {runDrawerOpen && currentRevision && !isViewingHistory && (
                     <aside className="rt-artifact-run-drawer" aria-label="最近一次试用">
                       <header className="rt-artifact-run-drawer__head">
                         <div>
@@ -1512,11 +1499,6 @@ export function ChatPage() {
                         </div>
                       </header>
                       <div className="rt-artifact-run-drawer__body" aria-live="polite">
-                        {!currentTestIsRunning && !currentTestError && (
-                          <div className="rt-studio-test__notice">
-                            本次真实任务已运行完成，请根据下方结果判断是否符合预期。
-                          </div>
-                        )}
                         {latestTestPrompt && (
                           <div className="rt-studio-test__submitted-prompt">
                             <span>本次任务</span>
@@ -1524,7 +1506,35 @@ export function ChatPage() {
                           </div>
                         )}
                         {currentTestIsRunning ? (
-                          <GeneratingPageSkeleton showStatus={false} compact />
+                          <>
+                            <div className="rt-studio-test__running" role="status">
+                              <span className="rt-studio-test__running-dot" aria-hidden="true" />
+                              <div>
+                                <strong>正在运行本次任务</strong>
+                                <p>返回内容会持续出现在下方。</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  studioTest.interrupt(
+                                    storedCurrentTestStatus === 'running'
+                                      ? studioState?.latestTest?.runId
+                                      : undefined,
+                                  )
+                                }
+                                disabled={
+                                  !studioTest.runId && storedCurrentTestStatus !== 'running'
+                                }
+                              >
+                                停止
+                              </button>
+                            </div>
+                            {latestTestOutput ? (
+                              <div className="rt-studio-test__stream">{latestTestOutput}</div>
+                            ) : (
+                              <div className="rt-studio-test__waiting">正在等待 Agent 返回…</div>
+                            )}
+                          </>
                         ) : currentTestError ? (
                           <>
                             <div className="rt-studio-test__notice is-error">
@@ -1542,7 +1552,7 @@ export function ChatPage() {
                           </>
                         ) : latestTestArtifact ? (
                           <div className="rt-studio-test__artifact">
-                            <ArtifactRenderer artifact={latestTestArtifact} />
+                            <ArtifactRenderer artifact={latestTestArtifact} interactive={false} />
                           </div>
                         ) : latestTestOutput ? (
                           <div className="rt-studio-test__text">{latestTestOutput}</div>
@@ -1605,14 +1615,14 @@ export function ChatPage() {
             aria-pressed={mobilePane === 'agent'}
             onClick={() => setMobilePane('agent')}
           >
-            Design Agent
+            修改
           </button>
           <button
             type="button"
             aria-pressed={mobilePane === 'preview'}
             onClick={() => setMobilePane('preview')}
           >
-            页面预览
+            页面
           </button>
         </nav>
       )}

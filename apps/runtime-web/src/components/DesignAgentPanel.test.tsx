@@ -44,6 +44,32 @@ function props(overrides: Partial<DesignAgentPanelProps> = {}): DesignAgentPanel
 }
 
 describe('DesignAgentPanel', () => {
+  it('keeps page versions in the compact left rail', () => {
+    const onSelectRevision = vi.fn();
+    render(
+      <DesignAgentPanel
+        {...props({
+          revisions: [
+            props().revisions[0]!,
+            {
+              ...props().revisions[0]!,
+              id: '44444444-4444-4444-8444-444444444444',
+              revisionNo: 2,
+              artifactVersion: 2,
+            },
+          ],
+          selectedRevisionNo: 2,
+          onSelectRevision,
+        })}
+      />,
+    );
+
+    const versions = screen.getByRole('combobox', { name: '页面版本' });
+    expect(versions).toHaveValue('2');
+    fireEvent.change(versions, { target: { value: '1' } });
+    expect(onSelectRevision).toHaveBeenCalledWith(1);
+  });
+
   it('keeps the complete conversation available as one continuous history', () => {
     const messages = Array.from({ length: 6 }, (_, index) => ({
       id: `message-${index}`,
@@ -122,6 +148,29 @@ describe('DesignAgentPanel', () => {
       <DesignAgentPanel {...props({ revisions: [], selectedRevisionNo: undefined, onSend })} />,
     );
     expect(onSend).toHaveBeenCalledWith('把结果区改成卡片');
+  });
+
+  it('drops draft text and queued edits when the keyed session changes', () => {
+    const onSendA = vi.fn(() => true);
+    const onSendB = vi.fn(() => true);
+    const { rerender } = render(
+      <DesignAgentPanel key="session-a" {...props({ isRunning: true, onSend: onSendA })} />,
+    );
+    const composer = screen.getByRole('textbox', { name: '描述页面修改' });
+
+    fireEvent.change(composer, { target: { value: '只属于 A 的下一条修改' } });
+    fireEvent.keyDown(composer, { key: 'Enter' });
+    expect(screen.getByText('1 条修改待执行')).toBeInTheDocument();
+    expect(onSendA).not.toHaveBeenCalled();
+
+    rerender(
+      <DesignAgentPanel key="session-b" {...props({ isRunning: false, onSend: onSendB })} />,
+    );
+
+    expect(screen.getByRole('textbox', { name: '描述页面修改' })).toHaveValue('');
+    expect(screen.queryByText('1 条修改待执行')).not.toBeInTheDocument();
+    expect(screen.queryByText('只属于 A 的下一条修改')).not.toBeInTheDocument();
+    expect(onSendB).not.toHaveBeenCalled();
   });
 
   it('exposes a stop action while the Design Agent is running', () => {

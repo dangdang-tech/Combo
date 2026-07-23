@@ -2,6 +2,8 @@ export interface GeneratingPageSkeletonProps {
   showStatus?: boolean;
   onStop?: () => void;
   compact?: boolean;
+  title?: string;
+  description?: string;
 }
 
 /**
@@ -12,6 +14,8 @@ export function GeneratingPageSkeleton({
   showStatus = true,
   onStop,
   compact = false,
+  title = '正在生成页面',
+  description = '完成后会自动显示',
 }: GeneratingPageSkeletonProps) {
   return (
     <section
@@ -24,8 +28,8 @@ export function GeneratingPageSkeleton({
           <div role="status" aria-live="polite">
             <span className="rt-page-skeleton__pulse" aria-hidden="true" />
             <span>
-              <strong>正在生成页面</strong>
-              <small>完成后会自动显示</small>
+              <strong>{title}</strong>
+              <small>{description}</small>
             </span>
           </div>
           {onStop && (

@@ -59,6 +59,7 @@ export function DesignAgentPanel({
   error,
   onSend,
   onInterrupt,
+  onSelectRevision,
   onOpenArtifact,
   onToggleAnnotation,
   onClearAnnotation,
@@ -70,6 +71,7 @@ export function DesignAgentPanel({
   const threadEndRef = useRef<HTMLDivElement>(null);
   const stickToLatestRef = useRef(true);
   const selectedRevision = revisions.find((item) => item.revisionNo === selectedRevisionNo);
+  const revisionOptions = [...revisions].sort((left, right) => right.revisionNo - left.revisionNo);
   const wasRunningRef = useRef(false);
   const bootstrapFailed = revisions.length === 0 && !isBootstrapping && Boolean(error);
   const isWorking = isRunning || isBootstrapping;
@@ -135,6 +137,28 @@ export function DesignAgentPanel({
 
   return (
     <aside className="rt-design-agent" aria-label="页面修改">
+      <header className="rt-design-agent__head">
+        <strong>修改</strong>
+        {selectedRevision ? (
+          <label>
+            <span className="rt-sr-only">页面版本</span>
+            <select
+              aria-label="页面版本"
+              value={selectedRevision.revisionNo}
+              onChange={(event) => onSelectRevision(Number(event.target.value))}
+            >
+              {revisionOptions.map((revision, index) => (
+                <option key={revision.id} value={revision.revisionNo}>
+                  版本 {revision.revisionNo}
+                  {index === 0 ? ' · 当前' : revision.verified ? ' · 已试用' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <span>{isBootstrapping ? '正在创建首版' : '还没有页面'}</span>
+        )}
+      </header>
       <div
         ref={threadRef}
         className="rt-design-agent__thread"

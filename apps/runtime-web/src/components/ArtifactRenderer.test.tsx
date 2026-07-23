@@ -70,6 +70,74 @@ describe('ArtifactRenderer Runtime bridge', () => {
     expect(frame.srcdoc).toContain('data-combo-key="run-primary"');
   });
 
+  it('renders HTML results as a static, network-isolated preview', () => {
+    const artifact = {
+      ...htmlArtifact(),
+      content:
+        '<!doctype html><html><head><meta http-equiv="refresh" content="0;url=https://evil.test"><style>body{color:red}</style></head><body><script>window.__ran = true</script><form action="https://evil.test"><button>发送</button></form></body></html>',
+    };
+    render(<ArtifactRenderer artifact={artifact} interactive={false} />);
+    const frame = screen.getByTitle('每日待办 Miniapp') as HTMLIFrameElement;
+
+    expect(frame.getAttribute('sandbox')).toBe('');
+    expect(frame.getAttribute('sandbox')).not.toContain('allow-scripts');
+    expect(frame.getAttribute('sandbox')).not.toContain('allow-forms');
+    expect(frame.getAttribute('sandbox')).not.toContain('allow-popups');
+    expect(frame).toHaveAttribute('tabindex', '-1');
+    expect(frame).toHaveStyle({ pointerEvents: 'none' });
+    expect(frame.srcdoc).toContain("default-src 'none'");
+    expect(frame.srcdoc).toContain("style-src 'unsafe-inline'");
+    expect(frame.srcdoc).toContain('img-src data: blob:');
+    expect(frame.srcdoc).toContain("connect-src 'none'");
+    expect(frame.srcdoc).toContain("form-action 'none'");
+    expect(frame.srcdoc).not.toMatch(
+      /<meta\b[^>]*\bhttp-equiv\s*=\s*(?:"refresh"|'refresh'|refresh\b)/i,
+    );
+    expect(frame.srcdoc).not.toContain('<script');
+    expect(frame.srcdoc).not.toContain('action="https://evil.test"');
+  });
+
+  it('installs the static CSP in the real head even when content contains fake head text', () => {
+    const artifact = {
+      ...htmlArtifact(),
+      content:
+        '<!doctype html><html><head><title>真实标题</title><meta http-equiv="Content-Security-Policy" content="default-src *"></head><body><!-- <head><meta http-equiv="refresh" content="0;url=https://evil.test"></head> --><script>const fake = "<head></head>"</script><img src="https://evil.test/pixel.png"><img src="data:image/png;base64,AA=="></body></html>',
+    };
+    render(<ArtifactRenderer artifact={artifact} interactive={false} />);
+    const frame = screen.getByTitle('每日待办 Miniapp') as HTMLIFrameElement;
+    const dom = new JSDOM(frame.srcdoc);
+    const policies = dom.window.document.head.querySelectorAll(
+      'meta[http-equiv="Content-Security-Policy"]',
+    );
+    const images = dom.window.document.querySelectorAll('img');
+
+    expect(policies).toHaveLength(1);
+    expect(dom.window.document.head.firstElementChild).toBe(policies[0]);
+    expect(policies[0]).toHaveAttribute('content', expect.stringContaining("default-src 'none'"));
+    expect(dom.window.document.head.querySelector('title')).toHaveTextContent('真实标题');
+    expect(dom.window.document.querySelector('script')).toBeNull();
+    expect(images[0]).not.toHaveAttribute('src');
+    expect(images[1]).toHaveAttribute('src', 'data:image/png;base64,AA==');
+  });
+
+  it('keeps the primary Miniapp interactive by default', () => {
+    const artifact = {
+      ...htmlArtifact(),
+      content:
+        '<!doctype html><html><body><script>window.__interactive = true</script><button>运行</button></body></html>',
+    };
+    render(<ArtifactRenderer artifact={artifact} />);
+    const frame = screen.getByTitle('每日待办 Miniapp') as HTMLIFrameElement;
+
+    expect(frame.getAttribute('sandbox')).toContain('allow-scripts');
+    expect(frame.getAttribute('sandbox')).toContain('allow-forms');
+    expect(frame.getAttribute('sandbox')).toContain('allow-popups');
+    expect(frame.srcdoc).toContain('window.__interactive = true');
+    expect(frame.srcdoc).not.toContain('Content-Security-Policy');
+    expect(frame).not.toHaveAttribute('tabindex');
+    expect(frame).not.toHaveStyle({ pointerEvents: 'none' });
+  });
+
   it('selects a semantic page element even when the generated HTML omitted its stable key', async () => {
     render(
       <ArtifactRenderer

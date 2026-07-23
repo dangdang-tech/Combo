@@ -18,6 +18,8 @@ export interface ComboElementSelection {
 
 export interface ArtifactRendererProps {
   artifact: ArtifactVersion;
+  /** HTML 默认可运行；试用结果等不可信回显必须显式关闭交互。 */
+  interactive?: boolean;
   onRunRequest?: (request: ComboRunRequest) => void;
   inspectionEnabled?: boolean;
   selectedElementKey?: string | null;
@@ -31,6 +33,8 @@ const MAX_COMBO_ELEMENT_LABEL_LENGTH = 160;
 const MAX_COMBO_ELEMENT_TEXT_LENGTH = 240;
 const MAX_COMBO_ELEMENT_PATH_LENGTH = 240;
 const MAX_COMBO_ELEMENT_MANIFEST_LENGTH = 80;
+const STATIC_PREVIEW_CSP =
+  "default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'";
 
 const STUDIO_INSPECTION_BRIDGE = `
 <style id="combo-studio-inspection-style">
@@ -367,6 +371,7 @@ export function ArtifactRenderer(props: ArtifactRendererProps) {
 
 function HtmlView({
   artifact,
+  interactive = true,
   onRunRequest,
   inspectionEnabled = false,
   selectedElementKey = null,
@@ -374,14 +379,19 @@ function HtmlView({
   onElementManifest,
 }: ArtifactRendererProps) {
   const frameRef = useRef<HTMLIFrameElement>(null);
-  const bridgeEnabled = Boolean(onElementSelect || onElementManifest);
+  const bridgeEnabled = interactive && Boolean(onElementSelect || onElementManifest);
   const srcDoc = useMemo(
-    () => (bridgeEnabled ? injectStudioInspectionBridge(artifact.content) : artifact.content),
-    [artifact.content, bridgeEnabled],
+    () =>
+      interactive
+        ? bridgeEnabled
+          ? injectStudioInspectionBridge(artifact.content)
+          : artifact.content
+        : prepareStaticHtmlPreview(artifact.content),
+    [artifact.content, bridgeEnabled, interactive],
   );
 
   const syncInspectionState = (): void => {
-    if (!bridgeEnabled) return;
+    if (!interactive || !bridgeEnabled) return;
     frameRef.current?.contentWindow?.postMessage(
       {
         type: 'combo:inspection-state',
@@ -394,7 +404,7 @@ function HtmlView({
   };
 
   useEffect(() => {
-    if (!onRunRequest && !onElementSelect && !onElementManifest) return;
+    if (!interactive || (!onRunRequest && !onElementSelect && !onElementManifest)) return;
 
     const handleMessage = (event: MessageEvent<unknown>): void => {
       if (event.source !== frameRef.current?.contentWindow) return;
@@ -419,7 +429,14 @@ function HtmlView({
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [inspectionEnabled, onElementManifest, onElementSelect, onRunRequest, selectedElementKey]);
+  }, [
+    inspectionEnabled,
+    interactive,
+    onElementManifest,
+    onElementSelect,
+    onRunRequest,
+    selectedElementKey,
+  ]);
 
   useEffect(() => {
     syncInspectionState();
@@ -430,11 +447,44 @@ function HtmlView({
       ref={frameRef}
       className="rt-artifact__frame"
       title={artifact.title}
-      sandbox="allow-scripts allow-popups allow-forms"
+      sandbox={interactive ? 'allow-scripts allow-popups allow-forms' : ''}
       srcDoc={srcDoc}
-      onLoad={syncInspectionState}
+      tabIndex={interactive ? undefined : -1}
+      style={interactive ? undefined : { pointerEvents: 'none' }}
+      onLoad={interactive ? syncInspectionState : undefined}
     />
   );
+}
+
+function prepareStaticHtmlPreview(content: string): string {
+  const doc = new DOMParser().parseFromString(content, 'text/html');
+  doc.querySelectorAll('meta[http-equiv]').forEach((meta) => {
+    const directive = meta.getAttribute('http-equiv')?.trim().toLowerCase();
+    if (directive === 'refresh' || directive === 'content-security-policy') meta.remove();
+  });
+  doc
+    .querySelectorAll('base, script, iframe, object, embed')
+    .forEach((element) => element.remove());
+
+  const urlAttributes = ['src', 'href', 'action', 'formaction', 'poster', 'data'] as const;
+  doc.querySelectorAll('*').forEach((element) => {
+    for (const attribute of urlAttributes) {
+      const value = element.getAttribute(attribute);
+      if (value !== null && !isStaticPreviewUrl(value)) element.removeAttribute(attribute);
+    }
+    if (element.hasAttribute('srcset')) element.removeAttribute('srcset');
+  });
+
+  const csp = doc.createElement('meta');
+  csp.httpEquiv = 'Content-Security-Policy';
+  csp.content = STATIC_PREVIEW_CSP;
+  doc.head.prepend(csp);
+  return `<!doctype html>\n${doc.documentElement.outerHTML}`;
+}
+
+function isStaticPreviewUrl(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized.startsWith('data:') || normalized.startsWith('blob:');
 }
 
 function injectStudioInspectionBridge(content: string): string {

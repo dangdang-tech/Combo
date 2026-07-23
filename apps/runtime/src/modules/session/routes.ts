@@ -570,7 +570,17 @@ export async function registerSessionRoutes(
     if (!userText) return badRequest(reply, req.id);
     const runSession: SessionRow =
       parsed.data.intent === 'design'
-        ? { ...row, instructions: withDesignStudioInstructions(row.instructions) }
+        ? {
+            ...row,
+            instructions: withDesignStudioInstructions(row.instructions, {
+              capabilityName: row.publicView.name,
+              tagline: row.publicView.tagline,
+              description: row.publicView.description,
+              inputLabels: row.publicView.inputs.fields.map((field) => field.label),
+              outputType: row.publicView.output.type,
+              taskText: userText,
+            }),
+          }
         : row;
 
     const run = await createRun(ctx.pool, {

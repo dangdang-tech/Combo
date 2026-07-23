@@ -2,13 +2,6 @@ import { useEffect, useState } from 'react';
 import type { RuntimeArtifact } from '@cb/shared';
 import { ArtifactRenderer } from './ArtifactRenderer.js';
 
-const KIND_LABEL: Record<string, string> = {
-  html: '网页',
-  markdown: '文档',
-  code: '代码',
-  structured: '结构化',
-};
-
 export interface ArtifactPanelProps {
   /** 当前展示的产物（active）。 */
   artifact: RuntimeArtifact;
@@ -51,10 +44,10 @@ export function ArtifactPanel({
     <aside className="rt-artifact">
       <header className="rt-artifact__bar">
         <div className="rt-artifact__meta">
-          <span className="rt-artifact__kind">{KIND_LABEL[artifact.kind] ?? artifact.kind}</span>
           {artifacts.length > 1 ? (
             <select
-              className="rt-artifact__versions"
+              className="rt-artifact__versions rt-artifact__title-select"
+              aria-label="选择产物"
               value={artifact.artifactKey}
               onChange={(e) => onSelectArtifact(e.target.value)}
             >
@@ -72,20 +65,27 @@ export function ArtifactPanel({
           {artifact.versions.length > 1 && (
             <select
               className="rt-artifact__versions"
+              aria-label="产物版本"
               value={version?.version ?? artifact.latestVersion}
               onChange={(e) => setSelectedVersion(Number(e.target.value))}
             >
               {artifact.versions.map((v) => (
                 <option key={v.version} value={v.version}>
-                  v{v.version}
+                  版本 {v.version}
                 </option>
               ))}
             </select>
           )}
           <button type="button" className="rt-icon-btn" onClick={copy} title="复制内容">
-            {copied ? '已复制' : '复制'}
+            {copied ? '已复制' : '复制结果'}
           </button>
-          <button type="button" className="rt-icon-btn" onClick={onClose} title="收起面板">
+          <button
+            type="button"
+            className="rt-icon-btn"
+            onClick={onClose}
+            title="收起面板"
+            aria-label="收起产物"
+          >
             ✕
           </button>
         </div>

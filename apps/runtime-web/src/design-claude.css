@@ -983,6 +983,17 @@ body {
   font-weight: 500;
 }
 
+.rt-artifact__versions.rt-artifact__title-select {
+  min-width: 0;
+  max-width: min(36vw, 320px);
+  border-color: transparent;
+  padding-inline: 2px 22px;
+  background-color: transparent;
+  font-family: var(--cb-font-sans);
+  font-size: 14px;
+  text-overflow: ellipsis;
+}
+
 .rt-artifact__body {
   background: var(--cb-bg);
 }
