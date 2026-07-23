@@ -8,7 +8,7 @@ SHA="${SHA:?SHA 必填（40 位提交 SHA；三镜像必须已在 GHCR）}"
 KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
 SRC_ROOT="${SRC_ROOT:-/opt/combo-preview/infra/k8s}"
 WORK_ROOT="${WORK_ROOT:-$HOME/combo-preview-k8s-deploy}"
-NAMESPACE=combo-preview
+NAMESPACE=combo-review
 export KUBECONFIG
 
 if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
@@ -27,6 +27,13 @@ test -f "$SRC_ROOT/overlays/cloud-review/kustomization.yaml" || {
   echo "[cloud-review] 找不到 overlay：$SRC_ROOT/overlays/cloud-review" >&2
   exit 66
 }
+
+# Cloud Review 与 Combo development 必须由不同 namespace 独立持有。这个保护要在
+# 删除 Job 或 apply 任何工作负载之前执行，避免未来再次写入 combo-preview。
+if [[ "$NAMESPACE" == combo-preview ]]; then
+  echo "[cloud-review] 拒绝写入 Combo development 持有的 combo-preview namespace" >&2
+  exit 78
+fi
 
 rsync -a --delete "$SRC_ROOT/" "$WORK_ROOT/"
 for kustomization in \

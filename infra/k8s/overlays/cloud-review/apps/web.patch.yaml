@@ -26,9 +26,9 @@ spec:
         - name: web
           env:
             - name: API_UPSTREAM_HOST
-              value: api.combo-preview.svc.cluster.local
+              value: api.combo-review.svc.cluster.local
             - name: RUNTIME_UPSTREAM_HOST
-              value: runtime.combo-preview.svc.cluster.local
+              value: runtime.combo-review.svc.cluster.local
             - name: REVIEW_ACCESS_TOKEN
               valueFrom:
                 secretKeyRef:

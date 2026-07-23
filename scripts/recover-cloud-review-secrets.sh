@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # 恢复固定 Cloud Review 槽位的预览专属 Secret。
-# 只接受 combo-preview 自己的主机备份或工作负载环境；绝不读取生产 namespace。
+# 只接受 combo-review 自己的主机备份或工作负载环境；绝不读取生产或 combo-dev namespace。
 set -euo pipefail
 
 KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
-NAMESPACE=combo-preview
+# 主机备份路径保持不变，以便把现有 Cloud Review 凭据安全迁入新 namespace。
+NAMESPACE=combo-review
 SECRET_ROOT=/opt/combo-preview/secrets
 ENV_SECRET=combo-preview-env
 BOOTSTRAP_SECRET=combo-preview-bootstrap
@@ -304,7 +305,7 @@ capture_preview_environment() {
     fi
   done
 
-  # 这些是公开、非敏感的预览路由/协议标识；数据库和对象存储凭据仍必须来自 combo-preview 自身。
+  # 这些是公开、非敏感的预览路由/协议标识；数据库和对象存储凭据仍必须来自 combo-review 自身。
   {
     printf '%s\n' \
       'LOG_LEVEL=info' \

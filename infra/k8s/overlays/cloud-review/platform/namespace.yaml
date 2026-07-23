@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: combo-preview
+  name: combo-review
   labels:
     app.kubernetes.io/name: combo
     app.kubernetes.io/part-of: combo-cloud-review

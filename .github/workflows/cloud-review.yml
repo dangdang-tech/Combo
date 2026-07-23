@@ -49,11 +49,23 @@ jobs:
           kubectl kustomize --load-restrictor=LoadRestrictionsNone infra/k8s/overlays/cloud-review/apps >/dev/null
           kubectl kustomize --load-restrictor=LoadRestrictionsNone infra/k8s/overlays/cloud-review >/dev/null
 
+      - name: Enforce Cloud Review namespace ownership
+        run: |
+          grep -qx 'namespace: combo-review' infra/k8s/overlays/cloud-review/platform/kustomization.yaml
+          grep -qx 'namespace: combo-review' infra/k8s/overlays/cloud-review/migrate/kustomization.yaml
+          grep -qx 'namespace: combo-review' infra/k8s/overlays/cloud-review/apps/kustomization.yaml
+          if grep -R -nE '^(namespace:|  name:) combo-preview$|\.combo-preview\.svc' \
+            infra/k8s/overlays/cloud-review; then
+            echo 'Cloud Review must not write the Combo development namespace.' >&2
+            exit 1
+          fi
+
       - name: Parse deployment scripts
         run: |
           bash -n \
             scripts/deploy-cloud-review.sh \
             scripts/recover-cloud-review-secrets.sh \
+            scripts/release-cloud-review-nodeports.sh \
             scripts/cloud-review-smoke.sh
 
   images:
@@ -111,7 +123,7 @@ jobs:
           cache-to: type=gha,scope=cloud-review-${{ matrix.image }},mode=max
 
   deploy:
-    name: deploy fixed combo-preview slot
+    name: deploy fixed combo-review slot
     runs-on: ubuntu-latest
     needs: [resolve, images]
     environment: cloud-review
@@ -151,8 +163,12 @@ jobs:
           rsync -az \
             scripts/deploy-cloud-review.sh \
             scripts/recover-cloud-review-secrets.sh \
+            scripts/release-cloud-review-nodeports.sh \
             scripts/cloud-review-smoke.sh \
             cloud-review-target:/opt/combo-preview/scripts/
+
+      - name: Release legacy review NodePorts
+        run: ssh cloud-review-target bash /opt/combo-preview/scripts/release-cloud-review-nodeports.sh
 
       - name: Refresh preview image pull credential
         env:
@@ -185,7 +201,7 @@ jobs:
               "kind": "Secret",
               "metadata": {
                   "name": "combo-preview-ghcr-pull",
-                  "namespace": "combo-preview",
+                  "namespace": "combo-review",
               },
               "type": "kubernetes.io/dockerconfigjson",
               "data": {
@@ -215,7 +231,7 @@ jobs:
           test "$RUNTIME_LLM_PROVIDER" = openrouter
           test -n "$RUNTIME_LLM_MODEL"
           python3 - <<'PY' | ssh cloud-review-target \
-            'kubectl -n combo-preview patch secret combo-preview-env --type merge --patch-file /dev/stdin'
+            'kubectl -n combo-review patch secret combo-preview-env --type merge --patch-file /dev/stdin'
           import base64
           import json
           import os
@@ -246,4 +262,4 @@ jobs:
         run: bash scripts/cloud-review-smoke.sh
 
       - name: Result
-        run: echo "Cloud Review 已部署 ${{ needs.resolve.outputs.sha }}；固定槽位 combo-preview 公网冒烟通过。"
+        run: echo "Cloud Review 已部署 ${{ needs.resolve.outputs.sha }}；独立槽位 combo-review 公网冒烟通过。"
