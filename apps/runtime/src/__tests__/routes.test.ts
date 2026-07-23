@@ -283,6 +283,24 @@ describe('POST /runtime/studio/sessions', () => {
         artifactStorageKey(restored.id, restoredArtifact!.id),
       ),
     ).toBe(html);
+
+    const detailReply = await call(
+      getSessionDetailHandler(),
+      makeReq({ db, objectStore: store, userId: ME, params: { id: restored.id } }),
+    );
+    const detail = (
+      detailReply.body as {
+        data: {
+          currentUiArtifactId: string | null;
+          artifacts: Array<{ id: string; sourceArtifactId?: string }>;
+        };
+      }
+    ).data;
+    expect(detail.currentUiArtifactId).toBe(restoredArtifact!.id);
+    expect(detail.artifacts[0]).toMatchObject({
+      id: restoredArtifact!.id,
+      sourceArtifactId: firstRevision.details!.artifactId,
+    });
   });
 
   it('首次进入只迁移同 Agent、同 owner 且通过运行契约的旧 consume HTML', async () => {
@@ -476,6 +494,79 @@ describe('session 端点 owner 守卫', () => {
     expect(
       (reply.body as { data: { messages: Array<{ turnId?: string }> } }).data.messages[0],
     ).toMatchObject({ turnId });
+  });
+
+  it('GET /runtime/sessions/:id：透出 Agent 当前 UI 指针，区分落库 revision 与已保存 UI', async () => {
+    const db = new FakeDb();
+    const store = new FakeObjectStore();
+    const cap = db.seedCapability({ owner_user_id: ME });
+    seedRunnableDefinition(store, cap);
+    const studio = await getOrCreateStudioSession(db, {
+      capabilityId: cap.id,
+      ownerUserId: ME,
+    });
+    const turnId = 'detail-ui-pointer-turn';
+    const turnController = new AbortController();
+    const now = new Date().toISOString();
+    db.turns.set(turnId, {
+      id: turnId,
+      session_id: studio.id,
+      status: 'running',
+      last_error: null,
+      created_at: now,
+      finished_at: null,
+    });
+    const revision = await createArtifactTool({
+      db,
+      objectStore: store,
+      sessionId: studio.id,
+      turnId,
+      turnSignal: turnController.signal,
+      capabilityId: cap.id,
+      mode: 'studio',
+      onArtifact: () => undefined,
+    }).execute('detail-ui-pointer', {
+      kind: 'html',
+      title: 'Agent 当前 UI',
+      content: `<!doctype html><html><head><style>button{color:red}</style></head><body>
+        <input id="goal"><button data-combo-key="run-primary">运行</button>
+        <script>
+          document.querySelector('[data-combo-key="run-primary"]').addEventListener('click', () => {
+            const prompt = document.querySelector('#goal').value.trim();
+            parent.postMessage({type:'combo:run',version:1,prompt}, '*');
+          });
+        </script>
+      </body></html>`,
+    });
+    db.turns.get(turnId)!.status = 'completed';
+    await bindCapabilityUiArtifact(db, {
+      capabilityId: cap.id,
+      artifactId: revision.details!.artifactId,
+      studioSessionId: studio.id,
+    });
+
+    const reply = await call(
+      getSessionDetailHandler(),
+      makeReq({ db, objectStore: store, userId: ME, params: { id: studio.id } }),
+    );
+
+    expect(reply.statusCode).toBe(200);
+    expect(
+      (reply.body as { data: { currentUiArtifactId: string | null } }).data.currentUiArtifactId,
+    ).toBe(revision.details!.artifactId);
+
+    const consumer = await createSession(db, {
+      capabilityId: cap.id,
+      ownerUserId: OTHER,
+    });
+    const consumerReply = await call(
+      getSessionDetailHandler(),
+      makeReq({ db, objectStore: store, userId: OTHER, params: { id: consumer.id } }),
+    );
+    expect(
+      (consumerReply.body as { data: { currentUiArtifactId: string | null } }).data
+        .currentUiArtifactId,
+    ).toBeNull();
   });
 
   it('POST /runtime/sessions/:id/messages：非本人 404，且不落 user 消息', async () => {

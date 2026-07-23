@@ -29,19 +29,22 @@ vi.mock('../api/runtime.js', () => ({
 }));
 
 vi.mock('../api/useSessionStream.js', () => ({
-  useSessionStream: () => ({
-    activeArtifactId: mocks.artifact?.id ?? null,
-    artifacts: mocks.artifact ? { [mocks.artifact.id]: mocks.artifact } : {},
-    artifactList: mocks.artifact ? [mocks.artifact] : [],
-    streamingText: null,
-    running: mocks.running,
-    activeRunId: mocks.activeRunId,
-    terminalRun: mocks.terminalRun,
-    errorMessage: mocks.errorMessage,
-    send: mocks.send,
-    interrupt: vi.fn(),
-    selectArtifact: vi.fn(),
-  }),
+  useSessionStream: () => {
+    const artifact = mocks.artifact ?? mocks.detail?.artifacts.at(-1) ?? null;
+    return {
+      activeArtifactId: artifact?.id ?? null,
+      artifacts: artifact ? { [artifact.id]: artifact } : {},
+      artifactList: artifact ? [artifact] : [],
+      streamingText: null,
+      running: mocks.running,
+      activeRunId: mocks.activeRunId,
+      terminalRun: mocks.terminalRun,
+      errorMessage: mocks.errorMessage,
+      send: mocks.send,
+      interrupt: vi.fn(),
+      selectArtifact: vi.fn(),
+    };
+  },
 }));
 
 vi.mock('../components/SessionSidebar.js', () => ({
@@ -66,8 +69,22 @@ function sessionDetail(mode?: 'consume' | 'studio'): SessionDetail {
       name: '周报助手',
       summary: '整理本周工作',
       kind: 'workflow',
-      inputs: [],
-      starterPrompts: [],
+      inputs: [
+        {
+          key: 'work',
+          label: '本周工作',
+          type: 'text',
+          required: true,
+        },
+        {
+          key: 'tone',
+          label: '表达风格',
+          type: 'enum',
+          required: false,
+          options: ['精炼', '详细'],
+        },
+      ],
+      starterPrompts: ['整理成管理层周报'],
     },
     messages: [],
     artifacts: [],
@@ -99,7 +116,14 @@ describe('ChatPage studio experience', () => {
     renderPage('/session/11111111-1111-4111-8111-111111111111?returnTo=%2Fcreate%2Fcapabilities');
 
     expect(screen.getByRole('heading', { level: 1, name: '周报助手 UI' })).toBeInTheDocument();
-    expect(screen.getByText('UI 设计 · 修改保存在当前会话')).toBeInTheDocument();
+    expect(screen.getByText('UI 设计')).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: '保存状态：尚未生成' })).toHaveAttribute(
+      'aria-describedby',
+      'rt-studio-save-help',
+    );
+    expect(
+      screen.getByText('每次生成成功后会自动设为 Agent 当前 UI，无需手动保存。'),
+    ).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '返回我的 Agent' })).toHaveAttribute(
       'href',
       '/capabilities',
@@ -110,11 +134,20 @@ describe('ChatPage studio experience', () => {
       '描述你想要的页面结构、交互和视觉…',
     );
     expect(screen.getByRole('button', { name: '生成第一版 UI' })).toBeDisabled();
-    expect(screen.getByRole('region', { name: '等待 UI 设计要求' })).toHaveTextContent(
-      '从左侧开始设计',
+    expect(screen.getByRole('region', { name: '当前系统默认页面' })).toHaveTextContent(
+      '这个 Agent 还没有专属 UI',
     );
+    expect(screen.getByRole('region', { name: '系统默认页面预览' })).toBeInTheDocument();
+    expect(screen.getByText('仅预览 · 消费者默认页')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: /本周工作/ })).toBeDisabled();
+    expect(screen.getByRole('combobox', { name: '表达风格' })).toBeDisabled();
+    expect(screen.getByRole('option', { name: '精炼' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: '补充要求' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '整理成管理层周报' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '开始生成 →' })).toBeDisabled();
     expect(screen.queryByRole('region', { name: '本次试用输入' })).not.toBeInTheDocument();
-    expect(screen.getByTestId('session-sidebar')).toHaveAttribute('data-experience', 'studio');
+    expect(screen.queryByTestId('session-sidebar')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '会话管理' })).not.toBeInTheDocument();
     expect(screen.queryByText('返回发布流程')).not.toBeInTheDocument();
   });
 
@@ -135,18 +168,63 @@ describe('ChatPage studio experience', () => {
     renderPage('/session/11111111-1111-4111-8111-111111111111?mode=studio');
 
     expect(screen.getByRole('complementary', { name: 'UI 设计对话' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: '等待 UI 设计要求' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '当前系统默认页面' })).toBeInTheDocument();
+  });
+
+  it('keeps the default consumer preview after a failed turn produced no UI', () => {
+    mocks.detail = {
+      ...mocks.detail!,
+      messages: [
+        {
+          id: '66666666-6666-4666-8666-666666666666',
+          seq: 1,
+          turnId: '77777777-7777-4777-8777-777777777777',
+          role: 'assistant',
+          content: [{ type: 'text', text: '这轮没有生成页面。' }],
+          status: 'completed',
+          createdAt: '2026-07-23T00:30:00.000Z',
+        },
+      ],
+    };
+    mocks.terminalRun = {
+      runId: '77777777-7777-4777-8777-777777777777',
+      state: 'failed',
+      message: '生成失败',
+    };
+    mocks.errorMessage = '生成失败';
+
+    renderPage('/session/11111111-1111-4111-8111-111111111111');
+
+    expect(screen.getByRole('region', { name: '当前系统默认页面' })).toBeInTheDocument();
+    expect(screen.queryByText('还没有可预览的 UI')).not.toBeInTheDocument();
+    expect(screen.getByRole('status', { name: '保存状态：本轮未保存' })).toBeInTheDocument();
   });
 
   it('does not send a business run into the Studio design conversation', () => {
-    mocks.artifact = {
+    const seededArtifact: ArtifactView = {
       id: '33333333-3333-4333-8333-333333333333',
       kind: 'html',
       title: '周报助手页面',
       updatedAt: '2026-07-23T01:00:00.000Z',
     };
+    mocks.detail = {
+      ...mocks.detail!,
+      artifacts: [seededArtifact],
+      currentUiArtifactId: seededArtifact.id,
+    };
     renderPage('/session/11111111-1111-4111-8111-111111111111');
     const frame = screen.getByTitle('周报助手页面') as HTMLIFrameElement;
+    const download = screen.getByRole('button', { name: '导出 HTML' });
+    expect(download).toHaveAttribute(
+      'title',
+      '导出当前 UI 的静态 HTML 文件，不包含 Agent 运行能力',
+    );
+    expect(download).toHaveAttribute(
+      'aria-describedby',
+      `rt-artifact-download-help-${seededArtifact.id}`,
+    );
+    expect(screen.getByRole('status', { name: '保存状态：已自动保存' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: '当前系统默认页面' })).not.toBeInTheDocument();
 
     fireEvent(
       window,
@@ -157,9 +235,29 @@ describe('ChatPage studio experience', () => {
     );
 
     expect(mocks.send).not.toHaveBeenCalled();
-    expect(screen.getByRole('status')).toHaveTextContent(
-      '当前是 UI 设计预览。请返回「我的 Agent」，从真实试用运行 Agent。',
-    );
+    expect(
+      screen.getByText('当前是 UI 设计预览。请返回「我的 Agent」，从真实试用运行 Agent。'),
+    ).toBeInTheDocument();
+  });
+
+  it('does not present an old current UI as newly saved after a transport error', () => {
+    const currentArtifact: ArtifactView = {
+      id: '33333333-3333-4333-8333-333333333333',
+      kind: 'html',
+      title: '周报助手页面',
+      updatedAt: '2026-07-23T01:00:00.000Z',
+    };
+    mocks.detail = {
+      ...mocks.detail!,
+      artifacts: [currentArtifact],
+      currentUiArtifactId: currentArtifact.id,
+    };
+    mocks.errorMessage = '发送失败，请重试。';
+
+    renderPage('/session/11111111-1111-4111-8111-111111111111');
+
+    expect(screen.getByRole('status', { name: '保存状态：保存状态待确认' })).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: '保存状态：已自动保存' })).not.toBeInTheDocument();
   });
 });
 
@@ -191,6 +289,11 @@ describe('ChatPage consume Miniapp bridge', () => {
     });
     renderPage('/session/11111111-1111-4111-8111-111111111111');
     const frame = screen.getByTitle('周报助手页面') as HTMLIFrameElement;
+    expect(screen.getByTestId('session-sidebar')).toHaveAttribute('data-experience', 'consume');
+    expect(screen.getByRole('button', { name: '会话管理' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '下载 HTML' })).toBeInTheDocument();
+    expect(screen.queryByText('仅预览 · 消费者默认页')).not.toBeInTheDocument();
+    expect(screen.queryByText('UI 设计')).not.toBeInTheDocument();
 
     fireEvent(
       window,
@@ -204,5 +307,52 @@ describe('ChatPage consume Miniapp bridge', () => {
     fireEvent.click(screen.getByRole('button', { name: '确认运行' }));
     await waitFor(() => expect(mocks.send).toHaveBeenCalledOnce());
     expect(mocks.send).toHaveBeenCalledWith('生成本周周报');
+  });
+});
+
+describe('ChatPage consume intake regression', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.detail = sessionDetail('consume');
+    mocks.running = false;
+    mocks.activeRunId = null;
+    mocks.terminalRun = null;
+    mocks.errorMessage = null;
+    mocks.artifact = null;
+    mocks.send.mockResolvedValue({
+      id: '44444444-4444-4444-8444-444444444444',
+      seq: 1,
+      turnId: '55555555-5555-4555-8555-555555555555',
+      role: 'user',
+      content: [{ type: 'text', text: '生成周报' }],
+      status: 'completed',
+      createdAt: '2026-07-23T01:01:00.000Z',
+    });
+  });
+
+  it('keeps the consumer form interactive and sends its structured prompt', async () => {
+    renderPage('/session/11111111-1111-4111-8111-111111111111');
+
+    expect(screen.getByTestId('session-sidebar')).toHaveAttribute('data-experience', 'consume');
+    expect(screen.getByRole('button', { name: '会话管理' })).toBeInTheDocument();
+    const submit = screen.getByRole('button', { name: '开始生成 →' });
+    expect(submit).toBeDisabled();
+
+    fireEvent.change(screen.getByRole('textbox', { name: /本周工作/ }), {
+      target: { value: '完成 Studio 体验修复' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: '表达风格' }), {
+      target: { value: '精炼' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: '补充要求' }), {
+      target: { value: '突出风险与验收结果' },
+    });
+
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+    await waitFor(() => expect(mocks.send).toHaveBeenCalledOnce());
+    expect(mocks.send).toHaveBeenCalledWith(
+      '请基于这些输入生成第一版产物。\n\n本周工作：完成 Studio 体验修复\n表达风格：精炼\n补充要求：突出风险与验收结果',
+    );
   });
 });

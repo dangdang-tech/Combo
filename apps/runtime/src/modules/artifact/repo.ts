@@ -70,10 +70,13 @@ function toStoredArtifact(r: ArtifactDbRow): StoredArtifact {
 }
 
 function toView(r: ArtifactDbRow): ArtifactView {
+  const sourceArtifactId =
+    typeof r.meta?.sourceArtifactId === 'string' ? r.meta.sourceArtifactId : undefined;
   return {
     id: r.id,
     kind: r.kind,
     ...(r.title ? { title: r.title } : {}),
+    ...(sourceArtifactId ? { sourceArtifactId } : {}),
     updatedAt: toIso(r.updated_at),
   };
 }
@@ -100,7 +103,7 @@ export async function upsertArtifact(
                    meta = EXCLUDED.meta,
                    updated_at = now()
        WHERE artifacts.session_id = EXCLUDED.session_id
-     RETURNING id, session_id, kind, title, storage_key, updated_at`,
+     RETURNING id, session_id, kind, title, storage_key, meta, updated_at`,
     [
       input.id,
       input.sessionId,
@@ -398,7 +401,7 @@ function existingToDbRow(artifact: StoredArtifact): ArtifactDbRow {
 /** 会话全部产物（详情画布恢复用），按创建先后。 */
 export async function listArtifacts(db: Queryable, sessionId: string): Promise<ArtifactView[]> {
   const res = await db.query<ArtifactDbRow>(
-    `SELECT id, session_id, kind, title, storage_key, updated_at
+    `SELECT id, session_id, kind, title, storage_key, meta, updated_at
        FROM artifacts
       WHERE session_id = $1
       ORDER BY created_at ASC`,

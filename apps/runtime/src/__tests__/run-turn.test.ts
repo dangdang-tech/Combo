@@ -306,8 +306,8 @@ describe('run-turn 成功路径', () => {
     ).toBe(true);
   });
 
-  it('Studio 会话把设计模式传给 agent 工厂', async () => {
-    const { db, runner, session, handle } = await setup({
+  it('Studio 会话把设计模式传给 agent 工厂，未生成 revision 时以失败终态收口', async () => {
+    const { db, eventLog, runner, session, handle } = await setup({
       finalMessages: [{ role: 'assistant', content: [{ type: 'text', text: '已更新页面' }] }],
     });
     const studio = await getOrCreateStudioSession(db, {
@@ -317,6 +317,58 @@ describe('run-turn 成功路径', () => {
 
     await runToIdle(runner, db, studio, '把主要按钮改成绿色');
     expect(handle.calls[0]?.mode).toBe('studio');
+    expect([...db.turns.values()].at(-1)?.status).toBe('failed');
+    expect(eventTypes(eventLog, studio.id)).toContain(EventType.RUN_ERROR);
+    expect(eventTypes(eventLog, studio.id)).not.toContain(EventType.RUN_FINISHED);
+  });
+
+  it('Studio 原有 current UI 时，无 revision 的完成回复也不能误报保存成功', async () => {
+    const { db, store, eventLog, runner, session } = await setup({
+      finalMessages: [{ role: 'assistant', content: [{ type: 'text', text: '已经改好了' }] }],
+    });
+    const studio = await getOrCreateStudioSession(db, {
+      capabilityId: session.capabilityId,
+      ownerUserId: session.ownerUserId,
+    });
+    const seedTurnId = 'studio-current-ui-turn';
+    const seedController = new AbortController();
+    const now = new Date().toISOString();
+    db.turns.set(seedTurnId, {
+      id: seedTurnId,
+      session_id: studio.id,
+      status: 'running',
+      last_error: null,
+      created_at: now,
+      finished_at: null,
+    });
+    const current = await createArtifactTool({
+      db,
+      objectStore: store,
+      sessionId: studio.id,
+      turnId: seedTurnId,
+      turnSignal: seedController.signal,
+      capabilityId: session.capabilityId,
+      mode: 'studio',
+      onArtifact: () => undefined,
+    }).execute('current-ui', {
+      kind: 'html',
+      title: '当前 UI',
+      content: studioHtml('当前版本'),
+    });
+    db.turns.get(seedTurnId)!.status = 'completed';
+    await bindCapabilityUiArtifact(db, {
+      capabilityId: session.capabilityId,
+      artifactId: current.details!.artifactId,
+      studioSessionId: studio.id,
+    });
+
+    await runToIdle(runner, db, studio, '把按钮改成绿色');
+
+    expect(db.capabilities.get(session.capabilityId)?.ui_artifact_id).toBe(
+      current.details!.artifactId,
+    );
+    expect([...db.turns.values()].at(-1)?.status).toBe('failed');
+    expect(eventTypes(eventLog, studio.id).at(-1)).toBe(EventType.RUN_ERROR);
   });
 
   it('Studio 只有整轮成功后才在同一终态事务提升最后一个 revision', async () => {

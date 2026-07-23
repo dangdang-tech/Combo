@@ -650,6 +650,7 @@ export class FakeDb implements Queryable, TxPool {
             kind: row.kind,
             title: row.title,
             storage_key: row.storage_key,
+            meta: row.meta,
             updated_at: row.updated_at,
           },
         ] as R[],
@@ -683,6 +684,7 @@ export class FakeDb implements Queryable, TxPool {
           kind: a.kind,
           title: a.title,
           storage_key: a.storage_key,
+          meta: a.meta,
           updated_at: a.updated_at,
         }));
       return { rows: rows as R[], rowCount: rows.length };

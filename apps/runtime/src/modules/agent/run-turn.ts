@@ -681,6 +681,11 @@ export function createTurnRunner(deps: TurnRunnerDeps): TurnRunner {
     }
     if (shutdownOwnedRuns.has(runId)) return;
     closeText();
+    if (args.mode === 'studio' && !lastStudioArtifactId) {
+      log.error({ runId }, 'Studio turn completed without an artifact revision');
+      await finishFailed('TURN_STUDIO_ARTIFACT_MISSING', '本轮没有生成可保存的页面，请重试。');
+      return;
+    }
     let completedNextIdx: number | null;
     try {
       const rows = agent

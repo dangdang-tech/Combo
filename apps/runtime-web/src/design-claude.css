@@ -1311,23 +1311,82 @@ body {
   border-left: 1px solid var(--cb-border);
 }
 
-.rt-studio-empty {
-  max-width: 420px;
-  color: var(--cb-muted);
-  text-align: center;
+.rt-genui__overlay--studio-default {
+  align-items: start;
+  padding: 28px;
 }
 
-.rt-studio-empty h2 {
-  margin: 0 0 8px;
+.rt-studio-default {
+  width: min(760px, 100%);
+  display: grid;
+  gap: 16px;
+  margin: 0 auto;
+}
+
+.rt-studio-default__notice {
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-card);
+  padding: 18px 20px;
+  background: var(--cb-surface-card);
+}
+
+.rt-studio-default__eyebrow {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--cb-accent);
+  font-family: var(--cb-font-mono);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.rt-studio-default__notice h2 {
+  margin: 0 0 6px;
   color: var(--cb-fg);
   font-family: var(--cb-font-serif);
-  font-size: clamp(24px, 2.3vw, 34px);
+  font-size: clamp(24px, 2.3vw, 32px);
   font-weight: 400;
 }
 
-.rt-studio-empty p {
+.rt-studio-default__notice p {
   margin: 0;
+  color: var(--cb-muted);
   line-height: 1.7;
+}
+
+.rt-studio-default .rt-intake {
+  width: 100%;
+  box-shadow: inset 0 0 0 1px var(--cb-border);
+}
+
+.rt-studio-default__preview {
+  position: relative;
+}
+
+.rt-studio-default__preview-badge {
+  position: absolute;
+  z-index: 2;
+  top: 14px;
+  right: 14px;
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-radius-pill);
+  padding: 4px 9px;
+  background: var(--cb-surface-raised);
+  color: var(--cb-muted);
+  font-family: var(--cb-font-mono);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+
+.rt-intake--preview :disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.rt-intake--preview .rt-intake__start {
+  opacity: 0.48;
 }
 
 .rt-conversation-panel {
@@ -1810,6 +1869,22 @@ body {
 }
 
 @media (max-width: 900px) {
+  .rt-genui__overlay--studio-default {
+    padding: 16px;
+  }
+
+  .rt-studio-default__notice,
+  .rt-studio-default .rt-intake {
+    padding: 18px;
+  }
+
+  .rt-studio-default__preview-badge {
+    position: static;
+    width: fit-content;
+    display: block;
+    margin: 0 0 8px auto;
+  }
+
   .rt-genui--conversation {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) minmax(240px, 42dvh);
