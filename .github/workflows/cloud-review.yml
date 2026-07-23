@@ -139,12 +139,14 @@ jobs:
       - name: Configure SSH
         env:
           # Repositories transferred from the original owner may retain the
-          # shared deploy key while the environment-specific key is restored.
+          # shared deploy tuple while the environment-specific key is restored.
           DEPLOY_SSH_KEY: ${{ secrets.CLOUD_REVIEW_SSH_KEY || secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_HOST: ${{ secrets.CLOUD_REVIEW_HOST }}
-          DEPLOY_USER: ${{ secrets.CLOUD_REVIEW_USER }}
+          DEPLOY_HOST: ${{ secrets.CLOUD_REVIEW_SSH_KEY && secrets.CLOUD_REVIEW_HOST || secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.CLOUD_REVIEW_SSH_KEY && secrets.CLOUD_REVIEW_USER || secrets.DEPLOY_USER }}
         run: |
           test -n "$DEPLOY_SSH_KEY"
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USER"
           mkdir -p ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/cloud_review_key
           chmod 600 ~/.ssh/cloud_review_key
