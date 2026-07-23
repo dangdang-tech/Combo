@@ -192,7 +192,7 @@ claim_forwarders_for_deploy() {
 
 host_preflight() {
   [[ $(id -u) -eq 0 ]] || blocked '调度器必须由受限 sudo 规则以 root 启动。'
-  for cmd in kubectl python3 jq sha256sum flock findmnt df systemctl ss timeout readlink install diff mv stat dirname openssl base64; do require_command "$cmd"; done
+  for cmd in kubectl python3 jq sha256sum flock findmnt df systemctl ss timeout readlink install diff mv stat dirname openssl base64 head; do require_command "$cmd"; done
   root_owned_not_writable /etc/combo-dev || blocked '开发配置目录可被非 root 修改。'
   root_owned_not_writable "$INSTALL_ROOT" || blocked '安装根目录可被非 root 修改。'
   root_owned_not_writable "$INSTALL_ROOT/bin" || blocked '调度器目录可被非 root 修改。'
@@ -1207,7 +1207,7 @@ main() {
   prepare_render "$RELEASE_DIR/infra/k8s/overlays/combo-dev" "$WORK/prepared" "$api_image" "$runtime_image" "$web_image"
   server_preflight "$WORK/prepared/render"
 
-  local before after start evidence runner_mode
+  local before after start evidence evidence_bytes runner_mode
   before=$(production_fingerprint)
   start=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -1232,9 +1232,13 @@ main() {
   [[ "$runner_mode" =~ ^[0-7]{3,4}$ ]] || blocked '真实验收器权限格式异常。'
   (( (8#$runner_mode & 8#022) == 0 )) || blocked '真实验收器可被非 root 修改。'
   evidence=$(mktemp "$WORK/acceptance.XXXXXX.json")
-  if ! (ulimit -f 128; exec timeout 3600 "$ACCEPTANCE_RUNNER" --revision "$revision" --web-origin 'http://127.0.0.1:18080' --s3-origin 'http://127.0.0.1:19000') >"$evidence" 2>/dev/null; then
+  if ! timeout 3600 "$ACCEPTANCE_RUNNER" --revision "$revision" \
+    --web-origin 'http://127.0.0.1:18080' --s3-origin 'http://127.0.0.1:19000' 2>/dev/null |
+    head -c 65537 >"$evidence"; then
     blocked '真实浏览器或产品流验收未完成。'
   fi
+  evidence_bytes=$(stat -c '%s' "$evidence" 2>/dev/null) || blocked '真实验收证据大小不可读。'
+  [[ "$evidence_bytes" =~ ^[0-9]+$ && "$evidence_bytes" -le 65536 ]] || blocked '真实验收证据超过 64 KiB。'
   timeout 1200 "$INSTALL_ROOT/bin/combo-dev-smoke" --revision "$revision" --since-time "$start" --evidence "$evidence" >/dev/null || {
     rc=$?; (( rc == 1 )) && fail '有限验收失败。'; blocked '有限验收证据不完整或超时。';
   }

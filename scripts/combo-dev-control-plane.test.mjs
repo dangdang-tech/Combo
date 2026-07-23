@@ -1856,6 +1856,9 @@ test('existing deployment invariants remain fail-closed', () => {
   assert.match(workflow, /scp -q "\$ARCHIVE" "combo-dev-target:\$temporary"/);
   assert.match(workflow, /ssh combo-dev-target mv -fT -- "\$temporary" "\$remote"/);
   assert.match(deploy, /INCOMING_BUNDLE=\$bundle/);
+  assert.match(deploy, /head -c 65537 >"\$evidence"/);
+  assert.match(deploy, /"\$evidence_bytes" -le 65536/);
+  assert.doesNotMatch(deploy, /ulimit -f/);
   assert.match(deploy, /\[\[ -z "\$INCOMING_BUNDLE" \]\] \|\| rm -f -- "\$INCOMING_BUNDLE"/);
   assert.match(reset, /wipe_static_volume_data/);
   assert.doesNotMatch(reset, /delete "persistentvolumeclaim\/\$name"/);
