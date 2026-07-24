@@ -51,7 +51,9 @@ kubectl apply -f infra/k8s/api.yaml -f infra/k8s/worker.yaml -f infra/k8s/runtim
 
 ## 日常更新
 
-日常更新由 CD 流水线全自动完成：main 的 CI 通过后，CD 把本目录同步到服务器 `/opt/combo/infra/k8s`，再在服务器上执行 `scripts/deploy-k8s.sh`（钉镜像 SHA、删旧迁移 Job、kustomize 渲染后 apply、等迁移完成与四个业务面滚动就绪），最后对 30080 入口跑冒烟。手动部署或回滚在服务器上执行同一个脚本：`env SHA=<完整提交SHA> bash /opt/combo/scripts/deploy-k8s.sh`。
+Production 不再随 `main` 的 CI 自动更新。负责人必须在 CD 流水线中填写已经由 `main` 成功 CI 构建的完整提交 SHA，流水线会确认该提交可从 `main` 到达且三镜像存在，再把本目录同步到服务器 `/opt/combo/infra/k8s`。服务器随后执行 `scripts/deploy-k8s.sh`，钉住镜像 SHA、重建迁移 Job、渲染并应用清单，等待迁移和四个业务面就绪，最后对 30080 入口执行冒烟验证。这个手动入口同时保留旧 SHA 的应用回滚能力；服务器上也可以执行 `env SHA=<完整提交SHA> bash /opt/combo/scripts/deploy-k8s.sh` 重放同一部署脚本。
+
+`main` 的默认发布目标将由 Preview 工作流接管。Production 在 Preview 同源晋级门禁完成前保持最后一次人工选择的稳定版本；后续 Production 流水线还会增加同 SHA 的 Preview 成功证据校验。
 
 注意两个操作纪律：迁移 Job 的模板不可修改而镜像标签每次都变，所以脚本每次都会先删旧 Job；apply 必须经 kustomize 渲染（脚本已保证），直接 apply 单个原始文件会带上未钉版的 latest 标签。
 

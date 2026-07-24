@@ -1,6 +1,6 @@
-# CD：部署到 tecent2 的单机 k3s（2026-07-17 起从 docker compose 切换，割接记录见 issue #86）。两个入口：
-#   自动 —— main 上的 CI 成功完成后触发（workflow_run；此时三镜像已推送完成，无竞态）。
-#   手动 —— workflow_dispatch，ref 填分支或旧 SHA；回滚就走这里（镜像按 SHA 留存在 GHCR，随取随部）。
+# CD：部署到 tecent2 的单机 k3s（2026-07-17 起从 docker compose 切换，割接记录见 issue #86）。
+# 当前只保留手动入口：Production 必须显式选择已经由 main CI 构建的完整提交 SHA。
+# main 后续默认部署 Preview；在同源晋级链路完成前，Production 固定在最后一次人工选择的版本。
 #
 # 前置约定：
 #   镜像由 CI 在 main push 时构建并推送 GHCR（tag = 完整 commit SHA），本 workflow 只拉不建。
@@ -15,17 +15,12 @@
 name: CD
 
 on:
-  # main 的 CI 全绿后自动部署（CI 里镜像 job 成功 = 三镜像已在 GHCR）。
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
     inputs:
-      ref:
-        description: 要部署的 git ref（分支或完整 SHA）。该提交的镜像必须已由 CI 在 main 上推送完成。
+      revision:
+        description: 要部署到 Production 的完整 main 提交 SHA；该提交必须已有成功的 main CI。
         required: true
-        default: main
+        type: string
 
 # 同一时间只允许一个部署在跑；后触发的排队而不是取消前一个（部署中途被杀会留半成品栈）。
 concurrency:
@@ -34,22 +29,46 @@ concurrency:
 
 jobs:
   deploy:
-    name: deploy to tecent2
-    # 自动路径只在 CI 成功时放行（workflow_run 对 failure 也会触发事件，这里挡掉）；手动路径无条件。
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    name: deploy selected main revision to Production
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: read
       packages: read
     steps:
+      - name: 校验不可变 main revision 与成功 CI
+        id: rev
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVISION: ${{ inputs.revision }}
+        run: |
+          set -euo pipefail
+          [[ "$REVISION" =~ ^[0-9a-f]{40}$ ]] || { echo 'Production revision 必须是完整提交 SHA。' >&2; exit 1; }
+          git_object=$(gh api "repos/${GITHUB_REPOSITORY}/git/commits/${REVISION}" --jq '.sha')
+          [[ "$git_object" == "$REVISION" ]] || exit 1
+          on_main=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${REVISION}...main" --jq '.status')
+          [[ "$on_main" == ahead || "$on_main" == identical ]] || {
+            echo 'Production revision 必须可从 main 到达。' >&2
+            exit 1
+          }
+          success=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${REVISION}&status=completed&per_page=100" \
+            --jq '[.workflow_runs[] | select(.head_sha == "'"$REVISION"'" and .head_branch == "main" and .event == "push" and .conclusion == "success")] | length > 0')
+          [[ "$success" == true ]] || { echo 'Production revision 没有成功的 main CI。' >&2; exit 1; }
+          printf 'sha=%s\n' "$REVISION" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v4
         with:
-          # 自动路径部署触发它的那次 CI 对应的提交；手动路径按输入 ref。
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.ref }}
+          ref: ${{ steps.rev.outputs.sha }}
+          persist-credentials: false
 
-      - name: 解析部署 SHA
-        id: rev
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: 确认 checkout 与输入一致
+        env:
+          REVISION: ${{ steps.rev.outputs.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$REVISION" ]]
+          git diff --quiet
+          git diff --cached --quiet
 
       # 镜像不存在就提前失败（比如 ref 指了还没跑完 CI 的提交），绝不带着缺镜像去动线上栈。
       - name: 校验三镜像已在 GHCR
@@ -104,4 +123,4 @@ jobs:
           '
 
       - name: 部署结果
-        run: echo "已部署 ${{ steps.rev.outputs.sha }}（触发方式 = ${{ github.event_name }}${{ inputs.ref && format('，ref = {0}', inputs.ref) || '' }}）到 tecent2 并通过冒烟。"
+        run: echo "已人工选择并部署 main@${{ steps.rev.outputs.sha }} 到 Production，tecent2 冒烟通过。"
