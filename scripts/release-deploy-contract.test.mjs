@@ -132,6 +132,11 @@ test('fresh reset is constrained to an exact workload and PVC allowlist', () => 
   assert.doesNotMatch(reset, /\bdelete\s+(?:namespace|ns)\b/);
   assert.doesNotMatch(reset, /\bdelete\s+secret\b/);
   assert.doesNotMatch(reset, /--all\b|\ball\b.*(?:deployment|statefulset|pvc)/i);
+  assert.doesNotMatch(
+    reset,
+    /\bstatefulset\/(?:postgres|redis-queue|minio)\b|\bpvc\/data-(?:postgres|redis-queue|minio)-0\b/,
+    'the legacy plane must remain available until traffic cutover succeeds',
+  );
 });
 
 test('migration is a hard fence before applications, traffic, and legacy cleanup', () => {
@@ -194,4 +199,10 @@ test('legacy cleanup runs only after traffic evidence and names only legacy reso
 
   assert.doesNotMatch(cleanup, /\bdelete\s+(?:namespace|ns|secret)\b/);
   assert.doesNotMatch(cleanup, /--all\b/);
+  assert.match(DEPLOY, /traffic_cut_succeeded=1[\s\S]*cleanup_legacy/);
+  assert.match(
+    DEPLOY,
+    /traffic_cut_succeeded == 0[\s\S]*fence_writers/,
+    'a post-cut evidence or cleanup failure must not fence the active candidate',
+  );
 });

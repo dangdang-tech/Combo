@@ -10,6 +10,7 @@ resources:
 patches:
   - path: storage.patch.yaml
   - path: pull-secret.patch.yaml
+  - path: ../../foundation-selector-isolation.patch.yaml
   - target:
       kind: Service
       name: minio

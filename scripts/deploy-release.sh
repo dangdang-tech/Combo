@@ -119,10 +119,12 @@ traffic_evidence=''
 inventory_deployments=''
 inventory_statefulsets=''
 inventory_jobs=''
+inventory_services=''
 inventory_configmaps=''
 pvc_inventory=''
 mutation_started=0
 deployment_succeeded=0
+traffic_cut_succeeded=0
 REUSE_COMPLETED=0
 
 validate_migrations() {
@@ -289,12 +291,14 @@ capture_inventory() {
   inventory_deployments="$work/deployments.json"
   inventory_statefulsets="$work/statefulsets.json"
   inventory_jobs="$work/jobs.json"
+  inventory_services="$work/services.json"
   inventory_configmaps="$work/configmaps.json"
   pvc_inventory="$work/pvcs.jsonl"
 
   "${K[@]}" -n "$NAMESPACE" get deployments -o json >"$inventory_deployments"
   "${K[@]}" -n "$NAMESPACE" get statefulsets -o json >"$inventory_statefulsets"
   "${K[@]}" -n "$NAMESPACE" get jobs -o json >"$inventory_jobs"
+  "${K[@]}" -n "$NAMESPACE" get services -o json >"$inventory_services"
   "${K[@]}" -n "$NAMESPACE" get configmaps -o json >"$inventory_configmaps"
 
   jq -e --arg allowed "$DEPLOYMENT_RE" '
@@ -313,12 +317,18 @@ capture_inventory() {
     | length == 0
   ' "$inventory_jobs" >/dev/null ||
     fail 'namespace contains an unapproved Job'
+  jq -e '
+    [.items[].metadata.name
+      | select(test("^(api|runtime|web|postgres|redis-queue|redis-hot|minio|release-postgres|release-redis-queue|release-redis-hot|release-minio|release-[0-9a-f]{12}-(api|runtime|web))$") | not)]
+    | length == 0
+  ' "$inventory_services" >/dev/null ||
+    fail 'namespace contains an unapproved Service'
 
   local storage_root_real claim_json claim volume pv_json reclaim path path_real
   storage_root_real=$(sudo -n realpath -e "$K3S_STORAGE_ROOT")
   : >"$pvc_inventory"
   while IFS= read -r claim; do
-    [[ "$claim" =~ ^(data-(release-)?(postgres|redis-queue|minio)-0|combo-preview-(postgres|redis-queue|minio)-data-(postgres|redis-queue|minio)-0)$ ]] ||
+    [[ "$claim" =~ ^(data-(release-)?(postgres|redis-queue|minio)-0|combo-preview-(postgres-data-postgres|redis-queue-data-redis-queue|minio-data-minio)-0)$ ]] ||
       fail "namespace contains an unapproved PVC: $claim"
     claim_json=$("${K[@]}" -n "$NAMESPACE" get "pvc/$claim" -o json)
     [[ "$(jq -er '.spec.storageClassName' <<<"$claim_json")" == local-path ]] ||
@@ -345,9 +355,11 @@ capture_inventory() {
 
 fence_writers() {
   local name
-  status 'fencing every allowlisted writer'
+  status 'fencing only the isolated release candidate'
   if [[ -n "$inventory_jobs" && -f "$inventory_jobs" ]]; then
     while IFS= read -r name; do
+      [[ "$name" == release-minio-init ||
+        "$name" =~ ^release-[0-9a-f]{12}-migrate$ ]] || continue
       "${K[@]}" -n "$NAMESPACE" delete "job/$name" \
         --ignore-not-found --wait=true --timeout=120s >/dev/null 2>&1 || true
     done < <(jq -r '.items[].metadata.name' "$inventory_jobs")
@@ -355,19 +367,31 @@ fence_writers() {
   "${K[@]}" -n "$NAMESPACE" delete "job/${PREFIX}migrate" job/release-minio-init \
     --ignore-not-found --wait=true --timeout=120s >/dev/null 2>&1 || true
   while IFS= read -r name; do
-    [[ "$name" =~ $DEPLOYMENT_RE ]] || continue
+    [[ "$name" == release-redis-hot ||
+      "$name" =~ ^release-[0-9a-f]{12}-(api|runtime|web|worker)$ ]] || continue
     "${K[@]}" -n "$NAMESPACE" scale "deployment/$name" --replicas=0 >/dev/null 2>&1 || true
   done < <("${K[@]}" -n "$NAMESPACE" get deployments -o json 2>/dev/null |
     jq -r '.items[].metadata.name' 2>/dev/null || true)
-  for name in postgres redis-queue minio release-postgres release-redis-queue release-minio; do
+  for name in release-postgres release-redis-queue release-minio; do
     "${K[@]}" -n "$NAMESPACE" scale "statefulset/$name" --replicas=0 \
       >/dev/null 2>&1 || true
   done
 }
 
 wait_for_removed_storage() {
-  local volume path removed
+  local scope=$1 claim volume path removed
   while IFS= read -r row; do
+    claim=$(jq -r '.claim' <<<"$row")
+    case "$scope" in
+      release)
+        [[ "$claim" =~ ^data-release-(postgres|redis-queue|minio)-0$ ]] || continue
+        ;;
+      legacy)
+        [[ "$claim" =~ ^(data-(postgres|redis-queue|minio)-0|combo-preview-(postgres-data-postgres|redis-queue-data-redis-queue|minio-data-minio)-0)$ ]] ||
+          continue
+        ;;
+      *) return 2 ;;
+    esac
     volume=$(jq -r '.volume' <<<"$row")
     path=$(jq -r '.path' <<<"$row")
     removed=0
@@ -392,12 +416,6 @@ fresh_reset_release_data() {
     data-release-redis-queue-0
     data-release-minio-0
   )
-  local legacy_claims=(data-postgres-0 data-redis-queue-0 data-minio-0)
-  legacy_claims+=(
-    combo-preview-postgres-data-postgres-0
-    combo-preview-redis-queue-data-redis-queue-0
-    combo-preview-minio-data-minio-0
-  )
   local business_names=(api worker runtime web)
   : "${release_foundation[*]}${business_names[*]}"
 
@@ -409,21 +427,24 @@ fresh_reset_release_data() {
         --ignore-not-found --wait=true --timeout=180s >/dev/null
     fi
   done < <(jq -r '.items[].metadata.name' "$inventory_deployments")
+  while IFS= read -r name; do
+    if [[ "$name" =~ ^release-[0-9a-f]{12}-(api|runtime|web)$ ]]; then
+      "${K[@]}" -n "$NAMESPACE" delete "service/$name" \
+        --ignore-not-found --wait=true --timeout=120s >/dev/null
+    fi
+  done < <(jq -r '.items[].metadata.name' "$inventory_services")
 
   "${K[@]}" -n "$NAMESPACE" delete deployment/release-redis-hot \
     --ignore-not-found --wait=true --timeout=180s >/dev/null
   "${K[@]}" -n "$NAMESPACE" delete \
-    statefulset/postgres statefulset/redis-queue statefulset/minio \
     statefulset/release-postgres statefulset/release-redis-queue statefulset/release-minio \
     --ignore-not-found --wait=true --timeout=180s >/dev/null
   "${K[@]}" -n "$NAMESPACE" delete \
-    service/postgres service/redis-queue service/redis-hot service/minio \
     service/release-postgres service/release-redis-queue service/release-redis-hot \
     service/release-minio \
     --ignore-not-found --wait=true --timeout=120s >/dev/null
   "${K[@]}" -n "$NAMESPACE" delete \
-    configmap/postgres-config configmap/redis-queue-config configmap/redis-hot-config \
-    configmap/minio-init-script configmap/release-redis-queue-config \
+    configmap/release-redis-queue-config \
     configmap/release-redis-hot-config configmap/release-minio-init-script \
     --ignore-not-found --wait=true --timeout=120s >/dev/null
 
@@ -433,11 +454,11 @@ fresh_reset_release_data() {
       --ignore-not-found --wait=true --timeout=120s >/dev/null
   done < <(jq -r '.items[].metadata.name' "$inventory_configmaps")
 
-  for name in "${release_claims[@]}" "${legacy_claims[@]}"; do
+  for name in "${release_claims[@]}"; do
     "${K[@]}" -n "$NAMESPACE" delete "pvc/$name" \
       --ignore-not-found --wait=true --timeout=180s >/dev/null
   done
-  wait_for_removed_storage
+  wait_for_removed_storage release
 }
 
 apply_release_metadata() {
@@ -627,6 +648,18 @@ cleanup_legacy() {
   )
 
   status 'removing only the captured legacy release plane after successful traffic cutover'
+  for name in "${legacy_jobs[@]}"; do
+    "${K[@]}" -n "$NAMESPACE" delete "job/$name" \
+      --ignore-not-found --wait=true --timeout=120s >/dev/null
+  done
+  for name in "${legacy_deployments[@]}"; do
+    "${K[@]}" -n "$NAMESPACE" scale "deployment/$name" --replicas=0 \
+      >/dev/null 2>&1 || true
+  done
+  for name in "${legacy_statefulsets[@]}"; do
+    "${K[@]}" -n "$NAMESPACE" scale "statefulset/$name" --replicas=0 \
+      >/dev/null 2>&1 || true
+  done
   for name in "${legacy_deployments[@]}"; do
     "${K[@]}" -n "$NAMESPACE" delete "deployment/$name" \
       --ignore-not-found --wait=true --timeout=180s >/dev/null
@@ -639,10 +672,6 @@ cleanup_legacy() {
     "${K[@]}" -n "$NAMESPACE" delete "service/$name" \
       --ignore-not-found --wait=true --timeout=120s >/dev/null
   done
-  for name in "${legacy_jobs[@]}"; do
-    "${K[@]}" -n "$NAMESPACE" delete "job/$name" \
-      --ignore-not-found --wait=true --timeout=120s >/dev/null
-  done
   for name in "${legacy_configmaps[@]}"; do
     "${K[@]}" -n "$NAMESPACE" delete "configmap/$name" \
       --ignore-not-found --wait=true --timeout=120s >/dev/null
@@ -651,6 +680,7 @@ cleanup_legacy() {
     "${K[@]}" -n "$NAMESPACE" delete "pvc/$name" \
       --ignore-not-found --wait=true --timeout=120s >/dev/null
   done
+  wait_for_removed_storage legacy
 
   for name in "${LEGACY_DEPLOYMENTS[@]}"; do
     ! "${K[@]}" -n "$NAMESPACE" get "deployment/$name" >/dev/null 2>&1 ||
@@ -753,7 +783,8 @@ write_release_evidence() {
 on_exit() {
   local rc=$?
   trap - EXIT
-  if ((rc != 0 && mutation_started == 1 && deployment_succeeded == 0)); then
+  if ((rc != 0 && mutation_started == 1 && deployment_succeeded == 0 &&
+    traffic_cut_succeeded == 0)); then
     fence_writers || true
   fi
   [[ -z "$work" ]] || rm -rf -- "$work"
@@ -791,6 +822,7 @@ apply_foundation
 run_migration
 apply_apps
 switch_release_traffic
+traffic_cut_succeeded=1
 cleanup_legacy
 write_release_evidence
 deployment_succeeded=1

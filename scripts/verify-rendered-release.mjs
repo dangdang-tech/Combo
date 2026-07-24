@@ -43,7 +43,7 @@ const INIT_IMAGE =
 const CONFIG_MAP_DATA_DIGESTS = Object.freeze({
   'release-redis-hot-config': '3483cc8fa9365597041b3e814c450caeadaed2dda48df5ead2fdb218ecb65357',
   'release-redis-queue-config': '8d2af3979e00c83bf940f53cc61c4d281bade324f8b7cae46c6575f07f31cd0f',
-  'release-minio-init-script': '7795ef0dbb91d336fa8ba1325f135b6f931beae02266e621b4a3f3f99707a693',
+  'release-minio-init-script': 'd0a07211a19b1e6e09eedf28e6e24487f58c3da74bfbe1520aad6f79f288f5c6',
 });
 
 function fail(message) {
@@ -350,9 +350,8 @@ function validateFoundation(resources, options) {
   ]);
   for (const resource of resources.filter((item) => item.kind === 'StatefulSet')) {
     const identity = resourceIdentity(resource);
-    const logicalName = resource.metadata.name.slice('release-'.length);
     const expectedSelector = {
-      app: logicalName,
+      app: resource.metadata.name,
       'combo.build/environment-foundation': config.foundationTrack,
     };
     if (
@@ -385,9 +384,8 @@ function validateFoundation(resources, options) {
     }
   }
   for (const resource of resources.filter((item) => item.kind === 'Deployment')) {
-    const logicalName = resource.metadata.name.slice('release-'.length);
     const expectedSelector = {
-      app: logicalName,
+      app: resource.metadata.name,
       'combo.build/environment-foundation': config.foundationTrack,
     };
     if (
@@ -401,9 +399,8 @@ function validateFoundation(resources, options) {
     }
   }
   for (const resource of resources.filter((item) => item.kind === 'Service')) {
-    const logicalName = resource.metadata.name.slice('release-'.length);
     const expectedSelector = {
-      app: logicalName,
+      app: resource.metadata.name,
       'combo.build/environment-foundation': config.foundationTrack,
     };
     if (JSON.stringify(resource.spec?.selector) !== JSON.stringify(expectedSelector)) {
