@@ -1277,7 +1277,7 @@ test('first bootstrap tolerates absent forwarder units and serializes the persis
   );
 });
 
-test('the always-on host guard uses an independent minimal fencer for missing, malformed, expired, or unauthorized dispatcher credentials', () => {
+test('the always-on host guard uses an independent minimal fencer for missing, malformed, expiring, or unauthorized dispatcher credentials', () => {
   const bootstrap = text('scripts/combo-dev-bootstrap.sh');
   const deploy = text('scripts/combo-dev-deploy.sh');
   const reset = text('scripts/combo-dev-reset.sh');
@@ -1299,15 +1299,56 @@ test('the always-on host guard uses an independent minimal fencer for missing, m
     /^ReadWritePaths=\/run \/var\/lib\/combo-dev \/home\/xingzheng\/data\/combo-dev$/m,
   );
   assert.doesNotMatch(unit, /ReadWritePaths=.* \/home\/xingzheng\/data(?:\s|$)/m);
-  assert.match(rbac, /name: combo-dev-fencer/);
-  assert.match(rbac, /resourceNames: \['api', 'worker', 'runtime', 'web', 'redis-hot'\]/);
-  assert.doesNotMatch(
-    rbac.slice(
-      rbac.indexOf('name: combo-dev-fencer'),
-      rbac.indexOf('name: combo-dev-control-auditor'),
-    ),
-    /verbs: \[[^\]]*(?:create|update)[^\]]*\]/,
+  const fencerRoleStart = rbac.indexOf('kind: Role\nmetadata:\n  name: combo-dev-fencer');
+  const fencerRoleEnd = rbac.indexOf('\n---', fencerRoleStart);
+  assert.ok(fencerRoleStart >= 0);
+  assert.ok(fencerRoleEnd > fencerRoleStart);
+  const fencerRole = rbac.slice(fencerRoleStart, fencerRoleEnd);
+  assert.match(
+    fencerRole,
+    /resources: \['deployments'\]\n {4}resourceNames: \['api', 'worker', 'runtime', 'web', 'redis-hot'\]\n {4}verbs: \['get'\]/,
   );
+  assert.match(
+    fencerRole,
+    /resources: \['deployments\/scale'\]\n {4}resourceNames: \['api', 'worker', 'runtime', 'web', 'redis-hot'\]\n {4}verbs: \['patch'\]/,
+  );
+  assert.match(
+    fencerRole,
+    /resources: \['statefulsets'\]\n {4}resourceNames: \['postgres', 'redis-queue', 'minio'\]\n {4}verbs: \['get'\]/,
+  );
+  assert.match(
+    fencerRole,
+    /resources: \['statefulsets\/scale'\]\n {4}resourceNames: \['postgres', 'redis-queue', 'minio'\]\n {4}verbs: \['patch'\]/,
+  );
+  assert.equal(fencerRole.match(/\/scale/g)?.length, 2);
+  assert.equal(fencerRole.match(/'patch'/g)?.length, 2);
+  assert.doesNotMatch(fencerRole, /verbs: \[[^\]]*(?:create|update)[^\]]*\]/);
+  assert.doesNotMatch(
+    fencerRole,
+    /resources: \['(?:deployments|statefulsets)'\]\n {4}resourceNames: [^\n]+\n {4}verbs: \[[^\]\n]*patch[^\]\n]*\]/,
+  );
+  for (const script of [bootstrap, guard]) {
+    const canI = script.slice(
+      script.indexOf(script === bootstrap ? 'can_i_with_credential() {' : 'can_i() {'),
+      script.indexOf(
+        script === bootstrap ? 'trusted_source_tree() {' : 'dispatcher_access_valid() {',
+      ),
+    );
+    assert.match(canI, /--subresource="\$subresource"/);
+    const fencerChecks = script.slice(
+      script.indexOf(
+        script === bootstrap ? 'fencer_credential_valid() {' : 'fencer_access_valid() {',
+      ),
+      script.indexOf(
+        script === bootstrap ? 'issue_client_credential() {' : 'mark_failure_fence() {',
+      ),
+    );
+    assert.match(fencerChecks, /yes patch "deployments\.apps\/\$name" "\$NAMESPACE" scale/);
+    assert.match(fencerChecks, /yes patch "statefulsets\.apps\/\$name" "\$NAMESPACE" scale/);
+    assert.match(fencerChecks, /no patch deployments\.apps\/api "\$NAMESPACE"/);
+    assert.match(fencerChecks, /no update deployments\.apps\/api "\$NAMESPACE" scale/);
+    assert.match(fencerChecks, /no patch deployments\.apps\/api "\$PRODUCTION_NAMESPACE" scale/);
+  }
   assert.match(lease, /FAILURE_FENCE_MARKER/);
 
   const fenceBody = guard.slice(guard.indexOf('fence_now() {'), guard.lastIndexOf('main() {'));
@@ -1330,7 +1371,7 @@ test('the always-on host guard uses an independent minimal fencer for missing, m
     const caCert = join(work, 'ca.crt');
     const key = join(work, 'client.key');
     const request = join(work, 'client.csr');
-    const expired = join(work, 'expired.crt');
+    const expiring = join(work, 'expiring.crt');
     for (const args of [
       [
         'req',
@@ -1371,26 +1412,26 @@ test('the always-on host guard uses an independent minimal fencer for missing, m
         '-set_serial',
         '2',
         '-days',
-        '-1',
+        '1',
         '-out',
-        expired,
+        expiring,
       ],
     ]) {
       execFileSync('openssl', args, { stdio: 'ignore' });
     }
     const kubeconfig = (certificate) =>
       `apiVersion: v1\nkind: Config\nclusters:\n- name: k3s\n  cluster:\n    server: https://127.0.0.1:6443\n    certificate-authority-data: ${readFileSync(caCert).toString('base64')}\nusers:\n- name: combo-dev-dispatcher\n  user:\n    client-certificate-data: ${readFileSync(certificate).toString('base64')}\n    client-key-data: ${readFileSync(key).toString('base64')}\ncontexts:\n- name: combo-dev\n  context:\n    cluster: k3s\n    user: combo-dev-dispatcher\ncurrent-context: combo-dev\n`;
-    const expiredConfig = join(work, 'expired.kubeconfig');
+    const expiringConfig = join(work, 'expiring.kubeconfig');
     const malformedConfig = join(work, 'malformed.kubeconfig');
-    writeFileSync(expiredConfig, kubeconfig(expired), { mode: 0o600 });
+    writeFileSync(expiringConfig, kubeconfig(expiring), { mode: 0o600 });
     writeFileSync(malformedConfig, 'not: [valid\n', { mode: 0o600 });
     const guardPath = join(repo, 'scripts/combo-dev-storage-guard.sh');
     const credentialHarness = (path) => `
 source ${JSON.stringify(guardPath)}
 private_file() { [[ -f "$1" ]]; }
-credential_certificate_valid_for ${JSON.stringify(path)} combo-dev-dispatcher 1
+credential_certificate_valid_for ${JSON.stringify(path)} combo-dev-dispatcher $((2 * 24 * 60 * 60))
 `;
-    for (const path of [join(work, 'missing.kubeconfig'), malformedConfig, expiredConfig]) {
+    for (const path of [join(work, 'missing.kubeconfig'), malformedConfig, expiringConfig]) {
       assert.notEqual(
         spawnSync('bash', ['-c', credentialHarness(path)], { stdio: 'ignore' }).status,
         0,
@@ -1544,21 +1585,36 @@ test('combo-dev nginx consumes the exact client-events route without proxying or
   }
 });
 
-test('combo-dev and Production deliveries are manual-only and share the exact host concurrency group', () => {
+test('Test, Preview, and Production serialize only deploy jobs and preserve promotion trust', () => {
   const workflow = text('.github/workflows/combo-dev.yml');
+  const ci = text('.github/workflows/ci.yml');
+  const preview = text('.github/workflows/preview.yml');
   const production = text('.github/workflows/cd.yml');
-  const group = (value) => value.match(/^concurrency:\n {2}group: ([^\n]+)$/m)?.[1];
-  assert.equal(group(workflow), 'cd-tecent2');
-  assert.equal(group(workflow), group(production));
+  const deployGroup = (value) =>
+    value.match(
+      /^ {4}concurrency:\n {6}group: ([^\n]+)\n {6}queue: ([^\n]+)\n {6}cancel-in-progress: ([^\n]+)$/m,
+    );
+  for (const delivery of [workflow, preview, production]) {
+    const group = deployGroup(delivery);
+    assert.ok(group);
+    assert.equal(group[1], 'cd-tecent2');
+    assert.equal(group[2], 'max');
+    assert.equal(group[3], 'false');
+    assert.doesNotMatch(delivery, /^concurrency:/m);
+  }
+
   assert.match(workflow, /^ {2}workflow_dispatch:/m);
-  const triggers = workflow.slice(workflow.indexOf('on:\n'), workflow.indexOf('\nconcurrency:'));
+  const triggers = workflow.slice(workflow.indexOf('on:\n'), workflow.indexOf('\npermissions:'));
   const productionTriggers = production.slice(
     production.indexOf('on:\n'),
-    production.indexOf('\n# 同一时间'),
+    production.indexOf('\npermissions:'),
   );
   assert.doesNotMatch(triggers, /workflow_run/);
   assert.match(productionTriggers, /^ {2}workflow_dispatch:/m);
   assert.doesNotMatch(productionTriggers, /workflow_run|push:|pull_request:/);
+  assert.match(preview, /^ {2}workflow_run:/m);
+  assert.match(preview, /branches: \[main\]/);
+  assert.match(preview, /COMBO_PREVIEW_AUTO_PROMOTION_MODE/);
   assert.match(
     workflow,
     /revision:[\s\S]*required: true[\s\S]*INPUT_REVISION: \$\{\{ inputs\.revision \}\}/,
@@ -1566,21 +1622,34 @@ test('combo-dev and Production deliveries are manual-only and share the exact ho
   assert.match(production, /REVISION: \$\{\{ inputs\.revision \}\}/);
   assert.match(workflow, /\^\[0-9a-f\]\{40\}\$/);
   assert.match(production, /\^\[0-9a-f\]\{40\}\$/);
-  assert.match(workflow, /git\/ref\/heads\/main/);
+  assert.match(workflow, /branches\?per_page=100/);
+  assert.match(workflow, /compare\/\$\{REVISION\}\.\.\.\$\{branch_sha\}/);
   assert.match(production, /compare\/\$\{REVISION\}\.\.\.main/);
-  assert.match(workflow, /actions\/workflows\/ci\.yml\/runs\?head_sha=\$\{REVISION\}/);
-  assert.match(production, /actions\/workflows\/ci\.yml\/runs\?head_sha=\$\{REVISION\}/);
+  assert.match(workflow, /uses: \.\/\.github\/workflows\/ci\.yml/);
+  assert.match(workflow, /publish_release: true/);
+  assert.doesNotMatch(ci, /github\.event_name == 'workflow_call'/);
+  assert.match(
+    ci,
+    /^ {2}release:\n[\s\S]*?^ {4}if: >-\n\s+\(github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'\) \|\|\n\s+inputs\.publish_release == true/m,
+  );
+  assert.match(
+    ci,
+    /push: >-\n\s+\$\{\{ \(github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'\) \|\|\n\s+inputs\.publish_release == true \}\}/,
+  );
+  assert.match(workflow, /combo-release-mutation\.lock/);
+  assert.match(workflow, /flock -w 300 9/);
+  assert.match(
+    workflow,
+    /combo-dev-reset[\s\\\n]*--confirm=DESTROY-COMBO-PREVIEW-DATA[\s\S]*combo-dev-deploy/,
+  );
+  assert.match(preview, /combo-preview-promotion-\$\{\{/);
+  assert.match(production, /combo-preview-promotion-\$\{\{/);
+  assert.match(production, /artifactFileSetDigest/);
   assert.match(workflow, /echo ' {2}ServerAliveInterval 30'/);
   assert.match(workflow, /echo ' {2}ServerAliveCountMax 20'/);
   assert.match(workflow, /echo ' {2}TCPKeepAlive yes'/);
-  assert.match(
-    workflow,
-    /\.head_branch == "main" and \.event == "push" and \.conclusion == "success"/,
-  );
-  assert.match(
-    production,
-    /\.head_branch == "main" and \.event == "push" and \.conclusion == "success"/,
-  );
+  assert.match(preview, /\[\[ "\$SOURCE_BRANCH" == main \]\]/);
+  assert.match(production, /\.path == "\.github\/workflows\/preview\.yml"/);
   assert.doesNotMatch(workflow, /issue\s*#?112|promotion/i);
 });
 
@@ -1858,6 +1927,8 @@ test('existing deployment invariants remain fail-closed', () => {
   const bootstrap = text('scripts/combo-dev-bootstrap.sh');
   const guard = text('scripts/combo-dev-storage-guard.sh');
   const rbac = text('infra/k8s/overlays/combo-dev/platform/rbac.yaml');
+  const testMinioInit = text('infra/k8s/overlays/combo-dev/init/resources.yaml');
+  const releaseMinioInit = text('infra/k8s/job-minio-init.yaml');
   assert.match(
     rbac,
     /resources: \['jobs'\]\n {4}verbs: \['create', 'get', 'list', 'watch', 'patch', 'delete'\]/,
@@ -1866,6 +1937,10 @@ test('existing deployment invariants remain fail-closed', () => {
   assert.match(
     deploy,
     /apply --server-side --dry-run=server --field-manager=combo-dev-dispatcher -f "\$job_probe"/,
+  );
+  assert.match(
+    deploy,
+    /\[\[ "\$stage" == foundation \]\][\s\S]*apply --server-side --dry-run=server --field-manager=combo-dev-dispatcher --force-conflicts -f "\$render\/\$stage\.yaml"/,
   );
   assert.match(workflow, /scp -q "\$ARCHIVE" "combo-dev-target:\$temporary"/);
   assert.match(workflow, /ssh combo-dev-target mv -fT -- "\$temporary" "\$remote"/);
@@ -1877,6 +1952,19 @@ test('existing deployment invariants remain fail-closed', () => {
   assert.match(reset, /wipe_static_volume_data/);
   assert.doesNotMatch(reset, /delete "persistentvolumeclaim\/\$name"/);
   assert.match(
+    reset,
+    /apply --server-side --dry-run=server --field-manager=combo-dev-dispatcher --force-conflicts -k "\$FOUNDATION"/,
+  );
+  assert.match(
+    reset,
+    /apply --server-side --field-manager=combo-dev-session --force-conflicts -f "\$manifest"/,
+  );
+  assert.doesNotMatch(reset, /patch secret\/combo-dev-session/);
+  for (const manifest of [testMinioInit, releaseMinioInit]) {
+    assert.match(manifest, /name: minio-init/);
+    assert.match(manifest, /limits:[\s\S]*?memory: 256Mi/);
+  }
+  assert.match(
     rbac,
     /resourceNames: \['combo-dev-postgres', 'combo-dev-redis-queue', 'combo-dev-minio'\]/,
   );
@@ -1885,6 +1973,9 @@ test('existing deployment invariants remain fail-closed', () => {
       script,
       /apply --server-side --field-manager=combo-dev-replicas --force-conflicts -f -/,
     );
+  }
+  for (const script of [bootstrap, deploy, reset]) {
+    assert.match(script, /exec 9>"\$LOCK_FILE"\n\s+flock -w 300 9/);
   }
   assert.match(bootstrap, /scale "\$controller" --replicas=0/);
   assert.match(guard, /scale "\$kind\/\$name" --replicas=0/);
