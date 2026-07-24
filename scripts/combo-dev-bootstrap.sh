@@ -732,17 +732,25 @@ dispatcher_credential_valid() {
 }
 
 fencer_credential_valid() {
-  local minimum_seconds=${1:-$DISPATCHER_OPERATION_MIN_SECONDS}
+  local minimum_seconds=${1:-$DISPATCHER_OPERATION_MIN_SECONDS} name
   fencer_certificate_valid_for "$minimum_seconds" || return 1
-  can_i_fencer yes patch deployments.apps/api "$NAMESPACE" || return 1
-  can_i_fencer yes patch statefulsets.apps/postgres "$NAMESPACE" || return 1
+  for name in api worker runtime web redis-hot; do
+    can_i_fencer yes get "deployments.apps/$name" "$NAMESPACE" || return 1
+    can_i_fencer yes patch "deployments.apps/$name" "$NAMESPACE" scale || return 1
+  done
+  for name in postgres redis-queue minio; do
+    can_i_fencer yes get "statefulsets.apps/$name" "$NAMESPACE" || return 1
+    can_i_fencer yes patch "statefulsets.apps/$name" "$NAMESPACE" scale || return 1
+  done
   can_i_fencer yes delete jobs.batch/migrate "$NAMESPACE" || return 1
   can_i_fencer yes list pods "$NAMESPACE" || return 1
   can_i_fencer yes delete pods "$NAMESPACE" || return 1
   can_i_fencer no list deployments.apps "$NAMESPACE" || return 1
+  can_i_fencer no patch deployments.apps/api "$NAMESPACE" || return 1
+  can_i_fencer no update deployments.apps/api "$NAMESPACE" scale || return 1
   can_i_fencer no create deployments.apps "$NAMESPACE" || return 1
   can_i_fencer no get secrets "$NAMESPACE" || return 1
-  can_i_fencer no patch deployments.apps "$PRODUCTION_NAMESPACE" || return 1
+  can_i_fencer no patch deployments.apps/api "$PRODUCTION_NAMESPACE" scale || return 1
 }
 
 issue_client_credential() {

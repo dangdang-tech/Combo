@@ -1277,7 +1277,7 @@ test('first bootstrap tolerates absent forwarder units and serializes the persis
   );
 });
 
-test('the always-on host guard uses an independent minimal fencer for missing, malformed, expired, or unauthorized dispatcher credentials', () => {
+test('the always-on host guard uses an independent minimal fencer for missing, malformed, expiring, or unauthorized dispatcher credentials', () => {
   const bootstrap = text('scripts/combo-dev-bootstrap.sh');
   const deploy = text('scripts/combo-dev-deploy.sh');
   const reset = text('scripts/combo-dev-reset.sh');
@@ -1299,15 +1299,56 @@ test('the always-on host guard uses an independent minimal fencer for missing, m
     /^ReadWritePaths=\/run \/var\/lib\/combo-dev \/home\/xingzheng\/data\/combo-dev$/m,
   );
   assert.doesNotMatch(unit, /ReadWritePaths=.* \/home\/xingzheng\/data(?:\s|$)/m);
-  assert.match(rbac, /name: combo-dev-fencer/);
-  assert.match(rbac, /resourceNames: \['api', 'worker', 'runtime', 'web', 'redis-hot'\]/);
+  const fencerRoleStart = rbac.indexOf('kind: Role\nmetadata:\n  name: combo-dev-fencer');
+  const fencerRoleEnd = rbac.indexOf('\n---', fencerRoleStart);
+  assert.ok(fencerRoleStart >= 0);
+  assert.ok(fencerRoleEnd > fencerRoleStart);
+  const fencerRole = rbac.slice(fencerRoleStart, fencerRoleEnd);
+  assert.match(
+    fencerRole,
+    /resources: \['deployments'\]\n    resourceNames: \['api', 'worker', 'runtime', 'web', 'redis-hot'\]\n    verbs: \['get'\]/,
+  );
+  assert.match(
+    fencerRole,
+    /resources: \['deployments\/scale'\]\n    resourceNames: \['api', 'worker', 'runtime', 'web', 'redis-hot'\]\n    verbs: \['patch'\]/,
+  );
+  assert.match(
+    fencerRole,
+    /resources: \['statefulsets'\]\n    resourceNames: \['postgres', 'redis-queue', 'minio'\]\n    verbs: \['get'\]/,
+  );
+  assert.match(
+    fencerRole,
+    /resources: \['statefulsets\/scale'\]\n    resourceNames: \['postgres', 'redis-queue', 'minio'\]\n    verbs: \['patch'\]/,
+  );
+  assert.equal(fencerRole.match(/\/scale/g)?.length, 2);
+  assert.equal(fencerRole.match(/'patch'/g)?.length, 2);
   assert.doesNotMatch(
-    rbac.slice(
-      rbac.indexOf('name: combo-dev-fencer'),
-      rbac.indexOf('name: combo-dev-control-auditor'),
-    ),
+    fencerRole,
     /verbs: \[[^\]]*(?:create|update)[^\]]*\]/,
   );
+  assert.doesNotMatch(
+    fencerRole,
+    /resources: \['(?:deployments|statefulsets)'\]\n    resourceNames: [^\n]+\n    verbs: \[[^\]\n]*patch[^\]\n]*\]/,
+  );
+  for (const script of [bootstrap, guard]) {
+    const canI = script.slice(
+      script.indexOf(script === bootstrap ? 'can_i_with_credential() {' : 'can_i() {'),
+      script.indexOf(script === bootstrap ? 'trusted_source_tree() {' : 'dispatcher_access_valid() {'),
+    );
+    assert.match(canI, /--subresource="\$subresource"/);
+    const fencerChecks = script.slice(
+      script.indexOf(script === bootstrap ? 'fencer_credential_valid() {' : 'fencer_access_valid() {'),
+      script.indexOf(script === bootstrap ? 'issue_client_credential() {' : 'mark_failure_fence() {'),
+    );
+    assert.match(fencerChecks, /yes patch "deployments\.apps\/\$name" "\$NAMESPACE" scale/);
+    assert.match(fencerChecks, /yes patch "statefulsets\.apps\/\$name" "\$NAMESPACE" scale/);
+    assert.match(fencerChecks, /no patch deployments\.apps\/api "\$NAMESPACE"/);
+    assert.match(fencerChecks, /no update deployments\.apps\/api "\$NAMESPACE" scale/);
+    assert.match(
+      fencerChecks,
+      /no patch deployments\.apps\/api "\$PRODUCTION_NAMESPACE" scale/,
+    );
+  }
   assert.match(lease, /FAILURE_FENCE_MARKER/);
 
   const fenceBody = guard.slice(guard.indexOf('fence_now() {'), guard.lastIndexOf('main() {'));
@@ -1330,7 +1371,7 @@ test('the always-on host guard uses an independent minimal fencer for missing, m
     const caCert = join(work, 'ca.crt');
     const key = join(work, 'client.key');
     const request = join(work, 'client.csr');
-    const expired = join(work, 'expired.crt');
+    const expiring = join(work, 'expiring.crt');
     for (const args of [
       [
         'req',
@@ -1371,26 +1412,26 @@ test('the always-on host guard uses an independent minimal fencer for missing, m
         '-set_serial',
         '2',
         '-days',
-        '-1',
+        '1',
         '-out',
-        expired,
+        expiring,
       ],
     ]) {
       execFileSync('openssl', args, { stdio: 'ignore' });
     }
     const kubeconfig = (certificate) =>
       `apiVersion: v1\nkind: Config\nclusters:\n- name: k3s\n  cluster:\n    server: https://127.0.0.1:6443\n    certificate-authority-data: ${readFileSync(caCert).toString('base64')}\nusers:\n- name: combo-dev-dispatcher\n  user:\n    client-certificate-data: ${readFileSync(certificate).toString('base64')}\n    client-key-data: ${readFileSync(key).toString('base64')}\ncontexts:\n- name: combo-dev\n  context:\n    cluster: k3s\n    user: combo-dev-dispatcher\ncurrent-context: combo-dev\n`;
-    const expiredConfig = join(work, 'expired.kubeconfig');
+    const expiringConfig = join(work, 'expiring.kubeconfig');
     const malformedConfig = join(work, 'malformed.kubeconfig');
-    writeFileSync(expiredConfig, kubeconfig(expired), { mode: 0o600 });
+    writeFileSync(expiringConfig, kubeconfig(expiring), { mode: 0o600 });
     writeFileSync(malformedConfig, 'not: [valid\n', { mode: 0o600 });
     const guardPath = join(repo, 'scripts/combo-dev-storage-guard.sh');
     const credentialHarness = (path) => `
 source ${JSON.stringify(guardPath)}
 private_file() { [[ -f "$1" ]]; }
-credential_certificate_valid_for ${JSON.stringify(path)} combo-dev-dispatcher 1
+credential_certificate_valid_for ${JSON.stringify(path)} combo-dev-dispatcher $((2 * 24 * 60 * 60))
 `;
-    for (const path of [join(work, 'missing.kubeconfig'), malformedConfig, expiredConfig]) {
+    for (const path of [join(work, 'missing.kubeconfig'), malformedConfig, expiringConfig]) {
       assert.notEqual(
         spawnSync('bash', ['-c', credentialHarness(path)], { stdio: 'ignore' }).status,
         0,
