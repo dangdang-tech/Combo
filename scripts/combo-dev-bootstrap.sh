@@ -1029,7 +1029,7 @@ main() {
   [[ -n "$K3S_DATA_DIR" && "$K3S_DATA_DIR" != *$'\n'* ]] || blocked 'k3s 数据目录配置不合法。'
   AK=(kubectl --request-timeout=30s --kubeconfig "$ADMIN_KUBECONFIG")
   exec 9>"$LOCK_FILE"
-  flock -n 9 || blocked '另一个 combo-dev 操作持有主机锁。'
+  flock -w 300 9 || blocked '另一个 combo-dev 操作长时间持有主机锁。'
   host_preflight
   WORK=$(mktemp -d)
   validate_config_names_only

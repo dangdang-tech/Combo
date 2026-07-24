@@ -1974,6 +1974,9 @@ test('existing deployment invariants remain fail-closed', () => {
       /apply --server-side --field-manager=combo-dev-replicas --force-conflicts -f -/,
     );
   }
+  for (const script of [bootstrap, deploy, reset]) {
+    assert.match(script, /exec 9>"\$LOCK_FILE"\n\s+flock -w 300 9/);
+  }
   assert.match(bootstrap, /scale "\$controller" --replicas=0/);
   assert.match(guard, /scale "\$kind\/\$name" --replicas=0/);
   assert.doesNotMatch(guard, /--field-manager=combo-dev-dispatcher/);

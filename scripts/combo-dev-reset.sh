@@ -375,7 +375,7 @@ recreate_foundation() {
 main() {
   [[ $# == 1 && $1 == "--confirm=$CONFIRMATION" ]] || blocked '必须提供完全匹配的破坏性确认串。'
   exec 9>"$LOCK_FILE"
-  flock -n 9 || blocked '另一个 combo-dev 操作持有主机锁。'
+  flock -w 300 9 || blocked '另一个 combo-dev 操作长时间持有主机锁。'
   WORK=$(mktemp -d)
   preflight
   local before after

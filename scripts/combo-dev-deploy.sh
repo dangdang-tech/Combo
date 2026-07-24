@@ -1168,7 +1168,7 @@ main() {
   INCOMING_BUNDLE=$bundle
 
   exec 9>"$LOCK_FILE"
-  flock -n 9 || blocked '另一个 combo-dev 操作持有主机锁。'
+  flock -w 300 9 || blocked '另一个 combo-dev 操作长时间持有主机锁。'
   WORK=$(mktemp -d)
   host_preflight
   rbac_preflight
