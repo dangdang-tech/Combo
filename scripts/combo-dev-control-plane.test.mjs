@@ -1587,6 +1587,7 @@ test('combo-dev nginx consumes the exact client-events route without proxying or
 
 test('Test, Preview, and Production serialize only deploy jobs and preserve promotion trust', () => {
   const workflow = text('.github/workflows/combo-dev.yml');
+  const ci = text('.github/workflows/ci.yml');
   const preview = text('.github/workflows/preview.yml');
   const production = text('.github/workflows/cd.yml');
   const deployGroup = (value) =>
@@ -1626,6 +1627,11 @@ test('Test, Preview, and Production serialize only deploy jobs and preserve prom
   assert.match(production, /compare\/\$\{REVISION\}\.\.\.main/);
   assert.match(workflow, /uses: \.\/\.github\/workflows\/ci\.yml/);
   assert.match(workflow, /publish_release: true/);
+  assert.doesNotMatch(ci, /github\.event_name == 'workflow_call'/);
+  assert.match(
+    ci,
+    /^ {2}release:\n[\s\S]*?^ {4}if: >-\n\s+\(github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'\) \|\|\n\s+inputs\.publish_release/m,
+  );
   assert.match(workflow, /combo-release-mutation\.lock/);
   assert.match(workflow, /flock -w 300 9/);
   assert.match(
