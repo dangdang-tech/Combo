@@ -83,7 +83,7 @@ test('all local and server-side validation gates precede the first fresh reset m
     [/release-manifest\.mjs["']?\s+verify/, 'release manifest digest verification'],
     [/web-asset-manifest\.mjs["']?\s+verify/, 'Web asset manifest digest verification'],
     [/validate_migrations(?:\s|$)/, 'migration list validation'],
-    [/secret_has_key(?:\s|$)/, 'Secret key-only validation'],
+    [/secret_has_nonempty_key(?:\s|$)/, 'Secret nonempty key validation'],
     [/validate_rendered_phase\s+foundation/, 'foundation server dry-run verification'],
     [/validate_rendered_phase\s+init/, 'init server dry-run verification'],
     [/validate_rendered_phase\s+migrate/, 'migration server dry-run verification'],
@@ -94,8 +94,8 @@ test('all local and server-side validation gates precede the first fresh reset m
 
   assert.match(
     DEPLOY,
-    /get secret "\$secret"[\s\\\n]*-o ['"]go-template=/,
-    'Secret inspection must request key names through a Go template',
+    /get secret "\$secret"[\s\\\n]*-o "go-template=\{\{if gt \(len \(index \.data/,
+    'Secret inspection must emit only a server-side boolean marker',
   );
   assert.doesNotMatch(
     DEPLOY,
@@ -106,6 +106,7 @@ test('all local and server-side validation gates precede the first fresh reset m
 
 test('fresh reset is constrained to an exact workload and PVC allowlist', () => {
   const reset = functionBody('fresh_reset_release_data');
+  const safeDelete = functionBody('delete_captured_resource');
 
   for (const workload of [
     'release-postgres',
@@ -127,16 +128,56 @@ test('fresh reset is constrained to an exact workload and PVC allowlist', () => 
     assert.ok(reset.includes(claim), `fresh reset PVC allowlist must name ${claim}`);
   }
 
-  assert.match(reset, /kubectl|\$\{?K\[@\]\}?/);
-  assert.match(reset, /\bdelete\b/);
-  assert.doesNotMatch(reset, /\bdelete\s+(?:namespace|ns)\b/);
-  assert.doesNotMatch(reset, /\bdelete\s+secret\b/);
-  assert.doesNotMatch(reset, /--all\b|\ball\b.*(?:deployment|statefulset|pvc)/i);
+  assert.match(reset, /delete_captured_resource/);
+  assert.match(safeDelete, /preconditions:\s*\{uid: \$uid\}/);
+  assert.match(safeDelete, /delete --raw=/);
+  assert.doesNotMatch(`${reset}\n${safeDelete}`, /\bdelete\s+(?:namespace|ns)\b/);
+  assert.doesNotMatch(`${reset}\n${safeDelete}`, /\bdelete\s+secret\b/);
+  assert.doesNotMatch(
+    `${reset}\n${safeDelete}`,
+    /--all\b|\ball\b.*(?:deployment|statefulset|pvc)/i,
+  );
   assert.doesNotMatch(
     reset,
     /\bstatefulset\/(?:postgres|redis-queue|minio)\b|\bpvc\/data-(?:postgres|redis-queue|minio)-0\b/,
     'the legacy plane must remain available until traffic cutover succeeds',
   );
+});
+
+test('new release storage is revalidated before initialization and traffic', () => {
+  const foundation = functionBody('apply_foundation');
+  const storage = functionBody('validate_live_release_storage');
+  const evidence = functionBody('write_release_evidence');
+  assertBefore(
+    indexOf(/\n[ \t]*validate_live_release_storage(?:\s|$)/, 'live storage validation call'),
+    indexOf(/\n[ \t]*run_migration(?:\s|$)/, 'run_migration call'),
+    'new PVC/PV identity must be verified before migration',
+  );
+  assert.match(
+    foundation,
+    /rollout status[\s\S]*validate_live_release_storage[\s\S]*apply -f "\$INIT_YAML"/,
+  );
+  for (const claim of [
+    'data-release-postgres-0',
+    'data-release-redis-queue-0',
+    'data-release-minio-0',
+  ]) {
+    assert.ok(DEPLOY.includes(claim), `release claim allowlist must include ${claim}`);
+  }
+  for (const contract of [
+    'local-path',
+    'ReadWriteOnce',
+    'Filesystem',
+    'Delete',
+    'pvc-$claim_uid',
+    '.spec.claimRef.uid == $claimUid',
+    '$storage_root_real/${volume}_${NAMESPACE}_${claim}',
+  ]) {
+    assert.ok(storage.includes(contract), `live storage validation must include ${contract}`);
+  }
+  assert.match(evidence, /--slurpfile storage "\$release_storage_evidence"/);
+  assert.match(evidence, /storage: \$storage\[0\]/);
+  assert.match(evidence, /releaseStorage: true/);
 });
 
 test('migration is a hard fence before applications, traffic, and legacy cleanup', () => {
@@ -164,6 +205,32 @@ test('migration is a hard fence before applications, traffic, and legacy cleanup
   );
 });
 
+test('traffic cutover uses a recoverable two-phase checkpoint', () => {
+  const apps = indexOf(/\n[ \t]*apply_apps(?:\s|$)/, 'apply_apps call');
+  const armed = indexOf(/\n[ \t]*write_release_checkpoint armed(?:\s|$)/, 'armed checkpoint call');
+  const traffic = indexOf(/\n[ \t]*switch_release_traffic(?:\s|$)/, 'switch_release_traffic call');
+  const postCut = indexOf(
+    /\n[ \t]*write_release_checkpoint post-cut(?:\s|$)/,
+    'post-cut checkpoint call',
+  );
+  const cleanup = indexOf(/\n[ \t]*cleanup_legacy(?:\s|$)/, 'cleanup_legacy call');
+
+  assert.ok(apps < armed, 'the candidate must pass application checks before arming');
+  assert.ok(armed < traffic, 'an atomic checkpoint must exist before traffic changes');
+  assert.ok(traffic < postCut, 'the checkpoint becomes post-cut only after switching');
+  assert.ok(postCut < cleanup, 'cleanup requires a durable post-cut checkpoint');
+
+  const load = functionBody('load_post_cut_checkpoint');
+  const write = functionBody('write_release_checkpoint');
+  assert.match(load, /\.schemaVersion == 2/);
+  assert.match(load, /\.phase == "armed" or \.phase == "post-cut"/);
+  assert.match(write, /mv -fT "\$checkpoint_stage" "\$pending_checkpoint"/);
+  assert.match(
+    functionBody('detect_live_traffic'),
+    /CHECKPOINT_PHASE" == armed[\s\S]*CHECKPOINT_PHASE" == post-cut[\s\S]*RESUME_POST_CUT=1/,
+  );
+});
+
 test('a completed evidence checkpoint returns before every cluster mutation', () => {
   const evidenceCheck = indexOf(
     /\n[ \t]*(?:verify_completed_release|completed_release_exists|reuse_completed_release)(?:\s|$)/,
@@ -176,8 +243,43 @@ test('a completed evidence checkpoint returns before every cluster mutation', ()
   assert.doesNotMatch(between, /\b(?:apply|delete|patch|replace|scale)\b/);
 });
 
+test('evidence commit and same-release reuse finish any interrupted checkpoint', () => {
+  const evidence = functionBody('write_release_evidence');
+  const finalize = functionBody('finalize_release_commit');
+  const reuse = DEPLOY.slice(
+    indexOf(/\nreuse_completed_release\n/, 'completed release reuse call'),
+    indexOf(/\n\[\[ ! -e "\$release_directory"/, 'incomplete evidence rejection'),
+  );
+
+  assert.match(evidence, /FOUNDATION_CREATED_THIS_RELEASE == 1/);
+  assert.match(evidence, /mv "\$stage" "\$release_directory"/);
+  assert.match(evidence, /finalize_release_commit 1/);
+  assert.match(finalize, /load_post_cut_checkpoint/);
+  assert.match(finalize, /write_current_checkpoint/);
+  assert.match(finalize, /rm -f -- "\$pending_checkpoint"/);
+  assert.match(reuse, /finalize_release_commit 0[\s\S]*exit 0/);
+});
+
+test('failure fencing reports partial failures and waits for candidate Pods to disappear', () => {
+  const fence = functionBody('fence_writers');
+  const wait = functionBody('wait_candidate_writers_fenced');
+  const exitTrap = functionBody('on_exit');
+  assert.doesNotMatch(fence, /\|\| true/);
+  assert.match(fence, /delete_candidate_job[\s\S]*\|\| failed=1/);
+  assert.match(fence, /scale_candidate_deployment[\s\S]*\|\| failed=1/);
+  assert.match(fence, /wait_candidate_writers_fenced \|\| failed=1/);
+  assert.match(wait, /get pods/);
+  assert.match(wait, /job-name=\$name/);
+  assert.match(wait, /\(\(pods != 0\)\) \|\| return 0/);
+  assert.match(exitTrap, /elif ! fence_writers; then/);
+  assert.match(exitTrap, /manual recovery is required/);
+});
+
 test('legacy cleanup runs only after traffic evidence and names only legacy resources', () => {
   const cleanup = functionBody('cleanup_legacy');
+  const preview = environmentArm('preview');
+  const production = environmentArm('production');
+  const allowlists = `${preview}\n${production}`;
 
   for (const workload of [
     'postgres',
@@ -191,12 +293,15 @@ test('legacy cleanup runs only after traffic evidence and names only legacy reso
     'web',
     'worker',
   ]) {
-    assert.ok(cleanup.includes(workload), `legacy cleanup allowlist must name ${workload}`);
+    assert.ok(allowlists.includes(workload), `legacy cleanup allowlist must name ${workload}`);
   }
   for (const claim of ['data-postgres-0', 'data-redis-queue-0', 'data-minio-0']) {
-    assert.ok(cleanup.includes(claim), `legacy cleanup PVC allowlist must name ${claim}`);
+    assert.ok(allowlists.includes(claim), `legacy cleanup PVC allowlist must name ${claim}`);
   }
 
+  assert.match(cleanup, /delete_captured_resource/);
+  assert.match(cleanup, /\^release-\[0-9a-f\]\{12\}-/);
+  assert.match(cleanup, /\$\{PREFIX\}/);
   assert.doesNotMatch(cleanup, /\bdelete\s+(?:namespace|ns|secret)\b/);
   assert.doesNotMatch(cleanup, /--all\b/);
   assert.match(DEPLOY, /traffic_cut_succeeded=1[\s\S]*cleanup_legacy/);
