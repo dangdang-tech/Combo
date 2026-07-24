@@ -945,7 +945,11 @@ server_preflight() {
   local render=$1 stage rc job_probe="$WORK/job-rbac-preflight.yaml"
   assert_validated_render "$render"
   for stage in platform foundation apps; do
-    "${K[@]}" apply --server-side --dry-run=server --field-manager=combo-dev-dispatcher -f "$render/$stage.yaml" >/dev/null 2>&1 || blocked "${stage} 服务端 dry-run 失败。"
+    if [[ "$stage" == foundation ]]; then
+      "${K[@]}" apply --server-side --dry-run=server --field-manager=combo-dev-dispatcher --force-conflicts -f "$render/$stage.yaml" >/dev/null 2>&1 || blocked "${stage} 服务端 dry-run 失败。"
+    else
+      "${K[@]}" apply --server-side --dry-run=server --field-manager=combo-dev-dispatcher -f "$render/$stage.yaml" >/dev/null 2>&1 || blocked "${stage} 服务端 dry-run 失败。"
+    fi
     set +e
     "${K[@]}" diff -f "$render/$stage.yaml" >/dev/null 2>&1
     rc=$?

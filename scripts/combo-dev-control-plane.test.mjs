@@ -1936,6 +1936,10 @@ test('existing deployment invariants remain fail-closed', () => {
     deploy,
     /apply --server-side --dry-run=server --field-manager=combo-dev-dispatcher -f "\$job_probe"/,
   );
+  assert.match(
+    deploy,
+    /\[\[ "\$stage" == foundation \]\][\s\S]*apply --server-side --dry-run=server --field-manager=combo-dev-dispatcher --force-conflicts -f "\$render\/\$stage\.yaml"/,
+  );
   assert.match(workflow, /scp -q "\$ARCHIVE" "combo-dev-target:\$temporary"/);
   assert.match(workflow, /ssh combo-dev-target mv -fT -- "\$temporary" "\$remote"/);
   assert.match(deploy, /INCOMING_BUNDLE=\$bundle/);
