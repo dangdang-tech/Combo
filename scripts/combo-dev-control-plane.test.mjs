@@ -1544,7 +1544,7 @@ test('combo-dev nginx consumes the exact client-events route without proxying or
   }
 });
 
-test('combo-dev delivery is manual-only and shares the exact production CD concurrency group', () => {
+test('combo-dev and Production deliveries are manual-only and share the exact host concurrency group', () => {
   const workflow = text('.github/workflows/combo-dev.yml');
   const production = text('.github/workflows/cd.yml');
   const group = (value) => value.match(/^concurrency:\n {2}group: ([^\n]+)$/m)?.[1];
@@ -1552,19 +1552,33 @@ test('combo-dev delivery is manual-only and shares the exact production CD concu
   assert.equal(group(workflow), group(production));
   assert.match(workflow, /^ {2}workflow_dispatch:/m);
   const triggers = workflow.slice(workflow.indexOf('on:\n'), workflow.indexOf('\nconcurrency:'));
+  const productionTriggers = production.slice(
+    production.indexOf('on:\n'),
+    production.indexOf('\n# 同一时间'),
+  );
   assert.doesNotMatch(triggers, /workflow_run/);
+  assert.match(productionTriggers, /^ {2}workflow_dispatch:/m);
+  assert.doesNotMatch(productionTriggers, /workflow_run|push:|pull_request:/);
   assert.match(
     workflow,
     /revision:[\s\S]*required: true[\s\S]*INPUT_REVISION: \$\{\{ inputs\.revision \}\}/,
   );
+  assert.match(production, /REVISION: \$\{\{ inputs\.revision \}\}/);
   assert.match(workflow, /\^\[0-9a-f\]\{40\}\$/);
+  assert.match(production, /\^\[0-9a-f\]\{40\}\$/);
   assert.match(workflow, /git\/ref\/heads\/main/);
+  assert.match(production, /compare\/\$\{REVISION\}\.\.\.main/);
   assert.match(workflow, /actions\/workflows\/ci\.yml\/runs\?head_sha=\$\{REVISION\}/);
+  assert.match(production, /actions\/workflows\/ci\.yml\/runs\?head_sha=\$\{REVISION\}/);
   assert.match(workflow, /echo ' {2}ServerAliveInterval 30'/);
   assert.match(workflow, /echo ' {2}ServerAliveCountMax 20'/);
   assert.match(workflow, /echo ' {2}TCPKeepAlive yes'/);
   assert.match(
     workflow,
+    /\.head_branch == "main" and \.event == "push" and \.conclusion == "success"/,
+  );
+  assert.match(
+    production,
     /\.head_branch == "main" and \.event == "push" and \.conclusion == "success"/,
   );
   assert.doesNotMatch(workflow, /issue\s*#?112|promotion/i);
