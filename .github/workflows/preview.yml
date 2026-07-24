@@ -224,6 +224,29 @@ jobs:
             exit "$rc"
           }
           trap cleanup EXIT
+          auth_failure_text() {
+            case "$1" in
+              *"failed to fetch oauth token"*401* | \
+                *"failed to fetch oauth token"*403* | \
+                *"failed to authorize"*Unauthorized* | \
+                *"failed to authorize"*Forbidden* | \
+              *Unauthorized* | *unauthorized* | *denied* | \
+                *"authentication required"* | *"no basic auth credentials"* | \
+                *invalid_token* | *insufficient_scope*) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+          auth_failure_event() {
+            local messages
+            messages=$(kubectl --kubeconfig "$kubeconfig" -n combo-review \
+              get events -o json |
+              jq -r --arg uid "$uid" '
+                .items[]
+                | select(.involvedObject.uid == $uid and .reason == "Failed")
+                | .message
+              ')
+            auth_failure_text "$messages"
+          }
           created=1
           uid=$(kubectl --kubeconfig "$kubeconfig" -n combo-review run "$name" \
             --image="$image" \
@@ -246,14 +269,13 @@ jobs:
                 get "pod/$name" \
                 -o jsonpath='{.status.containerStatuses[0].state.waiting.message}' \
                 2>/dev/null || true)
-              case "$message" in
-                *Unauthorized* | *unauthorized* | *denied* | \
-                  *"authentication required"* | *insufficient_scope*) exit 10 ;;
-                *) exit 11 ;;
-              esac
+              if auth_failure_text "$message" || auth_failure_event; then
+                exit 10
+              fi
             fi
             sleep 2
           done
+          auth_failure_event && exit 10
           exit 11
           REMOTE
           then
