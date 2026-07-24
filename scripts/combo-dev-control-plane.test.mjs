@@ -1950,6 +1950,11 @@ test('existing deployment invariants remain fail-closed', () => {
     /apply --server-side --dry-run=server --field-manager=combo-dev-dispatcher --force-conflicts -k "\$FOUNDATION"/,
   );
   assert.match(
+    reset,
+    /apply --server-side --field-manager=combo-dev-session --force-conflicts -f "\$manifest"/,
+  );
+  assert.doesNotMatch(reset, /patch secret\/combo-dev-session/);
+  assert.match(
     rbac,
     /resourceNames: \['combo-dev-postgres', 'combo-dev-redis-queue', 'combo-dev-minio'\]/,
   );
