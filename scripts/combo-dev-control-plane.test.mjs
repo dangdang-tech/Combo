@@ -1306,48 +1306,48 @@ test('the always-on host guard uses an independent minimal fencer for missing, m
   const fencerRole = rbac.slice(fencerRoleStart, fencerRoleEnd);
   assert.match(
     fencerRole,
-    /resources: \['deployments'\]\n    resourceNames: \['api', 'worker', 'runtime', 'web', 'redis-hot'\]\n    verbs: \['get'\]/,
+    /resources: \['deployments'\]\n {4}resourceNames: \['api', 'worker', 'runtime', 'web', 'redis-hot'\]\n {4}verbs: \['get'\]/,
   );
   assert.match(
     fencerRole,
-    /resources: \['deployments\/scale'\]\n    resourceNames: \['api', 'worker', 'runtime', 'web', 'redis-hot'\]\n    verbs: \['patch'\]/,
+    /resources: \['deployments\/scale'\]\n {4}resourceNames: \['api', 'worker', 'runtime', 'web', 'redis-hot'\]\n {4}verbs: \['patch'\]/,
   );
   assert.match(
     fencerRole,
-    /resources: \['statefulsets'\]\n    resourceNames: \['postgres', 'redis-queue', 'minio'\]\n    verbs: \['get'\]/,
+    /resources: \['statefulsets'\]\n {4}resourceNames: \['postgres', 'redis-queue', 'minio'\]\n {4}verbs: \['get'\]/,
   );
   assert.match(
     fencerRole,
-    /resources: \['statefulsets\/scale'\]\n    resourceNames: \['postgres', 'redis-queue', 'minio'\]\n    verbs: \['patch'\]/,
+    /resources: \['statefulsets\/scale'\]\n {4}resourceNames: \['postgres', 'redis-queue', 'minio'\]\n {4}verbs: \['patch'\]/,
   );
   assert.equal(fencerRole.match(/\/scale/g)?.length, 2);
   assert.equal(fencerRole.match(/'patch'/g)?.length, 2);
+  assert.doesNotMatch(fencerRole, /verbs: \[[^\]]*(?:create|update)[^\]]*\]/);
   assert.doesNotMatch(
     fencerRole,
-    /verbs: \[[^\]]*(?:create|update)[^\]]*\]/,
-  );
-  assert.doesNotMatch(
-    fencerRole,
-    /resources: \['(?:deployments|statefulsets)'\]\n    resourceNames: [^\n]+\n    verbs: \[[^\]\n]*patch[^\]\n]*\]/,
+    /resources: \['(?:deployments|statefulsets)'\]\n {4}resourceNames: [^\n]+\n {4}verbs: \[[^\]\n]*patch[^\]\n]*\]/,
   );
   for (const script of [bootstrap, guard]) {
     const canI = script.slice(
       script.indexOf(script === bootstrap ? 'can_i_with_credential() {' : 'can_i() {'),
-      script.indexOf(script === bootstrap ? 'trusted_source_tree() {' : 'dispatcher_access_valid() {'),
+      script.indexOf(
+        script === bootstrap ? 'trusted_source_tree() {' : 'dispatcher_access_valid() {',
+      ),
     );
     assert.match(canI, /--subresource="\$subresource"/);
     const fencerChecks = script.slice(
-      script.indexOf(script === bootstrap ? 'fencer_credential_valid() {' : 'fencer_access_valid() {'),
-      script.indexOf(script === bootstrap ? 'issue_client_credential() {' : 'mark_failure_fence() {'),
+      script.indexOf(
+        script === bootstrap ? 'fencer_credential_valid() {' : 'fencer_access_valid() {',
+      ),
+      script.indexOf(
+        script === bootstrap ? 'issue_client_credential() {' : 'mark_failure_fence() {',
+      ),
     );
     assert.match(fencerChecks, /yes patch "deployments\.apps\/\$name" "\$NAMESPACE" scale/);
     assert.match(fencerChecks, /yes patch "statefulsets\.apps\/\$name" "\$NAMESPACE" scale/);
     assert.match(fencerChecks, /no patch deployments\.apps\/api "\$NAMESPACE"/);
     assert.match(fencerChecks, /no update deployments\.apps\/api "\$NAMESPACE" scale/);
-    assert.match(
-      fencerChecks,
-      /no patch deployments\.apps\/api "\$PRODUCTION_NAMESPACE" scale/,
-    );
+    assert.match(fencerChecks, /no patch deployments\.apps\/api "\$PRODUCTION_NAMESPACE" scale/);
   }
   assert.match(lease, /FAILURE_FENCE_MARKER/);
 
@@ -1585,21 +1585,35 @@ test('combo-dev nginx consumes the exact client-events route without proxying or
   }
 });
 
-test('combo-dev and Production deliveries are manual-only and share the exact host concurrency group', () => {
+test('Test, Preview, and Production serialize only deploy jobs and preserve promotion trust', () => {
   const workflow = text('.github/workflows/combo-dev.yml');
+  const preview = text('.github/workflows/preview.yml');
   const production = text('.github/workflows/cd.yml');
-  const group = (value) => value.match(/^concurrency:\n {2}group: ([^\n]+)$/m)?.[1];
-  assert.equal(group(workflow), 'cd-tecent2');
-  assert.equal(group(workflow), group(production));
+  const deployGroup = (value) =>
+    value.match(
+      /^ {4}concurrency:\n {6}group: ([^\n]+)\n {6}queue: ([^\n]+)\n {6}cancel-in-progress: ([^\n]+)$/m,
+    );
+  for (const delivery of [workflow, preview, production]) {
+    const group = deployGroup(delivery);
+    assert.ok(group);
+    assert.equal(group[1], 'cd-tecent2');
+    assert.equal(group[2], 'max');
+    assert.equal(group[3], 'false');
+    assert.doesNotMatch(delivery, /^concurrency:/m);
+  }
+
   assert.match(workflow, /^ {2}workflow_dispatch:/m);
-  const triggers = workflow.slice(workflow.indexOf('on:\n'), workflow.indexOf('\nconcurrency:'));
+  const triggers = workflow.slice(workflow.indexOf('on:\n'), workflow.indexOf('\npermissions:'));
   const productionTriggers = production.slice(
     production.indexOf('on:\n'),
-    production.indexOf('\n# 同一时间'),
+    production.indexOf('\npermissions:'),
   );
   assert.doesNotMatch(triggers, /workflow_run/);
   assert.match(productionTriggers, /^ {2}workflow_dispatch:/m);
   assert.doesNotMatch(productionTriggers, /workflow_run|push:|pull_request:/);
+  assert.match(preview, /^ {2}workflow_run:/m);
+  assert.match(preview, /branches: \[main\]/);
+  assert.match(preview, /COMBO_PREVIEW_AUTO_PROMOTION_MODE/);
   assert.match(
     workflow,
     /revision:[\s\S]*required: true[\s\S]*INPUT_REVISION: \$\{\{ inputs\.revision \}\}/,
@@ -1607,21 +1621,25 @@ test('combo-dev and Production deliveries are manual-only and share the exact ho
   assert.match(production, /REVISION: \$\{\{ inputs\.revision \}\}/);
   assert.match(workflow, /\^\[0-9a-f\]\{40\}\$/);
   assert.match(production, /\^\[0-9a-f\]\{40\}\$/);
-  assert.match(workflow, /git\/ref\/heads\/main/);
+  assert.match(workflow, /branches\?per_page=100/);
+  assert.match(workflow, /compare\/\$\{REVISION\}\.\.\.\$\{branch_sha\}/);
   assert.match(production, /compare\/\$\{REVISION\}\.\.\.main/);
-  assert.match(workflow, /actions\/workflows\/ci\.yml\/runs\?head_sha=\$\{REVISION\}/);
-  assert.match(production, /actions\/workflows\/ci\.yml\/runs\?head_sha=\$\{REVISION\}/);
+  assert.match(workflow, /uses: \.\/\.github\/workflows\/ci\.yml/);
+  assert.match(workflow, /publish_release: true/);
+  assert.match(workflow, /combo-release-mutation\.lock/);
+  assert.match(workflow, /flock -w 300 9/);
+  assert.match(
+    workflow,
+    /combo-dev-reset[\s\\\n]*--confirm=DESTROY-COMBO-PREVIEW-DATA[\s\S]*combo-dev-deploy/,
+  );
+  assert.match(preview, /combo-preview-promotion-\$\{\{/);
+  assert.match(production, /combo-preview-promotion-\$\{\{/);
+  assert.match(production, /artifactFileSetDigest/);
   assert.match(workflow, /echo ' {2}ServerAliveInterval 30'/);
   assert.match(workflow, /echo ' {2}ServerAliveCountMax 20'/);
   assert.match(workflow, /echo ' {2}TCPKeepAlive yes'/);
-  assert.match(
-    workflow,
-    /\.head_branch == "main" and \.event == "push" and \.conclusion == "success"/,
-  );
-  assert.match(
-    production,
-    /\.head_branch == "main" and \.event == "push" and \.conclusion == "success"/,
-  );
+  assert.match(preview, /\[\[ "\$SOURCE_BRANCH" == main \]\]/);
+  assert.match(production, /\.path == "\.github\/workflows\/preview\.yml"/);
   assert.doesNotMatch(workflow, /issue\s*#?112|promotion/i);
 });
 
