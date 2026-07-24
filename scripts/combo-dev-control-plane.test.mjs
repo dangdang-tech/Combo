@@ -1927,6 +1927,8 @@ test('existing deployment invariants remain fail-closed', () => {
   const bootstrap = text('scripts/combo-dev-bootstrap.sh');
   const guard = text('scripts/combo-dev-storage-guard.sh');
   const rbac = text('infra/k8s/overlays/combo-dev/platform/rbac.yaml');
+  const testMinioInit = text('infra/k8s/overlays/combo-dev/init/resources.yaml');
+  const releaseMinioInit = text('infra/k8s/job-minio-init.yaml');
   assert.match(
     rbac,
     /resources: \['jobs'\]\n {4}verbs: \['create', 'get', 'list', 'watch', 'patch', 'delete'\]/,
@@ -1958,6 +1960,10 @@ test('existing deployment invariants remain fail-closed', () => {
     /apply --server-side --field-manager=combo-dev-session --force-conflicts -f "\$manifest"/,
   );
   assert.doesNotMatch(reset, /patch secret\/combo-dev-session/);
+  for (const manifest of [testMinioInit, releaseMinioInit]) {
+    assert.match(manifest, /name: minio-init/);
+    assert.match(manifest, /limits:[\s\S]*?memory: 256Mi/);
+  }
   assert.match(
     rbac,
     /resourceNames: \['combo-dev-postgres', 'combo-dev-redis-queue', 'combo-dev-minio'\]/,
