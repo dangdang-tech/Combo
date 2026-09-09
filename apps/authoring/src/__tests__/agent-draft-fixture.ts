@@ -63,10 +63,12 @@ export function uploadFixture(draft = draftFixture(), requestId: string = random
 export function contextUploadFixture(
   requestId: string = randomUUID(),
   name = '证据检查助手',
+  client: 'codex' | 'claude' = 'codex',
 ): AgentContextUpload {
   const compiled = compileCreatorAgentPackageFromContext(
     JSON.stringify({
       protocol: 'combo.agent-context-request/1',
+      client,
       request: '把当前可用的方法整理为 Agent。',
       content: {
         name,

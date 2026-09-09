@@ -30,6 +30,10 @@ function request() {
 describe('unverified available-context Draft contract', () => {
   it('has honest fixed source claims, exact bytes, and deterministic fingerprints', () => {
     const draft = createCreatorAgentContextDraft(JSON.stringify(request()));
+    // Captured from origin/main 78792c0d before adding the optional client field.
+    expect(draft.draftFingerprint).toBe(
+      'sha256:1c50488e848b91e6258141576109533f4d637f659a708e4aad33c673f9bd0e36',
+    );
     expect(draft.source).toEqual({
       kind: 'codex_available_context',
       verification: 'not_verified',
@@ -52,6 +56,56 @@ describe('unverified available-context Draft contract', () => {
     expect(() => parseCreatorAgentPackageDraftSnapshotV2(text)).toThrow();
     expect(() => parseCreatorAgentContextRequest(text)).toThrow();
   });
+
+  it('preserves default Codex bytes and binds an explicit Claude client without claiming verification', () => {
+    const codex = createCreatorAgentContextDraft(JSON.stringify(request()));
+    const explicitCodex = createCreatorAgentContextDraft(
+      JSON.stringify({ ...request(), client: 'codex' }),
+    );
+    expect(serializeCreatorAgentContextDraft(explicitCodex)).toBe(
+      serializeCreatorAgentContextDraft(codex),
+    );
+    const claude = createCreatorAgentContextDraft(
+      JSON.stringify({ ...request(), client: 'claude' }),
+    );
+    expect(claude.source).toEqual({
+      kind: 'claude_available_context',
+      verification: 'not_verified',
+      completeness: 'partial_or_unknown',
+    });
+    expect(claude).not.toHaveProperty('client');
+    expect(claude.draftFingerprint).not.toBe(codex.draftFingerprint);
+    const text = serializeCreatorAgentContextDraft(claude);
+    expect(parseCreatorAgentContextDraft(text)).toEqual(claude);
+    expect(serializeCreatorAgentContextDraft(parseCreatorAgentContextDraft(text))).toBe(text);
+    for (const [from, to] of [
+      ['claude_available_context', 'codex_available_context'],
+      ['claude_available_context', 'other_available_context'],
+      ['not_verified', 'verified'],
+      ['partial_or_unknown', 'complete'],
+    ]) {
+      expect(() => parseCreatorAgentContextDraft(text.replace(from!, to!))).toThrow();
+    }
+    expect(() =>
+      parseCreatorAgentContextRequest(
+        JSON.stringify({ ...request(), client: 'claude', source: claude.source }),
+      ),
+    ).toThrow();
+    expect(() =>
+      parseCreatorAgentContextRequest(
+        JSON.stringify({ ...request(), content: { ...request().content, client: 'claude' } }),
+      ),
+    ).toThrow();
+  });
+
+  it.each(['claude-code', 'Claude', 'cursor', '', null, 1, {}, []])(
+    'rejects an unknown or non-string client %#',
+    (client) => {
+      expect(() =>
+        createCreatorAgentContextDraft(JSON.stringify({ ...request(), client })),
+      ).toThrow();
+    },
+  );
 
   it.each(['root', 'content', 'starterPrompts', 'source', 'getter', 'revoked'])(
     'rejects unissued Draft objects without inspecting %s',

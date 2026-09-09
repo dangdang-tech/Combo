@@ -29,7 +29,7 @@ const packageSchema = z
   .strict();
 const source = z
   .object({
-    kind: z.literal('codex_available_context'),
+    kind: z.enum(['codex_available_context', 'claude_available_context']),
     verification: z.literal('not_verified'),
     completeness: z.literal('partial_or_unknown'),
   })
@@ -151,12 +151,14 @@ export function verifyPackage(input: unknown, expectedDigest: string) {
         throw new Error('bytes');
     }
     if (byteCount > MAX_PACKAGE_BYTES) throw new Error('limit');
-    provenance.parse(JSON.parse(candidate.files[2]!.text));
+    const declared = provenance.parse(JSON.parse(candidate.files[2]!.text));
+    const clientName =
+      declared.source.kind === 'claude_available_context' ? 'Claude Code' : 'Codex';
     // Only this native Skill entry is registered by the lightweight compiler. No package scripts run.
     if (
       !candidate.files[1]!.text.startsWith(
         '---\nname: extracted-method\n' +
-          'description: Apply a reusable method organized from available Codex context.\n---\n',
+          `description: Apply a reusable method organized from available ${clientName} context.\n---\n`,
       )
     )
       throw new Error('skill');

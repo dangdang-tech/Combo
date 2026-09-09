@@ -52,9 +52,9 @@ function project() {
   temporary.push(root);
   return root;
 }
-function setup() {
+function setup(client: 'codex' | 'claude' = 'codex') {
   const root = project();
-  const fixture = receiverFixture(root);
+  const fixture = receiverFixture(root, client);
   return {
     ...fixture,
     root,
@@ -138,14 +138,36 @@ describe('receiver argument and exact text Package contract', () => {
   ])('fails early for unsupported runtime %s %s', (platform, version) => {
     expect(() => assertSupportedRuntime(platform, version)).toThrow('Node 24');
   });
-  it('accepts supported runtime and exact compiler bytes without recompilation', () => {
-    assertSupportedRuntime('darwin', '24.2.0');
-    assertSupportedRuntime('linux', '25.1.0');
-    const fixture = receiverFixture();
-    expect(verifyPackage(fixture.bare, fixture.compiled.packageDigest).manifestText).toBe(
-      fixture.compiled.manifestText,
-    );
-  });
+  it.each(['codex', 'claude'] as const)(
+    'accepts supported runtime and exact %s compiler bytes without recompilation',
+    (client) => {
+      assertSupportedRuntime('darwin', '24.2.0');
+      assertSupportedRuntime('linux', '25.1.0');
+      const fixture = receiverFixture('/unselected', client);
+      expect(verifyPackage(fixture.bare, fixture.compiled.packageDigest).manifestText).toBe(
+        fixture.compiled.manifestText,
+      );
+    },
+  );
+  it.each(['unknown', 'verified', 'complete', 'extra', 'mismatched-skill'])(
+    'rejects Claude %s provenance even after rehashing the Package',
+    (mutation) => {
+      const fixture = receiverFixture('/unselected', 'claude');
+      const source = { ...fixture.compiled.draft.source };
+      if (mutation === 'unknown') Object.assign(source, { kind: 'other_available_context' });
+      if (mutation === 'verified') Object.assign(source, { verification: 'verified' });
+      if (mutation === 'complete') Object.assign(source, { completeness: 'complete' });
+      if (mutation === 'extra') Object.assign(source, { hostAttestation: 'forged' });
+      if (mutation === 'mismatched-skill')
+        Object.assign(source, { kind: 'codex_available_context' });
+      replaceContent(
+        fixture,
+        2,
+        JSON.stringify({ protocol: 'combo.agent-context-provenance/1', source }),
+      );
+      expect(() => verifyPackage(fixture.bare, fixture.bare.packageDigest)).toThrow('text profile');
+    },
+  );
   it.each(['digest', 'manifest', 'bytes', 'extra', 'duplicate', 'order', 'unknown-key', 'unicode'])(
     'rejects %s corruption',
     (mutation) => {
@@ -308,43 +330,50 @@ describe('anonymous bounded public receiver download', () => {
 });
 
 describe('project-local no-overwrite installation and offline verification', () => {
-  it('preserves every Package byte, isolates the adapter, and replays exactly', () => {
-    const value = setup();
-    writeFileSync(join(value.root, 'AGENTS.md'), 'Keep user rules.\n');
-    expect(installPackage(value.input, value.fs, value.candidate, value.receiver)).toBe(
-      'installed',
-    );
-    for (const file of value.compiled.files) {
-      const target = join(value.root, value.paths.packageRelativePath, file.path);
-      expect(readFileSync(target, 'utf8')).toBe(file.content);
-      expect(lstatSync(target).mode & 0o777).toBe(0o400);
-    }
-    const skill = join(value.root, value.paths.skillRelativePath);
-    expect(readFileSync(join(skill, 'SKILL.md'), 'utf8')).not.toContain(
-      value.compiled.draft.content.instructions,
-    );
-    expect(readFileSync(join(skill, 'agents/openai.yaml'), 'utf8')).toContain(
-      'allow_implicit_invocation: false',
-    );
-    expect(readFileSync(join(skill, 'scripts/receiver.mjs'))).toEqual(value.receiver);
-    const receipt = JSON.parse(readFileSync(join(skill, 'installation.json'), 'utf8'));
-    expect(receipt).toMatchObject({
-      protocol: 'combo.agent-package-installation/1',
-      packageDigest: value.input.packageDigest,
-      receiverDigest: digest(value.receiver),
-      projectBinding: { kind: 'host_selected_path', ...value.fs.rootIdentity },
-    });
-    expect(JSON.stringify(receipt)).not.toContain(value.root);
-    expect(readFileSync(join(value.root, 'AGENTS.md'), 'utf8')).toBe('Keep user rules.\n');
-    expect(existsSync(join(value.root, '.combo/receiver-install.lock'))).toBe(false);
-    expect(existsSync(join(skill, 'entry-pending'))).toBe(false);
-    const before = lstatSync(join(skill, 'SKILL.md'));
-    expect(installPackage(value.input, value.fs, value.candidate, value.receiver)).toBe(
-      'already_installed',
-    );
-    expect(lstatSync(join(skill, 'SKILL.md')).mtimeMs).toBe(before.mtimeMs);
-    expect(verifyInstalled(value.input, value.fs, value.receiver)).toEqual(value.candidate);
-  });
+  it.each(['codex', 'claude'] as const)(
+    'preserves every %s Package byte, isolates the adapter, and replays exactly',
+    (client) => {
+      const value = setup(client);
+      writeFileSync(join(value.root, 'AGENTS.md'), 'Keep user rules.\n');
+      expect(installPackage(value.input, value.fs, value.candidate, value.receiver)).toBe(
+        'installed',
+      );
+      for (const file of value.compiled.files) {
+        const target = join(value.root, value.paths.packageRelativePath, file.path);
+        expect(readFileSync(target, 'utf8')).toBe(file.content);
+        expect(lstatSync(target).mode & 0o777).toBe(0o400);
+      }
+      const skill = join(value.root, value.paths.skillRelativePath);
+      const adapter = readFileSync(join(skill, 'SKILL.md'), 'utf8');
+      expect(adapter).toContain('Codex or Claude Code');
+      expect(adapter).toContain('automatic .agents/skills discovery is not assumed');
+      expect(adapter).toContain('in this same conversation');
+      expect(readFileSync(join(skill, 'SKILL.md'), 'utf8')).not.toContain(
+        value.compiled.draft.content.instructions,
+      );
+      expect(readFileSync(join(skill, 'agents/openai.yaml'), 'utf8')).toContain(
+        'allow_implicit_invocation: false',
+      );
+      expect(readFileSync(join(skill, 'scripts/receiver.mjs'))).toEqual(value.receiver);
+      const receipt = JSON.parse(readFileSync(join(skill, 'installation.json'), 'utf8'));
+      expect(receipt).toMatchObject({
+        protocol: 'combo.agent-package-installation/1',
+        packageDigest: value.input.packageDigest,
+        receiverDigest: digest(value.receiver),
+        projectBinding: { kind: 'host_selected_path', ...value.fs.rootIdentity },
+      });
+      expect(JSON.stringify(receipt)).not.toContain(value.root);
+      expect(readFileSync(join(value.root, 'AGENTS.md'), 'utf8')).toBe('Keep user rules.\n');
+      expect(existsSync(join(value.root, '.combo/receiver-install.lock'))).toBe(false);
+      expect(existsSync(join(skill, 'entry-pending'))).toBe(false);
+      const before = lstatSync(join(skill, 'SKILL.md'));
+      expect(installPackage(value.input, value.fs, value.candidate, value.receiver)).toBe(
+        'already_installed',
+      );
+      expect(lstatSync(join(skill, 'SKILL.md')).mtimeMs).toBe(before.mtimeMs);
+      expect(verifyInstalled(value.input, value.fs, value.receiver)).toEqual(value.candidate);
+    },
+  );
   it.each(['relative', 'alias', 'file'])('rejects a %s project root', (kind) => {
     const root = project();
     let selected = 'relative';
@@ -611,6 +640,29 @@ describe('standalone built artifact', () => {
       receiverDigest: digest(value.receiver),
       runtime: { status: 'not_run' },
     });
+  });
+  it('accepts exact Claude bytes through the same built receiver and offline verifier', async () => {
+    const value = setup('claude');
+    const fetcher = mockPublic(value);
+    const module = (await import(pathToFileURL(bundle).href)) as {
+      runAgentPackageReceiver(args: string[]): Promise<Record<string, unknown>>;
+    };
+    expect(await module.runAgentPackageReceiver(value.args)).toMatchObject({
+      status: 'installed',
+      runtime: { status: 'not_run' },
+    });
+    fetcher.mockClear();
+    expect(await module.runAgentPackageReceiver(['verify', ...value.args.slice(1)])).toMatchObject({
+      status: 'verified',
+      packageDigest: value.compiled.packageDigest,
+      runtime: { status: 'not_run' },
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+    for (const file of value.compiled.files) {
+      expect(
+        readFileSync(join(value.root, value.paths.packageRelativePath, file.path), 'utf8'),
+      ).toBe(file.content);
+    }
   });
   it('returns one safe error JSON without leaking arguments or starting network work', () => {
     const value = setup();

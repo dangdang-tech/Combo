@@ -5,7 +5,7 @@
   这些测试不联网真实 Test 服务、不安装使用者项目，也不启动 Codex 推理，不能替代跨用户同任务两轮验收。
 - `agent-package-receiver-fixture.ts` 只用现有轻量编译器生成非敏感合成 Package 与公开响应，不保存真实发布者数据。
 
-- `agent-context-compiler.test.ts` 覆盖轻量内容的确定性编译、真实 loader 回读、敏感内容全字段拒绝、
+- `agent-context-compiler.test.ts` 覆盖轻量内容的 Codex 历史摘要兼容、Claude 来源与文案、双客户端确定性编译及真实 loader 回读、敏感内容全字段拒绝、
   V2 互斥、独立 Node 文件执行与无副作用导入，以及编译器依赖图没有来源读取和运行层；不调用真实 Codex。
 
 - `worker-serial-pump.test.ts` 覆盖 prepare、start、sealed success、fact handoff、取消竞态、并发 tick、

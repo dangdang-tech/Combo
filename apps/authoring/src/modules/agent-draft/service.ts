@@ -262,6 +262,7 @@ function validateContext(body: unknown) {
     const compiled = compileCreatorAgentPackageFromContext(
       JSON.stringify({
         protocol: CREATOR_AGENT_CONTEXT_REQUEST_PROTOCOL,
+        client: draft.source.kind === 'claude_available_context' ? 'claude' : 'codex',
         request: draft.request,
         content: draft.content,
       }),
