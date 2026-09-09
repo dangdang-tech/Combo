@@ -15,9 +15,11 @@
 此目录属于接收器应用边界，只依赖 Node 内置模块、包内文件及纯 Package 协议与 Schema。
 它不导入 Creator 来源扫描、Host、Session、Worker、Broker、数据库或旧版 AgentVersion，不读取凭据或其他任务，
 不执行 Package 文件，也不写全局目录、项目 `AGENTS.md` 或任何已存在文件。
-原包在 `.combo/agent-packages/sha256/` 下保持逐字节不变，薄适配器在项目 `.agents/skills/` 下可被发现。
+原包在 `.combo/agent-packages/sha256/` 下保持逐字节不变，薄适配器在项目 `.agents/skills/` 下可被 Codex 发现。
+Claude Code 显式读取适配器及原包，不假定自动发现该目录。两种来源均只接受固定未验证与不完整覆盖声明，
+来源种类必须与 Skill 固定元数据匹配，不将创作客户端冒充当前接收客户端。
 当前仅支持已有 Node 24.2 及以上的 macOS 和 Linux；不提供 Windows 或运行时安装回退。
 
 只有入口激活是原子的，不承诺多目录写入形成一个全局事务。目录身份和 no-follow 检查覆盖稳定链接与常见
 置换，不证明同 UID 对手精确竞态下的操作系统隔离。安装目录属于 Host 显式选定路径，不是 active-task 证明。
-安装收据与成功退出不证明 Agent 已在 Codex 实际生效；同一对话实际应用和跨用户两轮验收须独立记录。
+安装收据与成功退出不证明 Agent 已在 Codex 或 Claude Code 实际生效；同一对话实际应用和跨用户两轮验收须独立记录。

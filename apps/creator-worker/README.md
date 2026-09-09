@@ -12,22 +12,24 @@ node agent-package-receiver.mjs install --project-root <Host 已选的绝对根�
 node agent-package-receiver.mjs verify --project-root <同一个 Host 已选的绝对根目录> --share-url <同一个分享链接> --package-digest <同一个摘要>
 ```
 
-以上是给 Codex Host 执行的技术接口，不要求普通用户打开 Terminal、填写路径或摘要。Host 必须先从可信公开
+以上是给 Codex 或 Claude Code 客户端执行的技术接口，不要求普通用户打开 Terminal、填写路径或摘要。Host 必须先从可信公开
 引导取得固定接收器代码和摘要，在执行前独立核对代码 SHA-256，并使用当前已经选定的项目根。
-没有明确项目时停止并请用户在 Codex 中选择项目，不扫描其他项目、不从进程工作目录猜测。
+没有明确项目时停止并请用户在当前客户端中选择项目，不扫描其他项目、不从接收器或 MCP 进程工作目录猜测。
 首版仅支持 macOS、Linux 和已有的 Node 24.2 或更新版本；其他平台在网络或项目操作前明确失败，不安装运行时。
 入口使用 Node 的 `import.meta.main`，避免临时目录祖先别名使命令静默跳过；支持版本内的模块导入不进行路径读取。
 
 `install` 仅从固定 Test origin 匿名读取 Release 投影和裸 Package，核对原始 Release、Package digest、
 规范清单和所有 UTF-8 文件字节。`combo.agent-package-receiver-text/1` 只接受轻量编译器的根 `AGENT.md`、
-`skills/extracted-method/SKILL.md` 和 `skills/extracted-method/provenance.json`；来源声明固定未验证。
+`skills/extracted-method/SKILL.md` 和 `skills/extracted-method/provenance.json`；来源只接受 Codex 或 Claude 可用上下文，
+固定未验证且覆盖可能不完整，Skill 的固定元数据必须与该来源匹配。
 这只是文本安装范围，不证明 Agent 方法不需要工具，也不证明当前 Host 已具备全部语义能力。
 接收器不执行 Package 脚本、不安装依赖、不暗中连接 MCP，也不读取创作者对话、凭据或使用者业务文件。
 
 原始 `agent.json` 和清单文件按 exact bytes 保存到项目内 `.combo/agent-packages/sha256/<digest>/`。
 生成的薄适配器位于 `.agents/skills/combo-<release-id-suffix>/`，只包含受信 `SKILL.md`、显式调用策略、
 同一个接收器文件和包外安装收据。原包不放进自动发现的 Skill 目录，适配器不复制另一份 Agent 行为。
-入口默认禁止隐式调用，但它仍可被项目内其他任务发现，并非仅当前对话私有。不改 `AGENTS.md` 或全局配置。
+Codex 入口默认禁止隐式调用，但它仍可被项目内其他任务发现，并非仅当前对话私有。Claude Code 通过明确读取
+本地适配器和原包使用能力，不假定自动发现 `.agents/skills`。不改 `AGENTS.md`、`CLAUDE.md` 或全局配置。
 每次显式使用时，适配器先要求 Host 用独立原生摘要操作核对本地 helper 与入口中固定的接收器摘要，再允许
 执行离线验证。helper 不能先执行再为自己验真；同时替换入口和 helper 的同 UID 攻击不属于本机文件校验保证。
 
@@ -46,16 +48,19 @@ node agent-package-receiver.mjs verify --project-root <同一个 Host 已选的�
 
 ## 可用上下文轻量编译
 
-`agent-package-context-compiler` 是独立的轻量入口。Codex 先根据当前可用上下文整理方法，再调用
+`agent-package-context-compiler` 是独立的轻量入口。Codex 或 Claude Code 先根据当前可用上下文整理方法，再调用
 `compileCreatorAgentPackageFromContext(requestText)`；本函数不读取对话或 Project，不调用模型或启动会话。
-输入使用 `combo.agent-context-request/1`，字段仅有 `request` 和 `content`；后者包含 `name`、
+输入使用 `combo.agent-context-request/1`，业务字段有 `request`、`content` 和可选 `client`；内容包含 `name`、
 `description`、字符串 `instructions`、`starterPrompts`、`outputDescription` 和 `coverageSummary`。
-来源由代码固定为 `codex_available_context / not_verified / partial_or_unknown`，不接受调用方来源字段。
+`client` 仅接受 `codex` 或 `claude`，省略或指定 `codex` 保留旧 Draft 与 Package 字节；`claude` 生成
+`claude_available_context` 和明确的 Claude Code 说明。两种来源都固定 `not_verified / partial_or_unknown`，
+不接受调用方来源字段、来源选择器或认证声明，也不读取客户端历史。客户端名本身不证明真实来源。
 
 结果使用 `combo.agent-context-compilation/1`，包含真实 `draft`、规范 `draftText`、`draftFingerprint`、
 `manifestText`、`packageDigest` 和完整 `files`。每个文件含 `path`、精确文本 `content`、带 `sha256:`
 前缀的摘要 `sha256` 和 UTF-8 长度 `bytes`；完整文件集合包含 `agent.json`。`runtime.status` 固定 `not_run`。
-私有制作要求和 coverage 不进入 Package；相同能力得到相同 Package，Draft 的内容变化由 fingerprint 区分。
+私有制作要求和 coverage 不进入 Package；同一来源与能力得到相同 Package，不同客户端来源进入包内 provenance
+并改变摘要，Draft 的内容变化由 fingerprint 区分。创作客户端不限制使用者在另一支持客户端中读取同一 exact Package。
 
 `pnpm -F @cb/creator-worker run pretest` 构建独立 `dist/agent-package-context-compiler.mjs`。该文件可以作为
 模块导入 `compileCreatorAgentPackageFromContext`，导入没有 stdin 副作用；直接由 Node 执行时只读取一份有界

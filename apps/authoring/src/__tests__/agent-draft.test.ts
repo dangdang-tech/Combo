@@ -176,6 +176,45 @@ describe('private Agent Draft synchronization', () => {
 });
 
 describe('private available-context synchronization', () => {
+  it('preserves Claude source, exact compilation and idempotency through storage and reopen', async () => {
+    const { service, repository, objects } = setup();
+    const upload = contextUploadFixture(randomUUID(), '证据检查助手', 'claude');
+    const draft = JSON.parse(upload.draftText);
+    expect(inspectAgentContextUpload(upload)).toEqual({
+      requestId: upload.requestId,
+      name: draft.content.name,
+      draftFingerprint: draft.draftFingerprint,
+      packageDigest: upload.candidate.packageDigest,
+    });
+    const { record, created } = await service.saveContext(owner, upload);
+    expect(created).toBe(true);
+    expect(record.candidate).toEqual(upload.candidate);
+    expect(record.draft.text).toBe(upload.draftText);
+    expect(JSON.parse(record.draft.text).source).toEqual({
+      kind: 'claude_available_context',
+      verification: 'not_verified',
+      completeness: 'partial_or_unknown',
+    });
+    expect(record.sourceVerification).toBe('not_verified');
+    const restarted = new AgentDraftService(repository, objects);
+    expect(await restarted.read(owner, record.storage.draftId, 1)).toEqual(record);
+    expect(await restarted.saveContext(owner, upload)).toEqual({ created: false, record });
+    expect(repository.rows).toHaveLength(1);
+    expect(objects.writes).toBe(1);
+    await expect(
+      restarted.saveContext(owner, contextUploadFixture(upload.requestId)),
+    ).rejects.toMatchObject({ kind: 'idempotency_conflict' });
+  });
+  it('rejects substituting a Codex Package for an exact Claude Draft before writing', async () => {
+    const { service, repository, objects } = setup();
+    const claude = contextUploadFixture(randomUUID(), '证据检查助手', 'claude');
+    const codex = contextUploadFixture(claude.requestId);
+    const mixed = { ...claude, candidate: codex.candidate };
+    expect(() => inspectAgentContextUpload(mixed)).toThrow('Agent Draft validation');
+    await expect(service.saveContext(owner, mixed)).rejects.toMatchObject({ kind: 'validation' });
+    expect(repository.rows).toHaveLength(0);
+    expect(objects.writes).toBe(0);
+  });
   it('dispatches the independent strict upload and returns the exact private record contract', async () => {
     const { service, repository, objects } = setup();
     const upload = contextUploadFixture();

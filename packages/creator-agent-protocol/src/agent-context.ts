@@ -34,6 +34,7 @@ const ContentSchema = CreatorAgentPackageDraftContentSchema.unwrap()
 const RequestSchema = z
   .object({
     protocol: z.literal(CREATOR_AGENT_CONTEXT_REQUEST_PROTOCOL),
+    client: z.enum(['codex', 'claude']).optional(),
     request: ContextText(2_000),
     content: ContentSchema,
   })
@@ -42,7 +43,7 @@ const RequestSchema = z
 
 const SourceSchema = z
   .object({
-    kind: z.literal('codex_available_context'),
+    kind: z.enum(['codex_available_context', 'claude_available_context']),
     verification: z.literal('not_verified'),
     completeness: z.literal('partial_or_unknown'),
   })
@@ -80,7 +81,10 @@ export function createCreatorAgentContextDraft(requestText: unknown): CreatorAge
   const request = parseCreatorAgentContextRequest(requestText);
   const content = request.content;
   const source = Object.freeze({
-    kind: 'codex_available_context' as const,
+    kind:
+      request.client === 'claude'
+        ? ('claude_available_context' as const)
+        : ('codex_available_context' as const),
     verification: 'not_verified' as const,
     completeness: 'partial_or_unknown' as const,
   });
