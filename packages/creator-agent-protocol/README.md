@@ -197,3 +197,5 @@ pnpm -F @cb/creator-agent-protocol build
 pnpm -F @cb/creator-agent-protocol typecheck:test
 pnpm -F @cb/creator-agent-protocol test
 ```
+
+`./agent-package-receiver` 提供包外接收工具 V2 的严格四平台分发清单与大小上限，供构建器和公开下载 API 共用；不改变 Agent Package 合同。

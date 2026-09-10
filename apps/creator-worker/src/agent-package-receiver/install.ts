@@ -3,6 +3,7 @@ import { linkSync, lstatSync, unlinkSync, type Stats } from 'node:fs';
 import { adapterFiles, installationPaths } from './adapter.js';
 import {
   MAX_PACKAGE_BYTES,
+  RECEIVER_VERSION,
   ReceiverError,
   verifyPackage,
   type ReceiverInput,
@@ -47,11 +48,11 @@ function packageFiles(candidate: VerifiedPackage) {
 function assertExactFiles(
   fs: ProjectFiles,
   parent: string,
-  files: { path: string; bytes: Buffer }[],
+  files: { path: string; bytes: Buffer; mode?: 0o400 | 0o500 }[],
 ): void {
   equalInventory(fs.inventory(parent), expectedInventory(files.map(({ path }) => path)));
   for (const file of files)
-    if (!fs.read(`${parent}/${file.path}`, file.bytes.length).equals(file.bytes))
+    if (!fs.read(`${parent}/${file.path}`, file.bytes.length, file.mode).equals(file.bytes))
       throw new ReceiverError('INSTALL_CONFLICT');
 }
 export function verifyInstalled(
@@ -133,7 +134,7 @@ export function installPackage(
   fs.directory('.combo', true);
   const lock = lockPath;
   try {
-    fs.write(lock, Buffer.from('combo.agent-package-receiver/1\n', 'utf8'));
+    fs.write(lock, Buffer.from(`${RECEIVER_VERSION}\n`, 'utf8'));
   } catch (error) {
     if (error instanceof Error && 'code' in error && error.code === 'EEXIST')
       throw new ReceiverError('INSTALL_BUSY');
@@ -156,7 +157,7 @@ export function installPackage(
     const generated = adapterFiles(input, candidate, receiverBytes, fs.rootIdentity);
     const entry = generated.find(({ path }) => path === 'SKILL.md')!;
     for (const file of generated.filter(({ path }) => path !== 'SKILL.md'))
-      fs.write(`${paths.skillRelativePath}/${file.path}`, file.bytes);
+      fs.write(`${paths.skillRelativePath}/${file.path}`, file.bytes, file.mode);
     const pending = `${paths.skillRelativePath}/entry-pending`;
     fs.write(pending, entry.bytes);
     assertExactFiles(fs, paths.skillRelativePath, [

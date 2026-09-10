@@ -136,9 +136,9 @@ function ReleaseContent({ releaseId }: { releaseId: string }): ReactElement {
             在已经选定项目的 Codex 或 Claude Code 对话中使用。指令以服务端返回的这个固定版本为准。
           </p>
           <p>
-            支持 macOS / Linux，需已有 Node.js 24.2
-            或更新版本。当前支持轻量文本方法，不自动安装外部工具；遇到文件冲突会停止，不覆盖
-            AGENTS.md 或全局配置。
+            支持 macOS 13+ / Linux（glibc 2.17+）的 x64 / arm64，无需安装 Node.js 或 Bun。
+            当前支持轻量文本方法，不自动安装外部工具；遇到文件冲突会停止，不覆盖 AGENTS.md
+            或全局配置。
           </p>
           <p>
             无需主站登录。复制不会自动操作客户端或创建新对话；安装后仍需读取原始方法，并单独确认真实运行。

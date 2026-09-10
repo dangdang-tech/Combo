@@ -20,7 +20,11 @@ import {
 } from './transfer-contract.js';
 import { AgentTransferService } from './transfer-service.js';
 import { AgentPublicationService } from './publication-service.js';
-import { agentReceiverInstructions, getAgentReceiverArtifact } from './receiver-handoff.js';
+import {
+  agentReceiverInstructions,
+  getAgentReceiverArtifact,
+  getAgentReceiverManifest,
+} from './receiver-handoff.js';
 
 const objectDeadlines = new WeakMap<FastifyRequest, AbortSignal>();
 function services(req: FastifyRequest) {
@@ -238,29 +242,33 @@ export const AGENT_TRANSFER_ENDPOINTS: EndpointDecl[] = [
           throw new TransferFailure('unavailable');
         const origin = canonicalBrowserOrigins(req.server.infra.env)[0];
         if (!origin) throw new TransferFailure('unavailable');
-        return agentReceiverInstructions(publication, origin, await getAgentReceiverArtifact());
+        return agentReceiverInstructions(publication, origin, await getAgentReceiverManifest());
       }),
   },
   {
     method: 'GET',
-    url: '/agent-package-receivers/v1/:artifactFile',
+    url: '/agent-package-receivers/v2/:artifactFile',
     onRequest: base,
     config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
     handler: async (req, reply) => {
       try {
         const { artifactFile } = req.params as { artifactFile?: unknown };
-        if (typeof artifactFile !== 'string' || !/^[0-9a-f]{64}\.mjs$/u.test(artifactFile))
+        if (
+          typeof artifactFile !== 'string' ||
+          !/^(?:darwin|linux)-(?:arm64|x64)-[0-9a-f]{64}\.bin$/u.test(artifactFile)
+        )
           throw new TransferFailure('not_found');
-        const artifact = await getAgentReceiverArtifact();
-        if (artifact.filename !== artifactFile) throw new TransferFailure('not_found');
+        const artifact = await getAgentReceiverArtifact(artifactFile);
+        if (!artifact || artifact.filename !== artifactFile) throw new TransferFailure('not_found');
         return reply
           .header(
             'content-disposition',
             `attachment; filename="combo-agent-receiver-${artifactFile}"`,
           )
           .header('x-content-type-options', 'nosniff')
-          .type('text/javascript; charset=utf-8')
-          .send(artifact.bytes);
+          .header('content-length', artifact.byteLength)
+          .type('application/octet-stream')
+          .send(artifact.stream);
       } catch (error) {
         return fail(req, reply, error);
       }

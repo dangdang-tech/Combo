@@ -57,6 +57,7 @@ describe('Public Agent release', () => {
     expect(screen.getByText(/<script>steal\(\)<\/script>/u)).toBeInTheDocument();
     expect(document.querySelector('script')).toBeNull();
     expect(screen.getByText('尚未试运行')).toBeInTheDocument();
+    expect(screen.getByText(/无需安装 Node.js 或 Bun/u)).toBeInTheDocument();
     expect(screen.getByText(DIGEST)).toBeInTheDocument();
     expect(document.title).toBe('shared-agent · Agent · Combo');
   });

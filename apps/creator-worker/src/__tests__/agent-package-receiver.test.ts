@@ -46,20 +46,34 @@ import {
 } from './agent-package-receiver-fixture.js';
 
 const bundle = resolve(import.meta.dirname, '../../dist/agent-package-receiver.mjs');
+const manifestPath = resolve(
+  import.meta.dirname,
+  '../../dist/agent-package-receivers/manifest.json',
+);
+const nativeArtifact = JSON.parse(readFileSync(manifestPath, 'utf8')).artifacts.find(
+  (item: { target: string }) => item.target === `${process.platform}-${process.arch}`,
+);
+const binary = resolve(dirname(manifestPath), nativeArtifact.filename);
 const temporary: string[] = [];
+function cleanEnvironment() {
+  const environment: NodeJS.ProcessEnv = { ...process.env, NODE_PATH: '', PATH: '' };
+  for (const name of ['BUN_BE_BUN', 'BUN_OPTIONS', 'NODE_OPTIONS']) delete environment[name];
+  return environment;
+}
+
 function project() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'combo-receiver-test-')));
   temporary.push(root);
   return root;
 }
-function setup(client: 'codex' | 'claude' = 'codex') {
+function setup(client: 'codex' | 'claude' = 'codex', executable = false) {
   const root = project();
   const fixture = receiverFixture(root, client);
   return {
     ...fixture,
     root,
     fs: new ProjectFiles(root),
-    receiver: readFileSync(bundle),
+    receiver: readFileSync(executable ? binary : bundle),
     paths: installationPaths(fixture.input),
   };
 }
@@ -130,19 +144,21 @@ describe('receiver argument and exact text Package contract', () => {
     expect(() => parseArguments(fixture.args)).toThrow();
   });
   it.each([
-    ['win32', '24.2.0'],
-    ['darwin', '22.1.0'],
-    ['darwin', '24.0.0'],
-    ['linux', '24.1.9'],
+    ['win32', 'x64'],
+    ['darwin', 'ia32'],
+    ['freebsd', 'x64'],
+    ['linux', 's390x'],
     ['linux', 'unknown'],
   ])('fails early for unsupported runtime %s %s', (platform, version) => {
-    expect(() => assertSupportedRuntime(platform, version)).toThrow('Node 24');
+    expect(() => assertSupportedRuntime(platform, version)).toThrow('standalone Combo receiver');
   });
   it.each(['codex', 'claude'] as const)(
     'accepts supported runtime and exact %s compiler bytes without recompilation',
     (client) => {
-      assertSupportedRuntime('darwin', '24.2.0');
-      assertSupportedRuntime('linux', '25.1.0');
+      assertSupportedRuntime('darwin', 'arm64');
+      assertSupportedRuntime('darwin', 'x64');
+      assertSupportedRuntime('linux', 'x64');
+      assertSupportedRuntime('linux', 'arm64');
       const fixture = receiverFixture('/unselected', client);
       expect(verifyPackage(fixture.bare, fixture.compiled.packageDigest).manifestText).toBe(
         fixture.compiled.manifestText,
@@ -354,10 +370,11 @@ describe('project-local no-overwrite installation and offline verification', () 
       expect(readFileSync(join(skill, 'agents/openai.yaml'), 'utf8')).toContain(
         'allow_implicit_invocation: false',
       );
-      expect(readFileSync(join(skill, 'scripts/receiver.mjs'))).toEqual(value.receiver);
+      expect(readFileSync(join(skill, 'bin/receiver'))).toEqual(value.receiver);
+      expect(lstatSync(join(skill, 'bin/receiver')).mode & 0o777).toBe(0o500);
       const receipt = JSON.parse(readFileSync(join(skill, 'installation.json'), 'utf8'));
       expect(receipt).toMatchObject({
-        protocol: 'combo.agent-package-installation/1',
+        protocol: 'combo.agent-package-installation/2',
         packageDigest: value.input.packageDigest,
         receiverDigest: digest(value.receiver),
         projectBinding: { kind: 'host_selected_path', ...value.fs.rootIdentity },
@@ -424,8 +441,8 @@ describe('project-local no-overwrite installation and offline verification', () 
     const value = setup();
     const write = value.fs.write.bind(value.fs);
     let nested = false;
-    vi.spyOn(value.fs, 'write').mockImplementation((path, bytes) => {
-      write(path, bytes);
+    vi.spyOn(value.fs, 'write').mockImplementation((path, bytes, mode) => {
+      write(path, bytes, mode);
       if (path === '.combo/receiver-install.lock') {
         nested = true;
         expect(() =>
@@ -483,9 +500,7 @@ describe('project-local no-overwrite installation and offline verification', () 
       'could not be fully verified',
     );
     expect(existsSync(join(value.root, value.paths.skillRelativePath, 'SKILL.md'))).toBe(false);
-    expect(
-      existsSync(join(value.root, value.paths.skillRelativePath, 'scripts/receiver.mjs')),
-    ).toBe(true);
+    expect(existsSync(join(value.root, value.paths.skillRelativePath, 'bin/receiver'))).toBe(true);
     expect(existsSync(join(value.root, '.combo/receiver-install.lock'))).toBe(false);
   });
   it('refuses changed readonly modes even if the installed bytes still match', () => {
@@ -525,7 +540,7 @@ describe('project-local no-overwrite installation and offline verification', () 
     const value = setup();
     const write = value.fs.write.bind(value.fs);
     vi.spyOn(value.fs, 'write').mockImplementation((path, bytes) => {
-      if (path.endsWith('/scripts/receiver.mjs')) throw new Error('disk full');
+      if (path.endsWith('/bin/receiver')) throw new Error('disk full');
       write(path, bytes);
     });
     expect(() => installPackage(value.input, value.fs, value.candidate, value.receiver)).toThrow(
@@ -564,7 +579,7 @@ describe('project-local no-overwrite installation and offline verification', () 
               mutation === 'receipt'
                 ? 'installation.json'
                 : mutation === 'helper'
-                  ? 'scripts/receiver.mjs'
+                  ? 'bin/receiver'
                   : 'SKILL.md',
             );
       if (mutation === 'extra') writeFileSync(join(skill, 'unknown.txt'), 'Keep me.');
@@ -590,7 +605,7 @@ describe('project-local no-overwrite installation and offline verification', () 
   );
 });
 
-describe('standalone built artifact', () => {
+describe('standalone built artifact', { timeout: 30_000 }, () => {
   it('is bounded, uses only Node builtin imports, and imports with no task actions', () => {
     const text = readFileSync(bundle, 'utf8');
     expect(Buffer.byteLength(text)).toBeLessThan(MAX_ARTIFACT_BYTES);
@@ -614,24 +629,27 @@ describe('standalone built artifact', () => {
     expect(result.stderr).toBe('');
     expect(readdirSync(root)).toEqual([]);
   });
-  it('installs through the built public entry and verifies with the project helper offline', async () => {
-    const value = setup();
+  it('installs through the built public entry and verifies with the project binary without Node or Bun', async () => {
+    const value = setup('codex', true);
     const fetcher = mockPublic(value);
     const module = (await import(pathToFileURL(bundle).href)) as {
-      runAgentPackageReceiver(args: string[]): Promise<Record<string, unknown>>;
+      runAgentPackageReceiver(
+        args: string[],
+        executablePath: string,
+      ): Promise<Record<string, unknown>>;
     };
-    const output = await module.runAgentPackageReceiver(value.args);
+    const output = await module.runAgentPackageReceiver(value.args, binary);
     expect(output).toMatchObject({
       status: 'installed',
       packageDigest: value.input.packageDigest,
       runtime: { status: 'not_run' },
     });
     expect(fetcher).toHaveBeenCalledTimes(2);
-    const helper = join(value.root, value.paths.skillRelativePath, 'scripts/receiver.mjs');
-    const result = spawnSync(process.execPath, [helper, 'verify', ...value.args.slice(1)], {
+    const helper = join(value.root, value.paths.skillRelativePath, 'bin/receiver');
+    const result = spawnSync(helper, ['verify', ...value.args.slice(1)], {
       cwd: project(),
       encoding: 'utf8',
-      env: { ...process.env, NODE_PATH: '', NODE_TLS_REJECT_UNAUTHORIZED: '0' },
+      env: { ...cleanEnvironment(), NODE_TLS_REJECT_UNAUTHORIZED: '0' },
     });
     expect(result.status).toBe(0);
     expect(result.stderr).toBe('');
@@ -642,17 +660,22 @@ describe('standalone built artifact', () => {
     });
   });
   it('accepts exact Claude bytes through the same built receiver and offline verifier', async () => {
-    const value = setup('claude');
+    const value = setup('claude', true);
     const fetcher = mockPublic(value);
     const module = (await import(pathToFileURL(bundle).href)) as {
-      runAgentPackageReceiver(args: string[]): Promise<Record<string, unknown>>;
+      runAgentPackageReceiver(
+        args: string[],
+        executablePath: string,
+      ): Promise<Record<string, unknown>>;
     };
-    expect(await module.runAgentPackageReceiver(value.args)).toMatchObject({
+    expect(await module.runAgentPackageReceiver(value.args, binary)).toMatchObject({
       status: 'installed',
       runtime: { status: 'not_run' },
     });
     fetcher.mockClear();
-    expect(await module.runAgentPackageReceiver(['verify', ...value.args.slice(1)])).toMatchObject({
+    expect(
+      await module.runAgentPackageReceiver(['verify', ...value.args.slice(1)], binary),
+    ).toMatchObject({
       status: 'verified',
       packageDigest: value.compiled.packageDigest,
       runtime: { status: 'not_run' },
@@ -666,9 +689,10 @@ describe('standalone built artifact', () => {
   });
   it('returns one safe error JSON without leaking arguments or starting network work', () => {
     const value = setup();
-    const result = spawnSync(process.execPath, [bundle, '--force', 'private-input-must-not-leak'], {
+    const result = spawnSync(binary, ['--force', 'private-input-must-not-leak'], {
       cwd: value.root,
       encoding: 'utf8',
+      env: cleanEnvironment(),
     });
     expect(result.status).toBe(1);
     expect(result.stderr).toBe('');
@@ -685,13 +709,63 @@ describe('standalone built artifact', () => {
     const alias = join(root, 'alias');
     mkdirSync(physical);
     symlinkSync(physical, alias);
-    writeFileSync(join(physical, 'receiver.mjs'), readFileSync(bundle));
-    const result = spawnSync(process.execPath, [join(alias, 'receiver.mjs'), '--invalid'], {
+    writeFileSync(join(physical, 'receiver'), readFileSync(binary), { mode: 0o500 });
+    const result = spawnSync(join(alias, 'receiver'), ['--invalid'], {
       encoding: 'utf8',
     });
     expect(result.status).toBe(1);
     expect(result.stderr).toBe('');
     expect(JSON.parse(result.stdout)).toMatchObject({ code: 'INPUT_INVALID' });
+  });
+  it('runs a relocated binary without a runtime and ignores project configuration', () => {
+    const root = project();
+    const moved = join(root, 'receiver with spaces');
+    const sentinel = join(root, 'CONFIG_EXECUTED');
+    writeFileSync(moved, readFileSync(binary), { mode: 0o500 });
+    writeFileSync(join(root, '.env'), 'BUN_BE_BUN=1\nBUN_OPTIONS=--preload=./preload.ts\n');
+    writeFileSync(join(root, 'bunfig.toml'), 'preload = ["./preload.ts"]\n');
+    writeFileSync(
+      join(root, 'preload.ts'),
+      `import {writeFileSync} from 'node:fs'; writeFileSync(${JSON.stringify(sentinel)}, 'ran');`,
+    );
+    writeFileSync(join(root, 'tsconfig.json'), 'not valid json');
+    writeFileSync(join(root, 'package.json'), 'not valid json');
+    const result = spawnSync(moved, ['--invalid'], {
+      cwd: root,
+      encoding: 'utf8',
+      env: cleanEnvironment(),
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toMatchObject({ code: 'INPUT_INVALID' });
+    expect(existsSync(sentinel)).toBe(false);
+  });
+  it('clears inherited Bun launch overrides before running the verified binary', () => {
+    const root = project();
+    const sentinel = join(root, 'PRELOAD_EXECUTED');
+    const preload = join(root, 'preload.ts');
+    writeFileSync(
+      preload,
+      `import {writeFileSync} from 'node:fs'; writeFileSync(${JSON.stringify(sentinel)}, 'ran');`,
+    );
+    const result = spawnSync(
+      '/usr/bin/env',
+      ['-u', 'BUN_BE_BUN', '-u', 'BUN_OPTIONS', '-u', 'NODE_OPTIONS', binary, '--invalid'],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: {
+          ...cleanEnvironment(),
+          BUN_BE_BUN: '1',
+          BUN_OPTIONS: `--preload=${preload}`,
+          NODE_OPTIONS: `--import=${preload}`,
+        },
+      },
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toMatchObject({ code: 'INPUT_INVALID' });
+    expect(existsSync(sentinel)).toBe(false);
   });
   it('models the Host pre-execution pin: a tampered helper sentinel is never executed', () => {
     const value = setup();
@@ -703,7 +777,7 @@ describe('standalone built artifact', () => {
     expect(skill).toContain(
       'Do not take the expected digest from the helper or a mutable installation receipt',
     );
-    const helper = join(value.root, value.paths.skillRelativePath, 'scripts/receiver.mjs');
+    const helper = join(value.root, value.paths.skillRelativePath, 'bin/receiver');
     const sentinel = join(value.root, 'UNAUTHORIZED_EXECUTION');
     chmodSync(helper, 0o600);
     writeFileSync(
@@ -717,7 +791,7 @@ describe('standalone built artifact', () => {
     expect(existsSync(sentinel)).toBe(false);
   });
   it('stops on a real process crash after activation and preserves the interrupted lock', () => {
-    const value = setup();
+    const value = setup('codex', true);
     const program = `
       import fs from 'node:fs';
       import { syncBuiltinESMExports } from 'node:module';
@@ -731,7 +805,7 @@ describe('standalone built artifact', () => {
         Object.defineProperty(response,'url',{value:url}); return response;
       };
       const receiver = await import(${JSON.stringify(pathToFileURL(bundle).href)});
-      await receiver.runAgentPackageReceiver(fixture.args);
+      await receiver.runAgentPackageReceiver(fixture.args, ${JSON.stringify(binary)});
     `;
     const result = spawnSync(process.execPath, ['--input-type=module', '-e', program], {
       encoding: 'utf8',

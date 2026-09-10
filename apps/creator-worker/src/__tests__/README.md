@@ -1,6 +1,6 @@
 # 测试职责
 
-- `agent-package-receiver.test.ts` 使用公开合成 Package 和独立临时项目验证严格参数、平台、匿名下载、文本清单、
+- `agent-package-receiver.test.ts` 使用公开合成 Package 和独立临时项目验证严格参数、平台与架构、匿名下载、文本清单、
   字节完整性、符号链接与硬链接拒绝、排他锁、目录身份、失败后入口状态、精确幂等、离线验证和真实单文件入口。
   这些测试不联网真实 Test 服务、不安装使用者项目，也不启动 Codex 推理，不能替代跨用户同任务两轮验收。
 - `agent-package-receiver-fixture.ts` 只用现有轻量编译器生成非敏感合成 Package 与公开响应，不保存真实发布者数据。
@@ -129,3 +129,5 @@ server。Project 全量索引只证明扫描器读取并哈希了可支持的物
 断言也只是已知 literal 的 best-effort 防泄漏门槛。真实 Codex Host gate 与本地 Alpha gate 都只证明本机
 受控环境。本地 Alpha 的 loopback Broker 不是 Cloud Broker；这些测试不会证明公网身份、Cloud durability、
 进程崩溃后恢复回答、OS 级 Project-only 隔离或生产部署。
+
+接收器二进制回归在空 PATH 下直接执行真实 helper，覆盖离线验证、路径迁移、项目配置不加载、启动环境清理和可执行权限。Node 测试驱动及模拟下载不等同于完整用户真实链路。
