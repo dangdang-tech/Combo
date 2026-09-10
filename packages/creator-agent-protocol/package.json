@@ -59,6 +59,10 @@
     "./desktop-current-conversation-receipt": {
       "types": "./dist/desktop-current-conversation-receipt.d.ts",
       "default": "./dist/desktop-current-conversation-receipt.js"
+    },
+    "./agent-package-receiver": {
+      "types": "./dist/agent-package-receiver.d.ts",
+      "default": "./dist/agent-package-receiver.js"
     }
   },
   "files": [

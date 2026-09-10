@@ -1,24 +1,20 @@
 import { closeSync, constants, fstatSync, lstatSync, openSync, readSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 
 import { installationPaths } from './adapter.js';
 import {
   MAX_ARTIFACT_BYTES,
-  MINIMUM_NODE_VERSION,
   PROFILE_VERSION,
   RECEIVER_VERSION,
   ReceiverError,
   assertSupportedRuntime,
   digest,
   parseArguments,
-  supportsNodeVersion,
 } from './contract.js';
 import { downloadPackage } from './download.js';
 import { ProjectFiles } from './filesystem.js';
 import { installPackage, verifyInstalled } from './install.js';
 
-function readReceiverArtifact(url: string): Buffer {
-  const path = fileURLToPath(url);
+function readReceiverArtifact(path: string): Buffer {
   const before = lstatSync(path);
   if (
     !before.isFile() ||
@@ -56,11 +52,11 @@ function readReceiverArtifact(url: string): Buffer {
 }
 
 /** Intended for the trusted Host; import alone does not read files, start a process or use the network. */
-export async function runAgentPackageReceiver(args: readonly string[]) {
+export async function runAgentPackageReceiver(args: readonly string[], executablePath: string) {
   assertSupportedRuntime();
   const input = parseArguments(args);
   const fs = new ProjectFiles(input.projectRoot);
-  const receiverBytes = readReceiverArtifact(import.meta.url);
+  const receiverBytes = readReceiverArtifact(executablePath);
   const paths = installationPaths(input);
   let status: 'installed' | 'already_installed' | 'verified';
   let name: string;
@@ -81,7 +77,8 @@ export async function runAgentPackageReceiver(args: readonly string[]) {
     releaseId: input.releaseId,
     packageDigest: input.packageDigest,
     supportedPlatforms: ['darwin', 'linux'],
-    minimumNodeVersion: MINIMUM_NODE_VERSION,
+    target: `${process.platform}-${process.arch}`,
+    requiresRuntimeInstallation: false,
     name,
     skillName: `combo-${input.releaseId.slice(-32)}`,
     receiverDigest: digest(receiverBytes),
@@ -96,10 +93,10 @@ export async function runAgentPackageReceiver(args: readonly string[]) {
   };
 }
 
-async function main(): Promise<void> {
+export async function main(executablePath: string): Promise<void> {
   try {
     process.stdout.write(
-      `${JSON.stringify(await runAgentPackageReceiver(process.argv.slice(2)))}\n`,
+      `${JSON.stringify(await runAgentPackageReceiver(process.argv.slice(2), executablePath))}\n`,
     );
   } catch (error) {
     const failure =
@@ -116,10 +113,3 @@ async function main(): Promise<void> {
     process.exitCode = 1;
   }
 }
-// Native entry identity handles ancestor aliases without filesystem I/O during supported imports.
-// Older Node lacks this property: emit the unsupported-runtime error instead of a silent exit 0.
-if (
-  import.meta.main ||
-  (import.meta.main === undefined && !supportsNodeVersion(process.versions.node))
-)
-  await main();

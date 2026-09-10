@@ -7,12 +7,14 @@ import {
 } from '@cb/creator-agent-protocol/agent-package';
 import { z } from 'zod';
 
-export const RECEIVER_VERSION = 'combo.agent-package-receiver/1' as const;
+import { ReceiverTargetSchema } from '@cb/creator-agent-protocol/agent-package-receiver';
+export {
+  RECEIVER_VERSION,
+  MAX_RECEIVER_ARTIFACT_BYTES as MAX_ARTIFACT_BYTES,
+} from '@cb/creator-agent-protocol/agent-package-receiver';
 export const PROFILE_VERSION = 'combo.agent-package-receiver-text/1' as const;
 export const PUBLIC_ORIGIN = 'https://test.43-160-242-46.sslip.io';
-export const MAX_ARTIFACT_BYTES = 1_048_576;
 export const MAX_PACKAGE_BYTES = 524_288;
-export const MINIMUM_NODE_VERSION = '24.2.0';
 export const PROFILE_PATHS = [
   'AGENT.md',
   'skills/extracted-method/SKILL.md',
@@ -52,7 +54,7 @@ export class ReceiverError extends Error {
     super(
       {
         UNSUPPORTED_RUNTIME:
-          'Node 24.2 or newer on macOS or Linux is required; no runtime will be installed.',
+          'Use the standalone Combo receiver for macOS or Linux on x64 or arm64; Node and Bun installation is not required.',
         INPUT_INVALID: 'Receiver arguments or trusted artifact are invalid.',
         PROJECT_UNAVAILABLE: 'A canonical current project directory is required.',
         PACKAGE_INVALID: 'The exact published Package did not pass the supported text profile.',
@@ -66,16 +68,11 @@ export class ReceiverError extends Error {
     this.name = 'ReceiverError';
   }
 }
-export function supportsNodeVersion(nodeVersion: string): boolean {
-  if (!/^\d+\.\d+\.\d+(?:[-+].*)?$/u.test(nodeVersion)) return false;
-  const [major = 0, minor = 0] = nodeVersion.split('.').map(Number);
-  return major > 24 || (major === 24 && minor >= 2);
-}
 export function assertSupportedRuntime(
   platform: string = process.platform,
-  nodeVersion: string = process.versions.node,
+  architecture: string = process.arch,
 ): void {
-  if (!['darwin', 'linux'].includes(platform) || !supportsNodeVersion(nodeVersion))
+  if (!ReceiverTargetSchema.safeParse(`${platform}-${architecture}`).success)
     throw new ReceiverError('UNSUPPORTED_RUNTIME');
 }
 export function digest(bytes: Uint8Array | string): string {

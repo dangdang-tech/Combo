@@ -51,7 +51,7 @@
     "combo-creator-worker": "./dist/local-alpha-cli.js"
   },
   "scripts": {
-    "build": "pnpm run clean && tsc -b && esbuild dist/agent-package-creator-bridge.js --bundle --packages=bundle --platform=node --format=esm --target=node24 --charset=utf8 --legal-comments=none --outfile=dist/agent-package-creator-bridge.mjs && esbuild dist/agent-package-context-compiler-cli.js --bundle --packages=bundle --platform=node --format=esm --target=node24 --charset=utf8 --legal-comments=none --outfile=dist/agent-package-context-compiler.mjs && esbuild dist/agent-package-receiver/cli.js --bundle --packages=bundle --platform=node --format=esm --target=node24 --charset=utf8 --legal-comments=none --outfile=dist/agent-package-receiver.mjs",
+    "build": "pnpm run clean && tsc -b && esbuild dist/agent-package-creator-bridge.js --bundle --packages=bundle --platform=node --format=esm --target=node24 --charset=utf8 --legal-comments=none --outfile=dist/agent-package-creator-bridge.mjs && esbuild dist/agent-package-context-compiler-cli.js --bundle --packages=bundle --platform=node --format=esm --target=node24 --charset=utf8 --legal-comments=none --outfile=dist/agent-package-context-compiler.mjs && esbuild dist/agent-package-receiver/cli.js --bundle --packages=bundle --platform=node --format=esm --target=node24 --charset=utf8 --legal-comments=none --outfile=dist/agent-package-receiver.mjs && node scripts/build-receiver.mjs",
     "typecheck": "tsc -b --noEmit false",
     "typecheck:test": "tsc -p tsconfig.vitest.json",
     "pretest": "pnpm -F @cb/creator-agent-protocol build && pnpm -F @cb/creator-agent-persistence build && pnpm -F @cb/creator-agent-broker-journal build && pnpm -F @cb/creator-worker-broker-client build && pnpm run build",
@@ -82,6 +82,7 @@
   "devDependencies": {
     "@types/node": "^24.13.3",
     "@types/ws": "8.18.1",
+    "bun": "1.4.2",
     "esbuild": "0.25.12",
     "typescript": "^5.7.3",
     "vitest": "^2.1.8"

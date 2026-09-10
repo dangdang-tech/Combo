@@ -25,6 +25,7 @@
   要求、`current_conversation` 脱敏来源投影和独立 fingerprint domain。V2 不定义 Host snapshot wire，也不
   接受 task/thread/session/item ID、Project 路径、citation、消息数组或 raw transcript。两版都不把 Draft
   冒充可运行 Package；原 Project builder 仍只认 V1，独立 V2 compiler 显式验证后才能生成 Candidate。
+- `agent-package-receiver.ts` 定义接收工具 V2 的四平台资产清单、固定构建器版本、文件名与摘要绑定和大小上限。它只描述包外安装工具，不复制 Agent 定义，也不读取文件或执行安装器。
 - `agent-package-release.ts`：显式 `./agent-package-release` 子路径的不可变 Release 引用，只把稳定 Release
   ID 绑定到 exact Package digest，不保存分享链接、发布者资料、Package 内容或运行状态。
 - `agent-package-capability.ts`：显式 `./agent-package-capability` 子路径的严格 V2 迁移投影，只把旧

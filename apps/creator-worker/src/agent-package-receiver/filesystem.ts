@@ -108,7 +108,7 @@ export class ProjectFiles {
     this.assertBound();
     return create ? created : true;
   }
-  read(relative: string, maxBytes: number): Buffer {
+  read(relative: string, maxBytes: number, mode: 0o400 | 0o500 = 0o400): Buffer {
     if (!this.directory(relative.split('/').slice(0, -1).join('/'), false))
       throw new ReceiverError('INSTALL_CONFLICT');
     this.assertBound();
@@ -119,7 +119,7 @@ export class ProjectFiles {
       before.isSymbolicLink() ||
       before.nlink !== 1 ||
       before.size > maxBytes ||
-      (before.mode & 0o777) !== 0o400
+      (before.mode & 0o777) !== mode
     )
       throw new ReceiverError('INSTALL_CONFLICT');
     const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
@@ -130,7 +130,7 @@ export class ProjectFiles {
         !opened.isFile() ||
         opened.size !== before.size ||
         opened.nlink !== 1 ||
-        (opened.mode & 0o777) !== 0o400
+        (opened.mode & 0o777) !== mode
       )
         throw new ReceiverError('INSTALL_CONFLICT');
       this.assertBound();
@@ -148,7 +148,7 @@ export class ProjectFiles {
         after.mtimeMs !== opened.mtimeMs ||
         after.ctimeMs !== opened.ctimeMs ||
         after.nlink !== 1 ||
-        (after.mode & 0o777) !== 0o400
+        (after.mode & 0o777) !== mode
       )
         throw new ReceiverError('INSTALL_CONFLICT');
       this.assertBound();
@@ -157,14 +157,14 @@ export class ProjectFiles {
       closeSync(fd);
     }
   }
-  write(relative: string, bytes: Uint8Array): void {
+  write(relative: string, bytes: Uint8Array, mode: 0o400 | 0o500 = 0o400): void {
     this.directory(relative.split('/').slice(0, -1).join('/'), true);
     this.assertBound();
     const path = this.path(relative);
     const fd = openSync(
       path,
       constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
-      0o400,
+      mode,
     );
     try {
       const opened = fstatSync(fd);
@@ -181,7 +181,7 @@ export class ProjectFiles {
     } finally {
       closeSync(fd);
     }
-    if (!this.read(relative, bytes.length).equals(bytes))
+    if (!this.read(relative, bytes.length, mode).equals(bytes))
       throw new ReceiverError('INSTALL_INCOMPLETE');
   }
   inventory(relative: string): string[] {
