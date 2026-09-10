@@ -17,13 +17,13 @@
 - `publication-objects.ts` 限制 manifest、文件数量、路径和总字节，对每份文件校验 exact digest；资源先于清单写入且全部回读。
   公共 GET 仅返回未撤销的 `public_link` Release 与完整核验后的 Package，下载是裸 Package JSON；不含私有 Draft、
   creator request、账户邮箱、上传 secret 或原对话。公开请求不解析会话，不安装、不试跑，来源固定 `not_verified`。
-- `receiver-handoff.ts` 从已核验且未撤销的公开 Release 生成 Codex 或 Claude Code 共用的接收说明与可复制指令。它只读取 Worker 显式
-  `agent-package-receiver` 出口对应的已构建资产，计算摘要并按内容哈希地址提供 JavaScript 下载，绝不在 API 中
+- `receiver-handoff.ts` 从已核验且未撤销的公开 Release 生成 Codex 或 Claude Code 共用的接收说明与可复制指令。它只由 Worker 显式
+  `agent-package-receiver` 出口定位构建目录，读取严格四平台清单，并在二进制下载前用有界流重新核对摘要，绝不在 API 中
   导入或执行安装器。资产缺失、摘要地址过时或 Release 不可用时失败关闭。接收说明不保存 Project 路径、用户
   凭据或运行结果；项目选择、下载后独立验码、安装和当前对话应用都由使用者自己的客户端执行。
 
-匿名 `GET /agent-package-publications/:releaseId/codex-installation` 返回固定版本安装器的地址、摘要、调用参数和
-安全步骤；`GET /agent-package-receivers/v1/:artifactFile` 只返回与当前资产摘要完全匹配的 `.mjs` 字节。两者不
+匿名 `GET /agent-package-publications/:releaseId/codex-installation` 返回固定版本四平台二进制的地址、摘要、大小、调用参数和
+安全步骤；`GET /agent-package-receivers/v2/:artifactFile` 只返回与当前清单匹配且重新核验摘要的原始二进制流。两者不
 解析 Cookie、不写数据库、不安装任何内容，仍受 Test-only、无查询参数、速率和 `no-store` 边界约束。接收器只
 支持轻量文本方法；文本存储不代表所需工具已满足。安装、离线完整性、同任务应用及真实推理必须分别验收。
 路径中的 `codex-installation` 和原 handoff 协议名为兼容保留，不要求另开 Codex 任务。Claude Code 必须明确读取
@@ -51,3 +51,5 @@
 路由由 `bootstrap/routes.ts` 在受控 gate 生效时挂到 `/api/v1`。模块使用 `@cb/creator-agent-protocol` 校验唯一 Agent Package 与 Release 合同，使用 `platform/infra/object-store.ts` 的有界不可覆盖字节原语，并通过 `combo_api` 数据库角色访问 canonical Registry。
 
 历史受控入口数据库结构来自迁移 `0017_agent_package_registry.sql`，该迁移是部署前置依赖，不由本模块复制或回退创建。该入口不读取旧 `agent_releases`，不维护 latest 指针，不接受客户端 owner、对象键、Package digest、Release ID、价格或知识选择器，也不修改 Runtime 或支付。
+
+接收说明采用 V2 协议，用户无需 Node 或 Bun；首次下载、独立验码及直接执行均由 Host 完成。API 读取小型清单而不在每次交接时加载四份运行时；下载单个产物时保持固定文件描述符、长度上限与摘要校验。旧摘要 URL 不会改指向新内容，原 Agent Package 保持不变。

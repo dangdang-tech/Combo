@@ -1,3 +1,12 @@
+import { once } from 'node:events';
+import { fstatSync, mkdtempSync, rmSync, writeFileSync, type ReadStream } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Readable } from 'node:stream';
+import {
+  RECEIVER_TARGETS,
+  ReceiverManifestSchema,
+} from '@cb/creator-agent-protocol/agent-package-receiver';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import Fastify, { type FastifyInstance } from 'fastify';
 import cookie from '@fastify/cookie';
@@ -78,6 +87,21 @@ afterEach(async () => {
   await Promise.all(apps.splice(0).map((instance) => instance.close()));
   vi.restoreAllMocks();
 });
+function receiverManifest(bytes: Buffer) {
+  const digest = `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+  return ReceiverManifestSchema.parse({
+    protocol: 'combo.agent-package-receiver-artifacts/2',
+    receiverVersion: 'combo.agent-package-receiver/2',
+    bunVersion: '1.4.2',
+    artifacts: RECEIVER_TARGETS.map((target) => ({
+      target,
+      filename: `${target}-${digest.slice(7)}.bin`,
+      digest,
+      byteLength: bytes.length,
+    })),
+  });
+}
+
 describe('Agent transfer HTTP and immutable Package boundaries (no real DB or storage)', () => {
   it('keeps metadata strict and receipts free of owner, credentials and invented revisions', () => {
     const f = transferFixture();
@@ -127,7 +151,7 @@ describe('Agent transfer HTTP and immutable Package boundaries (no real DB or st
       expect(queries).toEqual([]);
       for (const path of [
         `/agent-package-publications/${publicationFixture().release.releaseId}/codex-installation`,
-        `/agent-package-receivers/v1/${'a'.repeat(64)}.mjs`,
+        `/agent-package-receivers/v2/linux-x64-${'a'.repeat(64)}.bin`,
       ]) {
         expect((await instance.inject({ url: `/api/v1${path}` })).statusCode).toBe(404);
       }
@@ -373,9 +397,10 @@ describe('Agent transfer HTTP and immutable Package boundaries (no real DB or st
     const { instance, queries } = await app();
     const publication = publicationFixture();
     const bytes = Buffer.from('throw new Error("MUST_NOT_EXECUTE_IN_API");\n');
-    const hex = createHash('sha256').update(bytes).digest('hex');
-    const artifact = { bytes, digest: `sha256:${hex}`, filename: `${hex}.mjs` };
+    const manifest = receiverManifest(bytes);
+    const artifact = { ...manifest.artifacts[0]!, stream: Readable.from(bytes) };
     const read = vi.spyOn(AgentPublicationService.prototype, 'read').mockResolvedValue(publication);
+    vi.spyOn(receiver, 'getAgentReceiverManifest').mockResolvedValue(manifest);
     vi.spyOn(receiver, 'getAgentReceiverArtifact').mockResolvedValue(artifact);
     const upload = vi.spyOn(AgentTransferService.prototype, 'upload');
     const publish = vi.spyOn(AgentPublicationService.prototype, 'publish');
@@ -386,13 +411,15 @@ describe('Agent transfer HTTP and immutable Package boundaries (no real DB or st
     expect(response.statusCode).toBe(200);
     const data = response.json().data;
     expect(data).toMatchObject({
-      protocol: 'combo.codex-agent-installation-handoff/1',
+      protocol: 'combo.codex-agent-installation-handoff/2',
       release: publication.release,
       shareUrl: publication.shareUrl,
       receiver: {
         profileVersion: 'combo.agent-package-receiver-text/1',
-        url: `http://localhost/api/v1/agent-package-receivers/v1/${hex}.mjs`,
-        digest: artifact.digest,
+        artifacts: manifest.artifacts.map((item) => ({
+          ...item,
+          url: `http://localhost/api/v1/agent-package-receivers/v2/${item.filename}`,
+        })),
         command: 'install',
         arguments: {
           '--share-url': publication.shareUrl,
@@ -406,7 +433,8 @@ describe('Agent transfer HTTP and immutable Package boundaries (no real DB or st
     expect(data).not.toHaveProperty('package');
     expect(data).not.toHaveProperty('publisher');
     expect(data.receiver.requires).toContain('Codex or Claude Code');
-    expect(data.receiver.requires).toContain('Node.js 24.2 or newer');
+    expect(data.receiver.requires).toContain('no Node.js or Bun installation');
+    expect(data.receiver.artifacts).toHaveLength(4);
     expect(data.receiver.arguments['--project-root']).toContain(
       'not an MCP server working directory',
     );
@@ -422,12 +450,15 @@ describe('Agent transfer HTTP and immutable Package boundaries (no real DB or st
     expect(read).toHaveBeenCalledOnce();
     expect(read).toHaveBeenCalledWith(publication.release.releaseId);
     const script = await instance.inject({
-      url: `/api/v1/agent-package-receivers/v1/${hex}.mjs`,
+      url: `/api/v1/agent-package-receivers/v2/${artifact.filename}`,
     });
     expect(script.statusCode).toBe(200);
     expect(script.rawPayload).toEqual(bytes);
-    expect(script.headers['content-type']).toContain('text/javascript');
-    expect(script.headers['content-disposition']).toContain(`combo-agent-receiver-${hex}.mjs`);
+    expect(script.headers['content-type']).toContain('application/octet-stream');
+    expect(script.headers['content-length']).toBe(String(bytes.length));
+    expect(script.headers['content-disposition']).toContain(
+      `combo-agent-receiver-${artifact.filename}`,
+    );
     expect(script.headers['x-content-type-options']).toBe('nosniff');
     expect(script.headers['cache-control']).toBe('no-store');
     expect(read).toHaveBeenCalledTimes(1);
@@ -435,35 +466,84 @@ describe('Agent transfer HTTP and immutable Package boundaries (no real DB or st
     expect(upload).not.toHaveBeenCalled();
     expect(publish).not.toHaveBeenCalled();
   });
-  it('distributes the real built receiver bytes through their exact hash address', async () => {
+  it('distributes all four real binaries through exact hash addresses without executing them', async () => {
     const { instance, queries } = await app();
     const publication = publicationFixture();
     vi.spyOn(AgentPublicationService.prototype, 'read').mockResolvedValue(publication);
-    // No receiver mock: fail if the application export or bundled build asset is missing.
-    const artifact = await receiver.getAgentReceiverArtifact();
-    expect(artifact.bytes.byteLength).toBeGreaterThan(0);
-    expect(artifact.bytes.byteLength).toBeLessThanOrEqual(1024 * 1024);
-    const hex = createHash('sha256').update(artifact.bytes).digest('hex');
-    expect(artifact.digest).toBe(`sha256:${hex}`);
-    expect(artifact.filename).toBe(`${hex}.mjs`);
+    const manifest = await receiver.getAgentReceiverManifest();
     const handoff = await instance.inject({
       url: `/api/v1/agent-package-publications/${publication.release.releaseId}/codex-installation`,
     });
     expect(handoff.statusCode).toBe(200);
-    expect(handoff.json().data.receiver.digest).toBe(artifact.digest);
-    const download = await instance.inject({
-      url: new URL(handoff.json().data.receiver.url).pathname,
-    });
-    expect(download.statusCode).toBe(200);
-    expect(download.rawPayload).toEqual(artifact.bytes);
+    const artifacts = handoff.json().data.receiver.artifacts;
+    expect(artifacts.map((item: { target: string }) => item.target)).toEqual([...RECEIVER_TARGETS]);
+    for (const [index, artifact] of artifacts.entries()) {
+      const download = await instance.inject({ url: new URL(artifact.url).pathname });
+      expect(download.statusCode).toBe(200);
+      expect(download.headers['content-type']).toContain('application/octet-stream');
+      expect(download.rawPayload.length).toBe(manifest.artifacts[index]!.byteLength);
+      expect(`sha256:${createHash('sha256').update(download.rawPayload).digest('hex')}`).toBe(
+        manifest.artifacts[index]!.digest,
+      );
+    }
     expect(queries).toEqual([]);
+  }, 30_000);
+  it('rejects a same-size corrupted binary before serving bytes', async () => {
+    const folder = mkdtempSync(join(tmpdir(), 'combo-binary-download-'));
+    try {
+      const bytes = Buffer.from('trusted binary fixture');
+      const manifest = receiverManifest(bytes);
+      writeFileSync(join(folder, 'manifest.json'), JSON.stringify(manifest));
+      for (const item of manifest.artifacts) writeFileSync(join(folder, item.filename), bytes);
+      const selected = manifest.artifacts[0]!;
+      writeFileSync(join(folder, selected.filename), Buffer.alloc(bytes.length, 0));
+      await expect(receiver.getAgentReceiverArtifact(selected.filename, folder)).rejects.toThrow(
+        'Receiver changed during read',
+      );
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
   });
+  it('closes the verified file descriptor when its response stream is interrupted', async () => {
+    const folder = mkdtempSync(join(tmpdir(), 'combo-binary-interrupt-'));
+    try {
+      const bytes = Buffer.alloc(262_144, 42);
+      const manifest = receiverManifest(bytes);
+      writeFileSync(join(folder, 'manifest.json'), JSON.stringify(manifest));
+      for (const item of manifest.artifacts) writeFileSync(join(folder, item.filename), bytes);
+      const result = await receiver.getAgentReceiverArtifact(
+        manifest.artifacts[0]!.filename,
+        folder,
+      );
+      const stream = result!.stream as ReadStream & { fd: number };
+      const fd = stream.fd;
+      expect(typeof fd).toBe('number');
+      const closed = once(stream, 'close');
+      stream.destroy();
+      await closed;
+      expect(() => fstatSync(fd)).toThrow();
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
+  });
+  it.each(['missing', 'duplicate', 'path', 'digest', 'size'])(
+    'rejects a malformed %s binary manifest',
+    (mutation) => {
+      const manifest = receiverManifest(Buffer.from('fixture'));
+      if (mutation === 'missing') manifest.artifacts.pop();
+      if (mutation === 'duplicate') manifest.artifacts[1] = manifest.artifacts[0]!;
+      if (mutation === 'path') manifest.artifacts[0]!.filename = '../outside.bin';
+      if (mutation === 'digest') manifest.artifacts[0]!.digest = `sha256:${'0'.repeat(64)}`;
+      if (mutation === 'size') manifest.artifacts[0]!.byteLength = 134_217_729;
+      expect(ReceiverManifestSchema.safeParse(manifest).success).toBe(false);
+    },
+  );
   it('rejects unavailable, revoked, rebound and query-bearing handoffs without exposing raw errors', async () => {
     const { instance, queries } = await app();
     const publication = publicationFixture();
     const path = `/api/v1/agent-package-publications/${publication.release.releaseId}/codex-installation`;
     const read = vi.spyOn(AgentPublicationService.prototype, 'read');
-    const artifact = vi.spyOn(receiver, 'getAgentReceiverArtifact');
+    const artifact = vi.spyOn(receiver, 'getAgentReceiverManifest');
     for (const [error, status] of [
       [new TransferFailure('not_found'), 404],
       [new Error('PRIVATE_STORAGE_PATH'), 503],
@@ -495,8 +575,8 @@ describe('Agent transfer HTTP and immutable Package boundaries (no real DB or st
     for (const url of [
       `${path}?access_token=PRIVATE_CANARY`,
       '/api/v1/agent-package-publications/invalid/codex-installation',
-      `/api/v1/agent-package-receivers/v1/${'a'.repeat(64)}.mjs?latest=1`,
-      '/api/v1/agent-package-receivers/v1/latest.mjs',
+      `/api/v1/agent-package-receivers/v2/linux-x64-${'a'.repeat(64)}.bin?latest=1`,
+      '/api/v1/agent-package-receivers/v2/latest.bin',
     ]) {
       expect((await instance.inject({ url })).statusCode).toBe(404);
     }
@@ -507,14 +587,13 @@ describe('Agent transfer HTTP and immutable Package boundaries (no real DB or st
   it('never serves different bytes at an earlier receiver digest URL', async () => {
     const { instance, queries } = await app();
     const bytes = Buffer.from('export {};\n');
-    const hex = createHash('sha256').update(bytes).digest('hex');
+    const artifact = receiverManifest(bytes).artifacts[0]!;
     vi.spyOn(receiver, 'getAgentReceiverArtifact').mockResolvedValue({
-      bytes,
-      digest: `sha256:${hex}`,
-      filename: `${hex}.mjs`,
+      ...artifact,
+      stream: Readable.from(bytes),
     });
     const response = await instance.inject({
-      url: `/api/v1/agent-package-receivers/v1/${'a'.repeat(64)}.mjs`,
+      url: `/api/v1/agent-package-receivers/v2/darwin-arm64-${'a'.repeat(64)}.bin`,
     });
     expect(response.statusCode).toBe(404);
     expect(response.body).not.toContain('export');

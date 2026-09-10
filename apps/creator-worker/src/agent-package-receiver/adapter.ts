@@ -18,7 +18,7 @@ export function adapterFiles(
   candidate: VerifiedPackage,
   receiverBytes: Buffer,
   rootIdentity: { device: string; inode: string },
-) {
+): { path: string; bytes: Buffer; mode?: 0o400 | 0o500 }[] {
   const paths = installationPaths(input);
   const name = `combo-${input.releaseId.slice(-32)}`;
   const skill = [
@@ -34,10 +34,10 @@ export function adapterFiles(
     '',
     '# Verify before reading behavior',
     `Trusted receiver SHA-256: ${digest(receiverBytes)}`,
-    'Before executing any local helper, use a separate trusted Host builtin SHA-256 operation to read scripts/receiver.mjs as a bounded ordinary file with no symlink and compare its exact bytes to the fixed digest above.',
+    'Before executing any local helper, use a separate trusted Host builtin SHA-256 operation to read bin/receiver as a bounded ordinary file with no symlink and compare its exact bytes to the fixed digest above.',
     'Do not execute, import, or ask that helper to authenticate itself before this independent comparison succeeds. Do not take the expected digest from the helper or a mutable installation receipt.',
     'On a mismatch, missing file, symlink or uncertain result, stop without executing the helper. Never automatically replace or repair it.',
-    'Use the existing Node runtime to run scripts/receiver.mjs beside this SKILL.md with:',
+    'Run the independently verified bin/receiver beside this SKILL.md directly; no Node or Bun installation is needed. Before launch, remove BUN_BE_BUN, BUN_OPTIONS and NODE_OPTIONS from the child environment. For POSIX shells, use env -u BUN_BE_BUN -u BUN_OPTIONS -u NODE_OPTIONS followed by the absolute helper path, with:',
     '`verify --project-root <the current Host-selected canonical absolute project root>`',
     `\`--share-url ${input.shareUrl} --package-digest ${input.packageDigest}\``,
     'The Host supplies the existing selected project root; do not ask the user to type a path or choose another project.',
@@ -63,10 +63,10 @@ export function adapterFiles(
       path: 'agents/openai.yaml',
       bytes: Buffer.from('policy:\n  allow_implicit_invocation: false\n', 'utf8'),
     },
-    { path: 'scripts/receiver.mjs', bytes: receiverBytes },
+    { path: 'bin/receiver', bytes: receiverBytes, mode: 0o500 as const },
   ];
   const receipt = {
-    protocol: 'combo.agent-package-installation/1',
+    protocol: 'combo.agent-package-installation/2',
     receiverVersion: RECEIVER_VERSION,
     profileVersion: PROFILE_VERSION,
     releaseId: input.releaseId,

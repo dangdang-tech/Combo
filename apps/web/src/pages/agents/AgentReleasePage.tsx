@@ -144,9 +144,9 @@ function ReleaseContent({ releaseId }: { releaseId: string }): ReactElement {
           />
         </div>
         <p className="cb-agent-subtle">
-          首版支持 macOS / Linux，需要已有 Node.js 24.2
-          或更新版本。当前支持轻量文本方法，不自动安装外部工具；只新增项目内文件，
-          遇到冲突会停止。项目 Skill 可供后续明确调用，不会修改 AGENTS.md 或全局配置。
+          支持 macOS 13+ / Linux（glibc 2.17+）的 x64 / arm64，无需安装 Node.js 或 Bun。
+          当前支持轻量文本方法，不自动安装外部工具；只新增项目内文件， 遇到冲突会停止。项目 Skill
+          可供后续明确调用，不会修改 AGENTS.md 或全局配置。
         </p>
         <p className="cb-agent-subtle">
           复制指令不会自动打开或操作 Codex。打开网页、安装完成与真实运行是三件不同的事。

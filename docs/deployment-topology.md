@@ -39,6 +39,12 @@
 
 `ci.yml` 的并发组名是 `main-cd-*`（main push 时 `main-cd-main`，分支构建时 `main-cd-<revision>`），与 `combo-deploy-<env>` 部署锁互不相交。自动部署只作用于 Preview（main 的 `Release build` 成功后触发）；Test 没有自动触发路径，只接受手工 `workflow_dispatch`。
 
+### Agent 接收器构建产物
+
+API 镜像的构建阶段通过 Creator Worker 的固定 Bun 1.4.2 开发依赖生成 macOS/Linux、x64/arm64 四份接收器及摘要清单。现有质量门禁同时运行接收器原生平台二进制回归；交叉编译不能替代其他平台的原生运行验收。运行层只将这些文件作为受控 Test 下载资产，不启动 Bun，不为使用者安装开发环境。
+
+接收器资产与 API 源码同一修订构建，每个文件按最终 SHA-256 命名并限制在 128 MiB 内。下载端点先核对摘要再发送文件流。macOS Developer ID 签名、公证及首次下载体验属于正式分发前的独立验收；签名后必须重新生成最终摘要清单，不能把未签名产物的摘要用于已签名文件。这些构建调整不改变任何环境晋级或部署授权。
+
 ## 4. 域名
 
 | 环境       | 域名                                                                                                                               |

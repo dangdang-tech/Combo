@@ -2,21 +2,23 @@
 
 ## 项目内公开 Agent 接收器
 
-`@cb/creator-worker/agent-package-receiver` 指向构建产物 `dist/agent-package-receiver.mjs`。
-它复用 Package 协议校验器并使用现有 esbuild 打成不超过 1 MiB 的单文件模块，运行时仅依赖 Node 内置模块。
-模块导入没有文件、网络或进程副作用；直接执行时支持 `install` 和完全离线的 `verify` 两个子命令。
+`@cb/creator-worker/agent-package-receiver` 保留可导入的核心模块，API 只用它定位构建目录，不执行安装器。
+固定版本 Bun 1.4.2 将独立入口编译为 macOS/Linux 的 x64/arm64 四份可执行文件；用户无需安装 Node 或 Bun。
+产物与严格清单位于 `dist/agent-package-receivers/`，每个文件最多 128 MiB，并绑定目标平台、字节长度和 SHA-256。
+核心模块导入没有文件、网络或进程副作用；二进制支持 `install` 和完全离线的 `verify` 两个子命令。
 本切片没有注册公开下载路由，没有发布插件，也不启动模型或另一个 Codex 任务。
 
 ```text
-node agent-package-receiver.mjs install --project-root <Host 已选的绝对根目录> --share-url <规范分享链接> --package-digest <精确摘要>
-node agent-package-receiver.mjs verify --project-root <同一个 Host 已选的绝对根目录> --share-url <同一个分享链接> --package-digest <同一个摘要>
+env -u BUN_BE_BUN -u BUN_OPTIONS -u NODE_OPTIONS /absolute/path/combo-receiver install --project-root <Host 已选的绝对根目录> --share-url <规范分享链接> --package-digest <精确摘要>
+env -u BUN_BE_BUN -u BUN_OPTIONS -u NODE_OPTIONS /absolute/path/combo-receiver verify --project-root <同一个 Host 已选的绝对根目录> --share-url <同一个分享链接> --package-digest <同一个摘要>
 ```
 
 以上是给 Codex 或 Claude Code 客户端执行的技术接口，不要求普通用户打开 Terminal、填写路径或摘要。Host 必须先从可信公开
 引导取得固定接收器代码和摘要，在执行前独立核对代码 SHA-256，并使用当前已经选定的项目根。
 没有明确项目时停止并请用户在当前客户端中选择项目，不扫描其他项目、不从接收器或 MCP 进程工作目录猜测。
-首版仅支持 macOS、Linux 和已有的 Node 24.2 或更新版本；其他平台在网络或项目操作前明确失败，不安装运行时。
-入口使用 Node 的 `import.meta.main`，避免临时目录祖先别名使命令静默跳过；支持版本内的模块导入不进行路径读取。
+当前支持 macOS 13+ 和 glibc 2.17+ 的 Linux，CPU 为 x64 或 arm64；其他平台在项目操作前明确失败。
+入口通过 `process.execPath` 读取实际二进制，支持祖先路径别名。构建关闭四类项目配置自动加载，
+Host 每次启动前清除 `BUN_BE_BUN`、`BUN_OPTIONS` 和 `NODE_OPTIONS`；首次下载与独立验码也不依赖语言运行时。
 
 `install` 仅从固定 Test origin 匿名读取 Release 投影和裸 Package，核对原始 Release、Package digest、
 规范清单和所有 UTF-8 文件字节。`combo.agent-package-receiver-text/1` 只接受轻量编译器的根 `AGENT.md`、
@@ -33,7 +35,7 @@ Codex 入口默认禁止隐式调用，但它仍可被项目内其他任务发�
 每次显式使用时，适配器先要求 Host 用独立原生摘要操作核对本地 helper 与入口中固定的接收器摘要，再允许
 执行离线验证。helper 不能先执行再为自己验真；同时替换入口和 helper 的同 UID 攻击不属于本机文件校验保证。
 
-所有目标都拒绝稳定符号链接、非普通文件、已有异物或版本冲突。新文件以排他创建且只读、不可执行的模式保存；
+所有目标都拒绝稳定符号链接、非普通文件、已有异物或版本冲突。原 Package 和文本适配器以排他创建且只读、不可执行的 0400 模式保存，只有可信 `bin/receiver` 使用 0500；
 完整读回后才通过不覆盖的硬链接发布 `SKILL.md`。这是入口最后激活，不是跨目录的全局事务。
 失败时不会递归删除目录；本次拥有的锁和已发布入口会做身份核对后的清理，无法确认清理时明确报告未完成。
 可能保留不完整目录，重复请求不能自行覆盖修复。已有完整字节、适配器和收据全部吻合才返回 `already_installed`。
@@ -45,6 +47,10 @@ Codex 入口默认禁止隐式调用，但它仍可被项目内其他任务发�
 第二份行为内容。安装与离线验证输出均固定 `runtime.status=not_run`。Host 仍需在同一对话读取已验证的
 `AGENT.md` 与 Skill 后实际应用；真实用户 B、C 各连续两轮和整体 `G-001@v1` · 可分享 Agent 验收尚不由本模块证明。
 该切片推进 Issue #321 的接收能力，但不表示该 Issue 已整体完成。
+
+接收器版本与安装收据升级为 V2。旧安装的 helper、固定摘要及原 Package 不会自动改写；已有冲突仍明确停止，
+新版本通过干净项目安装或另行授权的升级流程生效。构建产物不进入 Git。macOS 的交叉编译成功不等于
+原生运行或 Developer ID 签名、公证完成；面向正式用户的签名与下载体验须由后续发布验收分别证明。
 
 ## 可用上下文轻量编译
 
