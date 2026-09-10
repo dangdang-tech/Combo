@@ -36,7 +36,7 @@ describe('LandingPage current conversation entry', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(document.title).toBe('把对话，变成 Agent · Combo');
   });
-  it('copies the exact bounded installation request only on user click', async () => {
+  it('copies a pinned public install-and-extract request only on user click', async () => {
     const user = userEvent.setup();
     const write = vi.spyOn(navigator.clipboard, 'writeText');
     mount();
@@ -44,10 +44,29 @@ describe('LandingPage current conversation entry', () => {
     await user.click(screen.getByRole('button', { name: '复制指令' }));
     expect(write).toHaveBeenCalledOnce();
     expect(write).toHaveBeenCalledWith(CODING_AGENT_CREATION_TASK);
-    expect(CODING_AGENT_CREATION_TASK).toContain('解析并固定当前版本');
-    expect(CODING_AGENT_CREATION_TASK).toContain('不开始制作、上传或分享');
-    expect(CODING_AGENT_CREATION_TASK).toContain('不切换来源、不卸载已有插件');
-    expect(await screen.findByRole('status')).toHaveTextContent('先检查当前客户端的安装支持');
+    const publicCommit = 'fd6b715b216e55f46e613b0cb5845c136a0c5913';
+    expect(CODING_AGENT_CREATION_TASK).toContain(`固定提交：${publicCommit}`);
+    expect(CODING_AGENT_CREATION_TASK).toContain(
+      `https://github.com/dangdang-tech/combo-plugin-distribution/blob/${publicCommit}/docs/install.md`,
+    );
+    expect(CODING_AGENT_CREATION_TASK.match(/[a-f0-9]{40}/gu)).toEqual([
+      publicCommit,
+      publicCommit,
+    ]);
+    expect(CODING_AGENT_CREATION_TASK).not.toMatch(/combo-plugin(?:\s|\/)|\/blob\/main\//u);
+    expect(CODING_AGENT_CREATION_TASK).not.toContain('PUBLIC_COMMIT_SHA');
+    expect(CODING_AGENT_CREATION_TASK).toContain('当前对话中已经形成的可复用方法提取成');
+    expect(CODING_AGENT_CREATION_TASK).toContain('不要要求我手工打开 Terminal');
+    expect(CODING_AGENT_CREATION_TASK).toContain('不得覆盖、禁用或卸载旧版本');
+    expect(CODING_AGENT_CREATION_TASK).toContain('不要读取 Project、其他任务、原始会话文件或凭据');
+    expect(CODING_AGENT_CREATION_TASK).toContain('不要上传或公开分享');
+    expect(CODING_AGENT_CREATION_TASK).toContain('不要另外启动模型或读取旧会话来恢复内容');
+    expect(CODING_AGENT_CREATION_TASK).toContain(
+      '真实编译出的完整 AGENT.md、完整 Skill 和 Package digest',
+    );
+    expect(CODING_AGENT_CREATION_TASK).toContain('仅编译完成时不要声称已经运行');
+    expect(CODING_AGENT_CREATION_TASK).toContain('不要查询其他任务来补齐');
+    expect(await screen.findByRole('status')).toHaveTextContent('安装 Combo 并提取 Agent');
     expect(fetchMock).not.toHaveBeenCalled();
     expect(sessionStorage.getItem(CREATION_INTAKE_STORAGE_KEY)).toBeNull();
   });
