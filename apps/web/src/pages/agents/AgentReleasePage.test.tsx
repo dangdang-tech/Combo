@@ -53,11 +53,12 @@ describe('Public Agent release', () => {
     expect(await screen.findByRole('heading', { name: 'shared-agent' })).toBeInTheDocument();
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ method: 'GET', credentials: 'omit' });
+    await userEvent.click(screen.getByText('接收要求与版本信息'));
+    expect(screen.getByText(/无需安装 Node.js 或 Bun/u)).toBeVisible();
     await userEvent.click(screen.getByRole('button', { name: '查看完整方法' }));
     expect(screen.getByText(/<script>steal\(\)<\/script>/u)).toBeInTheDocument();
     expect(document.querySelector('script')).toBeNull();
     expect(screen.getByText('尚未试运行')).toBeInTheDocument();
-    expect(screen.getByText(/无需安装 Node.js 或 Bun/u)).toBeInTheDocument();
     expect(screen.getByText(DIGEST)).toBeInTheDocument();
     expect(document.title).toBe('shared-agent · Agent · Combo');
   });

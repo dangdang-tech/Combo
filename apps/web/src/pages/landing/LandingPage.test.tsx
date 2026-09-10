@@ -44,7 +44,7 @@ describe('LandingPage current conversation entry', () => {
     await user.click(screen.getByRole('button', { name: '复制指令' }));
     expect(write).toHaveBeenCalledOnce();
     expect(write).toHaveBeenCalledWith(CODING_AGENT_CREATION_TASK);
-    const publicCommit = 'fd6b715b216e55f46e613b0cb5845c136a0c5913';
+    const publicCommit = 'dcff6e60b5ec712368116371a19fd81a8843ff6a';
     expect(CODING_AGENT_CREATION_TASK).toContain(`固定提交：${publicCommit}`);
     expect(CODING_AGENT_CREATION_TASK).toContain(
       `https://github.com/dangdang-tech/combo-plugin-distribution/blob/${publicCommit}/docs/install.md`,
@@ -57,7 +57,27 @@ describe('LandingPage current conversation entry', () => {
     expect(CODING_AGENT_CREATION_TASK).not.toContain('PUBLIC_COMMIT_SHA');
     expect(CODING_AGENT_CREATION_TASK).toContain('当前对话中已经形成的可复用方法提取成');
     expect(CODING_AGENT_CREATION_TASK).toContain('不要要求我手工打开 Terminal');
-    expect(CODING_AGENT_CREATION_TASK).toContain('不得覆盖、禁用或卸载旧版本');
+    expect(CODING_AGENT_CREATION_TASK).toContain('包括 disabled');
+    expect(CODING_AGENT_CREATION_TASK).toContain('plugin@marketplace');
+    expect(CODING_AGENT_CREATION_TASK).toContain('明确确认具体旧项');
+    expect(CODING_AGENT_CREATION_TASK).toContain('官方卸载入口逐项卸载');
+    expect(CODING_AGENT_CREATION_TASK).toContain('保护 Projects、对话、源码和其他插件');
+    expect(CODING_AGENT_CREATION_TASK).toContain('禁止手动清缓存、改配置、批量卸载或强制安装');
+    expect(CODING_AGENT_CREATION_TASK).toContain('卸载后重新核对客户端清单及当前任务 MCP/Skill');
+    expect(CODING_AGENT_CREATION_TASK).toContain('不得用本地 CLI 绕过冲突');
+    expect(CODING_AGENT_CREATION_TASK).toMatch(/已有针对这些具体旧项的明确授权.*不重复询问/u);
+    expect(CODING_AGENT_CREATION_TASK).toMatch(
+      /残留、来源未知或无法证明清除.*停止.*原任务重载交接/u,
+    );
+    const migrationGates = [
+      '匿名取得并校验固定目标包',
+      '明确确认具体旧项',
+      '官方卸载入口逐项卸载',
+      '卸载后重新核对客户端清单及当前任务 MCP/Skill',
+      '新 MCP 工具仅未热加载且无旧冲突',
+    ].map((gate) => CODING_AGENT_CREATION_TASK.indexOf(gate));
+    expect(migrationGates.every((position) => position >= 0)).toBe(true);
+    expect(migrationGates).toEqual([...migrationGates].sort((left, right) => left - right));
     expect(CODING_AGENT_CREATION_TASK).toContain('不要读取 Project、其他任务、原始会话文件或凭据');
     expect(CODING_AGENT_CREATION_TASK).toContain('不要上传或公开分享');
     expect(CODING_AGENT_CREATION_TASK).toContain('不要另外启动模型或读取旧会话来恢复内容');
