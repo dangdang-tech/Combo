@@ -8,6 +8,8 @@
 ## 文件与接口
 
 - `service.ts` 校验上传、核对既有编译结果、保存不可变对象和版本索引，并从实际文件投影 `combo.agent-card-view/1` 卡片。
+  轻量上传复验按已解析 Draft 的 Codex 或 Claude 来源还原客户端输入，保持 exact Draft 和 Package，
+  不接受调用方额外客户端覆盖，不把客户端声明提升为已验证来源。
 - `routes.ts` 提供同源登录 Cookie 保护的两个接口；账户归属只来自认证会话，不接受请求指定 owner、Bearer 或 query token。
 
 `POST /api/v1/agent-package-drafts` 按严格协议分派。原 V2 JSON 保持不变：

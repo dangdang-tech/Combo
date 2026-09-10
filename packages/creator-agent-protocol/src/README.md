@@ -1,6 +1,6 @@
 # 源码职责
 
-- `agent-context.ts` 定义独立轻量内容请求和 Draft，接受有界 JSON、固定未验证来源声明、计算确定性 fingerprint，
+- `agent-context.ts` 定义独立轻量内容请求和 Draft，接受有界 JSON，按可选 Codex 或 Claude 客户端生成固定未验证来源声明、计算确定性 fingerprint，
   并验证 Draft 的规范往返；不读取来源、不提供 Host 签名，也不进入旧 V1/V2 分派器。
 
 - `primitives.ts`：Host 合约内部使用的最小、名义隔离值域。

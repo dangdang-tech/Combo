@@ -405,6 +405,19 @@ describe('Agent transfer HTTP and immutable Package boundaries (no real DB or st
     expect(JSON.stringify(data)).not.toContain(browserCookie);
     expect(data).not.toHaveProperty('package');
     expect(data).not.toHaveProperty('publisher');
+    expect(data.receiver.requires).toContain('Codex or Claude Code');
+    expect(data.receiver.requires).toContain('Node.js 24.2 or newer');
+    expect(data.receiver.arguments['--project-root']).toContain(
+      'not an MCP server working directory',
+    );
+    const instructions = data.instructions.join('\n');
+    expect(instructions).toContain('current native client (Codex or Claude Code)');
+    expect(instructions).toContain('automatic .agents/skills discovery is not assumed');
+    expect(instructions).toContain('explicitly read the verified original AGENT.md');
+    expect(instructions).toContain('apply this method in the current conversation');
+    expect(instructions).toContain(
+      'Do not create another task or launch codex exec or a new Claude Code process',
+    );
     expect(response.headers['cache-control']).toBe('no-store');
     expect(read).toHaveBeenCalledOnce();
     expect(read).toHaveBeenCalledWith(publication.release.releaseId);
@@ -519,6 +532,8 @@ describe('Agent transfer HTTP and immutable Package boundaries (no real DB or st
       `/api/v1/agent-package-publications/${publication.release.releaseId}/codex-installation`,
     );
     expect(prompt).toContain(publication.release.packageDigest);
+    expect(prompt).toContain('当前客户端（Codex 或 Claude Code）已选择的项目');
+    expect(prompt).toContain('当前对话中使用');
     expect(prompt).toContain('不重新提取或编译');
     expect(prompt).toContain('不覆盖已有文件');
     expect(prompt).not.toContain('curl');

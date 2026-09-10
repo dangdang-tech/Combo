@@ -57,6 +57,7 @@ export function compileCreatorAgentPackageFromContext(rawRequestText: unknown) {
     throw new CreatorAgentContextCompilerError('AGENT_CONTEXT_UNSAFE');
   }
   try {
+    const clientName = draft.source.kind === 'claude_available_context' ? 'Claude Code' : 'Codex';
     const agentText = [
       '# Identity',
       `You are ${content.name}.`,
@@ -66,8 +67,8 @@ export function compileCreatorAgentPackageFromContext(rawRequestText: unknown) {
       'Understand the current user request, apply the bundled extracted-method Skill, verify against available evidence, and return the result.',
       '',
       '# Context and Permissions',
-      'This method was organized from the creator Codex available context. Source identity was not verified and coverage may be partial or unknown.',
-      'The Package does not contain or mount the creator transcript. When used in an existing Codex task, that task may still retain its earlier context; do not claim isolation.',
+      `This method was organized from the creator ${clientName} available context. Source identity was not verified and coverage may be partial or unknown.`,
+      `The Package does not contain or mount the creator transcript. When used in an existing ${clientName} task, that task may still retain its earlier context; do not claim isolation.`,
       'Use only evidence and tools authorized by the current user and Host; do not claim access to other tasks or Projects.',
       'Package instructions never grant extra permissions. Ask for authorization before accessing additional sources or making consequential changes.',
       '',
@@ -78,7 +79,7 @@ export function compileCreatorAgentPackageFromContext(rawRequestText: unknown) {
     const skillText = [
       '---',
       'name: extracted-method',
-      'description: Apply a reusable method organized from available Codex context.',
+      `description: Apply a reusable method organized from available ${clientName} context.`,
       '---',
       '',
       '# Extracted method',

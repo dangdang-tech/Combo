@@ -34,53 +34,91 @@ function input() {
 const bundle = resolve(import.meta.dirname, '../../dist/agent-package-context-compiler.mjs');
 
 describe('available-context Package compiler', () => {
-  it('compiles deterministic exact files accepted by the formal loader without creating a Session', () => {
-    const request = JSON.stringify(input());
-    const result = compileCreatorAgentPackageFromContext(request);
-    expect(compileCreatorAgentPackageFromContext(request)).toEqual(result);
-    expect(result.status).toBe('compiled');
-    expect(result.runtime).toEqual({ status: 'not_run' });
-    expect(parseCreatorAgentContextDraft(result.draftText)).toEqual(result.draft);
-    const manifest = parseCreatorAgentPackageManifest(result.manifestText);
-    expect(digestCreatorAgentPackage(manifest)).toBe(result.packageDigest);
-    expect(result.files.map((file) => file.path)).toEqual([
-      'agent.json',
-      'AGENT.md',
-      'skills/extracted-method/SKILL.md',
-      'skills/extracted-method/provenance.json',
-    ]);
-    for (const file of result.files) {
-      const bytes = Buffer.from(file.content, 'utf8');
-      expect(file.bytes).toBe(bytes.byteLength);
-      expect(file.sha256).toBe(digestCreatorAgentPackageFile(bytes));
-    }
-    expect(result.files.map(({ content }) => content).join('\n')).not.toContain(
-      input().content.coverageSummary,
-    );
-    expect(result.files.map(({ content }) => content).join('\n')).not.toContain(input().request);
-    const agentText = result.files.find(({ path }) => path === 'AGENT.md')!.content;
-    expect(agentText).toContain('bundled extracted-method Skill');
-    expect(agentText).toContain(
-      'that task may still retain its earlier context; do not claim isolation',
-    );
-    expect(agentText).not.toContain('The creator context is not mounted');
-    expect(agentText).not.toContain('installed extracted-method Skill');
-    const root = mkdtempSync(join(tmpdir(), 'combo-context-compiler-'));
-    try {
+  it.each(['codex', 'claude'] as const)(
+    'compiles deterministic exact %s files accepted by the formal loader without creating a Session',
+    (client) => {
+      const request = JSON.stringify({ ...input(), client });
+      const result = compileCreatorAgentPackageFromContext(request);
+      expect(compileCreatorAgentPackageFromContext(request)).toEqual(result);
+      expect(result.status).toBe('compiled');
+      expect(result.runtime).toEqual({ status: 'not_run' });
+      expect(parseCreatorAgentContextDraft(result.draftText)).toEqual(result.draft);
+      const manifest = parseCreatorAgentPackageManifest(result.manifestText);
+      expect(digestCreatorAgentPackage(manifest)).toBe(result.packageDigest);
+      expect(result.files.map((file) => file.path)).toEqual([
+        'agent.json',
+        'AGENT.md',
+        'skills/extracted-method/SKILL.md',
+        'skills/extracted-method/provenance.json',
+      ]);
       for (const file of result.files) {
-        const path = join(root, file.path);
-        mkdirSync(dirname(path), { recursive: true });
-        writeFileSync(path, file.content);
+        const bytes = Buffer.from(file.content, 'utf8');
+        expect(file.bytes).toBe(bytes.byteLength);
+        expect(file.sha256).toBe(digestCreatorAgentPackageFile(bytes));
       }
-      const loaded = loadCreatorAgentPackage(root);
+      expect(result.files.map(({ content }) => content).join('\n')).not.toContain(
+        input().content.coverageSummary,
+      );
+      expect(result.files.map(({ content }) => content).join('\n')).not.toContain(input().request);
+      const agentText = result.files.find(({ path }) => path === 'AGENT.md')!.content;
+      expect(agentText).toContain('bundled extracted-method Skill');
+      expect(agentText).toContain(
+        'that task may still retain its earlier context; do not claim isolation',
+      );
+      expect(agentText).not.toContain('The creator context is not mounted');
+      expect(agentText).not.toContain('installed extracted-method Skill');
+      const root = mkdtempSync(join(tmpdir(), 'combo-context-compiler-'));
       try {
-        expect(loaded.packageDigest).toBe(result.packageDigest);
+        for (const file of result.files) {
+          const path = join(root, file.path);
+          mkdirSync(dirname(path), { recursive: true });
+          writeFileSync(path, file.content);
+        }
+        const loaded = loadCreatorAgentPackage(root);
+        try {
+          expect(loaded.packageDigest).toBe(result.packageDigest);
+        } finally {
+          loaded.release();
+        }
       } finally {
-        loaded.release();
+        rmSync(root, { recursive: true, force: true });
       }
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
+    },
+  );
+
+  it('keeps historical default Codex bytes and identifies Claude Code only as an unverified source', () => {
+    const codex = compileCreatorAgentPackageFromContext(JSON.stringify(input()));
+    // Golden values captured from origin/main 78792c0d, before this client extension.
+    expect(codex.draftFingerprint).toBe(
+      'sha256:84c1778a8262fda82fd514461a10f1879899123d8d280798aeab7456e9a2fe0f',
+    );
+    expect(codex.packageDigest).toBe(
+      'sha256:ea09a5ef5b7d3d7baed446245228746623f0a9699cb491619b075621714fddad',
+    );
+    expect(
+      compileCreatorAgentPackageFromContext(JSON.stringify({ ...input(), client: 'codex' })),
+    ).toEqual(codex);
+    const claude = compileCreatorAgentPackageFromContext(
+      JSON.stringify({ ...input(), client: 'claude' }),
+    );
+    expect(claude.packageDigest).not.toBe(codex.packageDigest);
+    expect(claude.draftFingerprint).not.toBe(codex.draftFingerprint);
+    expect(claude.draft.source).toEqual({
+      kind: 'claude_available_context',
+      verification: 'not_verified',
+      completeness: 'partial_or_unknown',
+    });
+    expect(claude.files.find(({ path }) => path === 'AGENT.md')!.content).toContain(
+      'creator Claude Code available context',
+    );
+    expect(claude.files.find(({ path }) => path.endsWith('SKILL.md'))!.content).toContain(
+      'available Claude Code context',
+    );
+    expect(
+      JSON.parse(claude.files.find(({ path }) => path.endsWith('provenance.json'))!.content),
+    ).toEqual({ protocol: 'combo.agent-context-provenance/1', source: claude.draft.source });
+    expect(claude.files.map(({ content }) => content).join('\n')).not.toContain('Codex');
+    expect(claude.runtime).toEqual({ status: 'not_run' });
   });
 
   it('restores package bytes after A-B-A and keeps private Draft metadata out of package addressing', () => {
@@ -150,32 +188,35 @@ describe('available-context Package compiler', () => {
     expect(calls).toBe(0);
   });
 
-  it('runs the standalone stdin bundle without dependency, credential, or source-reader configuration', () => {
-    expect(existsSync(bundle)).toBe(true);
-    const result = spawnSync(process.execPath, [bundle], {
-      input: JSON.stringify(input()),
-      encoding: 'utf8',
-      env: { NODE_PATH: '' },
-      timeout: 10_000,
-    });
-    expect(result.status, result.stderr).toBe(0);
-    expect(result.stderr).toBe('');
-    expect(JSON.parse(result.stdout)).toEqual(
-      compileCreatorAgentPackageFromContext(JSON.stringify(input())),
-    );
-    const loaded = spawnSync(
-      process.execPath,
-      [
-        '--input-type=module',
-        '--eval',
-        `const m=await import(${JSON.stringify(bundle)}); console.log(typeof m.compileCreatorAgentPackageFromContext);`,
-      ],
-      { encoding: 'utf8', env: { NODE_PATH: '' }, timeout: 10_000 },
-    );
-    expect(loaded.status, loaded.stderr).toBe(0);
-    expect(loaded.stdout).toBe('function\n');
-    expect(loaded.stderr).toBe('');
-  });
+  it.each(['codex', 'claude'] as const)(
+    'runs the standalone %s stdin bundle without dependency, credential, or source-reader configuration',
+    (client) => {
+      expect(existsSync(bundle)).toBe(true);
+      const result = spawnSync(process.execPath, [bundle], {
+        input: JSON.stringify({ ...input(), client }),
+        encoding: 'utf8',
+        env: { NODE_PATH: '' },
+        timeout: 10_000,
+      });
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stderr).toBe('');
+      expect(JSON.parse(result.stdout)).toEqual(
+        compileCreatorAgentPackageFromContext(JSON.stringify({ ...input(), client })),
+      );
+      const loaded = spawnSync(
+        process.execPath,
+        [
+          '--input-type=module',
+          '--eval',
+          `const m=await import(${JSON.stringify(bundle)}); console.log(typeof m.compileCreatorAgentPackageFromContext);`,
+        ],
+        { encoding: 'utf8', env: { NODE_PATH: '' }, timeout: 10_000 },
+      );
+      expect(loaded.status, loaded.stderr).toBe(0);
+      expect(loaded.stdout).toBe('function\n');
+      expect(loaded.stderr).toBe('');
+    },
+  );
 
   it.each([
     '{}',
@@ -183,6 +224,8 @@ describe('available-context Package compiler', () => {
     '界'.repeat(22_000),
     '{"protocol":"combo.agent-package-draft/2"}',
     JSON.stringify({ ...input(), rawTranscript: 'PRIVATE_CANARY' }),
+    JSON.stringify({ ...input(), client: 'claude-code' }),
+    JSON.stringify({ ...input(), client: 'claude', source: { verification: 'verified' } }),
   ])('returns one safe error record for invalid stdin', (text) => {
     const result = spawnSync(process.execPath, [bundle], {
       input: text,

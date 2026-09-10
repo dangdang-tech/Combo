@@ -17,15 +17,17 @@
 - `publication-objects.ts` 限制 manifest、文件数量、路径和总字节，对每份文件校验 exact digest；资源先于清单写入且全部回读。
   公共 GET 仅返回未撤销的 `public_link` Release 与完整核验后的 Package，下载是裸 Package JSON；不含私有 Draft、
   creator request、账户邮箱、上传 secret 或原对话。公开请求不解析会话，不安装、不试跑，来源固定 `not_verified`。
-- `receiver-handoff.ts` 从已核验且未撤销的公开 Release 生成 Codex 接收说明与可复制指令。它只读取 Worker 显式
+- `receiver-handoff.ts` 从已核验且未撤销的公开 Release 生成 Codex 或 Claude Code 共用的接收说明与可复制指令。它只读取 Worker 显式
   `agent-package-receiver` 出口对应的已构建资产，计算摘要并按内容哈希地址提供 JavaScript 下载，绝不在 API 中
   导入或执行安装器。资产缺失、摘要地址过时或 Release 不可用时失败关闭。接收说明不保存 Project 路径、用户
-  凭据或运行结果；项目选择、下载后独立验码、安装和当前任务应用都由使用者自己的 Codex 执行。
+  凭据或运行结果；项目选择、下载后独立验码、安装和当前对话应用都由使用者自己的客户端执行。
 
 匿名 `GET /agent-package-publications/:releaseId/codex-installation` 返回固定版本安装器的地址、摘要、调用参数和
 安全步骤；`GET /agent-package-receivers/v1/:artifactFile` 只返回与当前资产摘要完全匹配的 `.mjs` 字节。两者不
 解析 Cookie、不写数据库、不安装任何内容，仍受 Test-only、无查询参数、速率和 `no-store` 边界约束。接收器只
 支持轻量文本方法；文本存储不代表所需工具已满足。安装、离线完整性、同任务应用及真实推理必须分别验收。
+路径中的 `codex-installation` 和原 handoff 协议名为兼容保留，不要求另开 Codex 任务。Claude Code 必须明确读取
+已经验证的原包，不假定它自动发现 `.agents/skills`；两种客户端都不能从 MCP 工作目录猜测当前项目。
 
 所有新接口返回安全错误与 `no-store`。Desktop 请求拒绝 Cookie、Origin、Fetch Metadata 的 Site、Dest、User
 和查询参数凭据；Mode 只允许缺失或 Node 原生 fetch 固定附加的 `cors`，它不提供认证，也不豁免其他浏览器信号。

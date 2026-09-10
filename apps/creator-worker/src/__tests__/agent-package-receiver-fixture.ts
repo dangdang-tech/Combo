@@ -7,10 +7,11 @@ import {
 
 export const releaseId = `release.agent-package.${'a'.repeat(32)}`;
 export const shareUrl = `${PUBLIC_ORIGIN}/agents/${releaseId}`;
-export function receiverFixture(projectRoot = '/unselected') {
+export function receiverFixture(projectRoot = '/unselected', client: 'codex' | 'claude' = 'codex') {
   const compiled = compileCreatorAgentPackageFromContext(
     JSON.stringify({
       protocol: 'combo.agent-context-request/1',
+      client,
       request: '把可用方法做成 Agent。',
       content: {
         name: '接收核验员',
