@@ -30,12 +30,12 @@ export default tseslint.config(
         'error',
         { prefer: 'type-imports', fixStyle: 'inline-type-imports' },
       ],
-      // 骨架阶段：业务路由留 501 占位、端口实现待 Phase 3 注入，允许显式 any 但默认禁
+      // 默认禁止显式 any；必要的脚本配置在下方单独放宽。
       '@typescript-eslint/no-explicit-any': 'warn',
     },
   },
   // —— 分层依赖规则（后端仓库结构规范：违反即 CI 失败）——
-  // ① platform 是领域无关机制，永不依赖业务域 / 组合根 / 进程入口（保证未来 runtime 零改复用）。
+  // ① platform 是领域无关机制，永不依赖业务域 / 组合根 / 进程入口。
   {
     files: ['apps/authoring/src/platform/**/*.ts'],
     rules: {
@@ -79,56 +79,6 @@ export default tseslint.config(
               message:
                 '业务域之间只能 import 对方的 index.js 出口，不得深入其内部文件（后端仓库结构规范）。',
             },
-          ],
-        },
-      ],
-    },
-  },
-  // ③ Worker 后台进程不得 import Fastify app / 路由聚合（进程间只经 PG/Redis 间接通信，不拉起 Fastify app）。
-  {
-    files: ['apps/authoring/src/processes/worker.ts'],
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              group: [
-                '**/bootstrap/app',
-                '**/bootstrap/app.js',
-                '**/bootstrap/routes',
-                '**/bootstrap/routes.js',
-              ],
-              message:
-                'Worker 后台进程不得 import HTTP app / 路由聚合（bootstrap）；进程间只经 PG/Redis 间接通信。',
-            },
-          ],
-        },
-      ],
-    },
-  },
-  // ④ Runtime 的模型工具与沙箱接线只能调用远端 sandboxd，禁止增加宿主文件或子进程回退。
-  {
-    files: [
-      'apps/runtime/src/modules/agent/**/*.ts',
-      'apps/runtime/src/platform/infra/sandbox-*.ts',
-      'apps/runtime/src/platform/infra/kubernetes-sandbox-backend.ts',
-    ],
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          paths: [
-            ...['fs', 'node:fs', 'fs/promises', 'node:fs/promises'].map((name) => ({
-              name,
-              message:
-                'Runtime 模型工具不得访问宿主文件系统；必须经 SandboxBackend 调用 sandboxd Pod。',
-            })),
-            ...['child_process', 'node:child_process'].map((name) => ({
-              name,
-              message:
-                'Runtime 模型工具不得启动宿主进程；必须经 SandboxBackend 调用 sandboxd Pod。',
-            })),
           ],
         },
       ],

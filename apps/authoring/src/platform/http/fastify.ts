@@ -4,11 +4,11 @@ import type { InfraContext } from '../infra/index.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
-    /** 数据库、Redis、队列、对象存储、大模型、邮件、支付与认证限流容器。 */
+    /** PostgreSQL、热态 Redis、对象存储、邮件、支付与认证限流容器。 */
     infra: InfraContext;
   }
   interface FastifyRequest {
-    /** requireAuth / requireSseAuth 解出的鉴权上下文。 */
+    /** requireAuth 解出的 Cookie 会话上下文。 */
     auth?: AuthContext;
   }
 }

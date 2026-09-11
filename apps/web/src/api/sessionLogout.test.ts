@@ -53,9 +53,9 @@ describe('completeLogout', () => {
     completeLogout({ loggedOut: true }, navigate);
     expect(navigate).toHaveBeenCalledWith('/login');
   });
-  it('Preview 登出回邮箱登录并保留安全任务上下文', () => {
+  it('Preview 登出回邮箱登录并保留安全 Agent 转移上下文', () => {
     const navigate = vi.fn<(url: string) => void>();
-    const returnTo = '/tasks/01982e62-6d6e-7f4d-8fe8-b55f62720b5b?tab=history';
+    const returnTo = '/agent-transfers/11111111-1111-4111-8111-111111111111';
 
     completeLogout({ loggedOut: true }, navigate, 'preview', returnTo);
 

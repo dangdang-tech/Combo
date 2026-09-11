@@ -2,14 +2,12 @@
   "name": "@cb/scripts",
   "version": "0.0.0",
   "private": true,
-  "description": "运维/开发脚本（O-05）：bootstrap、健康冒烟等。",
+  "description": "API/Web 运维、发布清单、环境渲染与健康冒烟脚本。",
   "type": "module",
   "scripts": {
     "start": "./start.sh",
     "migrate": "./migrate.sh",
     "smoke": "./smoke.sh",
-    "acceptance:smoke": "./acceptance-smoke.sh",
-    "sandbox:e2e": "./integration/sandbox-tools-local.sh",
     "typecheck": "tsc -b",
     "test": "node --test resend-sent-email.test.mjs render-env.test.mjs render-v2.test.mjs migrate-v2-host.test.mjs"
   },

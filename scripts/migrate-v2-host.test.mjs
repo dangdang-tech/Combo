@@ -206,15 +206,11 @@ function lines(path) {
 
 function assertOneCredentialConnectionExecPerDeployment(log) {
   for (const namespace of ['combo-preview', 'combo-prod']) {
-    for (const deployment of ['api', 'worker', 'runtime']) {
-      assert.equal(
-        log.filter((line) =>
-          line.includes(`-n ${namespace} exec deployment/${deployment} -- node -e`),
-        ).length,
-        1,
-        `${namespace}/${deployment}`,
-      );
-    }
+    assert.equal(
+      log.filter((line) => line.includes(`-n ${namespace} exec deployment/api -- node -e`)).length,
+      1,
+      `${namespace}/api`,
+    );
   }
 }
 

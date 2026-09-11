@@ -94,7 +94,7 @@ export function createSafeTraceExporter(delegate: SpanExporter): SpanExporter {
   };
 }
 
-export function startNodeObservability(env: Env, processName: Env['PROCESS']): ObservabilityHandle {
+export function startNodeObservability(env: Env): ObservabilityHandle {
   const endpoint = env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim();
   if (env.OTEL_SDK_DISABLED === 'true' || !endpoint) {
     return { enabled: false, shutdown: async () => undefined };
@@ -102,6 +102,7 @@ export function startNodeObservability(env: Env, processName: Env['PROCESS']): O
   if (sdk) return { enabled: true, shutdown: () => sdk!.shutdown() };
 
   const serviceName = env.OTEL_SERVICE_NAME || 'cb-authoring';
+  const processName = 'api';
   const resource = resourceFromAttributes({
     ...parseResourceAttributes(env.OTEL_RESOURCE_ATTRIBUTES),
     [ATTR_SERVICE_NAME]: serviceName,

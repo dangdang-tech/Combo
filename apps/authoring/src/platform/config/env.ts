@@ -10,8 +10,6 @@ import { z } from 'zod';
 export const OFFICIAL_RESEND_API_BASE_URL = 'https://api.resend.com';
 export const PRODUCTION_RESEND_FROM_EMAIL = 'Combo <auth@buildwithcombo.com>';
 export const MAX_PUBLIC_APP_ORIGINS = 8;
-export const AGENT_PACKAGE_PUBLISHER_TEST_GATE_ENV =
-  'COMBO_AGENT_PACKAGE_PUBLISHER_TEST_GATE' as const;
 
 const emptyToUndefined = (value: unknown): unknown => (value === '' ? undefined : value);
 const booleanFromString = z
@@ -21,7 +19,6 @@ const booleanFromString = z
 
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  PROCESS: z.enum(['api', 'worker']).default('api'),
   PORT: z.coerce.number().int().default(3000),
   HOST: z.string().default('0.0.0.0'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
@@ -38,7 +35,6 @@ const EnvSchema = z.object({
   COMBO_WEB_ASSET_MANIFEST: z
     .string()
     .default(DEVELOPMENT_RELEASE_METADATA_ENV.COMBO_WEB_ASSET_MANIFEST),
-  COMBO_AGENT_PACKAGE_PUBLISHER_TEST_GATE: z.string().default(''),
 
   OTEL_SERVICE_NAME: z.string().default('cb-authoring'),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.preprocess(emptyToUndefined, z.string().optional()),
@@ -48,11 +44,9 @@ const EnvSchema = z.object({
   OTEL_SDK_DISABLED: z.enum(['true', 'false']).default('false'),
 
   DATABASE_URL: z.string().default('postgres://combo:combo@localhost:5432/combo'),
-  REDIS_QUEUE_URL: z.string().default('redis://localhost:6379/0'),
   REDIS_HOT_URL: z.string().default('redis://localhost:6380/0'),
 
   S3_ENDPOINT: z.string().default('http://localhost:9000'),
-  S3_PUBLIC_ENDPOINT: z.preprocess(emptyToUndefined, z.string().optional()),
   S3_ACCESS_KEY: z.string().default('minioadmin'),
   S3_SECRET_KEY: z.string().default('minioadmin'),
   S3_REGION: z.string().default('us-east-1'),
@@ -80,62 +74,9 @@ const EnvSchema = z.object({
   LESHOUYING_NOTIFY_URL: z.string().default(''),
   LESHOUYING_TIMEOUT_MS: z.coerce.number().int().min(500).max(15_000).default(5_000),
   BILLING_RECONCILE_INTERVAL_MS: z.coerce.number().int().min(5_000).max(300_000).default(15_000),
-
-  LLM_PROVIDER: z.preprocess(emptyToUndefined, z.enum(['anthropic', 'openrouter']).optional()),
-  ANTHROPIC_API_KEY: z.string().default(''),
-  OPENROUTER_API_KEY: z.string().default(''),
-  LLM_BASE_URL: z.preprocess(emptyToUndefined, z.string().default('https://openrouter.ai/api/v1')),
-  LLM_MODEL: z.preprocess(emptyToUndefined, z.string().default('')),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
-
-const AgentPackagePublisherTestGateSchema = z
-  .object({
-    protocol: z.literal('combo.agent-package-publisher-test-gate/1'),
-    sourceSha: z.string().regex(/^[0-9a-f]{40}$/u),
-    publisherUserId: z
-      .string()
-      .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u),
-    packageDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
-  })
-  .strict()
-  .readonly();
-
-export type AgentPackagePublisherTestGate = z.infer<typeof AgentPackagePublisherTestGateSchema>;
-
-/**
- * 解析唯一受控 Test Publisher gate。缺失或 candidate 漂移时路由保持 404；任何非法配置只报告键名。
- */
-export function agentPackagePublisherTestGateFromEnv(
-  env: Env,
-): AgentPackagePublisherTestGate | null {
-  const raw = env.COMBO_AGENT_PACKAGE_PUBLISHER_TEST_GATE;
-  if (raw === '') return null;
-
-  let decoded: unknown;
-  try {
-    decoded = JSON.parse(raw) as unknown;
-  } catch {
-    throw new Error(`[env] ${AGENT_PACKAGE_PUBLISHER_TEST_GATE_ENV} 配置不合法`);
-  }
-  const parsed = AgentPackagePublisherTestGateSchema.safeParse(decoded);
-  if (!parsed.success || JSON.stringify(parsed.data) !== raw) {
-    throw new Error(`[env] ${AGENT_PACKAGE_PUBLISHER_TEST_GATE_ENV} 配置不合法`);
-  }
-
-  let environment: string;
-  try {
-    environment = releaseMetadataFromEnv(env).environment;
-  } catch {
-    throw new Error(`[env] ${AGENT_PACKAGE_PUBLISHER_TEST_GATE_ENV} 配置不合法`);
-  }
-  if (env.PROCESS !== 'api' || environment !== 'test') {
-    throw new Error(`[env] ${AGENT_PACKAGE_PUBLISHER_TEST_GATE_ENV} 只能用于 Test API`);
-  }
-  if (parsed.data.sourceSha !== env.COMBO_SOURCE_SHA) return null;
-  return parsed.data;
-}
 
 function containsControlCharacter(value: string): boolean {
   for (let index = 0; index < value.length; index += 1) {
@@ -278,16 +219,12 @@ export function billingConfigurationFromEnv(env: Env): BillingConfiguration {
   return { gatewayEnabled: true, submissionRecoveryMs: env.LESHOUYING_TIMEOUT_MS + 5_000 };
 }
 
-const PRODUCTION_REQUIRED_BY_PROCESS: Record<Env['PROCESS'], readonly string[]> = {
-  api: [
-    ...COMMON_REQUIRED,
-    'REDIS_QUEUE_URL',
-    'REDIS_HOT_URL',
-    ...S3_REQUIRED,
-    ...AUTH_API_REQUIRED,
-  ],
-  worker: [...COMMON_REQUIRED, 'REDIS_QUEUE_URL', 'REDIS_HOT_URL', ...S3_REQUIRED],
-};
+const PRODUCTION_REQUIRED = [
+  ...COMMON_REQUIRED,
+  'REDIS_HOT_URL',
+  ...S3_REQUIRED,
+  ...AUTH_API_REQUIRED,
+] as const;
 
 let cached: Env | undefined;
 
@@ -363,8 +300,7 @@ export function loadEnv(): Env {
   if (cached) return cached;
 
   const isProduction = process.env.NODE_ENV === 'production';
-  const processType: Env['PROCESS'] = process.env.PROCESS === 'worker' ? 'worker' : 'api';
-  const required = PRODUCTION_REQUIRED_BY_PROCESS[processType];
+  const required = PRODUCTION_REQUIRED;
 
   if (isProduction) {
     const missing = required.filter((key) => {
@@ -372,9 +308,7 @@ export function loadEnv(): Env {
       return value === undefined || value.trim() === '';
     });
     if (missing.length > 0) {
-      throw new Error(
-        `[env] 生产模式（PROCESS=${processType}）缺少必需配置：${missing.join(', ')}`,
-      );
+      throw new Error(`[env] 生产模式缺少必需配置：${missing.join(', ')}`);
     }
   }
 
@@ -383,31 +317,24 @@ export function loadEnv(): Env {
     const keys = Object.keys(parsed.error.flatten().fieldErrors);
     if (isProduction) throw new Error(`[env] 生产模式环境变量校验失败：${keys.join(', ')}`);
     console.warn(`[env] dev/test 环境变量校验失败，使用默认配置：${keys.join(', ')}`);
-    cached = EnvSchema.parse({ NODE_ENV: process.env.NODE_ENV, PROCESS: processType });
+    cached = EnvSchema.parse({ NODE_ENV: process.env.NODE_ENV });
     assertReleaseMetadata(cached);
-    agentPackagePublisherTestGateFromEnv(cached);
     return cached;
   }
 
   cached = parsed.data;
   assertReleaseMetadata(cached);
-  agentPackagePublisherTestGateFromEnv(cached);
 
-  if (cached.PROCESS === 'api') {
-    try {
-      parsePublicAppOrigins(cached.PUBLIC_APP_ORIGINS);
-    } catch {
-      throw new Error('[env] PUBLIC_APP_ORIGINS 配置不合法');
-    }
-    if (
-      cached.RESEND_FROM_EMAIL.length > 0 &&
-      !isValidResendFromAddress(cached.RESEND_FROM_EMAIL)
-    ) {
-      throw new Error('[env] 邮件发件配置不合法：RESEND_FROM_EMAIL');
-    }
-    billingConfigurationFromEnv(cached);
-    if (isProduction) validateProductionAuthConfig(cached);
+  try {
+    parsePublicAppOrigins(cached.PUBLIC_APP_ORIGINS);
+  } catch {
+    throw new Error('[env] PUBLIC_APP_ORIGINS 配置不合法');
   }
+  if (cached.RESEND_FROM_EMAIL.length > 0 && !isValidResendFromAddress(cached.RESEND_FROM_EMAIL)) {
+    throw new Error('[env] 邮件发件配置不合法：RESEND_FROM_EMAIL');
+  }
+  billingConfigurationFromEnv(cached);
+  if (isProduction) validateProductionAuthConfig(cached);
 
   if (!isProduction) {
     const usingDefaults = required.filter((key) => {
@@ -415,9 +342,7 @@ export function loadEnv(): Env {
       return value === undefined || value.trim() === '';
     });
     if (usingDefaults.length > 0) {
-      console.warn(
-        `[env] dev/test（PROCESS=${processType}）使用默认或空配置（生产将拒绝）：${usingDefaults.join(', ')}`,
-      );
+      console.warn(`[env] dev/test 使用默认或空配置（生产将拒绝）：${usingDefaults.join(', ')}`);
     }
   }
 

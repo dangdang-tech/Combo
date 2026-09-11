@@ -29,7 +29,7 @@ helm upgrade --install grafana grafana-community/grafana --version 12.7.2 --name
 
 单节点集群上升级 Loki 有一个必须知道的坑：chart 默认给 gateway 加了硬性的 Pod 反亲和，而滚动更新要求新旧 Pod 在同一节点短暂共存，两者矛盾会让新 Pod 永远排不上、升级超时死锁。values-loki.yaml 里已把 gateway 的更新策略固定为 Recreate（先杀旧再起新），不要移除；gateway 的 affinity 字段是字符串模板类型，传空值会回落到默认反亲和，改它无效。
 
-密码只通过 Helm 生成的 Kubernetes Secret 注入，不写入 values 文件。执行完安装后建议立即运行 `unset GRAFANA_ADMIN_PASSWORD`，减少密码留在当前 shell 环境中的时间。业务 `api`、`worker` 和 `runtime` 应把 `OTEL_EXPORTER_OTLP_ENDPOINT` 设置为 `http://otel-collector.observability.svc.cluster.local:4318`。
+密码只通过 Helm 生成的 Kubernetes Secret 注入，不写入 values 文件。执行完安装后建议立即运行 `unset GRAFANA_ADMIN_PASSWORD`，减少密码留在当前 shell 环境中的时间。主栈业务 `api` 应把 `OTEL_EXPORTER_OTLP_ENDPOINT` 设置为 `http://otel-collector.observability.svc.cluster.local:4318`。
 
 ## 验收
 

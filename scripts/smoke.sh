@@ -24,11 +24,11 @@ pass '/health = ok'
 
 log '2/5 检查不依赖邮件供应商的 readiness'
 ready="$(curl -fsS --max-time 10 "${API_BASE}/ready")" || fail '/ready 不可达'
-for dependency in db redis_queue redis_hot minio llm; do
+for dependency in db redis_hot minio; do
   grep -q "\"name\":\"${dependency}\"" <<<"${ready}" || fail "/ready 缺依赖键 ${dependency}"
 done
 grep -q '"ready":true' <<<"${ready}" || fail '/ready 未就绪'
-pass '/ready 包含四个必需依赖与可降级 LLM，且不依赖邮件供应商'
+pass '/ready 包含三个必需依赖，且不依赖邮件供应商'
 
 log '3/5 检查未知路由错误信封'
 not_found_file="$(mktemp "${TMPDIR:-/tmp}/agora-smoke-404.XXXXXX")"
@@ -49,12 +49,16 @@ bearer_status="$(curl -sS --max-time 5 -o /dev/null -w '%{http_code}' \
 [[ "${bearer_status}" == '401' ]] || fail 'Bearer 被错误地当作浏览器会话'
 pass '匿名与 Bearer 请求都不能替代 HttpOnly 会话 Cookie'
 
-log '5/5 检查同源 Web 与 runtime 反代'
+log '5/5 检查同源 Web 与发布身份'
 if curl -fsS -o /dev/null --max-time 5 "${WEB_BASE}/" 2>/dev/null; then
-  runtime_status="$(curl -sS --max-time 5 -o /dev/null -w '%{http_code}' "${WEB_BASE}/api/v1/runtime/capabilities")" \
-    || fail 'runtime 反代不可达'
-  [[ "${runtime_status}" == '401' ]] || fail '匿名 runtime 受保护路径未返回 401'
-  pass 'Web 可达且 runtime 受保护路径经同源反代返回 401'
+  web_version="$(curl -fsS --max-time 5 "${WEB_BASE}/runtime-config.json")" \
+    || fail 'Web 发布身份不可达'
+  api_version="$(curl -fsS --max-time 5 "${WEB_BASE}/api/v1/version")" \
+    || fail 'API 发布身份经同源反代不可达'
+  web_release="$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.releaseId)' "$web_version")"
+  api_release="$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.releaseId)' "$api_version")"
+  [[ "$web_release" == "$api_release" ]] || fail 'Web 与 API 发布身份不一致'
+  pass 'Web 可达且 Web/API 发布身份一致'
 else
   log 'Web 未起或不可达，跳过可选反代检查'
 fi

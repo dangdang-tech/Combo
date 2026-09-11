@@ -36,27 +36,17 @@ export const CLIENT_FALLBACK_TRACE_ID = 'client-local';
 export const ErrorCode = {
   // 通用
   VALIDATION_FAILED: 'VALIDATION_FAILED',
-  INPUT_TOO_SMALL: 'INPUT_TOO_SMALL',
   UNAUTHENTICATED: 'UNAUTHENTICATED',
   FORBIDDEN: 'FORBIDDEN',
   NOT_FOUND: 'NOT_FOUND',
   IDEMPOTENCY_CONFLICT: 'IDEMPOTENCY_CONFLICT',
   STATE_CONFLICT: 'STATE_CONFLICT',
-  RESOURCE_LOCKED: 'RESOURCE_LOCKED',
   RATE_LIMITED: 'RATE_LIMITED',
   INTERNAL: 'INTERNAL',
-  LLM_UPSTREAM_FAILED: 'LLM_UPSTREAM_FAILED',
   DEPENDENCY_UNAVAILABLE: 'DEPENDENCY_UNAVAILABLE',
-  TASK_TIMEOUT: 'TASK_TIMEOUT',
   // 邮箱验证码认证
   AUTH_OTP_INVALID: 'AUTH_OTP_INVALID',
   AUTH_ACCOUNT_DISABLED: 'AUTH_ACCOUNT_DISABLED',
-  // 上传（配对路径）
-  PAIRING_CODE_INVALID: 'PAIRING_CODE_INVALID',
-  PAIRING_EXPIRED: 'PAIRING_EXPIRED',
-  UPLOAD_NO_CONTENT: 'UPLOAD_NO_CONTENT',
-  // 试用
-  SESSION_BUSY: 'SESSION_BUSY',
 } as const;
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];
@@ -77,13 +67,6 @@ export const ERROR_CLASSIFICATION: Record<ErrorCodeValue, ErrorClassification> =
     retriable: false,
     action: 'change_input',
     userMessageTemplate: '输入有点问题，改一下再试。',
-  },
-  INPUT_TOO_SMALL: {
-    code: 'INPUT_TOO_SMALL',
-    http: 400,
-    retriable: false,
-    action: 'change_input',
-    userMessageTemplate: '内容太少了，多传一些再试。',
   },
   UNAUTHENTICATED: {
     code: 'UNAUTHENTICATED',
@@ -120,13 +103,6 @@ export const ERROR_CLASSIFICATION: Record<ErrorCodeValue, ErrorClassification> =
     action: 'change_input',
     userMessageTemplate: '当前状态不允许这个操作，刷新看看最新状态。',
   },
-  RESOURCE_LOCKED: {
-    code: 'RESOURCE_LOCKED',
-    http: 423,
-    retriable: true,
-    action: 'wait',
-    userMessageTemplate: '正在处理中，稍等片刻。',
-  },
   RATE_LIMITED: {
     code: 'RATE_LIMITED',
     http: 429,
@@ -141,26 +117,12 @@ export const ERROR_CLASSIFICATION: Record<ErrorCodeValue, ErrorClassification> =
     action: 'retry',
     userMessageTemplate: '服务开小差了，请重试。',
   },
-  LLM_UPSTREAM_FAILED: {
-    code: 'LLM_UPSTREAM_FAILED',
-    http: 502,
-    retriable: true,
-    action: 'retry',
-    userMessageTemplate: '模型服务暂时不可用，请稍后重试。',
-  },
   DEPENDENCY_UNAVAILABLE: {
     code: 'DEPENDENCY_UNAVAILABLE',
     http: 503,
     retriable: true,
     action: 'retry',
     userMessageTemplate: '依赖服务暂时不可用，请稍后重试。',
-  },
-  TASK_TIMEOUT: {
-    code: 'TASK_TIMEOUT',
-    http: 504,
-    retriable: true,
-    action: 'retry',
-    userMessageTemplate: '这次处理超时了，点重试再来一次。',
   },
   AUTH_OTP_INVALID: {
     code: 'AUTH_OTP_INVALID',
@@ -175,34 +137,6 @@ export const ERROR_CLASSIFICATION: Record<ErrorCodeValue, ErrorClassification> =
     retriable: false,
     action: 'escalate',
     userMessageTemplate: '账号已停用，请联系支持。',
-  },
-  PAIRING_CODE_INVALID: {
-    code: 'PAIRING_CODE_INVALID',
-    http: 403,
-    retriable: false,
-    action: 'change_input',
-    userMessageTemplate: '配对码不对，检查后重新输入。',
-  },
-  PAIRING_EXPIRED: {
-    code: 'PAIRING_EXPIRED',
-    http: 410,
-    retriable: false,
-    action: 'change_input',
-    userMessageTemplate: '配对码已过期，回到任务页重新生成一个。',
-  },
-  UPLOAD_NO_CONTENT: {
-    code: 'UPLOAD_NO_CONTENT',
-    http: 400,
-    retriable: false,
-    action: 'change_input',
-    userMessageTemplate: '没有收到有效内容，检查助手是否在正确的目录下运行。',
-  },
-  SESSION_BUSY: {
-    code: 'SESSION_BUSY',
-    http: 409,
-    retriable: true,
-    action: 'wait',
-    userMessageTemplate: '上一轮回复还在生成中，等它结束再发。',
   },
 };
 

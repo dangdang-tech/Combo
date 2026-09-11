@@ -4,9 +4,6 @@ import { Link } from 'react-router-dom';
 import { useDocumentTitle } from '../shell/useDocumentTitle.js';
 
 export { LoginPage } from './LoginPage.js';
-export { TasksPage } from './tasks/TasksPage.js';
-export { TaskDetailPage } from './tasks/TaskDetailPage.js';
-export { CapabilitiesPage } from './capabilities/CapabilitiesPage.js';
 
 /** 人话 404：给回首页和站内登录两条退路，不暴露内部信息。 */
 export function NotFoundPage(): ReactElement {

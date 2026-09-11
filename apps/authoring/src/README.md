@@ -1,13 +1,13 @@
 # authoring 服务源码总览
 
-这是 Combo 创作侧后端服务。创作者先用邮箱六位验证码建立或登录账号，再创建上传任务；本机助手上传 Claude 或 Codex 对话历史，后台流水线解析、脱敏并归纳能力项，创作者可以查看和发布结果。HTTP 路由前缀是 `/api/v1`。
+这是 Combo 当前主栈的单一 API 服务。它承载邮箱认证、账户、充值、J-012 结构化 Draft、Agent Transfer、公开发布与接收器交付，HTTP 路由前缀是 `/api/v1`。
 
 ## 四层布局
 
-- `processes/` 放 API 与 worker 两个进程入口。
+- `processes/` 放唯一的 API 进程入口。
 - `bootstrap/` 组装 Fastify、基础设施、健康检查和业务路由。
-- `modules/` 按 account、task、capability、agent-package-release、agent-draft 和 billing 六个业务领域组织代码。account 是第一方认证唯一写入方，agent-package-release 是受控 Test canonical Registry 的唯一写入方，agent-draft 只保存私有编译快照，billing 是外部充值与内部钱包入账的唯一写入方。
-- `platform/` 提供配置、HTTP 边界、PostgreSQL、Redis、队列、对象存储、Resend、本地会话校验、链路追踪和事件流等公共设施。
+- `modules/` 按 account、agent-package-release、agent-draft 和 billing 四个业务领域组织代码。account 是第一方认证唯一写入方，agent-draft 保存私有编译快照，agent-package-release 负责 Transfer、公开发布与接收器交付，billing 是外部充值与内部钱包入账的唯一写入方。
+- `platform/` 提供配置、HTTP 边界、PostgreSQL、热态 Redis、不可变对象存储、Resend、本地会话校验和链路追踪等公共设施。
 
 依赖保持单向。processes 使用 bootstrap 与 modules，bootstrap 使用 modules 与 platform，modules 使用 platform，platform 不依赖业务模块。共享类型、错误信封、Cookie 常量和校验契约来自 `@cb/shared`。
 
@@ -21,12 +21,11 @@
 1. React 向 `POST /api/v1/auth/email/challenges` 请求邮箱验证码，再向 verification 端点提交六位码。
 2. account 模块在 PostgreSQL 中一次消费验证码，首次登录时创建用户和邮箱身份，并签发只保存摘要的七天会话。
 3. 浏览器只持有一枚 HttpOnly Cookie。HTTPS 发布入口显式配置根路径、Secure 且主机限定的 `__Host-cb_session`，本地 HTTP 开发入口显式配置根路径 `cb_session`，选择不依赖 `NODE_ENV`。authoring 的受保护路由只按当前安全策略对应的 Cookie 查询本地会话，不接受 Bearer 或 refresh 凭据。
-4. 创作者创建任务后，本机助手凭配对码上传分片。worker 消费任务，读取原文、解析、脱敏、调用大模型并写入能力项。
-5. 浏览器通过任务事件流读取进度，终态仍以 PostgreSQL 中的任务状态为准。
+4. 登录成功后只允许回到首页或规范的 `/agent-transfers/:id` 路由；其他返回地址统一回落到首页。
 
-## 受控 Test Package 发布
+## Agent 交付
 
-唯一 gate 发布者通过登录 Cookie 提交规范 `agent.json` 和固定三个 Package 文件。API 在服务端验证 exact Package 与 Knowledge Bundle、按 digest 推导对象键并逐一不可覆盖提交和回读，最后才提交 `agent.json` 与 PostgreSQL Registry marker。gate 缺失或候选提交漂移时路由保持 404；Preview、Production 与 worker 不能配置该 gate。
+Test 环境的 Transfer 路由接受 Desktop 发起的精确摘要意图、浏览器账户批准和私有上传。用户必须再次通过 Cookie 与精确 Origin 明确确认公开发布；匿名页面和接收器端点只读取已发布且未撤销的 Release。Package 文件写入固定 `combo-artifacts` 桶并保持不可覆盖。
 
 ## 充值主链路
 

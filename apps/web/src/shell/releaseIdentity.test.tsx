@@ -78,7 +78,7 @@ describe('ReleaseIdentityBadge', () => {
     window.history.replaceState(
       {},
       '',
-      '/tasks/01982e62-6d6e-7f4d-8fe8-b55f62720b5b?token=hidden#secret',
+      '/agent-transfers/11111111-1111-4111-8111-111111111111?token=hidden#secret',
     );
     const writeClipboard = vi.fn<(text: string) => Promise<void>>(async () => {});
     render(<ReleaseIdentityBadge metadata={PREVIEW_METADATA} writeClipboard={writeClipboard} />);
@@ -101,7 +101,7 @@ describe('ReleaseIdentityBadge', () => {
     expect(copied).toContain(`releaseId=${PREVIEW_METADATA.releaseId}`);
     expect(copied).toContain(`webAssetManifest=${PREVIEW_METADATA.webAssetManifest}`);
     expect(copied).toContain(
-      'page=http://localhost:3000/tasks/01982e62-6d6e-7f4d-8fe8-b55f62720b5b',
+      'page=http://localhost:3000/agent-transfers/11111111-1111-4111-8111-111111111111',
     );
     expect(copied).not.toContain('token=hidden');
     expect(copied).not.toContain('#secret');

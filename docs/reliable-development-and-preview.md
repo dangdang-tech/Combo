@@ -48,7 +48,7 @@ pnpm install --frozen-lockfile
 
 禁止纳入自动清理：
 
-- `~/.combo/uploads`：可能包含可续传上传快照。
+- 整个 `~/.combo`：可能包含用户或插件状态。
 - `~/.codex/sessions`、`archived_sessions` 和数据库：属于任务历史。
 - 任何源码工作树、未提交文件、发布证据或用户文档。
 - 未先列出精确路径和大小的递归目标。

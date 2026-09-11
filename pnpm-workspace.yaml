@@ -6,7 +6,5 @@ packages:
   - 'scripts'
 allowBuilds:
   bun: true
-  '@google/genai': false
   esbuild: true
-  msgpackr-extract: true
   protobufjs: false

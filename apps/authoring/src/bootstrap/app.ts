@@ -48,11 +48,11 @@ export interface BuildAppOptions {
 export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInstance> {
   const env = opts.env ?? loadEnv();
   const app = Fastify({
-    // 请求体上限：助手分片上传是 JSON 体（单片 2MB 文本 + JSON 转义开销），8MB 足够且不失守。
-    bodyLimit: 32 * 1024 * 1024, // 与 nginx client_max_body_size 32m 对齐；分片 2MB 文本 JSON 转义后仍有充分余量
+    // 业务路由会按需收紧；全局只允许有界 JSON 请求。
+    bodyLimit: 1024 * 1024,
     logger: {
       level: env.LOG_LEVEL,
-      base: { service: env.OTEL_SERVICE_NAME, process: env.PROCESS },
+      base: { service: env.OTEL_SERVICE_NAME, process: 'api' },
       ...(env.NODE_ENV === 'development' ? { transport: { target: 'pino-pretty' } } : {}),
       // 结构化日志按 traceId 串联。
       formatters: {
@@ -125,7 +125,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
       route.endsWith('/me');
     const oversizedMessage = authRoute
       ? '认证请求内容过大，请检查后重试。'
-      : '这一片内容太大，重跑助手命令即可（新版脚本会切成更小的分片）。';
+      : '请求内容过大，请缩小后重试。';
     const unsupportedMessage = authRoute ? '认证请求必须使用 JSON 格式。' : undefined;
     const overrides =
       statusCode === 413
@@ -160,7 +160,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   // 公开发布身份（无密钥、no-store），供部署验收核对 API 与同一 release manifest。
   await registerVersionRoute(app, env);
 
-  // 业务路由（account / task / capability / billing）。
+  // 业务路由（account / billing / agent draft / agent transfer）。
   await registerBusinessRoutes(app);
 
   const billingReconciler = startBillingReconciler({
@@ -176,9 +176,8 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   // 进程退出时关闭基础设施连接。
   app.addHook('onClose', async () => {
     await billingReconciler.stop();
-    const { closeDb, closeRedis, closeQueues, closeObjectStore } =
-      await import('../platform/infra/index.js');
-    await Promise.allSettled([closeDb(), closeRedis(), closeQueues()]);
+    const { closeDb, closeRedis, closeObjectStore } = await import('../platform/infra/index.js');
+    await Promise.allSettled([closeDb(), closeRedis()]);
     closeObjectStore();
   });
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 全栈起栈（O-05）。固定启动顺序（硬性）：
-#   基础设施 → 0000–0010 业务迁移与应用角色配置 → API/Worker/Runtime/Web。
+#   基础设施 → 业务迁移与应用角色配置 → API/Web。
 # 业务迁移失败即止、不起业务容器。任一步失败立刻退出（set -e + pipefail）。
 #
 # 本期【无 Docker】：脚本只写不跑；逻辑/顺序经评审，留作后续 compose up。
@@ -49,7 +49,6 @@ is_weak() {
 }
 
 # 生产必填且禁弱默认的密钥项（与 .env.compose.example / compose ${VAR:?} 对齐）。
-# LLM key 允许空（degraded 不计 /ready），不在此列表。
 REQUIRED_SECRETS=(
   POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB
   POSTGRES_API_PASSWORD POSTGRES_WORKER_PASSWORD POSTGRES_RUNTIME_PASSWORD
@@ -74,10 +73,11 @@ if [[ "${GUARD_FAILED}" -ne 0 ]]; then
 fi
 log "0/6 密钥守卫通过（无空值、无已知弱默认）。"
 
-# Compose 不删除已经从清单移除的服务。只删除当前项目带精确服务标签的旧
-# Logto 容器；不触碰卷、数据服务或其他 Compose 项目。
+# Compose 不删除已经从清单移除的服务。只删除当前项目带精确服务标签的
+# 旧身份服务与已退役 worker/runtime/queue Redis 容器；不触碰卷（包括 queue
+# 数据卷）、数据服务或其他 Compose 项目。
 COMPOSE_PROJECT="${COMPOSE_PROJECT_NAME:-infra}"
-OBSOLETE_SERVICES=(logto logto_db_seed logto_alteration)
+OBSOLETE_SERVICES=(logto logto_db_seed logto_alteration worker runtime redis_queue)
 remove_obsolete_project_containers() {
   local service container_id
   local -a obsolete_ids=()
@@ -104,20 +104,20 @@ remove_obsolete_project_containers() {
   done
 }
 
-log "1/6 删除并确认当前 Compose 项目的废弃身份服务容器 ..."
+log "1/6 删除并确认当前 Compose 项目的废弃服务容器 ..."
 remove_obsolete_project_containers
 
 # 第一方认证迁移是停机式切换，旧应用容器不能与迁移并行。
-log "2/6 停止并确认当前项目的旧业务容器已经退出 ..."
-"${COMPOSE[@]}" stop --timeout 60 api worker runtime web
-if [[ -n "$("${COMPOSE[@]}" ps --status running -q api worker runtime web)" ]]; then
-  die "旧业务容器仍在运行，拒绝执行停机式认证迁移"
+log "2/6 停止并确认当前项目的业务容器已经退出 ..."
+"${COMPOSE[@]}" stop --timeout 60 api web
+if [[ -n "$("${COMPOSE[@]}" ps --status running -q api web)" ]]; then
+  die "业务容器仍在运行，拒绝执行停机式认证迁移"
 fi
 
-log "3/6 起 postgres / redis_queue / redis_hot / minio / observability，并等待 healthy ..."
-"${COMPOSE[@]}" up -d --wait postgres redis_queue redis_hot minio loki tempo otel-collector grafana
+log "3/6 起 postgres / redis_hot / minio / observability，并等待 healthy ..."
+"${COMPOSE[@]}" up -d --wait postgres redis_hot minio loki tempo otel-collector grafana
 
-log "4/6 建 MinIO 四桶 ..."
+log "4/6 确保 MinIO combo-artifacts 桶存在 ..."
 "${COMPOSE[@]}" up --no-deps --abort-on-container-exit --exit-code-from minio_mc minio_mc \
   || die "对象存储桶初始化失败，数据库迁移与业务容器保持停止"
 
@@ -125,8 +125,8 @@ log "5/6 业务迁移与固定应用角色配置（db/scripts/migrate.ts）..."
 "${COMPOSE[@]}" up --no-deps --abort-on-container-exit --exit-code-from migrate migrate \
   || die "业务迁移失败，已中止；业务容器未启动"
 
-log "6/6 起 api / worker / runtime / web ..."
-"${COMPOSE[@]}" up -d --wait api worker runtime web
+log "6/6 起 api / web ..."
+"${COMPOSE[@]}" up -d --wait api web
 
 log "全栈已启动。健康检查："
 log "  - API   : http://localhost:3000/ready"

@@ -5,7 +5,8 @@ import { join, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
-const APPLICATIONS = Object.freeze(['runtime-web', 'web']);
+const APPLICATIONS = Object.freeze(['web']);
+export const WEB_ASSET_MANIFEST_SCHEMA_VERSION = 2;
 
 function fail(message) {
   throw new Error(`Invalid Web asset manifest: ${message}`);
@@ -42,7 +43,9 @@ export function validateWebAssetManifest(value) {
   if (!isRecord(value) || !exactKeys(value, ['schemaVersion', 'assets'])) {
     fail('root keys must be exactly: assets, schemaVersion');
   }
-  if (value.schemaVersion !== 1) fail('schemaVersion must be 1');
+  if (value.schemaVersion !== WEB_ASSET_MANIFEST_SCHEMA_VERSION) {
+    fail(`schemaVersion must be ${WEB_ASSET_MANIFEST_SCHEMA_VERSION}`);
+  }
   if (!Array.isArray(value.assets) || value.assets.length === 0) {
     fail('assets must be a non-empty array');
   }
@@ -77,7 +80,7 @@ export function validateWebAssetManifest(value) {
       fail(`${application}/index.html is missing`);
     }
   }
-  return { schemaVersion: 1, assets };
+  return { schemaVersion: WEB_ASSET_MANIFEST_SCHEMA_VERSION, assets };
 }
 
 function filesBelow(root, output) {
@@ -103,10 +106,7 @@ function filesBelow(root, output) {
 
 export function createWebAssetManifest(inputs) {
   const output = resolve(inputs.output);
-  const roots = [
-    ['web', resolve(inputs.webRoot)],
-    ['runtime-web', resolve(inputs.runtimeRoot)],
-  ];
+  const roots = [['web', resolve(inputs.webRoot)]];
   const assets = [];
   for (const [application, root] of roots) {
     for (const file of filesBelow(root, output)) {
@@ -122,7 +122,7 @@ export function createWebAssetManifest(inputs) {
     const rightKey = `${right.application}/${right.path}`;
     return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
   });
-  return validateWebAssetManifest({ schemaVersion: 1, assets });
+  return validateWebAssetManifest({ schemaVersion: WEB_ASSET_MANIFEST_SCHEMA_VERSION, assets });
 }
 
 export function serializeWebAssetManifest(value) {
@@ -174,15 +174,12 @@ function run(argv) {
   const [command, ...rest] = argv;
   const options = parseOptions(rest);
   if (command === 'create') {
-    if (
-      Object.keys(options).some((name) => !['web-root', 'runtime-root', 'output'].includes(name))
-    ) {
+    if (Object.keys(options).some((name) => !['web-root', 'output'].includes(name))) {
       throw new Error('Unknown create option');
     }
     const output = resolve(required(options, 'output'));
     const manifest = createWebAssetManifest({
       webRoot: required(options, 'web-root'),
-      runtimeRoot: required(options, 'runtime-root'),
       output,
     });
     writeFileSync(output, serializeWebAssetManifest(manifest), {

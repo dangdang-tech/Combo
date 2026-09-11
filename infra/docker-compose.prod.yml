@@ -1,6 +1,6 @@
 # tecent2 生产部署覆盖层。业务服务使用 CI 推送的 SHA 镜像，不在服务器上构建。
 # 第一方认证完全依赖业务 PostgreSQL；authoring 通过基础 Compose 注入的生产 Resend 配置发信，
-# runtime 只读取同一数据库中的不透明会话。此文件不注册测试邮件替身或检查接口。
+# 此文件不注册测试邮件替身或检查接口。
 #
 # 项目名固定为 infra，以便沿用既有命名卷。IMAGE_TAG 必须是被部署提交的完整 SHA。
 name: infra
@@ -16,17 +16,6 @@ services:
     environment:
       NODE_ENV: production
 
-  worker:
-    image: ghcr.io/dangdang-tech/combo-api:${IMAGE_TAG:?IMAGE_TAG 必填（CD 写入部署 SHA）}
-    build: !reset null
-
-  runtime:
-    image: ghcr.io/dangdang-tech/combo-runtime:${IMAGE_TAG:?IMAGE_TAG 必填（CD 写入部署 SHA）}
-    build: !reset null
-    environment:
-      NODE_ENV: production
-      REDIS_URL: redis://redis_queue:6379
-
   web:
     image: ghcr.io/dangdang-tech/combo-web:${IMAGE_TAG:?IMAGE_TAG 必填（CD 写入部署 SHA）}
     build: !reset null
@@ -35,16 +24,12 @@ services:
 
   minio:
     ports: !override
-      - '9000:9000'
-      - '9011:9001'
+      - '127.0.0.1:9000:9000'
+      - '127.0.0.1:9011:9001'
 
   postgres:
     ports: !override
       - '127.0.0.1:5432:5432'
-
-  redis_queue:
-    ports: !override
-      - '127.0.0.1:6379:6379'
 
   redis_hot:
     ports: !override

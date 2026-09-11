@@ -3,20 +3,9 @@ kind: Kustomization
 namespace: combo-test
 resources:
   - ../../postgres.yaml
-  - ../../redis-queue.yaml
   - ../../redis-hot.yaml
   - ../../minio.yaml
   - ../../job-minio-init.yaml
-patches:
-  - target:
-      kind: Service
-      name: minio
-    patch: |-
-      - op: replace
-        path: /spec/type
-        value: ClusterIP
-      - op: remove
-        path: /spec/ports/0/nodePort
 labels:
   - includeSelectors: true
     includeTemplates: true

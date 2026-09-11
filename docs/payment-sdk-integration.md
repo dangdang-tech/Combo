@@ -21,7 +21,7 @@ Payment SDK 只封装 Combo 支付中台接口。它不保存业务数据，也�
 - `callId` 是业务请求中的一次收费调用，网络重试和支付后继续都必须复用。
 - `requestKey` 是 Host 创建支付时的防重复编号，创建结果不确定时必须复用。
 
-现有 Hosted Runtime 的 `usageId` 接近业务请求编号，V2 Gateway 的 `turnId` 接近收费调用编号。两者不能在新协议里定义成同一个概念。
+已退役 Hosted Runtime 历史契约中的 `usageId` 接近业务请求编号，V2 Gateway 的 `turnId` 接近收费调用编号。两者不能在新协议里定义成同一个概念。
 
 ## 标准流程
 

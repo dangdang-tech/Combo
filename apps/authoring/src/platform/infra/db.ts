@@ -1,4 +1,4 @@
-// PostgreSQL 连接池（pg）。tasks/uploads/capabilities/users 等状态真源。
+// PostgreSQL 连接池（pg）。当前认证、Draft、发布与充值状态真源。
 // 惰性建池，不在启动期强连（无 Docker 也能跑 tsc/单测/冒烟）。
 import { Pool } from 'pg';
 import type { Env } from '../config/env.js';

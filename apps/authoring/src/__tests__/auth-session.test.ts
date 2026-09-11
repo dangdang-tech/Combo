@@ -2,7 +2,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
 import { AUTH_SESSION_COOKIE_NAME, AUTH_SESSION_COOKIE_PRODUCTION_NAME } from '@cb/shared';
 import { authSessionDigest, resolveAuthSession } from '../platform/infra/auth-session.js';
-import { requireAuth, requireSseAuth } from '../platform/middleware/auth.js';
+import { requireAuth } from '../platform/middleware/auth.js';
 import type { Queryable } from '../platform/infra/db.js';
 
 const SESSION = `s1.${Buffer.alloc(32, 3).toString('base64url')}`;
@@ -195,20 +195,5 @@ describe('authoring auth middleware', () => {
     await requireAuth().call(req.server, req, reply, vi.fn());
 
     expect(reply.code).toHaveBeenCalledWith(503);
-  });
-
-  it('rejects SSE query credentials before opening a stream', async () => {
-    const db = dbWithRows([]);
-    const req = requestDouble({ db, cookie: SESSION, query: { access_token: 'legacy-token' } });
-    const reply = replyDouble();
-
-    await requireSseAuth().call(req.server, req, reply, vi.fn());
-
-    expect(reply.code).toHaveBeenCalledWith(401);
-    expect(db.query).not.toHaveBeenCalled();
-    expect(JSON.stringify(reply.send.mock.calls)).not.toContain('legacy-token');
-    expect(JSON.stringify((req.log.warn as ReturnType<typeof vi.fn>).mock.calls)).not.toContain(
-      'legacy-token',
-    );
   });
 });

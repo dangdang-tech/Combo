@@ -155,7 +155,7 @@ if [[ "$roles_ready" != t ]]; then
   failed=1
 fi
 
-# Secret 相等后，再从 Preview/Production 当前 Pod 用各自注入的凭据建立全新连接。
+# Secret 相等后，再从 Preview/Production 当前 API Pod 用注入的凭据建立全新连接。
 # 这同时防止 Secret 已轮换但 Pod 仍持旧环境变量时误报成功。
 verify_application_role_connection() {
   local namespace=$1 deployment=$2 pg_module=$3 expected_role=$4 secret_key=$5
@@ -177,20 +177,10 @@ for namespace in combo-preview combo-prod; do
     printf 'migrate-v2-host: %s/combo_api credential or fresh connection failed\n' "$namespace" >&2
     failed=1
   fi
-  if ! verify_application_role_connection \
-    "$namespace" worker /app/apps/authoring/node_modules/pg combo_worker POSTGRES_WORKER_PASSWORD; then
-    printf 'migrate-v2-host: %s/combo_worker credential or fresh connection failed\n' "$namespace" >&2
-    failed=1
-  fi
-  if ! verify_application_role_connection \
-    "$namespace" runtime /app/apps/runtime/node_modules/pg combo_runtime POSTGRES_RUNTIME_PASSWORD; then
-    printf 'migrate-v2-host: %s/combo_runtime credential or fresh connection failed\n' "$namespace" >&2
-    failed=1
-  fi
 done
 
 for namespace in combo-test combo-preview combo-prod; do
-  for deployment in api worker runtime web; do
+  for deployment in api web; do
     if ! "${k[@]}" -n "$namespace" rollout status "deployment/$deployment" --timeout=120s; then
       printf 'migrate-v2-host: %s/%s is not ready\n' "$namespace" "$deployment" >&2
       failed=1

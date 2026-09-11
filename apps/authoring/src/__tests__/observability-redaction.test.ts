@@ -65,12 +65,12 @@ describe('authoring OpenTelemetry export boundary', () => {
     });
     const span = provider
       .getTracer('safe-export-test')
-      .startSpan('GET /api/v1/connect/script?code=pairing-secret');
+      .startSpan('GET /api/v1/agent-package-transfers/id?token=transfer-secret');
     span.setAttributes({
-      'http.route': '/api/v1/connect/script',
-      'http.target': '/api/v1/connect/script?code=pairing-secret',
-      'url.full': 'https://combo.example/api/v1/connect/script?code=pairing-secret',
-      'url.query': 'code=pairing-secret',
+      'http.route': '/api/v1/agent-package-transfers/:transferId',
+      'http.target': '/api/v1/agent-package-transfers/id?token=transfer-secret',
+      'url.full': 'https://combo.example/api/v1/agent-package-transfers/id?token=transfer-secret',
+      'url.query': 'token=transfer-secret',
       'http.client_ip': '192.0.2.44',
       'client.address': '192.0.2.44',
       'http.request.header.authorization': 'Bearer alternate-secret',
@@ -82,13 +82,15 @@ describe('authoring OpenTelemetry export boundary', () => {
       'exception.message': 'user@example.test 123456 resend-secret',
       'exception.stacktrace': 'cb_session=s1.cookie-secret',
     });
-    span.setStatus({ code: SpanStatusCode.ERROR, message: 'pairing-secret 192.0.2.44' });
+    span.setStatus({ code: SpanStatusCode.ERROR, message: 'transfer-secret 192.0.2.44' });
     span.end();
     await provider.forceFlush();
 
     const exported = memory.getFinishedSpans();
     expect(exported).toHaveLength(1);
-    expect(exported[0]?.attributes['http.route']).toBe('/api/v1/connect/script');
+    expect(exported[0]?.attributes['http.route']).toBe(
+      '/api/v1/agent-package-transfers/:transferId',
+    );
     const serialized = JSON.stringify(
       exported.map((item) => ({
         name: item.name,
@@ -98,7 +100,7 @@ describe('authoring OpenTelemetry export boundary', () => {
       })),
     );
     for (const sentinel of [
-      'pairing-secret',
+      'transfer-secret',
       'alternate-secret',
       'cookie-secret',
       'resend-secret',

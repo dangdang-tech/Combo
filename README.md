@@ -36,7 +36,7 @@ Combo 让用户把已经完成的对话、Project 或工作旅程制作成可分
 pnpm install
 ```
 
-工作区包含 `packages/shared`、`packages/payment-protocol`、Creator Agent 相关协议与持久化包、`apps/creator-worker`、`apps/authoring`、`apps/runtime`、`apps/runtime-web`、`apps/sandboxd`、`apps/web`、`db`、`infra` 与 `scripts`。
+工作区包含 `packages/shared`、`packages/payment-protocol`、Creator Agent 相关协议与持久化包、`apps/creator-worker`、`apps/authoring`、`apps/web`、当前 V2 应用、`db`、`infra` 与 `scripts`。旧能力提取、对话上传/配对、Agent 管理和 Web 执行栈已经退出源码与主栈编排。此处只描述源码期望态；清理源码不会删除或修改任何现存集群资源、桶、数据库或数据。
 
 Agent 开发 SDK（`combo-agent-sdk`）与 Next.js 模板已迁至独立仓库 [dangdang-tech/combo-agent-sdk](https://github.com/dangdang-tech/combo-agent-sdk)，不在本工作区维护。
 
@@ -60,10 +60,8 @@ pnpm format:check     # prettier 全量校验
 ```bash
 pnpm -F @cb/shared build        # 构建脊柱（apps 依赖其 dist + .d.ts，先构建它）
 pnpm -F @cb/payment-protocol build # 构建支付严格协议；OpenAPI 真源在包内 openapi/ 目录
-pnpm -F @cb/authoring build     # 构建创作 API 与 Worker
-pnpm -F @cb/runtime build       # 构建 Runtime API
+pnpm -F @cb/authoring build     # 构建当前单一 API
 pnpm -F @cb/web dev             # Vite 开发服务器（前端）
-pnpm -F @cb/runtime-web dev     # Vite 试用与 Studio 前端
 pnpm -F @cb/web build           # tsc -b && vite build
 ```
 
@@ -88,20 +86,11 @@ node apps/authoring/dist/processes/api.js
 
 ---
 
-## Authoring 两进程说明
+## Authoring API
 
-API 与 Worker 共用 Authoring 镜像，按 `PROCESS` 环境变量在 `infra/entrypoint.sh` 分叉：
+Authoring 镜像只启动 `apps/authoring/dist/processes/api.js`。它提供认证、账户、充值、私有 Agent Draft、Agent Transfer、公开发布和接收器下载接口；充值查单调度器在 API 应用内运行。
 
-| 进程     | 入口                                      | 职责                                    |
-| -------- | ----------------------------------------- | --------------------------------------- |
-| `api`    | `apps/authoring/dist/processes/api.js`    | Fastify HTTP、认证、任务接口与 SSE      |
-| `worker` | `apps/authoring/dist/processes/worker.js` | BullMQ Task pipeline 与失联任务租约恢复 |
-
-本地直跑单个进程：
-
-```bash
-PROCESS=worker node apps/authoring/dist/processes/worker.js
-```
+主站 Web 只公开首页、登录、Agent 展示页与受保护的 `/agent-transfers/:id` 页面。未知或已退出的页面统一显示 404。
 
 ---
 
@@ -119,7 +108,7 @@ pnpm -F @cb/db migrate:status  # 列清单（无连接也能列）
 默认 `DATABASE_URL=postgres://combo:combo@localhost:5432/combo`，可用环境变量覆盖。
 
 - 唯一 `CREATE EXTENSION` 是 `pgcrypto`（stock PG 自带），故任意 PG 实例可跑。
-- 当前迁移链包含 Task pipeline、Capability、Session、Turn、Message 与 Artifact 的运行时真源。
+- 历史迁移链仍保留 Task pipeline、Capability、Session、Turn、Message 与 Artifact 表；保留迁移历史不表示主栈仍提供这些退役功能。
 - Runner 会拒绝编号缺口、未知账本项、旧迁移链和非空 schema 配空账本；Test 从空库完整执行后再运行第二遍幂等检查。
 
 ---
@@ -128,14 +117,15 @@ pnpm -F @cb/db migrate:status  # 列清单（无连接也能列）
 
 > 以下 Compose 命令只用于独立开发环境，不作为 Test、Preview 或 Production 的验收证据。tecent2 源码检查不运行这些命令。
 
-编排在 `infra/docker-compose.yml`。固定启动顺序由 `depends_on` 与健康条件约束：基础设施就绪后运行 `0000` 至 `0011` 迁移并配置三个固定数据库角色，成功后才启动 API、Worker、Runtime 和 Web。
+编排在 `infra/docker-compose.yml`。固定启动顺序由 `depends_on` 与健康条件约束：PostgreSQL、`redis-hot` 和 MinIO 就绪后运行迁移，成功后启动 API 与 Web。
 
 要点：
 
 - 第一方邮箱 OTP 由 API 通过 Resend 发出；数据库只保存邮箱身份、验证码 HMAC 摘要和不透明会话摘要。
-- API、Worker、Runtime 分别使用 `combo_api`、`combo_worker`、`combo_runtime` 最小权限数据库角色。
-- Redis 物理拆两实例：`redis_queue`（AOF + noeviction，BullMQ 队列绝不被驱逐）/ `redis_hot`（maxmemory + allkeys-lru，事件 Streams / 锁 / 限流，可驱逐、无持久卷）。
-- 健康检查：postgres / redis×2 / minio 用原生探针；api 用 `/health`（liveness）；observability 栈提供 Grafana + Loki + Tempo + OpenTelemetry Collector。
+- API 使用 `combo_api` 最小权限数据库角色；既有迁移兼容流程仍保留历史角色定义，但主栈不启动对应进程。
+- `redis-hot` 使用 `allkeys-lru` 且无持久卷，只承载认证软限流。
+- MinIO 初始化只确保不可变 `combo-artifacts` 桶存在，不删除或改写对象。
+- 健康检查：postgres、redis-hot、minio 用原生探针；API 用 `/health`；observability 栈提供 Grafana、Loki、Tempo 与 OpenTelemetry Collector。
 
 ```bash
 cp .env.compose.example .env    # 全栈起栈用：填全部密钥（不得留空/不得用弱默认）
@@ -149,7 +139,7 @@ pnpm -F @cb/infra compose:down  # 拆栈
 
 #### 环境配置
 
-本机直跑复制 `.env.local.example`；Compose 使用 `.env.compose.example`。生产式配置必须提供 `PUBLIC_APP_ORIGINS`、三个数据库角色密码、`RESEND_API_KEY` 和 `OTP_HMAC_SECRET`。`scripts/start.sh` 会拒绝空值和已知弱默认值。
+本机直跑复制 `.env.local.example`；Compose 使用 `.env.compose.example`。生产式配置必须提供 `PUBLIC_APP_ORIGINS`、数据库角色密码、`RESEND_API_KEY` 和 `OTP_HMAC_SECRET`。`scripts/start.sh` 会拒绝空值和已知弱默认值。
 
 环境变量真源是上述两个 `.env.*.example`，分两类消费者：`[app]`（Node 进程的环境 schema 校验）与 `[compose]`（compose 变量替换）。
 
@@ -161,7 +151,7 @@ pnpm -F @cb/infra compose:down  # 拆栈
 
 三个 workflow 对应「检查 / 构建 / 部署」三个阶段：
 
-- `.github/workflows/pr-ci.yml`（PR checks）：合并前质量门禁，只由 `pull_request` 触发。完成依赖安装、shared 构建、format、lint、typecheck、无容器快速测试和 ShellCheck；不构建或发布镜像，也不读取部署 Secret。
+- `.github/workflows/pr-ci.yml`（PR checks）：`pull_request` 运行依赖安装、shared 构建、format、lint、typecheck、无容器快速测试和 ShellCheck；`pull_request_target` 只用受信 base 代码核对 retirement policy。两种触发都不构建或发布镜像，也不读取部署 Secret。
 - `.github/workflows/ci.yml`（Release build）：`main` 更新后执行完整 build、集成测试、容器契约与镜像构建，并发布绑定精确提交 SHA 的不可变 `combo-build-<SHA>-<attempt>` 构建清单。它也是分支构建的可复用入口（`workflow_call`）。
 - `.github/workflows/deploy.yml`（Deploy）：统一部署三个环境，按晋级链执行。
 
@@ -178,14 +168,12 @@ Test、Preview、Production 三个环境运行在同一台 tecent2 主机的 k3s
 
 ```
 .                      # 仓库根 = 本 monorepo（@cb/root）
-├── packages/shared/   # @cb/shared 脊柱：DTO / zod / ErrorEnvelope / SSE 协议 / 常量 / 端口 / OpenAPI 真源
+├── packages/shared/   # @cb/shared 脊柱：认证与充值 DTO、ErrorEnvelope、健康和发布身份契约
 ├── packages/creator-*/       # Creator Agent 协议、持久化、Broker Journal 与 Worker 客户端
-├── apps/authoring/    # @cb/authoring  创作 API 与任务 Worker
+├── apps/authoring/    # @cb/authoring  当前主栈单一 API
 ├── apps/creator-worker/ # Agent Package 创作、正式加载与原生 Codex 会话
-├── apps/runtime/      # @cb/runtime  会话、Turn、Artifact 与 Runtime SSE
-├── apps/web/          # @cb/web  创作端 React/Vite 应用
-├── apps/runtime-web/  # @cb/runtime-web  试用与 Studio React/Vite 应用
-├── apps/sandboxd/     # @cb/sandboxd  运行沙箱协议与进程边界
+├── apps/web/          # @cb/web  首页、登录、Agent 页面与 Transfer 页面
+├── apps/{authz,billing,llm-gateway}/ # 当前 V2 平台应用
 ├── db/                # @cb/db   PostgreSQL 迁移 + 幂等 runner
 ├── infra/             # @cb/infra 编排、发布拓扑、k8s 清单、Nginx 与基础设施配置
 ├── scripts/           # @cb/scripts 发布渲染 / 部署 / 验收 / 集成脚本
@@ -200,6 +188,6 @@ Test、Preview、Production 三个环境运行在同一台 tecent2 主机的 k3s
 
 源码门禁统一执行 `pnpm lint`、`pnpm format:check`、`pnpm typecheck`、`pnpm typecheck:test`、`pnpm build` 和 `pnpm test`。数据库集成检查使用一个可丢弃的 PostgreSQL，验证从空库执行 `0000` 至 `0011`、再次幂等执行、应用角色权限和异常账本拒绝。
 
-Test、Preview 与 Production 的环境证据来自 tecent2 K3s 的 `combo-test`、`combo-preview` 与 `combo-prod` namespace。受保护的 `main` 控制器可以部署自动产生的 `main` 候选，也可以部署手工选择的任意同仓库分支候选；每次部署都核对四个业务面的镜像摘要、迁移头、运行时发布身份、Web 资源摘要并验证环境域名返回对应 SHA。源码目录中的普通测试不启动 Docker 或 Docker Compose。
+Test、Preview 与 Production 的环境证据来自 tecent2 K3s 的 `combo-test`、`combo-preview` 与 `combo-prod` namespace。受保护的 `main` 控制器可以部署自动产生的 `main` 候选，也可以部署手工选择的任意同仓库分支候选；每次部署都核对 API 与 Web 镜像摘要、迁移头、发布身份、Web 资源摘要并验证环境域名返回对应 SHA。源码目录中的普通测试不启动 Docker 或 Docker Compose。
 
 Agent 固定按次计费与乐收赢充值的源码验收、未完成现场证据和后续 Test 人工步骤见 [`docs/leshouying-test-acceptance.md`](docs/leshouying-test-acceptance.md)。

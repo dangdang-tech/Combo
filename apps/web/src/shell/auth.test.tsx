@@ -35,6 +35,7 @@ const ME: MeView = {
   lastLoginAt: null,
 };
 const ME_ENVELOPE = { data: ME, meta: { traceId: 'trace-me-1' } };
+const TRANSFER_PATH = '/agent-transfers/11111111-1111-4111-8111-111111111111';
 
 describe('fetchMe', () => {
   it('parses the first-party /me envelope with the shared schema', async () => {
@@ -95,32 +96,25 @@ describe('fetchMe', () => {
 describe('first-party login navigation', () => {
   it('uses the in-app /login route and preserves allowed returnTo paths', () => {
     expect(loginUrl()).toBe(AUTH_LOGIN_PATH);
-    expect(loginUrl('/tasks/task-42?tab=logs')).toBe(
-      `/login?returnTo=${encodeURIComponent('/tasks/task-42?tab=logs')}`,
-    );
-    expect(loginUrl('/try/c/capability-1')).toBe(
-      `/login?returnTo=${encodeURIComponent('/try/c/capability-1')}`,
-    );
+    expect(loginUrl(TRANSFER_PATH)).toBe(`/login?returnTo=${encodeURIComponent(TRANSFER_PATH)}`);
   });
 
-  it('falls unsafe or unknown paths back to /tasks', () => {
+  it('falls unsafe or retired paths back to the landing page', () => {
     for (const value of [
       'https://evil.example/phish',
       '//evil.example/phish',
-      '/tasks\\evil',
+      '/retired\\evil',
       '/settings/security',
-      '/tasks/%2f%2fevil.example',
+      '/retired/%2f%2fevil.example',
     ]) {
-      expect(loginUrl(value)).toBe(`/login?returnTo=${encodeURIComponent('/tasks')}`);
+      expect(loginUrl(value)).toBe(`/login?returnTo=${encodeURIComponent('/')}`);
     }
   });
 
   it('navigates straight to the custom page with the current protected deep link', () => {
     const navigate = vi.fn<(url: string) => void>();
-    goToLogin('/capabilities?filter=published', navigate);
-    expect(navigate).toHaveBeenCalledWith(
-      `/login?returnTo=${encodeURIComponent('/capabilities?filter=published')}`,
-    );
+    goToLogin(TRANSFER_PATH, navigate);
+    expect(navigate).toHaveBeenCalledWith(`/login?returnTo=${encodeURIComponent(TRANSFER_PATH)}`);
   });
 });
 
@@ -158,7 +152,7 @@ function LocationProbe(): ReactElement {
   return <output data-testid="route-location">{location.pathname + location.search}</output>;
 }
 
-function renderGuard(initialEntry = '/tasks'): QueryClient {
+function renderGuard(initialEntry = TRANSFER_PATH): QueryClient {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
@@ -168,8 +162,7 @@ function renderGuard(initialEntry = '/tasks'): QueryClient {
         <MemoryRouter initialEntries={[initialEntry]}>
           <Routes>
             <Route element={<RequireAuth />}>
-              <Route path="/tasks" element={<ProtectedProbe />} />
-              <Route path="/capabilities" element={<ProtectedProbe />} />
+              <Route path="/agent-transfers/:transferId" element={<ProtectedProbe />} />
             </Route>
             <Route path="/login" element={<LocationProbe />} />
           </Routes>
@@ -186,18 +179,18 @@ describe('RequireAuth', () => {
     renderGuard();
 
     expect(await screen.findByTestId('route-location')).toHaveTextContent(
-      `/login?returnTo=${encodeURIComponent('/tasks')}`,
+      `/login?returnTo=${encodeURIComponent(TRANSFER_PATH)}`,
     );
     expect(screen.queryByText('受保护内容')).toBeNull();
     expect(fetchMock.calls).toHaveLength(1);
   });
 
-  it('preserves an allowed protected query string in returnTo', async () => {
+  it('drops query strings from the protected transfer returnTo', async () => {
     fetchMock = installFetchMock({ status: 401, json: {} });
-    renderGuard('/capabilities?filter=draft&sort=updated');
+    renderGuard(`${TRANSFER_PATH}?token=hidden`);
 
     expect(await screen.findByTestId('route-location')).toHaveTextContent(
-      `/login?returnTo=${encodeURIComponent('/capabilities?filter=draft&sort=updated')}`,
+      `/login?returnTo=${encodeURIComponent('/')}`,
     );
     expect(fetchMock.calls).toHaveLength(1);
   });

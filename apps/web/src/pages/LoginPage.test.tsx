@@ -40,7 +40,7 @@ function deferredResponse() {
 
 function renderLogin(
   navigateAfterLogin = vi.fn<(path: string) => void>(),
-  initialEntry = '/login?returnTo=%2Ftasks%2Ftask-1',
+  initialEntry = '/login',
 ) {
   render(
     <MemoryRouter initialEntries={[initialEntry]}>
@@ -92,7 +92,7 @@ describe('LoginPage two-step email OTP flow', () => {
     });
     const navigate = renderLogin();
 
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/tasks/task-1'));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/'));
     expect(fetchMock.calls.map(({ url }) => url)).toEqual(['/api/v1/me']);
     expect(screen.queryByRole('textbox', { name: '邮箱' })).toBeNull();
   });
@@ -114,7 +114,7 @@ describe('LoginPage two-step email OTP flow', () => {
       {
         status: 200,
         json: {
-          data: { user: USER, returnTo: '/tasks/task-1?acceptance=recovered' },
+          data: { user: USER, returnTo: '/' },
           meta: { traceId: 'trace-recovered-login' },
         },
       },
@@ -138,9 +138,7 @@ describe('LoginPage two-step email OTP flow', () => {
     await user.type(screen.getByRole('textbox', { name: '六位验证码' }), '123456');
     await user.click(screen.getByRole('button', { name: '验证并登录' }));
 
-    await waitFor(() =>
-      expect(navigate).toHaveBeenCalledWith('/tasks/task-1?acceptance=recovered'),
-    );
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/'));
   });
 
   it('shows a terminal disabled state and switches accounts only through idempotent logout', async () => {
@@ -186,7 +184,7 @@ describe('LoginPage two-step email OTP flow', () => {
       {
         status: 200,
         json: {
-          data: { user: USER, returnTo: '/tasks/task-1' },
+          data: { user: USER, returnTo: '/' },
           meta: { traceId: 'trace-login' },
         },
       },
@@ -214,7 +212,7 @@ describe('LoginPage two-step email OTP flow', () => {
     expect(codeInput).toHaveValue('004271');
     await user.keyboard('{Enter}');
 
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/tasks/task-1'));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/'));
     expect(fetchMock.calls.map(({ method, url }) => [method, url])).toEqual([
       ['GET', '/api/v1/me'],
       ['POST', '/api/v1/auth/email/challenges'],
@@ -223,24 +221,24 @@ describe('LoginPage two-step email OTP flow', () => {
     expect(fetchMock.calls[2]?.body).toEqual({
       email: 'Alice@example.com',
       code: '004271',
-      returnTo: '/tasks/task-1',
+      returnTo: '/',
     });
     expect(storageSpy).not.toHaveBeenCalled();
   });
 
-  it('returns a completed email login to the protected capabilities page', async () => {
+  it('falls a retired route returnTo back to the landing page', async () => {
     fetchMock = installFetchMock([
       { status: 401, json: {} },
       challengeAccepted,
       {
         status: 200,
         json: {
-          data: { user: USER, returnTo: '/capabilities' },
-          meta: { traceId: 'trace-capabilities-return' },
+          data: { user: USER, returnTo: '/' },
+          meta: { traceId: 'trace-retired-return' },
         },
       },
     ]);
-    const navigate = renderLogin(undefined, '/login?returnTo=%2Fcapabilities');
+    const navigate = renderLogin(undefined, '/login?returnTo=%2Fretired');
     const user = userEvent.setup();
 
     await user.type(await screen.findByRole('textbox', { name: '邮箱' }), 'Alice@example.com');
@@ -248,11 +246,11 @@ describe('LoginPage two-step email OTP flow', () => {
     await user.type(await screen.findByRole('textbox', { name: '六位验证码' }), '123456');
     await user.click(screen.getByRole('button', { name: '验证并登录' }));
 
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/capabilities'));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/'));
     expect(fetchMock.calls[2]?.body).toEqual({
       email: 'Alice@example.com',
       code: '123456',
-      returnTo: '/capabilities',
+      returnTo: '/',
     });
   });
 
@@ -336,14 +334,14 @@ describe('LoginPage two-step email OTP flow', () => {
       verification.resolve({
         status: 200,
         json: {
-          data: { user: USER, returnTo: '/tasks/task-1' },
+          data: { user: USER, returnTo: '/' },
           meta: { traceId: 'trace-deferred-verification' },
         },
       });
       await verification.promise;
     });
 
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/tasks/task-1'));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/'));
     expect(fetchMock.calls[2]?.body).toMatchObject({ email: 'old@example.com', code: '123456' });
   });
 
@@ -396,7 +394,7 @@ describe('LoginPage two-step email OTP flow', () => {
     await user.type(await screen.findByRole('textbox', { name: '六位验证码' }), '123456');
     await user.click(screen.getByRole('button', { name: '验证并登录' }));
 
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/tasks/task-1'));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/'));
     expect(fetchMock.calls.map(({ url }) => url)).toEqual([
       '/api/v1/me',
       '/api/v1/auth/email/challenges',
@@ -551,7 +549,7 @@ describe('LoginPage two-step email OTP flow', () => {
       {
         status: 200,
         json: {
-          data: { user: USER, returnTo: '/tasks' },
+          data: { user: USER, returnTo: '/' },
           meta: { traceId: 'trace-safe-return' },
         },
       },
@@ -564,11 +562,11 @@ describe('LoginPage two-step email OTP flow', () => {
     await user.type(await screen.findByRole('textbox', { name: '六位验证码' }), '123456');
     await user.click(screen.getByRole('button', { name: '验证并登录' }));
 
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/tasks'));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/'));
     expect(fetchMock.calls[2]?.body).toEqual({
       email: 'Alice@example.com',
       code: '123456',
-      returnTo: '/tasks',
+      returnTo: '/',
     });
   });
 });

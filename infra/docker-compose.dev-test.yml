@@ -5,10 +5,6 @@ services:
     ports: !override
       - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
 
-  redis_queue:
-    ports: !override
-      - '127.0.0.1:${REDIS_QUEUE_PORT:-6379}:6379'
-
   redis_hot:
     ports: !override
       - '127.0.0.1:${REDIS_HOT_PORT:-6380}:6379'
@@ -57,19 +53,6 @@ services:
       OTEL_SDK_DISABLED: 'true'
     ports: !override
       - '127.0.0.1:${API_PORT:-3000}:3000'
-
-  runtime:
-    environment:
-      NODE_ENV: development
-      PUBLIC_APP_ORIGINS: ${PUBLIC_APP_ORIGINS:?PUBLIC_APP_ORIGINS 仅测试时必填}
-      SESSION_COOKIE_SECURE: 'false'
-      REDIS_URL: redis://redis_queue:6379
-      OTEL_SDK_DISABLED: 'true'
-
-  worker:
-    environment:
-      NODE_ENV: development
-      OTEL_SDK_DISABLED: 'true'
 
   web:
     environment:

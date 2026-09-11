@@ -6,6 +6,8 @@
 
 本文中的符号命名必须使用“稳定 ID · 语义名称”双命名。面向人的页面、文档、PR 和验收报告不得只展示裸 ID；语义发生变化时应新增 ID，而不是保留旧 ID 改写含义。
 
+当前主栈已经移除旧能力提取、对话上传/配对、旧 Agent 管理和 Web 执行链路。主栈只保留 Authoring API、Web、PostgreSQL、热态 Redis 与 MinIO；Creator Worker、Creator packages、数据库迁移和独立 V2 应用继续作为当前产品工程资产保留。历史章节只用于解释产品决策，不构成重新接回旧链路的实现授权。
+
 ## 当前增量：`J-012` · 可用上下文轻量创作
 
 用户于 2026-09-07 明确确认取消完整快照和 Desktop 来源证明前置；该决定已写入 `PROJECT.md`。
@@ -134,32 +136,32 @@ Combo 不自行实现模型推理循环。Codex 负责推理和工具循环；Co
 | Module                                   | 责任                                                                                                                                 | 当前仓库主要承载位置                                                                                                                                           | 服务的 Capability                                                                                                             |
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `MOD-CREATOR-BRIDGE` · Agent 制作入口    | 接收制作指令，默认消费 Desktop attested active-task 对话来源；Project 与工作旅程作为独立显式来源                                     | 需要新增 Desktop current-task handoff，具体 Host / Plugin API 尚未冻结；旧 Hook / Bridge 只保留 Project 兼容职责                                               | `CAP-010` · 创作来源绑定、`CAP-011` · Desktop 当前对话绑定                                                                    |
-| `MOD-CREATOR-UI` · 创作者体验            | Codex Desktop 内的创建进度、Agent Studio、审阅修订和发布动作                                                                         | 需要新增 Codex Desktop Creator / Studio surface；`apps/web/` 与 `apps/runtime-web/` 仅可复用展示能力                                                           | `CAP-030` · Studio 审阅试跑、`CAP-040` · Package 发布                                                                         |
+| `MOD-CREATOR-UI` · 创作者体验            | Codex Desktop 内的创建进度、Agent Studio、审阅修订和发布动作                                                                         | 需要新增 Codex Desktop Creator / Studio surface；`apps/web/` 只承载当前首页、登录、Agent 与 Transfer 页面                                                      | `CAP-030` · Studio 审阅试跑、`CAP-040` · Package 发布                                                                         |
 | `MOD-AUTHORING` · Agent 创作             | 来源读取、Draft 提取和 Package 编译编排                                                                                              | `apps/authoring/`；Agent Package 编译核心需要正式接入                                                                                                          | `CAP-010` · 创作来源绑定、`CAP-012` · 当前对话 Draft 提取、`CAP-020` · Draft 提取与 Package 编译、`CAP-030` · Studio 审阅试跑 |
 | `MOD-PACKAGE` · Package 核心             | Agent Package 协议、构建、摘要、加载和只读快照                                                                                       | `packages/creator-agent-protocol/`、`apps/creator-worker/` 中的 Package 构建器、发布器与加载器                                                                 | `CAP-020` · Draft 提取与 Package 编译、`CAP-070` · Package 推理运行                                                           |
 | `MOD-REGISTRY` · Package 注册            | 保存不可变 Package、发布版本和解析 digest                                                                                            | `apps/authoring/`、`db/`、对象存储端口；需要新增 Package Release 语义                                                                                          | `CAP-040` · Package 发布、`CAP-050` · 双入口分享、`CAP-080` · 安装与会话恢复                                                  |
 | `MOD-SHARE` · 分享服务                   | 生成分享链接与能力获取指令，并把两者解析到 exact Release                                                                             | `apps/web/`、`apps/authoring/`；需要新增 Package Entry Resolver                                                                                                | `CAP-050` · 双入口分享、`CAP-060` · Agent 能力接收                                                                            |
 | `MOD-RECEIVER` · Agent 能力接收          | 接收链接或能力获取指令，校验并加载对应 Agent Package                                                                                 | 需要新增 Combo Plugin Receiver 或等价 Agent handoff                                                                                                            | `CAP-060` · Agent 能力接收、`CAP-070` · Package 推理运行                                                                      |
-| `MOD-WEB-PREVIEW` · Web 试跑预览         | 在网页中展示试跑过程、对话和产物                                                                                                     | `apps/runtime/`、`apps/runtime-web/`                                                                                                                           | `CAP-030` · Studio 审阅试跑                                                                                                   |
+| `MOD-WEB-PREVIEW` · Web 试跑预览         | 在网页中展示试跑过程、对话和产物                                                                                                     | 尚未实现；不得复用已经退役的 Web Runtime 路线作为完成证据                                                                                                      | `CAP-030` · Studio 审阅试跑                                                                                                   |
 | `MOD-CODEX-HOST` · 原生 Codex Agent 运行 | 正式加载 Package、挂载 Skill 并维持 Codex 线程；未来顶层 Desktop Host 还需提供不可伪造的当前 active task 来源边界和显式 Project 权限 | 当前 `apps/creator-worker/` 只承载 Agent Package Session、Project Creator 授权语义与自建 Bundled Codex Host；Desktop current-task handoff 为 `NOT_IMPLEMENTED` | `CAP-010` · 创作来源绑定、`CAP-011` · Desktop 当前对话绑定、`CAP-070` · Package 推理运行、`CAP-080` · 安装与会话恢复          |
 | `MOD-PAYMENTS` · 支付中台                | 保存权威支付请求、订单、到账、资金预留和流水；向 Host 提供托管收银台；不保存或恢复业务请求                                           | `apps/billing/` 与 `packages/payment-protocol/` 已提供支付 API、身份校验、渠道与收银台模块；实际环境和 Host 验收仍未完成                                       | `CAP-075` · 平台托管支付                                                                                                      |
 | `MOD-SHARED` · 共享基础设施              | 跨服务合同、认证、存储、事件和错误模型                                                                                               | `packages/shared/`、`db/`、`infra/`                                                                                                                            | `CAP-010` · 创作来源绑定至 `CAP-080` · 安装与会话恢复的跨模块基础设施                                                         |
 
-当前 `Capability`、旧 `AgentVersion` 或 Catalog 数据可以作为迁移来源、管理投影或历史兼容层，但不能与 Agent Package 并列成为新的交付真相。
+数据库中保留的历史 Capability、旧 AgentVersion 或 Catalog 数据只作为迁移背景，不再有主栈读写路由，也不能与 Agent Package 并列成为新的交付真相。
 
 ## 四、当前工程基线
 
 当前基线由同一仓库内两条尚未形成产品闭环的工程线组成：
 
-- Web、Authoring API、Runtime、数据库、对象存储端口和既有 Capability 发布链路构成现有产品服务线。
-- `apps/creator-worker/` 与 Creator Agent 相关 packages 已实现 Agent Package 创作、正式加载和原生 Codex Session，并经过真实流程测试，但尚未接入 Web、Authoring API、Registry 和分享链路。
+- Web、Authoring API、数据库与不可变对象存储构成当前主栈服务线。
+- `apps/creator-worker/` 与 Creator Agent 相关 packages 已实现 Agent Package 创作、正式加载和原生 Codex Session，并经过真实流程测试；Authoring 已复用其公开编译器和接收器产物，但完整 Desktop 产品闭环仍需单独验收。
 
 两条工程线各自已有模块级或独立真实流程测试；跨线 E2E 尚未运行，不能等价为跨用户产品闭环已经完成。
 
 ### 已经具备或已被验证的核心机制
 
-- Web、Authoring、Runtime、Runtime Web、数据库和基础设施骨架。
-- 来源导入、后台任务、进度事件、能力发布和公开页的既有实现基础。
+- Web 首页、登录、Agent 与 Transfer 页面，Authoring API、数据库和基础设施骨架。
+- J-012 私有 Draft、Agent Transfer、公开 Release 与接收器交付的实现基础。
 - Agent Package 的内容寻址协议、固定构建、完整性校验和正式重载机制。
 - `AGENT.md` 注入、Package Skill 注册、私有只读运行快照。
 - Bundled Codex 的同一线程多轮推理。
@@ -425,7 +427,7 @@ Evidence: <run or artifact URL>
 2. 具体 PRD、交互稿和飞书文档负责解释某一阶段的用户行为，不得改写唯一目标。
 3. `packages/creator-agent-protocol/`、共享 Schema 和数据库迁移负责实现合同，不得反向定义产品目标。
 4. 测试计划和测试报告负责证明完成状态，不得用测试数量替代用户旅程结果。
-5. 历史 Capability、旧 AgentVersion 和既有 Runtime 文档属于迁移背景；与本文冲突时，以 `PROJECT.md` 中已确认的目标、体验和唯一产物模型为准。
+5. 历史 Capability、旧 AgentVersion 和已退役 Runtime 资料只属于迁移背景；与本文冲突时，以 `PROJECT.md` 中已确认的目标、体验和唯一产物模型为准。
 
 ---
 

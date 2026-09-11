@@ -25,6 +25,7 @@ const ME = {
   createdAt: '2026-01-01T00:00:00.000Z',
   lastLoginAt: '2026-01-01T00:01:00.000Z',
 };
+const TRANSFER_PATH = '/agent-transfers/11111111-1111-4111-8111-111111111111';
 
 describe('first-party auth API', () => {
   it('posts a strict email challenge and parses the shared response contract', async () => {
@@ -108,7 +109,7 @@ describe('first-party auth API', () => {
     const error = await verifyEmail({
       email: 'Alice@example.com',
       code: '004271',
-      returnTo: '/tasks',
+      returnTo: TRANSFER_PATH,
     }).catch((cause: unknown) => cause);
 
     expect(error).toBeInstanceOf(AuthRequestError);
@@ -117,7 +118,7 @@ describe('first-party auth API', () => {
     expect(fetchMock.calls[0]).toEqual(
       expect.objectContaining({
         url: EMAIL_VERIFICATION_PATH,
-        body: { email: 'Alice@example.com', code: '004271', returnTo: '/tasks' },
+        body: { email: 'Alice@example.com', code: '004271', returnTo: TRANSFER_PATH },
       }),
     );
   });
@@ -138,7 +139,7 @@ describe('first-party auth API', () => {
     const error = await verifyEmail({
       email: 'Alice@example.com',
       code: '004271',
-      returnTo: '/tasks',
+      returnTo: TRANSFER_PATH,
     }).catch((cause: unknown) => cause);
 
     expect(error).toBeInstanceOf(AuthRequestError);
@@ -151,7 +152,7 @@ describe('first-party auth API', () => {
     const error = await verifyEmail({
       email: 'Alice@example.com',
       code: '004271',
-      returnTo: '/tasks',
+      returnTo: TRANSFER_PATH,
     }).catch((cause: unknown) => cause);
     expect(error).toMatchObject({ status: 401, outcomeUncertain: false });
     expect((error as AuthRequestError).message).toBe('验证码无效或已过期，请重新获取。');
@@ -161,14 +162,18 @@ describe('first-party auth API', () => {
     fetchMock = installFetchMock({
       status: 200,
       json: {
-        data: { user: { ...ME, avatarUrl: 'future-field' }, returnTo: '/tasks', onboarding: true },
+        data: {
+          user: { ...ME, avatarUrl: 'future-field' },
+          returnTo: TRANSFER_PATH,
+          onboarding: true,
+        },
         meta: { traceId: 'trace-verification', requestVersion: 2 },
       },
     });
 
     await expect(
-      verifyEmail({ email: 'Alice@example.com', code: '004271', returnTo: '/tasks' }),
-    ).resolves.toEqual({ user: ME, returnTo: '/tasks' });
+      verifyEmail({ email: 'Alice@example.com', code: '004271', returnTo: TRANSFER_PATH }),
+    ).resolves.toEqual({ user: ME, returnTo: TRANSFER_PATH });
     expect(JSON.stringify(fetchMock.calls)).not.toContain('cb_session');
   });
 });

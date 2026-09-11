@@ -2,7 +2,7 @@
   "name": "@cb/web",
   "version": "0.0.0",
   "private": true,
-  "description": "React/Vite 创作者中心前端骨架；消费 @cb/shared 类型 / OpenAPI client（Phase 4 填页面）",
+  "description": "Combo Landing、Agent 发布与转移 React/Vite 前端",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -18,10 +18,7 @@
   },
   "dependencies": {
     "@cb/shared": "workspace:*",
-    "@microsoft/fetch-event-source": "^2.0.1",
     "@tanstack/react-query": "^5.62.11",
-    "echarts": "^5.6.0",
-    "echarts-for-react": "^3.0.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.1"

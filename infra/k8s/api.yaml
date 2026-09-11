@@ -34,8 +34,6 @@ spec:
         - name: api
           image: ghcr.io/dangdang-tech/combo-api:latest
           env:
-            - name: PROCESS
-              value: api
             - name: NODE_ENV
               value: production
             - name: HOST
@@ -56,15 +54,10 @@ spec:
                 secretKeyRef: { name: combo-env, key: POSTGRES_API_PASSWORD }
             - name: DATABASE_URL
               value: postgres://$(PGUSER):$(PGPASSWORD)@$(PGHOST):$(PGPORT)/$(PGDATABASE)
-            - name: REDIS_QUEUE_URL
-              value: redis://redis-queue:6379/0
             - name: REDIS_HOT_URL
               value: redis://redis-hot:6379/0
             - name: S3_ENDPOINT
               value: http://minio:9000
-            - name: S3_PUBLIC_ENDPOINT
-              valueFrom:
-                secretKeyRef: { name: combo-env, key: S3_PUBLIC_ENDPOINT }
             - name: S3_REGION
               value: us-east-1
             - name: S3_ACCESS_KEY
@@ -88,14 +81,8 @@ spec:
             - name: OTP_HMAC_SECRET
               valueFrom:
                 secretKeyRef: { name: combo-env, key: OTP_HMAC_SECRET }
-            # 受控 Test Publisher gate 是单个严格 JSON 绑定；缺失时路由保持 404。
-            # Preview/Production 若误配此键，Authoring API 会拒绝启动。
-            - name: COMBO_AGENT_PACKAGE_PUBLISHER_TEST_GATE
-              valueFrom:
-                secretKeyRef:
-                  { name: combo-env, key: COMBO_AGENT_PACKAGE_PUBLISHER_TEST_GATE, optional: true }
-            # 钱包充值只在 Authoring API 中启用。支付配置逐键读取，绝不通过 envFrom
-            # 扩散到 worker；缺省时网关保持关闭，启用后任一缺项都会由应用拒绝启动。
+            # 钱包充值只在 Authoring API 中启用。支付配置逐键读取，不通过 envFrom
+            # 扩散到其他进程；缺省时网关保持关闭，启用后任一缺项都会由应用拒绝启动。
             - name: LESHOUYING_ENABLED
               valueFrom:
                 secretKeyRef: { name: combo-env, key: LESHOUYING_ENABLED, optional: true }
@@ -129,21 +116,6 @@ spec:
               value: http://otel-collector.observability.svc.cluster.local:4318
             - name: OTEL_RESOURCE_ATTRIBUTES
               value: deployment.environment=k8s
-            - name: ANTHROPIC_API_KEY
-              valueFrom:
-                secretKeyRef: { name: combo-env, key: ANTHROPIC_API_KEY, optional: true }
-            - name: LLM_PROVIDER
-              valueFrom:
-                secretKeyRef: { name: combo-env, key: LLM_PROVIDER, optional: true }
-            - name: OPENROUTER_API_KEY
-              valueFrom:
-                secretKeyRef: { name: combo-env, key: OPENROUTER_API_KEY, optional: true }
-            - name: LLM_BASE_URL
-              valueFrom:
-                secretKeyRef: { name: combo-env, key: LLM_BASE_URL, optional: true }
-            - name: LLM_MODEL
-              valueFrom:
-                secretKeyRef: { name: combo-env, key: LLM_MODEL, optional: true }
           ports:
             - name: http
               containerPort: 3000

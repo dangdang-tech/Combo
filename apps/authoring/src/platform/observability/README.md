@@ -8,6 +8,6 @@
 
 ## 上下游
 
-被谁使用：`processes/api.ts` 和 `processes/worker.ts` 启动时调 startNodeObservability 并在退出时 shutdown；`bootstrap/app.ts` 在请求钩子里用 currentTraceId、currentTraceLogFields、currentTraceparent 写响应头和请求日志；`platform/sse/sse.ts` 建流时写 traceparent 响应头；`platform/http/client-events.ts` 记浏览器上报事件时取日志字段。
+`processes/api.ts` 启动时调用 `startNodeObservability` 并在退出时关闭；`bootstrap/app.ts` 在请求钩子里使用 `currentTraceId`、`currentTraceLogFields` 和 `currentTraceparent` 写响应头与请求日志；`platform/http/client-events.ts` 记录浏览器上报事件时读取低敏日志字段。
 
-依赖什么：@opentelemetry 系列包和共享包 `@cb/shared` 的 traceId 转换工具；`platform/config/env.ts` 的 Env 类型。外部资源：配置了 OTEL_EXPORTER_OTLP_ENDPOINT 时向该 Collector 端点发送 trace 数据，未配置则不发任何网络请求。
+该目录依赖 OpenTelemetry 系列包、`@cb/shared` 的 traceId 转换工具和 `platform/config/env.ts` 的 Env 类型。配置了 `OTEL_EXPORTER_OTLP_ENDPOINT` 时向该 Collector 端点发送 trace 数据，未配置则不发任何网络请求。

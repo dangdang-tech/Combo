@@ -55,11 +55,6 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: apps/sandboxd/go.mod
-          cache-dependency-path: apps/sandboxd/go.sum
-
       - uses: azure/setup-kubectl@v4
         with:
           version: v1.31.0
@@ -123,11 +118,10 @@ jobs:
             scripts/*.sh \
             scripts/integration/*.sh \
             infra/entrypoint.sh \
-            infra/minio/init-buckets.sh \
-            infra/k8s/overlays/sandbox-tools/maintenance/*.sh
+            infra/minio/init-buckets.sh
 
   integration:
-    name: integration (database migration + dual Redis)
+    name: integration (database migration + hot Redis)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: gate
@@ -141,14 +135,6 @@ jobs:
         ports: ['5432:5432']
         options: >-
           --health-cmd "pg_isready -U agora"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
-      redis_queue:
-        image: redis:7
-        ports: ['6379:6379']
-        options: >-
-          --health-cmd "redis-cli ping"
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
@@ -182,7 +168,7 @@ jobs:
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Build Runtime workspace dependencies first
+      - name: Build shared workspace dependencies first
         run: pnpm -F @cb/creator-agent-protocol build && pnpm -F @cb/shared build
 
       - name: Install database and Redis clients
@@ -191,11 +177,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client redis-tools
 
-      - name: Apply dual Redis policies
+      - name: Apply hot Redis policy
         run: |
           set -euo pipefail
-          redis-cli -h localhost -p 6379 config set maxmemory-policy noeviction
-          redis-cli -h localhost -p 6379 config set appendonly yes
           redis-cli -h localhost -p 6380 config set maxmemory-policy allkeys-lru
 
       - name: Database migration integration
@@ -223,13 +207,6 @@ jobs:
           BILLING_AUTHORING_TEST_DATABASE_URL: postgres://combo_api:ci-api-role-password@localhost:5432/agora
         run: pnpm --dir apps/authoring exec vitest run src/__tests__/billing.pg.test.ts
 
-      - name: Runtime billing PostgreSQL invariants
-        env:
-          BILLING_PG_TEST: '1'
-          BILLING_TEST_DATABASE_URL: postgres://agora:agora@localhost:5432/agora
-          BILLING_RUNTIME_TEST_DATABASE_URL: postgres://combo_runtime:ci-runtime-role-password@localhost:5432/agora
-        run: pnpm --dir apps/runtime exec vitest run src/__tests__/billing.pg.test.ts
-
       - name: V2 database migration and billing invariants
         env:
           DATABASE_URL: postgres://agora:agora@localhost:5432/combo_v2_ci
@@ -250,66 +227,14 @@ jobs:
           AUTHZ_RATE_LIMIT_REDIS_URL: redis://localhost:6380/0
         run: pnpm --dir apps/authz exec vitest run src/__tests__/rate-limit.redis.test.ts
 
-      - name: Runtime terminal fence integration
-        env:
-          RUNTIME_TERMINAL_FENCE_DATABASE_URL: postgres://agora:agora@localhost:5432/agora
-          RUNTIME_TERMINAL_FENCE_REDIS_URL: redis://localhost:6380
-        run: pnpm --dir apps/runtime exec vitest run src/__tests__/terminal-fence.integration.test.ts
-
-      - name: Runtime session snapshot integration
-        env:
-          RUNTIME_TERMINAL_FENCE_DATABASE_URL: postgres://agora:agora@localhost:5432/agora
-        run: pnpm --dir apps/runtime exec vitest run src/__tests__/session-consistency.integration.test.ts
-
-      - name: Dual Redis integration
-        env:
-          REDIS_QUEUE_HOST: localhost
-          REDIS_QUEUE_PORT: '6379'
-          REDIS_HOT_HOST: localhost
-          REDIS_HOT_PORT: '6380'
-        run: bash scripts/integration/redis-dual.sh
-
       - name: First-party email authentication integration
         run: bash scripts/integration/resend-auth-e2e.sh
-
-  sandbox-integration:
-    name: sandbox protocol / process / path
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: gate
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.SOURCE_SHA }}
-          persist-credentials: false
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.0.9
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - uses: azure/setup-kubectl@v4
-        with:
-          version: v1.31.0
-
-      - name: Install
-        run: pnpm install --frozen-lockfile
-
-      - name: Sandbox authenticated vertical slice
-        env:
-          SANDBOX_E2E_REQUIRE_LOOPBACK: '1'
-        run: bash scripts/integration/sandbox-tools-local.sh
 
   image:
     name: image / ${{ matrix.key }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    needs: [integration, sandbox-integration]
+    needs: integration
     permissions:
       contents: read
       packages: write
@@ -320,9 +245,6 @@ jobs:
           - key: api
             repository: ghcr.io/dangdang-tech/combo-api
             dockerfile: infra/Dockerfile.api
-          - key: runtime
-            repository: ghcr.io/dangdang-tech/combo-runtime
-            dockerfile: infra/Dockerfile.runtime
           - key: web
             repository: ghcr.io/dangdang-tech/combo-web
             dockerfile: infra/Dockerfile.web
@@ -364,7 +286,7 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.key }}
           cache-to: type=gha,scope=${{ matrix.key }},mode=max
 
-      - name: Verify the hardened Web runtime metadata path
+      - name: Verify the hardened Web release metadata path
         if: matrix.key == 'web'
         env:
           IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
@@ -386,7 +308,7 @@ jobs:
               docker image inspect "$IMAGE_REF" >/dev/null
               ;;
             *)
-              echo 'Invalid publish mode for Web runtime verification.' >&2
+              echo 'Invalid publish mode for Web release verification.' >&2
               exit 1
               ;;
           esac
@@ -405,7 +327,6 @@ jobs:
             --tmpfs /tmp:rw,noexec,nosuid,size=32m,uid=101,gid=101,mode=1777 \
             --env NGINX_RESOLVER=127.0.0.11 \
             --env API_UPSTREAM_HOST=api.invalid \
-            --env RUNTIME_UPSTREAM_HOST=runtime.invalid \
             --env COMBO_ENVIRONMENT=development \
             --env COMBO_SOURCE_SHA="$SOURCE_SHA" \
             --env COMBO_RELEASE_ID="release-$SOURCE_SHA" \
@@ -425,12 +346,8 @@ jobs:
           [[ "$ready" == 1 ]]
           docker exec "$container" wget -qO- http://127.0.0.1/runtime-config.json \
             >"$RUNNER_TEMP/web-runtime-config.json"
-          docker exec "$container" wget -qO- http://127.0.0.1/try/runtime-config.json \
-            >"$RUNNER_TEMP/web-try-runtime-config.json"
           docker exec "$container" wget -qO /dev/null http://127.0.0.1/
-          docker exec "$container" wget -qO /dev/null http://127.0.0.1/try/
           cmp "$RUNNER_TEMP/web-version.json" "$RUNNER_TEMP/web-runtime-config.json"
-          cmp "$RUNNER_TEMP/web-version.json" "$RUNNER_TEMP/web-try-runtime-config.json"
           jq -e '
             .schemaVersion == 1
             and .environment == "development"
@@ -500,7 +417,7 @@ jobs:
       - name: Install the release tooling dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Download the three image digests from this run
+      - name: Download the two image digests from this run
         uses: actions/download-artifact@v4
         with:
           pattern: combo-image-digest-${{ env.SOURCE_SHA }}-${{ github.run_attempt }}-*
@@ -527,10 +444,8 @@ jobs:
           mkdir -p "$bundle/metadata"
 
           api_image=$(<"$RUNNER_TEMP/image-digests/api.image")
-          runtime_image=$(<"$RUNNER_TEMP/image-digests/runtime.image")
           web_image=$(<"$RUNNER_TEMP/image-digests/web.image")
           [[ "$api_image" =~ ^ghcr\.io/dangdang-tech/combo-api@sha256:[0-9a-f]{64}$ ]]
-          [[ "$runtime_image" =~ ^ghcr\.io/dangdang-tech/combo-runtime@sha256:[0-9a-f]{64}$ ]]
           [[ "$web_image" =~ ^ghcr\.io/dangdang-tech/combo-web@sha256:[0-9a-f]{64}$ ]]
 
           find db/migrations -maxdepth 1 -type f -name '*.sql' -exec basename {} \; \
@@ -563,7 +478,6 @@ jobs:
             --output "$bundle/metadata/release.json" \
             --source-sha "$SOURCE_SHA" \
             --api-image "$api_image" \
-            --runtime-image "$runtime_image" \
             --web-image "$web_image" \
             --migration-head "$migration_head" \
             --built-at "$built_at" \
@@ -573,6 +487,7 @@ jobs:
             --manifest "$bundle/metadata/release.json" \
             --source-sha "$SOURCE_SHA" \
             --digest "$manifest_digest" >/dev/null
+          jq -e '.schemaVersion == 2' "$bundle/metadata/release.json" >/dev/null
 
           if find "$bundle" -type l -print -quit | grep -q .; then
             echo 'Build bundle contains a symbolic link.' >&2
