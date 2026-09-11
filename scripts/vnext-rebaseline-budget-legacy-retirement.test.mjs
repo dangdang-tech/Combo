@@ -645,11 +645,19 @@ test('PR workflow has an isolated trusted base-side retirement gate', () => {
   assert.match(workflow, /group: pr-ci-\$\{\{ github\.event_name \}\}-/u);
   assert.match(trustedJob, /name: CI \/ trusted retirement policy/u);
   assert.match(trustedJob, /if: \$\{\{ github\.event_name == 'pull_request_target' \}\}/u);
-  assert.match(trustedJob, /ref: \$\{\{ github\.event\.pull_request\.merge_commit_sha \}\}/u);
+  assert.match(
+    trustedJob,
+    /ref: refs\/pull\/\$\{\{ github\.event\.pull_request\.number \}\}\/merge/u,
+  );
+  assert.doesNotMatch(trustedJob, /github\.event\.pull_request\.merge_commit_sha/u);
   assert.match(trustedJob, /fetch-depth: 0/u);
   assert.match(trustedJob, /persist-credentials: false/u);
+  assert.match(trustedJob, /\[\[ "\$PULL_REQUEST_NUMBER" =~ \^\[1-9\]\[0-9\]\*\$ \]\]/u);
+  assert.match(trustedJob, /MERGE_SHA=\$\(git rev-parse HEAD\)/u);
+  assert.match(trustedJob, /\[\[ "\$MERGE_SHA" =~ \^\[0-9a-f\]\{40\}\$ \]\]/u);
   assert.match(trustedJob, /git rev-parse HEAD\^1\)" == "\$BASE_SHA"/u);
   assert.match(trustedJob, /git rev-parse HEAD\^2\)" == "\$HEAD_SHA"/u);
+  assert.match(trustedJob, /printf 'MERGE_SHA=%s\\n' "\$MERGE_SHA" >> "\$GITHUB_ENV"/u);
   assert.match(trustedJob, /git archive --format=tar "\$BASE_SHA" -- scripts/u);
   assert.match(trustedJob, /COMBO_BUDGET_REPO_ROOT="\$GITHUB_WORKSPACE"/u);
   assert.match(
