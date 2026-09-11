@@ -60,7 +60,6 @@ export const legacyRetirementDeletionFiles = Object.freeze([
   'apps/authoring/src/processes/worker.ts',
   'apps/web/public/combo-color-card.html',
   'apps/web/public/combo-design-language.html',
-  'apps/web/src/api/client.test.ts',
   'apps/web/src/api/endpoints.ts',
   'apps/web/src/api/useTaskEvents.test.tsx',
   'apps/web/src/api/useTaskEvents.ts',
@@ -170,6 +169,7 @@ export const legacyRetirementEditableFiles = Object.freeze([
   'apps/web/src/App.landing.test.tsx',
   'apps/web/src/App.tsx',
   'apps/web/src/api/auth.test.ts',
+  'apps/web/src/api/client.test.ts',
   'apps/web/src/api/client.ts',
   'apps/web/src/api/index.ts',
   'apps/web/src/api/sessionLogout.test.ts',
@@ -280,16 +280,23 @@ export const legacyRetirementLimits = Object.freeze({
   maxEditableFiles: 140,
   maxEditableAdditions: 1000,
   maxEditableChangedLines: 8500,
-  maxChangedLinesPerEditableFile: 3000,
+  maxChangedLinesPerEditableFile: 1200,
+  maxPnpmLockChangedLines: 3000,
 });
+
+function maxChangedLinesForLegacyRetirementEditablePath(path) {
+  return path === 'pnpm-lock.yaml'
+    ? legacyRetirementLimits.maxPnpmLockChangedLines
+    : legacyRetirementLimits.maxChangedLinesPerEditableFile;
+}
 
 // Locked from the immutable v8 base after the retirement manifest was finalized.
 export const legacyRetirementInventoryLock = Object.freeze({
   algorithm: 'sha256',
-  files: 376,
-  bytes: 3128233,
-  lines: 86296,
-  digest: 'sha256:75267179e6c467a3340e2c01fa8493b8330b685d9cafb062592682a828b6e2ce',
+  files: 375,
+  bytes: 3120363,
+  lines: 86090,
+  digest: 'sha256:87f24a24996cecc82f762454d2184f3f632f03e5cfdbe9cc9fd77c4eabd7ee0f',
 });
 
 function invariant(condition, message) {
@@ -602,7 +609,7 @@ export function assessLegacyRetirement({
   );
   for (const entry of editable)
     invariant(
-      entry.changedLines <= legacyRetirementLimits.maxChangedLinesPerEditableFile,
+      entry.changedLines <= maxChangedLinesForLegacyRetirementEditablePath(entry.path),
       `retirement per-editable-file budget exceeded: ${entry.path}`,
     );
   return {

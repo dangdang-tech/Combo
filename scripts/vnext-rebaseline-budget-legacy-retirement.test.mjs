@@ -54,7 +54,6 @@ const contract = parseLegacyRetirementContract({
 
 const zeroObject = '0'.repeat(40);
 const addedDeletionOnlyPaths = Object.freeze([
-  'apps/web/src/api/client.test.ts',
   'apps/web/src/pages/landing/landingDraft.test.ts',
   'apps/web/src/pages/landing/landingDraft.ts',
   'apps/web/src/safeReturnTo.test.ts',
@@ -69,6 +68,7 @@ const addedDeletionOnlyPaths = Object.freeze([
 ]);
 const addedEditablePaths = Object.freeze([
   'apps/web/index.html',
+  'apps/web/src/api/client.test.ts',
   'apps/web/src/api/client.ts',
   'apps/web/src/pages/landing/LandingPage.test.tsx',
   'apps/web/src/shell/useDocumentTitle.ts',
@@ -150,8 +150,13 @@ test('v8 contract is canonical, active, immutable, and retains the normal v7 cei
     maxEditableFiles: 140,
     maxEditableAdditions: 1000,
     maxEditableChangedLines: 8500,
-    maxChangedLinesPerEditableFile: 3000,
+    maxChangedLinesPerEditableFile: 1200,
+    maxPnpmLockChangedLines: 3000,
   });
+  assert.equal(legacyRetirementDeletionFiles.length, 75);
+  assert.equal(contract.retirement.deletionOnlyFiles.length, 75);
+  assert.equal(legacyRetirementEditableFiles.length, 142);
+  assert.equal(contract.retirement.editableFiles.length, 142);
   assert.ok(policyPaths.includes(legacyRetirementContractPath));
   for (const path of archivedDesignPolicyPaths) assert.ok(policyPaths.includes(path));
   assert.throws(
@@ -235,12 +240,12 @@ test('base inventory canonical digest covers every manifest removal target', () 
   assert.deepEqual(createRetirementInventoryReceipt(inventory), legacyRetirementInventoryLock);
   assert.deepEqual(legacyRetirementInventoryLock, {
     algorithm: 'sha256',
-    files: 376,
-    bytes: 3128233,
-    lines: 86296,
-    digest: 'sha256:75267179e6c467a3340e2c01fa8493b8330b685d9cafb062592682a828b6e2ce',
+    files: 375,
+    bytes: 3120363,
+    lines: 86090,
+    digest: 'sha256:87f24a24996cecc82f762454d2184f3f632f03e5cfdbe9cc9fd77c4eabd7ee0f',
   });
-  assert.equal(inventory.length, 376);
+  assert.equal(inventory.length, 375);
   assert.ok(inventory.every(({ mode, type }) => type === 'blob' && /^100(644|755)$/u.test(mode)));
   assert.ok(legacyRetirementSentinels.every((path) => inventoryPaths.includes(path)));
   assert.throws(
@@ -485,6 +490,29 @@ test('retirement integration edits remain under tight non-deletion budgets', () 
   assert.throws(
     () =>
       assessLegacyRetirement({
+        entries: [...deletionEntries, changed('pnpm-lock.yaml', 'M', 0, 3001)],
+        ...retirementContext(),
+      }),
+    /per-editable-file budget exceeded: pnpm-lock\.yaml/,
+  );
+  assert.equal(
+    assessLegacyRetirement({
+      entries: [...deletionEntries, changed('apps/web/src/styles.css', 'M', 0, 1200)],
+      ...retirementContext(),
+    }).editableChangedLines,
+    1200,
+  );
+  assert.throws(
+    () =>
+      assessLegacyRetirement({
+        entries: [...deletionEntries, changed('apps/web/src/styles.css', 'M', 0, 1201)],
+        ...retirementContext(),
+      }),
+    /per-editable-file budget exceeded: apps\/web\/src\/styles\.css/,
+  );
+  assert.throws(
+    () =>
+      assessLegacyRetirement({
         entries: [
           ...deletionEntries,
           changed(
@@ -508,9 +536,14 @@ test('retirement integration edits remain under tight non-deletion budgets', () 
       }),
     /editable-file budget exceeded/,
   );
-  const atChangedLineLimit = legacyRetirementEditableFiles
-    .slice(0, 3)
-    .map((path, index) => changed(path, 'M', 0, index === 0 ? 2500 : 3000));
+  const ordinaryTotalPaths = legacyRetirementEditableFiles
+    .filter((path) => path !== 'pnpm-lock.yaml')
+    .slice(0, 5);
+  const atChangedLineLimit = [
+    changed('pnpm-lock.yaml', 'M', 0, 3000),
+    ...ordinaryTotalPaths.slice(0, 4).map((path) => changed(path, 'M', 0, 1200)),
+    changed(ordinaryTotalPaths[4], 'M', 0, 700),
+  ];
   assert.equal(
     atChangedLineLimit.reduce((sum, entry) => sum + entry.changedLines, 0),
     8500,
@@ -522,9 +555,11 @@ test('retirement integration edits remain under tight non-deletion budgets', () 
     }).editableChangedLines,
     8500,
   );
-  const overChangedLineLimit = legacyRetirementEditableFiles
-    .slice(0, 3)
-    .map((path, index) => changed(path, 'M', 0, index === 0 ? 2501 : 3000));
+  const overChangedLineLimit = [
+    changed('pnpm-lock.yaml', 'M', 0, 3000),
+    ...ordinaryTotalPaths.slice(0, 4).map((path) => changed(path, 'M', 0, 1200)),
+    changed(ordinaryTotalPaths[4], 'M', 0, 701),
+  ];
   assert.equal(
     overChangedLineLimit.reduce((sum, entry) => sum + entry.changedLines, 0),
     8501,
@@ -536,21 +571,6 @@ test('retirement integration edits remain under tight non-deletion budgets', () 
         ...retirementContext(),
       }),
     /editable changed-line budget exceeded/,
-  );
-  const overPerFileLimit = changed(
-    legacyRetirementEditableFiles[0],
-    'M',
-    0,
-    legacyRetirementLimits.maxChangedLinesPerEditableFile + 1,
-  );
-  assert.equal(overPerFileLimit.changedLines, 3001);
-  assert.throws(
-    () =>
-      assessLegacyRetirement({
-        entries: [...deletionEntries, overPerFileLimit],
-        ...retirementContext(),
-      }),
-    /per-editable-file budget exceeded/,
   );
 });
 
@@ -658,6 +678,10 @@ test('PR workflow has an isolated trusted base-side retirement gate', () => {
   const repositoryCheck = trustedJob.indexOf('[[ "$GITHUB_REPOSITORY" == dangdang-tech/Combo ]]');
   const baseRefCheck = trustedJob.indexOf('[[ "$GITHUB_BASE_REF" == main ]]');
   const mergeDerivation = trustedJob.indexOf('MERGE_SHA=$(git rev-parse HEAD)');
+  const secondParentCheck = trustedJob.indexOf('[[ "$(git rev-parse HEAD^2)" == "$HEAD_SHA" ]]');
+  const cleanWorktreeCheck = trustedJob.indexOf('git diff --quiet');
+  const cleanIndexCheck = trustedJob.indexOf('git diff --cached --quiet');
+  const mergeExport = trustedJob.indexOf(`printf 'MERGE_SHA=%s\\n' "$MERGE_SHA" >> "$GITHUB_ENV"`);
   const archiveExecution = trustedJob.indexOf('git archive --format=tar "$BASE_SHA" -- scripts');
   const trustedScriptExecution = trustedJob.indexOf(
     'node "$RUNNER_TEMP/combo-budget-base/scripts/vnext-rebaseline-budget.mjs"',
@@ -666,7 +690,11 @@ test('PR workflow has an isolated trusted base-side retirement gate', () => {
     repositoryCheck > 0 &&
       baseRefCheck > repositoryCheck &&
       mergeDerivation > baseRefCheck &&
-      archiveExecution > mergeDerivation &&
+      secondParentCheck > mergeDerivation &&
+      cleanWorktreeCheck > secondParentCheck &&
+      cleanIndexCheck > cleanWorktreeCheck &&
+      mergeExport > cleanIndexCheck &&
+      archiveExecution > mergeExport &&
       trustedScriptExecution > archiveExecution,
   );
   assert.match(trustedJob, /MERGE_SHA=\$\(git rev-parse HEAD\)/u);
@@ -770,6 +798,7 @@ test('retirement manifest classifies the corrected shared, web, and infrastructu
 });
 
 test('follow-up classifies unused Web helpers, migration-only contracts, list support, and browser presign exposure for deletion', () => {
+  assert.equal(addedDeletionOnlyPaths.length, 11);
   assert.deepEqual(addedDeletionOnlyPaths, [...addedDeletionOnlyPaths].sort());
   for (const path of addedDeletionOnlyPaths) {
     assert.equal(isLegacyRetirementDeletionPath(path), true, path);
@@ -779,6 +808,7 @@ test('follow-up classifies unused Web helpers, migration-only contracts, list su
 });
 
 test('follow-up keeps exact consumers and current docs editable with zero deletion overlap', () => {
+  assert.equal(addedEditablePaths.length, 15);
   assert.deepEqual(addedEditablePaths, [...addedEditablePaths].sort());
   for (const path of addedEditablePaths) {
     assert.equal(isLegacyRetirementDeletionPath(path), false, path);
@@ -788,10 +818,10 @@ test('follow-up keeps exact consumers and current docs editable with zero deleti
   assert.deepEqual(legacyRetirementEditableFiles.filter(isLegacyRetirementDeletionPath), []);
 });
 
-test('final correction retires the generic legacy client test and keeps workspace build policy editable', () => {
-  assert.equal(isLegacyRetirementDeletionPath('apps/web/src/api/client.test.ts'), true);
-  assert.ok(legacyRetirementDeletionFiles.includes('apps/web/src/api/client.test.ts'));
-  assert.equal(legacyRetirementEditableFiles.includes('apps/web/src/api/client.test.ts'), false);
+test('client tests stay editable to trim retired Task, Capability, and pagination cases while preserving sanitization, 401 navigation, and no-POST-replay coverage', () => {
+  assert.equal(isLegacyRetirementDeletionPath('apps/web/src/api/client.test.ts'), false);
+  assert.equal(legacyRetirementDeletionFiles.includes('apps/web/src/api/client.test.ts'), false);
+  assert.ok(legacyRetirementEditableFiles.includes('apps/web/src/api/client.test.ts'));
 
   assert.equal(isLegacyRetirementDeletionPath('pnpm-workspace.yaml'), false);
   assert.equal(legacyRetirementDeletionFiles.includes('pnpm-workspace.yaml'), false);
