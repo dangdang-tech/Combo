@@ -2,17 +2,69 @@ name: PR checks
 
 on:
   pull_request:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read
 
 concurrency:
-  group: pr-ci-${{ github.event.pull_request.number }}
+  group: pr-ci-${{ github.event_name }}-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
+  trusted-retirement-policy:
+    name: CI / trusted retirement policy
+    if: ${{ github.event_name == 'pull_request_target' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Check out the exact pull request merge source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify the checked-out merge identity
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_EVENT_NAME" == pull_request_target ]]
+          [[ "$MERGE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "$MERGE_SHA" ]]
+          [[ "$(git rev-parse HEAD^1)" == "$BASE_SHA" ]]
+          [[ "$(git rev-parse HEAD^2)" == "$HEAD_SHA" ]]
+          git diff --quiet
+          git diff --cached --quiet
+
+      - name: Extract the trusted base budget implementation
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/combo-budget-base"
+          git archive --format=tar "$BASE_SHA" -- scripts \
+            | tar -xf - -C "$RUNNER_TEMP/combo-budget-base"
+
+      - name: Set up trusted Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Verify retirement policy with trusted base code
+        run: |
+          set -euo pipefail
+          COMBO_BUDGET_REPO_ROOT="$GITHUB_WORKSPACE" \
+            node "$RUNNER_TEMP/combo-budget-base/scripts/vnext-rebaseline-budget.mjs"
+
   quality:
     name: CI / quality
+    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -54,7 +106,9 @@ jobs:
       - name: Verify the change budget before dependency execution
         run: node scripts/vnext-rebaseline-budget.mjs
 
-      - uses: actions/setup-go@v5
+      - name: Set up Go for sandboxd
+        if: ${{ hashFiles('apps/sandboxd/go.mod') != '' }}
+        uses: actions/setup-go@v5
         with:
           go-version-file: apps/sandboxd/go.mod
           cache-dependency-path: apps/sandboxd/go.sum
@@ -91,11 +145,15 @@ jobs:
             scripts/*.sh \
             scripts/integration/*.sh \
             infra/entrypoint.sh \
-            infra/minio/init-buckets.sh \
-            infra/k8s/overlays/sandbox-tools/maintenance/*.sh
+            infra/minio/init-buckets.sh
+
+      - name: ShellCheck sandbox maintenance scripts
+        if: ${{ hashFiles('infra/k8s/overlays/sandbox-tools/maintenance/*.sh') != '' }}
+        run: shellcheck infra/k8s/overlays/sandbox-tools/maintenance/*.sh
 
   billing-pg:
     name: CI / billing PostgreSQL
+    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     services:
@@ -166,6 +224,7 @@ jobs:
         run: pnpm --dir apps/authoring exec vitest run src/__tests__/billing.pg.test.ts
 
       - name: Runtime billing PostgreSQL invariants
+        if: ${{ hashFiles('apps/runtime/package.json') != '' }}
         env:
           BILLING_PG_TEST: '1'
           BILLING_TEST_DATABASE_URL: postgres://agora:agora@localhost:5432/agora

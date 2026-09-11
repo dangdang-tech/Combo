@@ -6,6 +6,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import './vnext-rebaseline-budget-tranche.test.mjs';
 import './vnext-rebaseline-budget-design-scope.test.mjs';
+import './vnext-rebaseline-budget-legacy-retirement.test.mjs';
 
 import {
   assessCumulative,

@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   archivedBudgetPath,
@@ -16,15 +16,46 @@ import {
   parseDesignScopeContract,
   verifyLegacyV6Receipt,
 } from './vnext-rebaseline-budget-design-scope.mjs';
+import {
+  assessLegacyRetirement,
+  classifyLegacyRetirementState,
+  createRetirementInventoryReceipt,
+  isLegacyRetirementDeletionPath,
+  legacyRetirementContractPath,
+  legacyRetirementInventoryLock,
+  legacyRetirementProtocol,
+  legacyRetirementSentinels,
+  legacyV7Lock,
+  parseLegacyRetirementContract,
+  verifyLegacyV7Receipt,
+} from './vnext-rebaseline-budget-legacy-retirement.mjs';
 
 export { archivedBudgetPath } from './vnext-rebaseline-budget-tranche.mjs';
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+export function resolveBudgetRepoRoot({
+  override = process.env.COMBO_BUDGET_REPO_ROOT,
+  moduleUrl = import.meta.url,
+} = {}) {
+  const localDefault = resolve(dirname(fileURLToPath(moduleUrl)), '..');
+  if (override === undefined || override === '') return localDefault;
+  invariant(
+    isAbsolute(override) && resolve(override) === override,
+    'COMBO_BUDGET_REPO_ROOT must be an absolute normalized path',
+  );
+  invariant(
+    realpathSync(override) === override,
+    'COMBO_BUDGET_REPO_ROOT must resolve to its canonical path',
+  );
+  return override;
+}
+
+const repoRoot = resolveBudgetRepoRoot();
 export const legacyContractPath = 'scripts/vnext-rebaseline-budget.v1.json';
 export const previousContractPath = 'scripts/vnext-rebaseline-budget.v2.json';
 export const supersededContractPath = 'scripts/vnext-rebaseline-budget.v3.json';
 export const previousBudgetPath = 'scripts/vnext-rebaseline-budget.v4.json';
 export const contractPath = designScopeContractPath;
+export const activeContractPath = legacyRetirementContractPath;
 export const archivedPolicyPaths = Object.freeze([
   '.agents/skills/github-collaboration/SKILL.md',
   '.agents/skills/github-collaboration/references/governance-and-contributions.md',
@@ -48,12 +79,19 @@ export const archivedTranchePolicyPaths = Object.freeze([
   'scripts/vnext-rebaseline-budget-tranche.test.mjs',
   'scripts/vnext-rebaseline-budget.v6.md',
 ]);
-export const policyPaths = Object.freeze([
+export const archivedDesignPolicyPaths = Object.freeze([
   ...archivedTranchePolicyPaths,
   contractPath,
   'scripts/vnext-rebaseline-budget-design-scope.mjs',
   'scripts/vnext-rebaseline-budget-design-scope.test.mjs',
   'scripts/vnext-rebaseline-budget.v7.md',
+]);
+export const policyPaths = Object.freeze([
+  ...archivedDesignPolicyPaths,
+  activeContractPath,
+  'scripts/vnext-rebaseline-budget-legacy-retirement.mjs',
+  'scripts/vnext-rebaseline-budget-legacy-retirement.test.mjs',
+  'scripts/vnext-rebaseline-budget.v8.md',
 ]);
 
 const protocol = 'combo.vnext-rebaseline-budget/5';
@@ -493,6 +531,38 @@ export function parseNumstat(numstat, changedNames) {
   );
 }
 
+export function parseStatusEntries(numstat, nameStatus, rawDiff) {
+  const fields = nameStatus.split('\0').filter(Boolean);
+  invariant(fields.length % 2 === 0, 'malformed git name-status output');
+  const statuses = new Map();
+  const names = [];
+  for (let index = 0; index < fields.length; index += 2) {
+    const status = fields[index];
+    const path = fields[index + 1];
+    invariant(/^[AMDTU]$/u.test(status), `unsupported git status ${status}: ${path}`);
+    invariant(!statuses.has(path), `duplicate name-status path: ${path}`);
+    statuses.set(path, status);
+    names.push(path);
+  }
+  const rawFields = rawDiff.split('\0').filter(Boolean);
+  invariant(rawFields.length % 2 === 0, 'malformed git raw output');
+  const rawEntries = new Map();
+  for (let index = 0; index < rawFields.length; index += 2) {
+    const header = rawFields[index];
+    const path = rawFields[index + 1];
+    const match = /^:([0-7]{6}) ([0-7]{6}) ([0-9a-f]{40}) ([0-9a-f]{40}) ([AMDTU])$/u.exec(header);
+    invariant(match !== null, `malformed git raw record: ${path}`);
+    const [, oldMode, newMode, oldObject, newObject, status] = match;
+    invariant(statuses.get(path) === status, `git status/raw mismatch: ${path}`);
+    invariant(!rawEntries.has(path), `duplicate raw path: ${path}`);
+    rawEntries.set(path, { oldMode, newMode, oldObject, newObject });
+  }
+  invariant(rawEntries.size === statuses.size, 'git status/raw path set mismatch');
+  return parseNumstat(numstat, `${names.join('\0')}${names.length > 0 ? '\0' : ''}`).map(
+    (entry) => ({ ...entry, status: statuses.get(entry.path), ...rawEntries.get(entry.path) }),
+  );
+}
+
 function pathAllowed(contract, path) {
   return (
     contract.allowedFiles.includes(path) ||
@@ -599,8 +669,30 @@ export function assessPullRequest(
     bootstrapState = 'PENDING',
     admissionShapeValid = false,
     previousMainIsAncestor = false,
+    retirementState,
+    expectedDeletionPaths = [],
+    expectedDeletionInventory = [],
+    sentinelsAtBase = [],
   } = {},
 ) {
+  if (contract.protocol === legacyRetirementProtocol) {
+    invariant(
+      ['PENDING', 'RETIREMENT', 'CONSUMED'].includes(retirementState),
+      'v8 retirement state is required',
+    );
+    if (retirementState === 'RETIREMENT') {
+      invariant(
+        entries.every(({ path }) => !policyPaths.includes(path)),
+        'legacy retirement cannot modify budget policy or the PR gate',
+      );
+      return assessLegacyRetirement({
+        entries,
+        expectedDeletionPaths,
+        expectedDeletionInventory,
+        sentinelsAtBase,
+      });
+    }
+  }
   const changedPolicyPaths = entries.filter(({ path }) => policyPaths.includes(path));
   const changedMaintenancePaths = entries.filter(({ path }) => path === contract.maintenanceFile);
   const exactPlatformV2Bootstrap = isExactPlatformV2Bootstrap({
@@ -615,7 +707,12 @@ export function assessPullRequest(
     mode = 'PLATFORM_V2_BOOTSTRAP';
   } else if (isExactMaintenanceModeBootstrap({ comparisonBase, entries, contract })) {
     mode = 'GOVERNANCE_MAINTENANCE_BOOTSTRAP';
-  } else if (changedPolicyPaths.length > 0) {
+  } else if (
+    changedPolicyPaths.length > 0 ||
+    (contract.protocol === legacyRetirementProtocol &&
+      retirementState === 'PENDING' &&
+      entries.length === 0)
+  ) {
     invariant(
       entries.every(({ path }) => policyPaths.includes(path)),
       'budget policy changes must be governance-only',
@@ -649,6 +746,12 @@ export function assessPullRequest(
       `per-file changed-line budget exceeded: ${entry.path}`,
     );
   }
+  if (contract.protocol === legacyRetirementProtocol && retirementState === 'PENDING') {
+    invariant(
+      mode === 'GOVERNANCE_ONLY',
+      'only governance changes are allowed while legacy retirement is pending',
+    );
+  }
   return { mode, ...summary };
 }
 
@@ -658,7 +761,9 @@ export function assessCumulative(contract, entries) {
       ? archivedPolicyPaths
       : contract.protocol === legacyV6Lock.protocol
         ? archivedTranchePolicyPaths
-        : policyPaths;
+        : contract.protocol === legacyV7Lock.protocol
+          ? archivedDesignPolicyPaths
+          : policyPaths;
   for (const { path } of entries) {
     invariant(
       allowedPolicyPaths.includes(path) ||
@@ -1064,6 +1169,75 @@ function commitParents(commit) {
   return fields.slice(1);
 }
 
+export function isAtomicLegacyRetirementSource({
+  comparisonBase,
+  sourceSha,
+  sourceParents,
+  sourceCommitCount,
+  allowUncommittedIndex = false,
+}) {
+  if (
+    allowUncommittedIndex &&
+    sourceSha === comparisonBase &&
+    sourceCommitCount === 0 &&
+    sourceParents.length === 0
+  )
+    return true;
+  return (
+    sourceSha !== comparisonBase &&
+    sourceCommitCount === 1 &&
+    sourceParents.length === 1 &&
+    sourceParents[0] === comparisonBase
+  );
+}
+
+function verifyAtomicLegacyRetirementSource({ comparisonBase, environment }) {
+  const githubPullRequest =
+    environment.GITHUB_ACTIONS === 'true' &&
+    ['pull_request', 'pull_request_target'].includes(environment.GITHUB_EVENT_NAME);
+  const checkoutSha = git(['rev-parse', 'HEAD']).trim();
+  const checkoutParents = checkoutSha === comparisonBase ? [] : commitParents(checkoutSha);
+  const integratedMerge =
+    !githubPullRequest && checkoutParents.length === 2 && checkoutParents[0] === comparisonBase;
+  const sourceSha = githubPullRequest
+    ? environment.HEAD_SHA
+    : integratedMerge
+      ? checkoutParents[1]
+      : checkoutSha;
+  invariant(
+    typeof sourceSha === 'string' && shaPattern.test(sourceSha),
+    'legacy retirement source SHA is unavailable',
+  );
+  const sourceCommitCount = Number(
+    git(['rev-list', '--count', `${comparisonBase}..${sourceSha}`]).trim(),
+  );
+  invariant(
+    Number.isSafeInteger(sourceCommitCount) && sourceCommitCount >= 0,
+    'legacy retirement source commit count is invalid',
+  );
+  const sourceParents = sourceSha === comparisonBase ? [] : commitParents(sourceSha);
+  invariant(
+    isAtomicLegacyRetirementSource({
+      comparisonBase,
+      sourceSha,
+      sourceParents,
+      sourceCommitCount,
+      allowUncommittedIndex: !githubPullRequest,
+    }),
+    'legacy retirement source must be exactly one non-merge product commit on its comparison base',
+  );
+  return {
+    sourceSha,
+    sourceCommitCount,
+    shape:
+      sourceCommitCount === 0
+        ? 'LOCAL_STAGED_INDEX'
+        : integratedMerge
+          ? 'MERGED_SINGLE_PRODUCT_COMMIT'
+          : 'SINGLE_PRODUCT_COMMIT',
+  };
+}
+
 function verifyPlatformV2AdmissionShape({ comparisonBase, candidateSha, requireOuterMerge }) {
   const headParents = commitParents('HEAD');
   const sourceParents =
@@ -1110,16 +1284,18 @@ function verifyGithubCheckoutIdentity(environment) {
 }
 
 function collectDiff(base) {
-  return parseNumstat(
+  return parseStatusEntries(
     git(['diff', '--cached', '--no-renames', '--numstat', '-z', base]),
-    git(['diff', '--cached', '--no-renames', '--name-only', '-z', base]),
+    git(['diff', '--cached', '--no-renames', '--name-status', '-z', base]),
+    git(['diff', '--cached', '--raw', '-z', '--full-index', '--no-renames', '--abbrev=40', base]),
   );
 }
 
 function collectCommittedDiff(base, head) {
-  return parseNumstat(
+  return parseStatusEntries(
     git(['diff', '--no-renames', '--numstat', '-z', base, head]),
-    git(['diff', '--no-renames', '--name-only', '-z', base, head]),
+    git(['diff', '--no-renames', '--name-status', '-z', base, head]),
+    git(['diff', '--raw', '-z', '--full-index', '--no-renames', '--abbrev=40', base, head]),
   );
 }
 
@@ -1141,6 +1317,135 @@ function collectCommittedRawDiffSha256(base, head) {
   return createHash('sha256').update(rawDiff).digest('hex');
 }
 
+function retirementPaths(paths) {
+  return paths.filter((path) => isLegacyRetirementDeletionPath(path)).sort();
+}
+
+function treePaths(commit) {
+  return git(['ls-tree', '-r', '--name-only', '-z', commit]).split('\0').filter(Boolean);
+}
+
+function candidatePaths() {
+  return git(['ls-files', '-z']).split('\0').filter(Boolean);
+}
+
+function lineCount(buffer) {
+  if (buffer.length === 0) return 0;
+  let lines = buffer.at(-1) === 10 ? 0 : 1;
+  for (const byte of buffer) if (byte === 10) lines += 1;
+  return lines;
+}
+
+function collectRetirementBaseInventory() {
+  const output = execFileSync('git', ['ls-tree', '-r', '-z', '--long', legacyV7Lock.headSha], {
+    cwd: repoRoot,
+  }).toString('utf8');
+  const entries = [];
+  for (const record of output.split('\0').filter(Boolean)) {
+    const match = /^(\d+) (\w+) ([0-9a-f]{40})\s+(\d+)\t(.+)$/u.exec(record);
+    invariant(match !== null, 'malformed retirement base inventory');
+    const [, mode, type, object, bytesText, path] = match;
+    if (!isLegacyRetirementDeletionPath(path)) continue;
+    const blob = execFileSync('git', ['cat-file', 'blob', object], { cwd: repoRoot });
+    entries.push({
+      path,
+      mode,
+      type,
+      object,
+      bytes: Number(bytesText),
+      lines: lineCount(blob),
+    });
+  }
+  return entries.sort(({ path: left }, { path: right }) =>
+    left < right ? -1 : left > right ? 1 : 0,
+  );
+}
+
+function verifyRetirementBaseInventory() {
+  const entries = collectRetirementBaseInventory();
+  invariant(
+    JSON.stringify(createRetirementInventoryReceipt(entries)) ===
+      JSON.stringify(legacyRetirementInventoryLock),
+    'legacy retirement base inventory receipt changed',
+  );
+  const paths = entries.map(({ path }) => path);
+  invariant(
+    legacyRetirementSentinels.every((path) => paths.includes(path)),
+    'legacy retirement base inventory is missing a sentinel',
+  );
+  return { entries, paths, sentinels: [...legacyRetirementSentinels] };
+}
+
+function verifyPendingRetirementBridge(comparisonBase) {
+  const entries = collectCommittedDiff(legacyV7Lock.headSha, comparisonBase);
+  invariant(
+    entries.every(({ path }) => policyPaths.includes(path)),
+    'the v8 base-to-comparison bridge must contain policy changes only',
+  );
+  return summarize(entries);
+}
+
+function findRetirementConsumption(comparisonBase, inventory) {
+  const commits = git([
+    'rev-list',
+    '--first-parent',
+    '--reverse',
+    `${legacyV7Lock.headSha}..${comparisonBase}`,
+  ])
+    .trim()
+    .split('\n')
+    .filter(Boolean);
+  let consumption;
+  for (const commit of commits) {
+    const paths = retirementPaths(treePaths(commit));
+    if (consumption === undefined && paths.length === 0) {
+      const parent = git(['rev-parse', `${commit}^1`]).trim();
+      invariant(
+        JSON.stringify(retirementPaths(treePaths(parent))) === JSON.stringify(inventory.paths),
+        'legacy retirement must transition directly from PENDING to CONSUMED',
+      );
+      verifyPendingRetirementBridge(parent);
+      const assessment = assessLegacyRetirement({
+        entries: collectCommittedDiff(parent, commit),
+        expectedDeletionPaths: inventory.paths,
+        expectedDeletionInventory: inventory.entries,
+        sentinelsAtBase: inventory.sentinels,
+      });
+      const integrationParents = commitParents(commit);
+      invariant(
+        integrationParents.length >= 1 &&
+          integrationParents.length <= 2 &&
+          integrationParents[0] === parent,
+        'legacy retirement Main transition must be a direct commit or two-parent merge',
+      );
+      const sourceSha = integrationParents.length === 1 ? commit : integrationParents[1];
+      const sourceParents = commitParents(sourceSha);
+      const sourceCommitCount = Number(
+        git(['rev-list', '--count', `${parent}..${sourceSha}`]).trim(),
+      );
+      invariant(
+        isAtomicLegacyRetirementSource({
+          comparisonBase: parent,
+          sourceSha,
+          sourceParents,
+          sourceCommitCount,
+        }),
+        'legacy retirement history must record exactly one non-merge product commit',
+      );
+      consumption = { commit, parent, sourceSha, assessment };
+    } else if (consumption === undefined) {
+      invariant(
+        JSON.stringify(paths) === JSON.stringify(inventory.paths),
+        'legacy retirement history contains partial or drifted inventory',
+      );
+    } else {
+      invariant(paths.length === 0, 'legacy retirement tombstones were replayed in history');
+    }
+  }
+  invariant(consumption !== undefined, 'consumed retirement transition is missing from Main');
+  return consumption;
+}
+
 export function defaultBaseRef(environment = process.env) {
   if (environment.GITHUB_BASE_REF) return environment.BASE_SHA;
   if (environment.GITHUB_EVENT_NAME === 'push' && environment.GITHUB_REF === 'refs/heads/main')
@@ -1153,11 +1458,18 @@ export function verifyRepository({ baseRef, environment = process.env } = {}) {
   const archivedSource = readFileSync(join(repoRoot, archivedBudgetPath), 'utf8');
   const archivedBudget = parseContract(archivedSource);
   const archivedTrancheSource = readFileSync(join(repoRoot, trancheContractPath), 'utf8');
-  const contract = parseDesignScopeContract(
-    readFileSync(join(repoRoot, contractPath), 'utf8'),
+  const archivedDesignSource = readFileSync(join(repoRoot, contractPath), 'utf8');
+  const archivedDesign = parseDesignScopeContract(
+    archivedDesignSource,
     archivedTrancheSource,
     archivedBudget,
   );
+  const contract = parseLegacyRetirementContract({
+    source: readFileSync(join(repoRoot, activeContractPath), 'utf8'),
+    archivedDesignSource,
+    archivedTrancheSource,
+    archivedBudget,
+  });
   if (environment.GITHUB_ACTIONS === 'true') {
     invariant(
       environment.GITHUB_REPOSITORY === legacyV5Lock.repository,
@@ -1182,13 +1494,18 @@ export function verifyRepository({ baseRef, environment = process.env } = {}) {
   const platformV2Receipt = verifyPlatformV2Bootstrap(archivedBudget);
   const comparisonBase = git(['merge-base', resolvedBaseRef, 'HEAD']).trim();
   invariant(shaPattern.test(comparisonBase), 'comparison base is unavailable');
-  const trancheBase = verifyMainlineTrancheBase({
+  const retirementBase = verifyMainlineTrancheBase({
     repoRoot,
     baseSha: contract.baseSha,
     comparisonBase,
     environment,
   });
-  // This is a scope extension on the same tranche, never a cumulative-budget reset.
+  const trancheBase = verifyMainlineTrancheBase({
+    repoRoot,
+    baseSha: archivedDesign.baseSha,
+    comparisonBase,
+    environment,
+  });
   const scopeBase = verifyMainlineTrancheBase({
     repoRoot,
     baseSha: legacyV6Lock.headSha,
@@ -1212,6 +1529,14 @@ export function verifyRepository({ baseRef, environment = process.env } = {}) {
     entries: legacyV5Entries,
     rawDiffSha256: collectCommittedRawDiffSha256(legacyV5Lock.baseSha, legacyV5Lock.headSha),
   });
+  const legacyV7Entries = collectCommittedDiff(legacyV7Lock.baseSha, legacyV7Lock.headSha);
+  assessCumulative(archivedDesign, legacyV7Entries);
+  const legacyV7 = verifyLegacyV7Receipt({
+    source: archivedDesignSource,
+    committedSource: git(['show', `${legacyV7Lock.headSha}:${contractPath}`]),
+    entries: legacyV7Entries,
+    rawDiffSha256: collectCommittedRawDiffSha256(legacyV7Lock.baseSha, legacyV7Lock.headSha),
+  });
   const previousMainIsAncestor = isAncestor(
     archivedBudget.platformV2Bootstrap.previousMainSha,
     comparisonBase,
@@ -1230,7 +1555,7 @@ export function verifyRepository({ baseRef, environment = process.env } = {}) {
       comparisonBase,
       candidateSha: archivedBudget.platformV2Bootstrap.candidateSha,
       requireOuterMerge:
-        environment.GITHUB_EVENT_NAME === 'pull_request' ||
+        ['pull_request', 'pull_request_target'].includes(environment.GITHUB_EVENT_NAME) ||
         (environment.GITHUB_EVENT_NAME === 'push' && environment.GITHUB_REF === 'refs/heads/main'),
     });
   }
@@ -1241,6 +1566,26 @@ export function verifyRepository({ baseRef, environment = process.env } = {}) {
     candidateInHead,
     admissionShape: admission.shape,
   };
+  const retirementInventory = verifyRetirementBaseInventory();
+  const comparisonRetirementPaths = retirementPaths(treePaths(comparisonBase));
+  const candidateRetirementPaths = retirementPaths(candidatePaths());
+  const retirementState = classifyLegacyRetirementState({
+    expectedPaths: retirementInventory.paths,
+    comparisonPaths: comparisonRetirementPaths,
+    candidatePaths: candidateRetirementPaths,
+  });
+  const retirementBridge =
+    retirementState === 'PENDING' || retirementState === 'RETIREMENT'
+      ? verifyPendingRetirementBridge(comparisonBase)
+      : undefined;
+  const retirementConsumption =
+    retirementState === 'CONSUMED'
+      ? findRetirementConsumption(comparisonBase, retirementInventory)
+      : undefined;
+  const retirementSource =
+    retirementState === 'RETIREMENT'
+      ? verifyAtomicLegacyRetirementSource({ comparisonBase, environment })
+      : undefined;
   const pullRequestEntries = collectDiff(comparisonBase);
   const pullRequest = assessPullRequest(contract, pullRequestEntries, {
     comparisonBase,
@@ -1248,6 +1593,10 @@ export function verifyRepository({ baseRef, environment = process.env } = {}) {
     bootstrapState,
     admissionShapeValid: admission.valid,
     previousMainIsAncestor,
+    retirementState,
+    expectedDeletionPaths: retirementInventory.paths,
+    expectedDeletionInventory: retirementInventory.entries,
+    sentinelsAtBase: retirementInventory.sentinels,
   });
   if (bootstrapState === 'PENDING') {
     invariant(
@@ -1290,10 +1639,34 @@ export function verifyRepository({ baseRef, environment = process.env } = {}) {
         contract,
       }),
   });
-  const cumulative =
-    bootstrapState !== 'PENDING'
-      ? { status: bootstrapState, ...assessCumulative(contract, collectDiff(contract.baseSha)) }
-      : { status: 'PENDING_PLATFORM_V2_BOOTSTRAP', changedFiles: 0, changedLines: 0 };
+  let cumulative;
+  if (retirementState === 'PENDING') {
+    cumulative = { status: 'PENDING', changedFiles: 0, changedLines: 0 };
+  } else if (retirementState === 'RETIREMENT') {
+    cumulative = {
+      status: 'RETIREMENT',
+      changedFiles: pullRequest.editableFiles,
+      changedLines: pullRequest.editableChangedLines,
+      excludedDeletionFiles: pullRequest.excludedDeletionFiles,
+      excludedDeletionLines: pullRequest.excludedDeletionLines,
+    };
+  } else {
+    const postRetirement = assessCumulative(contract, collectDiff(retirementConsumption.commit));
+    const retirementChangedLines = retirementConsumption.assessment.editableChangedLines;
+    invariant(
+      retirementChangedLines + postRetirement.changedLines <=
+        contract.limits.maxChangedLinesFromBase,
+      'v8 cumulative changed-line budget exceeded',
+    );
+    cumulative = {
+      status: 'CONSUMED',
+      changedFiles: retirementConsumption.assessment.editableFiles + postRetirement.changedFiles,
+      changedLines: retirementChangedLines + postRetirement.changedLines,
+      retirementCommit: retirementConsumption.commit,
+      excludedDeletionFiles: retirementConsumption.assessment.excludedDeletionFiles,
+      excludedDeletionLines: retirementConsumption.assessment.excludedDeletionLines,
+    };
+  }
   return {
     pullRequest,
     productBaseline,
@@ -1303,8 +1676,17 @@ export function verifyRepository({ baseRef, environment = process.env } = {}) {
     platformV2Bootstrap,
     legacyV5,
     legacyV6,
+    legacyV7,
     trancheBase,
     scopeBase,
+    retirementBase,
+    legacyRetirement: {
+      state: retirementState,
+      inventory: legacyRetirementInventoryLock,
+      bridge: retirementBridge,
+      source: retirementSource,
+      consumptionCommit: retirementConsumption?.commit,
+    },
     cumulative,
   };
 }
