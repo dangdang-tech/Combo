@@ -170,7 +170,7 @@ AUTH_E2E_WEB_BASE_URL="$PUBLIC_APP_ORIGIN" \
 AUTH_E2E_RESEND_MOCK_BASE_URL="$RESEND_MOCK_BASE_URL" \
 AUTH_E2E_RESEND_MOCK_API_KEY="$RESEND_MOCK_API_KEY" \
 AUTH_E2E_SENTINEL_FILE="$SENTINEL_FILE" \
-pnpm exec playwright test --config=playwright.config.ts
+pnpm exec playwright test --config=playwright.config.ts --tsconfig=tsconfig.e2e.json
 
 "${COMPOSE[@]}" logs --no-color >"$LOG_FILE" 2>&1
 while IFS= read -r sentinel; do

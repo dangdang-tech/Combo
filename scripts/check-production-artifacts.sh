@@ -38,7 +38,7 @@ legacy_auth_hits=$(
     --glob '!scripts/integration/db-migrate.sh' \
     --glob '!scripts/check-production-artifacts.sh' \
     | grep -Ev \
-      -e '^scripts/start\.sh:[0-9]+:(# Logto 容器；不触碰卷、数据服务或其他 Compose 项目。|OBSOLETE_SERVICES=\(logto logto_db_seed logto_alteration\)|log .*废弃 Logto 容器.*)$' \
+      -e '^scripts/start\.sh:[0-9]+:(# Logto 容器；不触碰卷、数据服务或其他 Compose 项目。|OBSOLETE_SERVICES=\(logto logto_db_seed logto_alteration worker runtime redis_queue\)|log .*废弃 Logto 容器.*)$' \
     || true
 )
 if [[ -n "$legacy_auth_hits" ]]; then
