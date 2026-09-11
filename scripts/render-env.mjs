@@ -20,7 +20,6 @@ const ENVIRONMENTS = Object.freeze({
     namespace: 'combo-test',
     foundationOverlay: 'test-foundation',
     postgresHost: 'postgres',
-    redisQueueHost: 'redis-queue',
     redisHotHost: 'redis-hot',
     minioHost: 'minio',
     publicAppOrigin: 'https://test.43-160-242-46.sslip.io',
@@ -30,7 +29,6 @@ const ENVIRONMENTS = Object.freeze({
     namespace: 'combo-preview',
     foundationOverlay: 'shared-foundation',
     postgresHost: 'postgres.combo-foundation.svc.cluster.local',
-    redisQueueHost: 'redis-queue.combo-foundation.svc.cluster.local',
     redisHotHost: 'redis-hot.combo-foundation.svc.cluster.local',
     minioHost: 'minio.combo-foundation.svc.cluster.local',
     publicAppOrigin: 'https://review.43-160-242-46.sslip.io',
@@ -40,7 +38,6 @@ const ENVIRONMENTS = Object.freeze({
     namespace: 'combo-prod',
     foundationOverlay: 'shared-foundation',
     postgresHost: 'postgres.combo-foundation.svc.cluster.local',
-    redisQueueHost: 'redis-queue.combo-foundation.svc.cluster.local',
     redisHotHost: 'redis-hot.combo-foundation.svc.cluster.local',
     minioHost: 'minio.combo-foundation.svc.cluster.local',
     publicAppOrigin:
@@ -57,7 +54,6 @@ const FOUNDATION_NAMESPACES = Object.freeze({
 
 const FIXTURE_DIGESTS = Object.freeze({
   api: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-  runtime: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
   web: 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
 });
 
@@ -107,7 +103,6 @@ function replaceFixtureDigests(root, manifest) {
     let source = readFileSync(file, 'utf8');
     const replacements = {
       [FIXTURE_DIGESTS.api]: imageDigest(manifest.images.api),
-      [FIXTURE_DIGESTS.runtime]: imageDigest(manifest.images.runtime),
       [FIXTURE_DIGESTS.web]: imageDigest(manifest.images.web),
     };
     for (const [from, to] of Object.entries(replacements)) source = source.replaceAll(from, to);
@@ -128,9 +123,7 @@ function replaceScalars(value, environment) {
   if (value === 'combo-session-cookie-secure') return config.sessionCookieSecure;
   return value
     .replaceAll('api.combo.svc.cluster.local', `api.${config.namespace}.svc.cluster.local`)
-    .replaceAll('runtime.combo.svc.cluster.local', `runtime.${config.namespace}.svc.cluster.local`)
     .replaceAll('postgres:5432', `${config.postgresHost}:5432`)
-    .replaceAll('redis-queue:6379', `${config.redisQueueHost}:6379`)
     .replaceAll('redis-hot:6379', `${config.redisHotHost}:6379`)
     .replaceAll('minio:9000', `${config.minioHost}:9000`);
 }
@@ -209,8 +202,8 @@ function validateApps(resources, environment, manifest) {
   const deployments = resources.filter((resource) => resource.kind === 'Deployment');
   const services = resources.filter((resource) => resource.kind === 'Service');
   const configMaps = resources.filter((resource) => resource.kind === 'ConfigMap');
-  const expectedDeployments = ['api', 'runtime', 'web', 'worker'].sort();
-  const expectedServices = ['api', 'runtime', 'web'].sort();
+  const expectedDeployments = ['api', 'web'].sort();
+  const expectedServices = ['api', 'web'].sort();
   const expectedConfigMaps = [];
   assertNames(deployments, expectedDeployments, 'Deployment');
   assertNames(services, expectedServices, 'Service');
@@ -220,12 +213,6 @@ function validateApps(resources, environment, manifest) {
   }
   const deployment = (name) => deployments.find((item) => item.metadata?.name === name);
   if (containerImage(deployment('api'), 'api') !== manifest.images.api) fail('API image mismatch');
-  if (containerImage(deployment('worker'), 'worker') !== manifest.images.api) {
-    fail('Worker must use the API image');
-  }
-  if (containerImage(deployment('runtime'), 'runtime') !== manifest.images.runtime) {
-    fail('Runtime image mismatch');
-  }
   if (containerImage(deployment('web'), 'web') !== manifest.images.web) fail('Web image mismatch');
   validateServices(services);
 }
@@ -250,16 +237,13 @@ function validateFoundation(resources, namespace) {
   const expected = [
     ['ConfigMap', 'minio-init-script'],
     ['ConfigMap', 'redis-hot-config'],
-    ['ConfigMap', 'redis-queue-config'],
     ['Deployment', 'redis-hot'],
     ['Job', 'minio-init'],
     ['Service', 'minio'],
     ['Service', 'postgres'],
     ['Service', 'redis-hot'],
-    ['Service', 'redis-queue'],
     ['StatefulSet', 'minio'],
     ['StatefulSet', 'postgres'],
-    ['StatefulSet', 'redis-queue'],
   ]
     .map(([kind, name]) => `${kind}/${name}`)
     .sort();

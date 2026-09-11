@@ -12,7 +12,7 @@
 | Preview    | `combo-preview` | 共享 foundation   | 只部署 main                    |
 | Production | `combo-prod`    | 共享 foundation   | 只部署 preview 验证通过的 main |
 
-基础资源（PostgreSQL、Redis queue、Redis hot、MinIO）只存在两套：
+基础资源（PostgreSQL、Redis hot、MinIO）只存在两套：
 
 - `combo-test` namespace 内一套，仅 Test 应用使用。
 - `combo-foundation` namespace 内一套，**Preview 与 Production 应用共同使用**（跨 namespace 连接）。Preview 不建立独立的基础资源。
@@ -29,11 +29,11 @@
 
 ## 3. workflow 清单
 
-| workflow                       | 显示名        | 触发                                  | 作用                                                                                                                                                        |
-| ------------------------------ | ------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `.github/workflows/pr-ci.yml`  | PR checks     | pull_request                          | 合并前质量门禁：依赖安装、shared 构建、format、lint、typecheck、无容器快速测试、ShellCheck；不构建或发布镜像                                                |
-| `.github/workflows/ci.yml`     | Release build | main push、workflow_call              | 全量构建：集成测试、容器契约、三个镜像（api/runtime/web），并发布绑定精确提交 SHA 的不可变 `combo-build-<SHA>-<attempt>` 构建清单；也是分支构建的可复用入口 |
-| `.github/workflows/deploy.yml` | Deploy        | Release build 完成、workflow_dispatch | 统一部署三环境，执行晋级链                                                                                                                                  |
+| workflow                       | 显示名        | 触发                                  | 作用                                                                                                                                                |
+| ------------------------------ | ------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.github/workflows/pr-ci.yml`  | PR checks     | pull_request、pull_request_target     | `pull_request` 执行质量门禁；`pull_request_target` 只用受信 base 代码核对 retirement policy。两者都不构建或发布镜像，也不读取部署 Secret            |
+| `.github/workflows/ci.yml`     | Release build | main push、workflow_call              | 全量构建：集成测试、容器契约、两个镜像（api/web），并发布绑定精确提交 SHA 的不可变 `combo-build-<SHA>-<attempt>` 构建清单；也是分支构建的可复用入口 |
+| `.github/workflows/deploy.yml` | Deploy        | Release build 完成、workflow_dispatch | 统一部署三环境，执行晋级链                                                                                                                          |
 
 `deploy.yml` 的 `workflow_run` 触发器必须引用 `Release build` 显示名；重命名 ci.yml 时需要同步。
 
@@ -66,13 +66,13 @@ API 镜像的构建阶段通过 Creator Worker 的固定 Bun 1.4.2 开发依赖�
 
 - `foundation`：确保 foundation namespace 与资源存在（幂等 apply，不重建不重置）。
 - `migrate`：删除旧迁移 Job 后应用新迁移 Job 并等待完成（幂等，per-foundation 锁串行）。
-- `apps`：应用应用清单（含 `combo-release` ConfigMap）并等待 rollout。
+- `apps`：应用 API 与 Web 清单（含 `combo-release` ConfigMap）并等待 rollout。
 
-`scripts/render-env.mjs` 按环境渲染 apps / migrate / foundation 三份清单，替换镜像 digest 与每环境占位符（Secret 名、Postgres/Redis/MinIO 主机、公开入口、Cookie 安全标志）。Preview/Production 的 Postgres/Redis/MinIO 主机解析为 `combo-foundation` 的跨 namespace 服务名。
+`scripts/render-env.mjs` 按环境渲染 apps / migrate / foundation 三份清单，替换 schemaVersion 2 发布清单中的两个镜像 digest 与每环境占位符（Secret 名、Postgres/Redis hot/MinIO 主机、公开入口、Cookie 安全标志）。Preview/Production 的基础资源主机解析为 `combo-foundation` 的跨 namespace 服务名。独立公开的 `version.json` / `runtime-config.json` 发布身份元数据继续使用 schemaVersion 1。
 
 ## 7. 凭证规范
 
-- 各应用 namespace 必须存在 `combo-env` Secret（Postgres/S3/Resend/OTP/LLM 配置）与 `ghcr-pull`（镜像拉取）。
+- 各应用 namespace 必须存在 `combo-env` Secret（Postgres/S3/Resend/OTP/支付配置）与 `ghcr-pull`（镜像拉取）。
 - 共享 foundation（`combo-foundation`）的 Postgres/S3 凭证必须与 `combo-preview`、`combo-prod` 的凭证一致；否则应用无法连接共享数据库。
 - 凭证只通过 `scripts/configure-first-party-auth-secrets.sh` 原位轮换，不删除重建；轮换目标是各应用 namespace 的 `combo-env`（test→`combo-test`、preview→`combo-preview`、production→`combo-prod`）。
 - 部署脚本不得输出、落盘、复制或提交任何 Secret 值。
@@ -89,6 +89,8 @@ API 镜像的构建阶段通过 Creator Worker 的固定 Bun 1.4.2 开发依赖�
 2. Test 有独立 foundation，数据常驻，不做销毁重建。
 3. 生产正式域名是 `buildwithcombo.com`，部署验证以此为准。
 4. 三环境应用部署互不阻塞；共享 foundation 的迁移串行。
+5. 主栈应用面只有 API 与 Web，foundation 只有 PostgreSQL、Redis hot 与 MinIO；发布清单不得重新引入队列 Redis、后台 Worker、旧 Runtime 或沙箱服务。
+6. 删除旧清单只改变仓库期望态，不代表已删除任何集群对象；清理存量资源必须另获部署授权。
 
 ## 10. combo-v2：V2 架构验证命名空间
 
@@ -97,7 +99,7 @@ API 镜像的构建阶段通过 Creator Worker 的固定 Bun 1.4.2 开发依赖�
 - 手工部署：代码从本地 rsync 到主机构建，镜像经 `docker save` 加 `k3s ctr images import` 进集群，不经过 GitHub CI/CD，不产生 `combo-build-<SHA>` 构建清单；验证结束后整个命名空间拆除。
 - 不得修改、重启或删除三环境与 `combo-foundation`、`kol-agents`、`observability` 的现有资源。经用户明确授权的 V2 升级可以更新 V2 自有 Nginx 文件和 systemd 单元；其他主机配置保持不变。
 - 数据按「实例共享、逻辑隔离」：在 `combo-foundation` 的共享 PostgreSQL 实例上新建独立 database `combo_v2`（不动现有 `combo` 库），三个 V2 PostgreSQL 客户端清单把非敏感 `PGDATABASE` 固定为 `combo_v2`，不从 Secret 选择数据库。Redis 复用 `redis-hot` 并用 `authz:v2:` 等 v2 前缀隔离键。正式迁移链保持 `db/migrations/0000` 至当前主线头；V2 runner 只复用其中 `0000` 至 `0011`，再执行 `db/v2-migrations/0012` 至 `0017`，两条 `schema_migrations` 序列互不混用。V2 runner 对迁移前已存在的 canonical API/worker/runtime 三角色只恢复 LOGIN 并保留原密码；V2 自有 `combo_authz`、`combo_billing` 角色绑定 V2 Secret。
-- V2 迁移属于停机人工维护操作，只能通过主机侧 `scripts/migrate-v2-host.sh` 执行。先将 V2 四个 Deployment 缩到 0 并确认 Pod 消失，迁移成功后再应用同候选的新应用清单。该入口持有与 Preview/Production 正式迁移相同的 `$HOME/data/combo-foundation-shared.lock`，在锁内清理遗留 Job、确认 V2 writer 已停、以内存比较核对 V2/Preview/Production 三份共享角色 Secret、执行并等待 Job、核对五角色 LOGIN、从 Preview/Production 当前 Pod 建立六条新数据库连接并检查三环境 rollout。Job 超时或进程中断时，入口持续持锁直到 Job/Pod 已删除；任一步失败都不能把无人监护的迁移留在锁外。
+- V2 迁移属于停机人工维护操作，只能通过主机侧 `scripts/migrate-v2-host.sh` 执行。先将 V2 四个 Deployment 缩到 0 并确认 Pod 消失，迁移成功后再应用同候选的新应用清单。该入口持有与 Preview/Production 正式迁移相同的 `$HOME/data/combo-foundation-shared.lock`，在锁内清理遗留 Job、确认 V2 writer 已停、以内存比较核对 V2/Preview/Production 三份 canonical 角色 Secret、执行并等待 Job、核对五角色 LOGIN，并以 Preview 与 Production 当前 API Pod 建立的两条新数据库连接验证三环境 API/Web rollout。Job 超时或进程中断时，入口持续持锁直到 Job/Pod 已删除；任一步失败都不能把无人监护的迁移留在锁外。
 - 入口为 `https://v2-test.43-160-242-46.sslip.io`。主机回环端口固定为 Authz 18091、Agent 18092、Billing 18093、Gateway 18094，集群 Service 仍为 ClusterIP。Billing 只公开支付、收银台和指定回调路径，管理入账及内部计费接口不出公网。
 - 清单在 `infra/k8s/v2/`，所有对象固定到 `combo-v2`。平台与 Agent 镜像标注源码 SHA，清单只接受镜像摘要。Authz 使用 Resend 随机验证码，不允许开发固定码。平台密钥保留在 `combo-env`，Agent 凭据保存在独立的 `restart-life-credentials` Secret；Agent 不持有模型供应商密钥或平台内部密钥。
 - V2 镜像先构建 `@cb/shared` 与 `@cb/payment-protocol`，再构建服务；运行层同时包含两个包的清单和产物。V2 清单启用独立支付准入凭据；服务的代码默认开关仍为关闭。

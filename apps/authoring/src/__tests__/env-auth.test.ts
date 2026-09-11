@@ -3,7 +3,6 @@ import { PRODUCTION_RESEND_FROM_EMAIL } from '../platform/config/env.js';
 
 const COMMON = {
   DATABASE_URL: 'postgres://test.invalid/test',
-  REDIS_QUEUE_URL: 'redis://test.invalid/0',
   REDIS_HOT_URL: 'redis://test.invalid/0',
   S3_ENDPOINT: 'https://objects.example.test',
   S3_ACCESS_KEY: 'test-access-value',
@@ -36,7 +35,6 @@ describe('authoring authentication environment boundary', () => {
     stub({
       ...COMMON,
       NODE_ENV: 'production',
-      PROCESS: 'api',
       PUBLIC_APP_ORIGINS: 'https://combo.example',
       SESSION_COOKIE_SECURE: 'true',
       RESEND_API_KEY: '',
@@ -58,7 +56,6 @@ describe('authoring authentication environment boundary', () => {
     stub({
       ...COMMON,
       NODE_ENV: 'production',
-      PROCESS: 'api',
       PUBLIC_APP_ORIGINS: 'https://combo.example',
       SESSION_COOKIE_SECURE: 'true',
       RESEND_API_KEY: 'test-resend-key-value',
@@ -82,7 +79,6 @@ describe('authoring authentication environment boundary', () => {
     stub({
       ...COMMON,
       NODE_ENV: 'production',
-      PROCESS: 'api',
       PUBLIC_APP_ORIGINS: 'https://combo.example',
       SESSION_COOKIE_SECURE: 'true',
       RESEND_API_KEY: 'test-resend-key-value',
@@ -105,7 +101,6 @@ describe('authoring authentication environment boundary', () => {
     stub({
       ...COMMON,
       NODE_ENV: 'production',
-      PROCESS: 'api',
       PUBLIC_APP_ORIGINS: 'https://combo.example,https://try.combo.example',
       SESSION_COOKIE_SECURE: 'true',
       RESEND_API_KEY: 'test-resend-key-value',
@@ -123,30 +118,11 @@ describe('authoring authentication environment boundary', () => {
     }
   });
 
-  it('does not require or materialize production auth secrets for the worker process', async () => {
-    stub({
-      ...COMMON,
-      NODE_ENV: 'production',
-      PROCESS: 'worker',
-      RESEND_API_KEY: '',
-      RESEND_FROM_EMAIL: '',
-      OTP_HMAC_SECRET: '',
-    });
-    const loadEnv = await freshLoadEnv();
-
-    const env = loadEnv();
-    expect(env.PROCESS).toBe('worker');
-    expect(env.RESEND_API_KEY).toBe('');
-    expect(env.RESEND_FROM_EMAIL).toBe('');
-    expect(env.OTP_HMAC_SECRET).toBe('');
-  });
-
   it('allows a local Resend mock base only in test', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     stub({
       ...COMMON,
       NODE_ENV: 'test',
-      PROCESS: 'api',
       PUBLIC_APP_ORIGINS: 'http://localhost',
       SESSION_COOKIE_SECURE: 'false',
       RESEND_API_KEY: 'test-resend-key-value',
@@ -164,7 +140,6 @@ describe('authoring authentication environment boundary', () => {
     stub({
       ...COMMON,
       NODE_ENV: 'production',
-      PROCESS: 'api',
       PUBLIC_APP_ORIGINS: 'http://127.0.0.1:18080',
       SESSION_COOKIE_SECURE: 'false',
       RESEND_API_KEY: 'test-resend-key-value',
@@ -181,7 +156,6 @@ describe('authoring authentication environment boundary', () => {
       ...COMMON,
       COMBO_ENVIRONMENT: 'preview',
       NODE_ENV: 'production',
-      PROCESS: 'api',
       PUBLIC_APP_ORIGINS: 'http://127.0.0.1:18080',
       SESSION_COOKIE_SECURE: 'false',
       RESEND_API_KEY: 'test-resend-key-value',
@@ -203,7 +177,6 @@ describe('authoring authentication environment boundary', () => {
     stub({
       ...COMMON,
       NODE_ENV: 'production',
-      PROCESS: 'api',
       PUBLIC_APP_ORIGINS: origins,
       SESSION_COOKIE_SECURE: 'true',
       RESEND_API_KEY: 'test-resend-key-value',

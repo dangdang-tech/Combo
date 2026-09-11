@@ -2,7 +2,7 @@
    白色内容底 + 浅灰侧栏 + Combo 墨色/砖红品牌 + 衬线标题 / 等宽 label。 */
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,900&family=Noto+Serif+SC:wght@500;600&family=Noto+Sans+SC:wght@400;500;700&family=Geist+Mono:wght@400;500;700&display=swap');
 :root {
-  /* ===== Combo 统一设计 token（canon 单一事实源；与 runtime-web/styles.css 逐值同步，diff 必须为零）===== */
+  /* ===== Combo 当前设计 token ===== */
   /* 尺寸 */
   --cb-sidebar-w: 288px;
   --cb-sidebar-w-collapsed: 64px;

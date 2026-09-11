@@ -62,8 +62,7 @@ chmod 0755 "$runtime_directory"
 
 for output in \
   "$runtime_directory/runtime-config.json" \
-  "$runtime_directory/version.json" \
-  "$runtime_directory/try-runtime-config.json"; do
+  "$runtime_directory/version.json"; do
   {
     printf '{\n'
     printf '  "schemaVersion": 1,\n'

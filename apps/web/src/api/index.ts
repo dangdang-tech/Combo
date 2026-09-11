@@ -1,8 +1,7 @@
-// API 层出口：认证、typed client、业务端点与任务进度 SSE hook，均消费 @cb/shared 契约真源。
+// API 层出口：认证、typed client 与当前 Agent Package 交付接口。
 export {
   ApiError,
   apiGet,
-  apiGetEnvelope,
   apiPost,
   fallbackErrorBody,
   sanitizeErrorBody,
@@ -19,14 +18,4 @@ export {
   AUTH_ME_PATH,
   type AuthSessionProbe,
 } from './auth.js';
-export * from './endpoints.js';
 export * from './agentPackages.js';
-export {
-  useTaskEvents,
-  reduceTaskEvents,
-  INITIAL_TASK_EVENTS_STATE,
-  __setFetchEventSourceForTests,
-  type TaskEventsState,
-  type SSEConnectionStatus,
-  type UseTaskEventsOptions,
-} from './useTaskEvents.js';

@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { ALL_ENDPOINTS } from '../bootstrap/routes.js';
 
 describe('route registry self-check', () => {
-  it('registers exactly 36 declared endpoints (including anonymous Codex receiver handoff)', () => {
-    expect(ALL_ENDPOINTS).toHaveLength(36);
+  it('registers exactly 22 retained endpoints (including anonymous Codex receiver handoff)', () => {
+    expect(ALL_ENDPOINTS).toHaveLength(22);
   });
 
   it('has no duplicate method and URL pairs', () => {
@@ -43,8 +43,6 @@ describe('route registry self-check', () => {
 
   it('puts an Origin guard before every browser write and enumerates non-browser exceptions', () => {
     const exempt = new Set([
-      '/connect/prepare',
-      '/connect/upload',
       '/billing/leshouying/payment-notify',
       '/agent-package-transfers',
       '/agent-package-transfers/:transferId/status',
@@ -89,28 +87,9 @@ describe('route registry self-check', () => {
     );
   });
 
-  it('keeps the controlled Package Publisher owner-only, no-store, bounded, and rate-limited', () => {
-    const publisher = ALL_ENDPOINTS.filter((endpoint) =>
-      endpoint.url.startsWith('/agent-package-releases'),
-    );
-    expect(publisher).toHaveLength(2);
-    const mutation = publisher.find((endpoint) => endpoint.method === 'POST');
-    expect(mutation).toMatchObject({
-      url: '/agent-package-releases',
-      bodyLimit: 4 * 1_024 * 1_024,
-      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
-    });
-    expect(mutation?.onRequest).toHaveLength(4);
-    expect(mutation?.preHandlers).toHaveLength(1);
-    const read = publisher.find((endpoint) => endpoint.method === 'GET');
-    expect(read?.url).toBe('/agent-package-releases/:releaseId');
-    expect(read?.onRequest).toHaveLength(1);
-    expect(read?.preHandlers).toHaveLength(2);
-  });
-
-  it('keeps assistant endpoints independent from browser login', () => {
-    const connect = ALL_ENDPOINTS.filter((endpoint) => endpoint.url.startsWith('/connect/'));
-    expect(connect.length).toBeGreaterThanOrEqual(2);
-    for (const endpoint of connect) expect(endpoint.preHandlers ?? []).toHaveLength(0);
+  it('has no retired task, capability, connect, or legacy release endpoints', () => {
+    for (const endpoint of ALL_ENDPOINTS) {
+      expect(endpoint.url).not.toMatch(/^\/(?:tasks|capabilities|connect|agent-package-releases)/u);
+    }
   });
 });

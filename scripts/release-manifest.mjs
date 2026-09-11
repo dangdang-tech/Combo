@@ -4,7 +4,7 @@ import { lstatSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-export const RELEASE_MANIFEST_SCHEMA_VERSION = 1;
+export const RELEASE_MANIFEST_SCHEMA_VERSION = 2;
 
 const SOURCE_SHA_PATTERN = /^[0-9a-f]{40}$/;
 const MIGRATION_HEAD_PATTERN = /^[0-9]{4}_[a-z0-9_]+\.sql$/;
@@ -13,7 +13,6 @@ const UTC_TIMESTAMP_PATTERN = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-
 
 export const IMAGE_REPOSITORIES = Object.freeze({
   api: 'ghcr.io/dangdang-tech/combo-api',
-  runtime: 'ghcr.io/dangdang-tech/combo-runtime',
   web: 'ghcr.io/dangdang-tech/combo-web',
 });
 
@@ -106,7 +105,6 @@ export function validateReleaseManifest(value) {
     releaseId: value.releaseId,
     images: {
       api: value.images.api,
-      runtime: value.images.runtime,
       web: value.images.web,
     },
     migrationHead: value.migrationHead,
@@ -173,7 +171,6 @@ function createFromOptions(options) {
     'output',
     'source-sha',
     'api-image',
-    'runtime-image',
     'web-image',
     'migration-head',
     'built-at',
@@ -186,7 +183,6 @@ function createFromOptions(options) {
     releaseId: releaseIdForSource(sourceSha),
     images: {
       api: required(options, 'api-image'),
-      runtime: required(options, 'runtime-image'),
       web: required(options, 'web-image'),
     },
     migrationHead: required(options, 'migration-head'),

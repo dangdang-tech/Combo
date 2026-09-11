@@ -1,8 +1,7 @@
-# API 与 Worker 共用同一镜像，按 PROCESS=api|worker 在 entrypoint 分叉。
-# 同镜像也用于一次性迁移容器；迁移任务覆盖 entrypoint 后运行 db/scripts/migrate.ts。
+# API 镜像也用于一次性迁移容器；迁移任务覆盖 entrypoint 后运行 db/scripts/migrate.ts。
 #
 # web 取舍：web 用独立镜像（Dockerfile.web，nginx 托管静态产物 + 反代）。理由——前端是 nginx 静态服务、
-# 与 Node 业务进程运行时不同，分镜像更小更清晰；故本镜像只负责 API、Worker 和 migration。
+# 与 Node 业务进程运行时不同，分镜像更小更清晰；故本镜像只负责 API 和 migration。
 
 FROM node:24-slim AS build
 WORKDIR /app
@@ -19,8 +18,6 @@ RUN pnpm -F @cb/authoring... build
 FROM node:24-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-# PROCESS 决定本容器跑哪个进程入口（api 为默认）；migrate 容器在 compose 覆盖 entrypoint。
-ENV PROCESS=api
 RUN corepack enable && corepack prepare pnpm@11.0.9 --activate
 # 工作区清单 + 各包 package.json（--prod install 需要）
 COPY --from=build /app/pnpm-workspace.yaml /app/package.json /app/pnpm-lock.yaml* ./
@@ -45,9 +42,9 @@ COPY --from=build /app/apps/authoring/dist ./apps/authoring/dist
 COPY --from=build /app/db/migrations ./db/migrations
 COPY --from=build /app/db/scripts/migrate.ts ./db/scripts/migrate.ts
 COPY --from=build /app/db/scripts/provision-app-roles.ts ./db/scripts/provision-app-roles.ts
-# entrypoint 分叉脚本
+# API entrypoint；migrate 容器以显式 entrypoint 覆盖。
 COPY infra/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 EXPOSE 3000
-# 默认走 entrypoint 按 PROCESS 分叉；compose 的 migrate 容器用显式 entrypoint 覆盖。
+# 默认启动单一 API 进程；compose 的 migrate 容器用显式 entrypoint 覆盖。
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

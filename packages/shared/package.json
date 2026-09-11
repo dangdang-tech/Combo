@@ -2,7 +2,7 @@
   "name": "@cb/shared",
   "version": "0.0.0",
   "private": true,
-  "description": "前后端共享真源:地基(ids/信封/错误/SSE/进度) + 业务域 DTO/zod schema(auth/task/capability/trial/redaction)",
+  "description": "Authoring 与 Web 共享的认证、充值、错误、健康和发布身份契约",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

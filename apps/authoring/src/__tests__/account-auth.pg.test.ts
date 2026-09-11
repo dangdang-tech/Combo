@@ -141,7 +141,7 @@ pgDescribe('first-party auth PostgreSQL invariants', () => {
     return verifyEmail(dependencies(rateLimiter), {
       email,
       code,
-      returnTo: '/tasks',
+      returnTo: '/',
       clientAddress: '192.0.2.10',
       traceId: 'trace-pg-verify',
     });

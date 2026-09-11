@@ -1,13 +1,9 @@
 // vitest setup（每个测试文件前执行一次）。
 //   1. @testing-library/jest-dom：toBeInTheDocument 等 DOM 匹配器。
-//   2. afterEach 清理：unmount RTL 渲染 + 复位 MockFetchEventSource 连接表 + 还原 fetch mock。
-//
-// SSE 测试不再注入全局 EventSource：useSSE 改用 @microsoft/fetch-event-source（Codex r2 P1 #7），
-// 测试经 useSSE 导出的 __setFetchEventSourceForTests seam 换受控 MockFetchEventSource（见各测试文件）。
+//   2. afterEach 清理已挂载的 RTL 组件。
 import '@testing-library/jest-dom/vitest';
 import { afterEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
-import { MockFetchEventSource } from './mockFetchEventSource.js';
 
 // 本环境（Node ≥22 实验性 webstorage 遮蔽 / jsdom 初始化差异）下 globalThis.localStorage
 // 可能是个缺 clear() 等方法的残废对象，导致 useCollapse 等测试整批红。
@@ -54,5 +50,4 @@ if (typeof (globalThis as { localStorage?: Storage }).localStorage?.clear !== 'f
 
 afterEach(() => {
   cleanup();
-  MockFetchEventSource.reset();
 });

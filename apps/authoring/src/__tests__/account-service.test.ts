@@ -223,7 +223,7 @@ describe('account auth service orchestration', () => {
     const result = await verifyEmail(deps, {
       email: 'Alice@example.com',
       code: '042731',
-      returnTo: '/tasks',
+      returnTo: '/',
       clientAddress: '192.0.2.4',
       traceId: 'trace-service',
       currentSessionCookie: `s1.${Buffer.alloc(32, 9).toString('base64url')}`,
@@ -233,7 +233,7 @@ describe('account auth service orchestration', () => {
       kind: 'ok',
       user: USER,
       sessionCookie: `s1.${Buffer.alloc(32, 5).toString('base64url')}`,
-      returnTo: '/tasks',
+      returnTo: '/',
     });
     expect(repoMocks.verifyEmailChallenge).toHaveBeenCalledWith(
       deps.db,
@@ -259,7 +259,7 @@ describe('account auth service orchestration', () => {
         verifyEmail(deps, {
           email: 'Alice@example.com',
           code: '111111',
-          returnTo: '/tasks',
+          returnTo: '/',
           clientAddress: '192.0.2.4',
           traceId: 'trace-service',
         }),

@@ -4,7 +4,7 @@
 //   1. 绝不裸露错误码：所有非 2xx → 白名单重建 ErrorEnvelope，UI 只读 userMessage + action（见 ApiError）。
 //   2. 永不裸转圈：本层只负责取数与抛错；加载态/进度由组件层承担。
 //
-// 轻包络 { data, meta }（脊柱 §2）：成功默认解包 data；需要 meta（分页）时用 apiGetEnvelope。
+// 轻包络 { data, meta }：成功默认解包 data。
 import {
   API_PREFIX,
   CLIENT_FALLBACK_TRACE_ID,
@@ -14,7 +14,6 @@ import {
   type ErrorAction,
   type ErrorBody,
   type ErrorEnvelope,
-  type Meta,
   sanitizeAuthReturnTo,
 } from '@cb/shared';
 import { clientTraceHeaders, reportClientEvent } from './telemetry.js';
@@ -100,7 +99,7 @@ export function fallbackErrorBody(userMessage: string): ErrorBody {
 /**
  * 从任意可疑输入白名单重建 ErrorBody：只摘 userMessage/retriable/action/traceId/failureId?/details?，
  * code/status/stack/原始 message 一律不进结果。不像 ErrorBody 的输入 → 兜底人话（绝不裸露错误码）。
- * HTTP 非 2xx body、SSE error 帧、done.error 三处共用。
+ * HTTP 非 2xx body 统一使用此边界。
  */
 export function sanitizeErrorBody(input: unknown): ErrorBody {
   if (typeof input !== 'object' || input === null) {
@@ -222,14 +221,6 @@ async function request<T>(path: string, opts: RawRequestOptions): Promise<Envelo
 
 export async function apiGet<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   return (await request<T>(path, { ...opts, method: 'GET' })).data;
-}
-
-/** 需要 meta（分页）时用这个版本。 */
-export async function apiGetEnvelope<T>(
-  path: string,
-  opts: RequestOptions = {},
-): Promise<{ data: T; meta?: Meta }> {
-  return request<T>(path, { ...opts, method: 'GET' });
 }
 
 export async function apiPost<T>(

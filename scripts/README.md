@@ -12,11 +12,11 @@
 | Preview    | `combo-preview` | 共享 foundation（`shared-foundation`） | `https://review.43-160-242-46.sslip.io`                               |
 | Production | `combo-prod`    | 共享 foundation（`shared-foundation`） | `https://agora.43-160-242-46.sslip.io` / `https://buildwithcombo.com` |
 
-Preview 与 Production 共用一套 Postgres、Redis（queue/hot）和 MinIO，放在 `combo-foundation` namespace，应用跨 namespace 连接；Test 有自己独立的一套 foundation，数据常驻保留。两套 foundation 分别是 `combo-test` 与 `combo-foundation` namespace 内的 `postgres`、`redis-queue`、`redis-hot`、`minio` 与 `minio-init` 任务。
+Preview 与 Production 共用一套 Postgres、`redis-hot` 和 MinIO，放在 `combo-foundation` namespace，应用跨 namespace 连接；Test 有自己独立的一套 foundation，数据常驻保留。两套 foundation 分别是 `combo-test` 与 `combo-foundation` namespace 内的 `postgres`、`redis-hot`、`minio` 与 `minio-init` 任务。
 
 ## 部署脚本
 
-`render-env.mjs` 按环境渲染 k8s 清单。它读取 canonical 发布清单（`release-manifest.mjs` 生成），把镜像 digest、`combo-release` ConfigMap（release 元数据）和每环境占位符注入应用 overlay。占位符包括 `combo-env`、`ghcr-pull`、`combo-postgres-host`、`combo-public-app-origin`、`combo-session-cookie-secure`，以及 `postgres:5432`、`redis-queue:6379`、`redis-hot:6379`、`minio:9000` 主机名。Preview/Production 的 Postgres/Redis/MinIO 主机解析为 `combo-foundation` 的跨 namespace 服务名。支持三个 phase：`apps`、`migrate`、`foundation`。渲染结果只含 Service、Deployment、Job 与允许的 ConfigMap，绝不含 Secret。
+`render-env.mjs` 按环境渲染 k8s 清单。它读取 canonical 发布清单（`release-manifest.mjs` 生成），把镜像 digest、`combo-release` ConfigMap 和每环境占位符注入应用 overlay。占位符包括 Secret 名、公开入口、Cookie 安全标志，以及 Postgres、`redis-hot`、MinIO 主机名。Preview/Production 的基础资源主机解析为 `combo-foundation` 的跨 namespace 服务名。渲染结果只含 Service、Deployment、Job 与允许的 ConfigMap，绝不含 Secret。
 
 `deploy-env.sh` 在主机上执行部署，三个子命令：
 
@@ -26,9 +26,9 @@ Preview 与 Production 共用一套 Postgres、Redis（queue/hot）和 MinIO，�
 
 `deploy-env.sh` 支持 `--render-dir`：workflow 在 runner 上先渲染 YAML，再上传到主机用预渲染文件执行。
 
-`release-manifest.mjs` 创建和校验 canonical、不可覆盖的发布清单。清单把一个完整源码 SHA 唯一映射到 API、Runtime、Web 三个 `repository@sha256` 镜像、迁移头和 Web 静态资源摘要。Worker 与 migration 固定使用 API 镜像。
+`release-manifest.mjs` 创建和校验 schemaVersion 2 的 canonical、不可覆盖发布清单。清单把一个完整源码 SHA 唯一映射到 API、Web 两个 `repository@sha256` 镜像、迁移头和 Web 静态资源摘要；migration 固定使用 API 镜像。
 
-`web-asset-manifest.mjs` 为 Web 与 Runtime Web 的实际构建文件生成严格、确定性的内容摘要清单。正式 CI 从最终 Web 镜像中提取并复验这份清单，而不是从标签或宿主构建目录推断。
+`web-asset-manifest.mjs` 为 Web 的实际构建文件生成 schemaVersion 2 的严格、确定性内容摘要清单。正式 CI 从最终 Web 镜像中提取并复验这份清单，而不是从标签或宿主构建目录推断。Web 对外 `version.json` / `runtime-config.json` 是另一份发布身份合同，继续使用 schemaVersion 1。
 
 ## 部署 workflow
 
@@ -39,7 +39,7 @@ Preview 与 Production 共用一套 Postgres、Redis（queue/hot）和 MinIO，�
 
 `select` job 校验触发源、分支 tip、main 可达性并解析该 SHA 的 `combo-build-<SHA>-<attempt>` 构建清单 artifact；`deploy` job 按环境并发（`combo-deploy-<env>`），在 runner 上渲染 YAML、scp 到主机，再由主机上的 `deploy-env.sh` 依次执行 foundation、migrate、apps，最后验证环境域名返回该 SHA 的版本元数据。分支 Test 通过 `build_branch` job 回调 main 定义的 `ci.yml` 构建不可变 artifact；候选分支的 workflow 与脚本不会在受保护 Environment 中执行。
 
-`deploy.yml` 需要仓库级 Secret：`DEPLOY_SSH_KEY`、`DEPLOY_HOST`、`DEPLOY_USER`、`DEPLOY_SSH_KNOWN_HOSTS`（SSH 到 tecent2 执行部署）。这些 Secret 只被运行在 `main` 上的受信任控制器读取。主机上各 namespace 的 `combo-env`（Postgres/S3/Resend/OTP/LLM 凭证）与 `ghcr-pull`（镜像拉取）Secret 需要预先就位，`deploy-env.sh` 在缺失时直接失败。
+`deploy.yml` 需要仓库级 Secret：`DEPLOY_SSH_KEY`、`DEPLOY_HOST`、`DEPLOY_USER`、`DEPLOY_SSH_KNOWN_HOSTS`（SSH 到 tecent2 执行部署）。这些 Secret 只被运行在 `main` 上的受信任控制器读取。主机上各 namespace 的 `combo-env`（Postgres/S3/Resend/OTP/支付凭证）与 `ghcr-pull`（镜像拉取）Secret 需要预先就位，`deploy-env.sh` 在缺失时直接失败。
 
 ## 其他脚本
 
@@ -47,7 +47,7 @@ Preview 与 Production 共用一套 Postgres、Redis（queue/hot）和 MinIO，�
 
 V2 渲染要求 `--platform`、`--restart-life`、`--state-redis` 三个镜像摘要。Agent 自有 Redis 仅监听同 Pod 回环地址，使用独立持久卷；它不属于共享 foundation。
 
-- `start.sh` / `smoke.sh` / `migrate.sh` / `acceptance-smoke.sh`：本地开发与冒烟。
+- `start.sh` / `smoke.sh` / `migrate.sh`：本地开发与冒烟。
 - `check-production-artifacts.sh`：CI gate，校验生产构建产物不含测试文件、测试邮件基础设施或已废弃认证栈。
 - `scripts/integration/`：CI 集成测试脚本。
 - `scripts/integration/db-migrate.sh`：正式源码迁移头 `0021` 的空库、幂等、历史升级和角色验证；串行运行 Registry、公开发布/浏览器授权、0020→0021 升级等 DDL 测试，最后构建 authoring 编译器依赖并运行私有 Draft HTTP/PG 测试（对象存储假件）。只用于临时测试库，不能对常驻 Test/Preview/Production 执行；私有 Draft/公开发布测试另有本地连接与测试库名保护。

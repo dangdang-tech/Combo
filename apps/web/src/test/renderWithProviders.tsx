@@ -14,9 +14,9 @@ export function createTestQueryClient(): QueryClient {
 }
 
 export interface RenderPageOptions {
-  /** 初始路由（如 '/tasks/t-1'）。 */
+  /** 初始路由（如 '/agent-transfers/<id>'）。 */
   route?: string;
-  /** 路由 path 模板（如 '/tasks/:taskId'）；缺省 '*' 直接渲染。 */
+  /** 路由 path 模板（如 '/agent-transfers/:transferId'）；缺省 '*' 直接渲染。 */
   path?: string;
 }
 

@@ -6,7 +6,7 @@ import {
   type TraceId,
 } from '@cb/shared';
 
-export type ClientEventKind = 'api_error' | 'sse_error' | 'window_error' | 'unhandled_rejection';
+export type ClientEventKind = 'api_error' | 'window_error' | 'unhandled_rejection';
 
 export interface TraceHeaders {
   traceId: TraceId;

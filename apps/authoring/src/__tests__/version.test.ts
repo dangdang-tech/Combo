@@ -12,6 +12,18 @@ const releaseEnvironment = {
   COMBO_RELEASE_MANIFEST_DIGEST: `sha256:${'b'.repeat(64)}`,
   COMBO_WEB_ASSET_MANIFEST: `sha256:${'c'.repeat(64)}`,
 };
+const productionApiEnvironment = {
+  DATABASE_URL: 'postgres://combo:combo@localhost:5432/combo',
+  REDIS_HOT_URL: 'redis://localhost:6380/0',
+  S3_ENDPOINT: 'http://localhost:9000',
+  S3_ACCESS_KEY: 'test-access',
+  S3_SECRET_KEY: 'test-secret',
+  PUBLIC_APP_ORIGINS: 'https://combo.example',
+  SESSION_COOKIE_SECURE: 'true',
+  RESEND_API_KEY: 'test-resend-key',
+  RESEND_FROM_EMAIL: 'Combo <auth@buildwithcombo.com>',
+  OTP_HMAC_SECRET: 'h'.repeat(32),
+};
 
 afterEach(() => {
   process.env = { ...originalEnv };
@@ -45,18 +57,7 @@ describe('authoring release version', () => {
     process.env = {
       ...originalEnv,
       NODE_ENV: 'production',
-      PROCESS: 'api',
-      DATABASE_URL: 'postgres://combo:combo@localhost:5432/combo',
-      REDIS_QUEUE_URL: 'redis://localhost:6379/0',
-      REDIS_HOT_URL: 'redis://localhost:6380/0',
-      S3_ENDPOINT: 'http://localhost:9000',
-      S3_ACCESS_KEY: 'test-access',
-      S3_SECRET_KEY: 'test-secret',
-      PUBLIC_APP_ORIGINS: 'https://combo.example',
-      SESSION_COOKIE_SECURE: 'true',
-      RESEND_API_KEY: 'test-resend-key',
-      RESEND_FROM_EMAIL: 'Combo <auth@buildwithcombo.com>',
-      OTP_HMAC_SECRET: 'h'.repeat(32),
+      ...productionApiEnvironment,
     };
     for (const key of Object.keys(releaseEnvironment)) delete process.env[key];
 
@@ -65,18 +66,12 @@ describe('authoring release version', () => {
   });
 
   it.each(['test', 'preview'] as const)(
-    'accepts exact %s release metadata in the production-mode Worker image',
+    'accepts exact %s release metadata in the production-mode API image',
     async (environment) => {
       process.env = {
         ...originalEnv,
         NODE_ENV: 'production',
-        PROCESS: 'worker',
-        DATABASE_URL: 'postgres://combo:combo@localhost:5432/combo',
-        REDIS_QUEUE_URL: 'redis://localhost:6379/0',
-        REDIS_HOT_URL: 'redis://localhost:6380/0',
-        S3_ENDPOINT: 'http://localhost:9000',
-        S3_ACCESS_KEY: 'test-access',
-        S3_SECRET_KEY: 'test-secret',
+        ...productionApiEnvironment,
         ...releaseEnvironment,
         COMBO_ENVIRONMENT: environment,
       };
@@ -90,7 +85,6 @@ describe('authoring release version', () => {
     process.env = {
       ...originalEnv,
       NODE_ENV: 'development',
-      PROCESS: 'api',
       ...releaseEnvironment,
       COMBO_ENVIRONMENT: 'production',
     };
@@ -103,13 +97,7 @@ describe('authoring release version', () => {
     process.env = {
       ...originalEnv,
       NODE_ENV: 'production',
-      PROCESS: 'worker',
-      DATABASE_URL: 'postgres://combo:combo@localhost:5432/combo',
-      REDIS_QUEUE_URL: 'redis://localhost:6379/0',
-      REDIS_HOT_URL: 'redis://localhost:6380/0',
-      S3_ENDPOINT: 'http://localhost:9000',
-      S3_ACCESS_KEY: 'test-access',
-      S3_SECRET_KEY: 'test-secret',
+      ...productionApiEnvironment,
       COMBO_ENVIRONMENT: 'development',
       COMBO_SOURCE_SHA: '0'.repeat(40),
       COMBO_RELEASE_ID: `release-${'0'.repeat(40)}`,

@@ -104,7 +104,7 @@ describe('first-party account handlers', () => {
       kind: 'ok',
       user: USER,
       sessionCookie: SESSION,
-      returnTo: '/tasks',
+      returnTo: '/',
     });
     repoMocks.revokeSession.mockResolvedValue(undefined);
     repoMocks.readMe.mockResolvedValue({ ...USER, disabledAt: null });
@@ -160,7 +160,7 @@ describe('first-party account handlers', () => {
 
   it('preserves a leading-zero code and sets the explicit HTTPS session cookie', async () => {
     const req = requestDouble({
-      body: { email: 'Alice@example.com', code: '004271', returnTo: '/tasks' },
+      body: { email: 'Alice@example.com', code: '004271', returnTo: '/' },
       nodeEnv: 'test',
       sessionCookieSecure: true,
     });
@@ -170,7 +170,7 @@ describe('first-party account handlers', () => {
 
     expect(serviceMocks.verifyEmail).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ code: '004271', returnTo: '/tasks' }),
+      expect.objectContaining({ code: '004271', returnTo: '/' }),
     );
     expect(SESSION).toMatch(AUTH_SESSION_COOKIE_VALUE_PATTERN);
     expect(reply.setCookie).toHaveBeenCalledTimes(1);
@@ -184,14 +184,14 @@ describe('first-party account handlers', () => {
     expect(reply.setCookie.mock.calls[0]?.[2]).not.toHaveProperty('domain');
     expect(reply.code).toHaveBeenCalledWith(200);
     expect(reply.send).toHaveBeenCalledWith({
-      data: { user: USER, returnTo: '/tasks' },
+      data: { user: USER, returnTo: '/' },
       meta: { traceId: 'trace-account-test' },
     });
   });
 
   it('uses the local HTTP cookie when a production Test process explicitly disables Secure', async () => {
     const req = requestDouble({
-      body: { email: 'Alice@example.com', code: '004271', returnTo: '/tasks' },
+      body: { email: 'Alice@example.com', code: '004271', returnTo: '/' },
       nodeEnv: 'production',
       sessionCookieSecure: false,
     });

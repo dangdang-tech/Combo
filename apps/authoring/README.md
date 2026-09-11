@@ -1,13 +1,13 @@
 # apps/authoring（创作端服务）
 
-本包是创作者业务、受控 Test Agent Package 发布和余额充值的写入服务。API 进程提供第一方邮箱验证码认证、任务、上传、提取、能力管理、受控 Package Registry、钱包读取与乐收赢充值接口；worker 进程消费提取队列并执行租约对账。只有 API 进程持有邮件供应商、验证码 HMAC、Test Publisher gate 和支付机构密钥，worker 不依赖这些配置。
+本包是 Combo 当前唯一的主栈 API 服务。单一进程提供第一方邮箱验证码认证、账户、余额充值、私有 Agent Draft、Agent Transfer、公开发布和接收器下载接口。
 
-`src/modules/agent-draft/` 另外提供私有 Draft V2、独立轻量上下文 Draft 与已编译 Package 的严格保存、指定版本读取和只读卡片投影。它复用 `@cb/creator-worker` 的两套公开编译器与同一私有版本表，固定声明来源未验证，不运行 worker，不创建公共 Release，不表示 Plugin OAuth 或 Desktop 提取已接入。
+`src/modules/agent-draft/` 提供 J-012 私有 Draft V2、轻量上下文 Draft 与已编译 Package 的严格保存、指定版本读取和只读卡片投影。它复用 `@cb/creator-worker` 的公开编译器，固定声明来源未验证，不创建公共 Release，也不表示 Plugin OAuth 或 Desktop 提取已经接入。
 
 ## 目录与文件
 
-- `src/` 保存 API、worker、业务模块、基础设施适配器和测试，并由目录内的 README 继续说明各层职责。
-- `package.json` 声明运行依赖、开发依赖以及构建、类型检查、测试和双进程启动命令。
+- `src/` 保存 API、业务模块、基础设施适配器和测试，并由目录内的 README 继续说明各层职责。
+- `package.json` 声明运行依赖、开发依赖以及构建、类型检查、测试和 API 启动命令。
 - `tsconfig.json` 定义生产源码的 TypeScript 项目构建配置。
 - `tsconfig.vitest.json` 为测试源码提供独立的 TypeScript 诊断配置。
 - `vitest.config.ts` 定义 authoring 单元测试与 PostgreSQL 集成测试的发现规则。
@@ -16,4 +16,4 @@
 
 ## 上下游关系
 
-authoring 依赖 `@cb/shared` 的接口契约和 `@cb/creator-agent-protocol` 的 Package 合同，使用 PostgreSQL 保存业务、认证、canonical Package Registry、充值订单与资金事实，使用 redis_queue 承载 BullMQ 队列，使用 redis_hot 承载事件流、锁和认证软限流，并通过对象存储保存上传、能力产物与不可变 Package 字节。浏览器只通过同源 Nginx 访问 API；runtime 不导入本包代码，而是通过同一数据库使用会话、Package Release、免费额度和钱包事实。乐收赢只由 API 进程通过固定测试或正式基址访问。
+authoring 依赖 `@cb/shared` 的接口契约和 Creator Agent 的 Package 合同，使用 PostgreSQL 保存认证、Draft、发布、充值订单与资金事实，使用 `redis-hot` 承载认证软限流，并通过 `combo-artifacts` 桶保存不可变 Agent Package 字节。浏览器只通过同源 Nginx 访问 API；Resend 与乐收赢只由这个 API 进程访问。

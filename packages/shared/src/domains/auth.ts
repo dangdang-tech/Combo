@@ -34,14 +34,8 @@ export const EMAIL_OTP_CODE_LENGTH = 6;
 export const EMAIL_OTP_EXPIRES_IN_SECONDS = 5 * 60;
 export const EMAIL_OTP_RESEND_AFTER_SECONDS = 60;
 
-export const AUTH_DEFAULT_RETURN_TO = '/tasks';
+export const AUTH_DEFAULT_RETURN_TO = '/';
 export const AUTH_RETURN_TO_MAX_LENGTH = 512;
-const AUTH_ID_PATH_SEGMENT =
-  '[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
-const CAPABILITY_RELEASE_RETURN_PATH = new RegExp(
-  `^/capabilities/${AUTH_ID_PATH_SEGMENT}/release(?:/(?:pricing|identity|review|success))?$`,
-  'i',
-);
 const AGENT_TRANSFER_RETURN_PATH =
   /^\/agent-transfers\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
@@ -84,7 +78,7 @@ export const NormalizedEmailAddressSchema = EmailAddressInputSchema.refine((emai
 export type NormalizedEmailAddress = z.infer<typeof NormalizedEmailAddressSchema>;
 
 /**
- * 只保留认证完成后允许进入的站内业务路径。任何不可信输入统一回落到 /tasks，
+ * 只保留首页或当前 Agent 转移页。任何不可信输入统一回落到首页，
  * 调用方不得把返回值再次解释成外部 URL。
  */
 export function sanitizeAuthReturnTo(value: unknown): string {
@@ -106,14 +100,7 @@ export function sanitizeAuthReturnTo(value: unknown): string {
     const base = 'https://auth-return.invalid';
     const parsed = new URL(value, base);
     const path = parsed.pathname;
-    const allowed =
-      path === '/tasks' ||
-      path.startsWith('/tasks/') ||
-      path === '/capabilities' ||
-      CAPABILITY_RELEASE_RETURN_PATH.test(path) ||
-      (AGENT_TRANSFER_RETURN_PATH.test(value) && path === value) ||
-      path === '/try' ||
-      path.startsWith('/try/');
+    const allowed = path === '/' || (AGENT_TRANSFER_RETURN_PATH.test(value) && path === value);
 
     if (parsed.origin !== base || parsed.username || parsed.password || !allowed) {
       return AUTH_DEFAULT_RETURN_TO;

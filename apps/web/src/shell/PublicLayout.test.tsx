@@ -16,21 +16,19 @@ function renderAt(pathname: string): void {
 }
 
 describe('PublicLayout', () => {
-  it('公开页面提供进入 Combo 的唯一入口', () => {
+  it('公开页面只保留返回首页的品牌入口', () => {
     renderAt('/');
 
     expect(screen.getByRole('link', { name: 'Combo 首页' })).toHaveAttribute('href', '/');
-    expect(screen.getByRole('link', { name: '进入 Combo' })).toHaveAttribute(
-      'href',
-      '/capabilities',
-    );
+    expect(screen.queryByRole('link', { name: '登录' })).toBeNull();
     expect(screen.queryByRole('navigation', { name: '公开导航' })).toBeNull();
     expect(screen.queryByRole('link', { name: '开始创建' })).toBeNull();
   });
 
-  it('登录页隐藏返回入口，避免重复登录路径', () => {
+  it('登录页同样不增加全局登录入口', () => {
     renderAt('/login');
 
-    expect(screen.queryByRole('link', { name: '进入 Combo' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Combo 首页' })).toHaveAttribute('href', '/');
+    expect(screen.queryByRole('link', { name: '登录' })).toBeNull();
   });
 });

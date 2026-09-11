@@ -4,7 +4,7 @@ import { normalizeTraceId } from '@cb/shared';
 import { currentTraceLogFields } from '../observability/node.js';
 
 const ClientEventSchema = z.object({
-  kind: z.enum(['api_error', 'sse_error', 'window_error', 'unhandled_rejection']),
+  kind: z.enum(['api_error', 'window_error', 'unhandled_rejection']),
   traceId: z.string().optional(),
   message: z.string().max(1000).optional(),
   stack: z.string().max(4000).optional(),
@@ -15,11 +15,11 @@ const ClientEventSchema = z.object({
 
 export type ClientRouteBucket =
   | 'auth'
-  | 'tasks'
-  | 'capabilities'
-  | 'runtime'
+  | 'agent-transfer'
+  | 'agent-publication'
+  | 'billing'
   | 'login'
-  | 'public'
+  | 'landing'
   | 'unknown';
 
 function isPathWithin(pathname: string, prefix: string): boolean {
@@ -32,19 +32,21 @@ export function clientRouteBucket(raw: string | undefined): ClientRouteBucket {
   try {
     const pathname = new URL(raw, 'https://client-event.invalid').pathname;
     if (isPathWithin(pathname, '/api/v1/auth') || pathname === '/api/v1/me') return 'auth';
-    if (isPathWithin(pathname, '/api/v1/tasks') || isPathWithin(pathname, '/tasks')) return 'tasks';
     if (
-      isPathWithin(pathname, '/api/v1/capabilities') ||
-      isPathWithin(pathname, '/capabilities') ||
-      isPathWithin(pathname, '/a')
+      isPathWithin(pathname, '/api/v1/agent-package-transfers') ||
+      isPathWithin(pathname, '/agent-transfers')
     ) {
-      return 'capabilities';
+      return 'agent-transfer';
     }
-    if (isPathWithin(pathname, '/api/v1/runtime') || isPathWithin(pathname, '/try')) {
-      return 'runtime';
+    if (
+      isPathWithin(pathname, '/api/v1/agent-package-publications') ||
+      isPathWithin(pathname, '/agents')
+    ) {
+      return 'agent-publication';
     }
+    if (isPathWithin(pathname, '/api/v1/billing')) return 'billing';
     if (pathname === '/login') return 'login';
-    if (pathname === '/' || isPathWithin(pathname, '/c')) return 'public';
+    if (pathname === '/') return 'landing';
     return 'unknown';
   } catch {
     return 'unknown';

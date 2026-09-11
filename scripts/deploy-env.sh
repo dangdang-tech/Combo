@@ -102,7 +102,6 @@ wait_ready() {
     foundation)
       "${K[@]}" -n "$FOUNDATION_NS" rollout status statefulset/postgres --timeout=300s || true
       "${K[@]}" -n "$FOUNDATION_NS" rollout status statefulset/minio --timeout=300s || true
-      "${K[@]}" -n "$FOUNDATION_NS" rollout status statefulset/redis-queue --timeout=300s || true
       "${K[@]}" -n "$FOUNDATION_NS" rollout status deployment/redis-hot --timeout=300s || true
       ;;
     migrate)
@@ -116,7 +115,7 @@ wait_ready() {
       fi
       ;;
     apps)
-      for deploy in api worker runtime web; do
+      for deploy in api web; do
         "${K[@]}" -n "$NAMESPACE" rollout status "deployment/$deploy" --timeout=300s || {
           "${K[@]}" -n "$NAMESPACE" describe "deployment/$deploy" >&2 || true
           fatal "rollout of $deploy failed"

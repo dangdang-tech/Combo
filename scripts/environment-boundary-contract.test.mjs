@@ -64,7 +64,7 @@ test('Deploy grants its reusable Main CI caller the complete permission ceiling'
   assert.match(buildBranch, /\n {4}uses: \.\/\.github\/workflows\/ci\.yml\n/);
 });
 
-test('three environments keep explicit app, foundation, listener, and public-domain ownership', () => {
+test('three environments keep explicit app, foundation, web listener, and public-domain ownership', () => {
   const deploy = text('scripts/deploy-env.sh');
   const workflow = text('.github/workflows/deploy.yml');
 
@@ -105,43 +105,21 @@ test('three environments keep explicit app, foundation, listener, and public-dom
   );
 
   const services = {
-    test: [
-      serviceContract('combo-test-web-forward.service'),
-      serviceContract('combo-test-s3-forward.service'),
-    ],
-    preview: [
-      serviceContract('combo-preview-web-forward.service'),
-      serviceContract('combo-preview-minio-forward.service'),
-    ],
-    production: [
-      serviceContract('combo-prod-web-forward.service'),
-      serviceContract('combo-prod-minio-forward.service'),
-    ],
+    test: [serviceContract('combo-test-web-forward.service')],
+    preview: [serviceContract('combo-preview-web-forward.service')],
+    production: [serviceContract('combo-prod-web-forward.service')],
   };
   assert.deepEqual(services, {
-    test: [
-      { name: 'combo-test-web-forward.service', namespace: 'combo-test', port: '18083' },
-      { name: 'combo-test-s3-forward.service', namespace: 'combo-test', port: '19003' },
-    ],
+    test: [{ name: 'combo-test-web-forward.service', namespace: 'combo-test', port: '18083' }],
     preview: [
       {
         name: 'combo-preview-web-forward.service',
         namespace: 'combo-preview',
         port: '18081',
       },
-      {
-        name: 'combo-preview-minio-forward.service',
-        namespace: 'combo-foundation',
-        port: '19001',
-      },
     ],
     production: [
       { name: 'combo-prod-web-forward.service', namespace: 'combo-prod', port: '18082' },
-      {
-        name: 'combo-prod-minio-forward.service',
-        namespace: 'combo-foundation',
-        port: '19002',
-      },
     ],
   });
 
@@ -176,34 +154,19 @@ test('three environments keep explicit app, foundation, listener, and public-dom
   assert.equal(new Set(Object.values(domains)).size, 3, 'public domains must be environment-owned');
 });
 
-test('CI runs both billing PostgreSQL suites against the migrated ephemeral database', () => {
+test('CI runs the retained Authoring billing PostgreSQL suite after migration', () => {
   const mainWorkflow = text('.github/workflows/ci.yml');
   const migrationAt = mainWorkflow.indexOf('bash scripts/integration/db-migrate.sh');
   const authoringAt = mainWorkflow.indexOf(
     'pnpm --dir apps/authoring exec vitest run src/__tests__/billing.pg.test.ts',
   );
-  const runtimeAt = mainWorkflow.indexOf(
-    'pnpm --dir apps/runtime exec vitest run src/__tests__/billing.pg.test.ts',
-  );
   assert.ok(migrationAt >= 0, 'ci.yml must run the db migration before the billing PG suites');
   assert.ok(authoringAt > migrationAt, 'authoring billing.pg.test.ts must run after the migration');
-  assert.ok(
-    runtimeAt > authoringAt,
-    'runtime billing.pg.test.ts must run after the authoring suite',
-  );
-  assert.equal((mainWorkflow.match(/BILLING_PG_TEST: '1'/g) ?? []).length, 2);
+  assert.equal((mainWorkflow.match(/BILLING_PG_TEST: '1'/g) ?? []).length, 1);
   assert.equal(
     (
       mainWorkflow.match(
         /BILLING_TEST_DATABASE_URL: postgres:\/\/agora:agora@localhost:5432\/agora/g,
-      ) ?? []
-    ).length,
-    2,
-  );
-  assert.equal(
-    (
-      mainWorkflow.match(
-        /BILLING_AUTHORING_TEST_DATABASE_URL: postgres:\/\/combo_api:ci-api-role-password@localhost:5432\/agora/g,
       ) ?? []
     ).length,
     1,
@@ -211,7 +174,7 @@ test('CI runs both billing PostgreSQL suites against the migrated ephemeral data
   assert.equal(
     (
       mainWorkflow.match(
-        /BILLING_RUNTIME_TEST_DATABASE_URL: postgres:\/\/combo_runtime:ci-runtime-role-password@localhost:5432\/agora/g,
+        /BILLING_AUTHORING_TEST_DATABASE_URL: postgres:\/\/combo_api:ci-api-role-password@localhost:5432\/agora/g,
       ) ?? []
     ).length,
     1,

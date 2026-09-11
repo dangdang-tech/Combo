@@ -1,10 +1,10 @@
 import {
   API_PREFIX,
   LogoutResponseSchema,
+  sanitizeAuthReturnTo,
   type LogoutResult,
   type ReleaseMetadata,
 } from '@cb/shared';
-import { sanitizeReturnTo } from '../safeReturnTo.js';
 
 /** 后端幂等登出入口：撤销可识别会话并清除同一枚 HttpOnly Cookie。 */
 export const AUTH_LOGOUT_PATH = `${API_PREFIX}/auth/logout`;
@@ -28,15 +28,17 @@ export async function logoutSession(): Promise<LogoutResult | null> {
   }
 }
 
-/** 登出后回到仓库内邮箱登录页；Preview 可保留安全的任务上下文。 */
+/** 登出后回到仓库内邮箱登录页；Preview 只保留规范的 Agent 转移上下文。 */
 export function logoutDestination(
   _result: LogoutResult,
   environment: ReleaseMetadata['environment'] = 'production',
   returnTo?: string,
 ): string {
   if (environment !== 'preview') return '/login';
-  const safeReturnTo = sanitizeReturnTo(returnTo);
-  return safeReturnTo ? `/login?returnTo=${encodeURIComponent(safeReturnTo)}` : '/login';
+  const safeReturnTo = sanitizeAuthReturnTo(returnTo);
+  return safeReturnTo.startsWith('/agent-transfers/')
+    ? `/login?returnTo=${encodeURIComponent(safeReturnTo)}`
+    : '/login';
 }
 
 /** 登出成功后整页离开受保护应用，清掉当前前端内存中的身份与业务缓存。 */

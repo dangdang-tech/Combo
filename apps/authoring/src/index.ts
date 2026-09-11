@@ -1,2 +1,2 @@
-// 默认入口是 API 进程；Worker 由容器入口按 PROCESS=worker 单独启动。
+// Authoring 只有这一条 API 进程入口。
 import './processes/api.js';

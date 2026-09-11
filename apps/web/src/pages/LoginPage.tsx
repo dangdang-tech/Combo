@@ -53,7 +53,7 @@ interface DependencyErrorState {
 }
 
 export interface LoginPageProps {
-  /** 测试注入点；生产默认整页导航，以便安全进入 /try 下的另一个前端 bundle。 */
+  /** 测试注入点；生产默认整页导航，以清空登录前的内存状态。 */
   navigateAfterLogin?: (path: string) => void;
 }
 

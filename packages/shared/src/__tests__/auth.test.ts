@@ -97,46 +97,36 @@ describe('认证 returnTo 白名单', () => {
     '/agent-transfers/not-an-id',
     '/agent-transfers',
     '/agent-transfers/%31' + transferPath.slice('/agent-transfers/1'.length),
-    `/tasks/..${transferPath}`,
+    `/retired/..${transferPath}`,
     `/unused/..${transferPath}`,
     `https://evil.example${transferPath}`,
     `/${transferPath}`,
   ])('Agent transfer 回跳拒绝非规范变体 %s', (value) => {
     expect(sanitizeAuthReturnTo(value)).toBe(AUTH_DEFAULT_RETURN_TO);
   });
-  it.each([
-    ['/tasks', '/tasks'],
-    ['/tasks/task-1?tab=events', '/tasks/task-1?tab=events'],
-    ['/capabilities', '/capabilities'],
-    [
-      '/capabilities/01982e62-6d6e-7f4d-8fe8-b55f62720b5b/release/review?from=studio',
-      '/capabilities/01982e62-6d6e-7f4d-8fe8-b55f62720b5b/release/review?from=studio',
-    ],
-    ['/try', '/try'],
-    ['/try/capability-1#preview', '/try/capability-1#preview'],
-  ])('保留允许的站内目标 %s', (input, expected) => {
-    expect(sanitizeAuthReturnTo(input)).toBe(expected);
+  it('保留首页作为默认目标', () => {
+    expect(sanitizeAuthReturnTo('/')).toBe('/');
   });
 
   it.each([
     undefined,
     '',
-    'tasks',
-    'https://evil.example/tasks',
-    '//evil.example/tasks',
-    '/tasks//evil',
-    '/tasks\\evil',
-    '/tasks/%2Fevil',
-    '/tasks/%5cevil',
-    '/tasks/%00evil',
-    '/tasks/%2e%2e/admin',
+    'retired',
+    'https://evil.example/retired',
+    '//evil.example/retired',
+    '/retired//evil',
+    '/retired\\evil',
+    '/retired/%2Fevil',
+    '/retired/%5cevil',
+    '/retired/%00evil',
+    '/retired/%2e%2e/admin',
     '/admin',
-    '/capabilities/private',
-    '/capabilities/not-an-id/release/pricing',
-    '/capabilities/01982e62-6d6e-7f4d-8fe8-b55f62720b5b/release/admin',
-    `/tasks/${'a'.repeat(512)}`,
-    '/tasks\nnext',
-  ])('把不可信目标统一回落到 /tasks', (input) => {
+    '/removed/private',
+    '/removed/not-an-id/release/pricing',
+    '/removed/01982e62-6d6e-7f4d-8fe8-b55f62720b5b/release/admin',
+    `/retired/${'a'.repeat(512)}`,
+    '/retired\nnext',
+  ])('把不可信或已退役目标统一回落到首页', (input) => {
     expect(sanitizeAuthReturnTo(input)).toBe(AUTH_DEFAULT_RETURN_TO);
   });
 
@@ -147,7 +137,7 @@ describe('认证 returnTo 白名单', () => {
         code: '123456',
         returnTo: 'https://evil.example',
       }).returnTo,
-    ).toBe('/tasks');
+    ).toBe('/');
     expect(
       EmailVerificationBodySchema.safeParse({
         email: 'Alice@example.com',
@@ -219,13 +209,13 @@ describe('第一方会话与响应契约', () => {
       EmailVerificationResponseSchema.parse({
         data: {
           user: { ...me, avatarUrl: 'https://example.test/avatar' },
-          returnTo: '/tasks/task-1',
+          returnTo: '/',
           onboarding: 'future-field',
         },
         meta: { traceId: 'trace-2', requestVersion: 2 },
       }),
     ).toEqual({
-      data: { user: me, returnTo: '/tasks/task-1' },
+      data: { user: me, returnTo: '/' },
       meta: { traceId: 'trace-2' },
     });
   });
@@ -257,7 +247,7 @@ describe('认证安全错误与健康依赖', () => {
   });
 
   it('readiness 不再依赖外部身份或邮件供应商', () => {
-    expect(REQUIRED_DEPENDENCIES).toEqual(['db', 'redis_queue', 'redis_hot', 'minio']);
+    expect(REQUIRED_DEPENDENCIES).toEqual(['db', 'redis_hot', 'minio']);
     expect(DependencyNameSchema.safeParse('external_auth').success).toBe(false);
     expect(DependencyNameSchema.safeParse('resend').success).toBe(false);
   });

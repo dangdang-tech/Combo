@@ -3,7 +3,6 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { CODING_AGENT_CREATION_TASK, LandingPage } from './LandingPage.js';
-import { CREATION_INTAKE_STORAGE_KEY, saveLandingDraft } from './landingDraft.js';
 
 const fetchMock = vi.fn();
 function mount() {
@@ -14,12 +13,10 @@ function mount() {
   );
 }
 beforeEach(() => {
-  sessionStorage.clear();
   fetchMock.mockReset();
   vi.stubGlobal('fetch', fetchMock);
 });
 afterEach(() => {
-  sessionStorage.clear();
   Reflect.deleteProperty(navigator, 'clipboard');
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -88,7 +85,6 @@ describe('LandingPage current conversation entry', () => {
     expect(CODING_AGENT_CREATION_TASK).toContain('不要查询其他任务来补齐');
     expect(await screen.findByRole('status')).toHaveTextContent('安装 Combo 并提取 Agent');
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(sessionStorage.getItem(CREATION_INTAKE_STORAGE_KEY)).toBeNull();
   });
   it('automatically exposes the full selectable text when clipboard rejects', async () => {
     const user = userEvent.setup();
@@ -99,18 +95,6 @@ describe('LandingPage current conversation entry', () => {
     expect(screen.getByRole('textbox', { name: '复制指令的完整文本' })).toHaveValue(
       CODING_AGENT_CREATION_TASK,
     );
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-  it('neither loads nor deletes a previously saved legacy intake draft', () => {
-    saveLandingDraft({
-      profileUrl: 'https://example.com/creator',
-      consent: true,
-      sampleText: '这是一份用户以前保存的资料，新的入口不应读取或删除它。',
-    });
-    const previous = sessionStorage.getItem(CREATION_INTAKE_STORAGE_KEY);
-    mount();
-    expect(screen.queryByText('https://example.com/creator')).toBeNull();
-    expect(sessionStorage.getItem(CREATION_INTAKE_STORAGE_KEY)).toBe(previous);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

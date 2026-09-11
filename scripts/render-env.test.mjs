@@ -11,12 +11,11 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 
 function fixtureManifest() {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     sourceSha: 'a'.repeat(40),
     releaseId: 'release-' + 'a'.repeat(40),
     images: {
       api: 'ghcr.io/dangdang-tech/combo-api@sha256:' + '1'.repeat(64),
-      runtime: 'ghcr.io/dangdang-tech/combo-runtime@sha256:' + '2'.repeat(64),
       web: 'ghcr.io/dangdang-tech/combo-web@sha256:' + '3'.repeat(64),
     },
     migrationHead: '0009_billing.sql',
@@ -52,27 +51,21 @@ test('renders apps for all three environments into their namespaces', () => {
   writeFileSync(path, serializeReleaseManifest(manifest));
   const digest = releaseManifestDigest(manifest);
   const cases = [
-    ['test', 'combo-test', 'https://test.43-160-242-46.sslip.io', 'redis://redis-queue:6379/0'],
-    [
-      'preview',
-      'combo-preview',
-      'https://review.43-160-242-46.sslip.io',
-      'redis://redis-queue.combo-foundation.svc.cluster.local:6379/0',
-    ],
+    ['test', 'combo-test', 'https://test.43-160-242-46.sslip.io'],
+    ['preview', 'combo-preview', 'https://review.43-160-242-46.sslip.io'],
     [
       'production',
       'combo-prod',
       'https://agora.43-160-242-46.sslip.io,https://buildwithcombo.com,https://www.buildwithcombo.com',
-      'redis://redis-queue.combo-foundation.svc.cluster.local:6379/0',
     ],
   ];
-  for (const [environment, namespace, origin, redisQueue] of cases) {
+  for (const [environment, namespace, origin] of cases) {
     const apps = render(environment, 'apps', path, digest);
     assert.match(apps, new RegExp(`namespace: ${namespace}`));
     assert.match(apps, new RegExp(`name: combo-release`));
     assert.match(apps, new RegExp(`COMBO_ENVIRONMENT: ${environment}`));
     assert.ok(apps.includes(origin), `${environment} public origin`);
-    assert.ok(apps.includes(redisQueue), `${environment} redis queue host`);
+    assert.doesNotMatch(apps, /redis-queue|combo-runtime|name: worker|name: runtime/);
     assert.ok(apps.includes(`ghcr.io/dangdang-tech/combo-api@sha256:${'1'.repeat(64)}`));
     assert.ok(
       apps.includes('combo.build/source-sha'),
@@ -98,7 +91,7 @@ test('renders the two foundation sets into their namespaces', () => {
   assert.match(shared, /name: minio/);
 });
 
-test('renders the billing payment wiring into api and the fixed policy into runtime', () => {
+test('renders the billing payment wiring into the single API deployment', () => {
   const manifest = fixtureManifest();
   const path = join(mkdtempSync(join(tmpdir(), 'render-env-billing-')), 'release.json');
   writeFileSync(path, serializeReleaseManifest(manifest));
@@ -120,53 +113,6 @@ test('renders the billing payment wiring into api and the fixed policy into runt
         `name: ${name}\\s*\\n\\s+valueFrom:\\s*\\n\\s+secretKeyRef:\\s*\\n\\s+key: ${name}\\s*\\n\\s+name: combo-env`,
       ),
       `${name} must be wired from the combo-env secret`,
-    );
-  }
-  assert.match(apps, /name: RUNTIME_BILLING_FREE_USES\s*\n\s+value: "3"/);
-  assert.match(apps, /name: RUNTIME_BILLING_UNIT_PRICE_CENTS\s*\n\s+value: "1"/);
-  rmSync(dirname(path), { recursive: true, force: true });
-});
-
-test('renders the optional controlled Publisher gate only as one API secret reference', () => {
-  const manifest = fixtureManifest();
-  const path = join(mkdtempSync(join(tmpdir(), 'render-env-publisher-')), 'release.json');
-  writeFileSync(path, serializeReleaseManifest(manifest));
-  const digest = releaseManifestDigest(manifest);
-  for (const environment of ['test', 'preview', 'production']) {
-    const apps = render(environment, 'apps', path, digest);
-    assert.equal(
-      [...apps.matchAll(/name: COMBO_AGENT_PACKAGE_PUBLISHER_TEST_GATE/g)].length,
-      1,
-      `${environment} must wire the gate only into the API deployment`,
-    );
-    assert.match(
-      apps,
-      /name: COMBO_AGENT_PACKAGE_PUBLISHER_TEST_GATE\s*\n\s+valueFrom:\s*\n\s+secretKeyRef:\s*\n\s+key: COMBO_AGENT_PACKAGE_PUBLISHER_TEST_GATE\s*\n\s+name: combo-env\s*\n\s+optional: true/,
-    );
-    assert.doesNotMatch(apps, /publisherUserId|packageDigest|agent-package-publisher-test-gate/);
-  }
-  rmSync(dirname(path), { recursive: true, force: true });
-});
-
-test('renders the optional Knowledge Agent gate only as one Runtime secret reference', () => {
-  const manifest = fixtureManifest();
-  const path = join(mkdtempSync(join(tmpdir(), 'render-env-knowledge-gate-')), 'release.json');
-  writeFileSync(path, serializeReleaseManifest(manifest));
-  const digest = releaseManifestDigest(manifest);
-  for (const environment of ['test', 'preview', 'production']) {
-    const apps = render(environment, 'apps', path, digest);
-    assert.equal(
-      [...apps.matchAll(/name: COMBO_KNOWLEDGE_AGENT_TEST_GATE/g)].length,
-      1,
-      `${environment} must wire the gate only into the Runtime deployment`,
-    );
-    assert.match(
-      apps,
-      /name: COMBO_KNOWLEDGE_AGENT_TEST_GATE\s*\n\s+valueFrom:\s*\n\s+secretKeyRef:\s*\n\s+key: COMBO_KNOWLEDGE_AGENT_TEST_GATE\s*\n\s+name: combo-env\s*\n\s+optional: true/,
-    );
-    assert.doesNotMatch(
-      apps,
-      /combo[.]knowledge-agent-runtime-test-gate|publisherUserId|packageDigest|validatorPolicyVersion|questionDigest/,
     );
   }
   rmSync(dirname(path), { recursive: true, force: true });

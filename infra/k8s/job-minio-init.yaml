@@ -5,8 +5,7 @@ metadata:
 data:
   init-buckets.sh: |
     #!/bin/sh
-    # 一次性 minio_mc 容器入口（O-02）：建 ObjectStore 四桶（70 §8.2）。minio healthy 后跑、跑完退。幂等可重入。
-    # 四桶：combo-raw（去敏快照）/ combo-artifacts（产物）/ combo-exports（导出）/ combo-experience（经验体语料）。
+    # 只确保不可变 Agent Package 使用的 combo-artifacts 存在；绝不删除桶或业务对象。
     set -eu
 
     S3_ENDPOINT="${S3_ENDPOINT:-http://minio:9000}"
@@ -24,21 +23,8 @@ data:
       sleep 2
     done
 
-    for bucket in combo-raw combo-artifacts combo-exports combo-experience; do
-      # mb 已存在不报错（--ignore-existing → 幂等）
-      mc mb --ignore-existing "local/${bucket}"
-      echo "[init-buckets] ensured bucket '${bucket}'"
-    done
-
-    # 有界的合成对象冒烟：只验证一次上传、读取和删除，不枚举业务对象。
-    object=local/combo-artifacts/.combo-release-minio-smoke
-    expected=combo-release-minio-smoke
-    printf '%s' "$expected" | mc pipe "$object" >/dev/null
-    actual=$(mc cat "$object")
-    [ "$actual" = "$expected" ]
-    mc rm "$object" >/dev/null
-
-    echo "[init-buckets] buckets and synthetic object smoke passed"
+    mc mb --ignore-existing local/combo-artifacts
+    echo "[init-buckets] ensured bucket 'combo-artifacts'"
 ---
 apiVersion: batch/v1
 kind: Job

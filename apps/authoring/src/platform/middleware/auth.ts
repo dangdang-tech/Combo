@@ -50,22 +50,3 @@ export function requireAuth(): preHandlerHookHandler {
     req.auth = resolution.context;
   };
 }
-
-/** SSE 在建流前额外拒绝 query token；新连接仍只读同一枚 PostgreSQL 会话 Cookie。 */
-export function requireSseAuth(): preHandlerHookHandler {
-  return async (req, reply) => {
-    if (rejectNonCookieCredential(req)) {
-      return sendAuthError(req, reply, ErrorCode.UNAUTHENTICATED);
-    }
-
-    const resolution = await resolveRequestSession(req);
-    if (!resolution || resolution.kind !== 'valid') {
-      return replyForResolution(req, reply, resolution);
-    }
-    req.auth = resolution.context;
-  };
-}
-
-export function isOwner(req: FastifyRequest, ownerUserId: string): boolean {
-  return req.auth?.userId === ownerUserId;
-}
