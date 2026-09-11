@@ -649,10 +649,26 @@ test('PR workflow has an isolated trusted base-side retirement gate', () => {
     trustedJob,
     /ref: refs\/pull\/\$\{\{ github\.event\.pull_request\.number \}\}\/merge/u,
   );
+  assert.match(trustedJob, /allow-unsafe-pr-checkout: true/u);
+  assert.equal(workflow.match(/^ {10}allow-unsafe-pr-checkout: true$/gmu)?.length, 1);
   assert.doesNotMatch(trustedJob, /github\.event\.pull_request\.merge_commit_sha/u);
   assert.match(trustedJob, /fetch-depth: 0/u);
   assert.match(trustedJob, /persist-credentials: false/u);
   assert.match(trustedJob, /\[\[ "\$PULL_REQUEST_NUMBER" =~ \^\[1-9\]\[0-9\]\*\$ \]\]/u);
+  const repositoryCheck = trustedJob.indexOf('[[ "$GITHUB_REPOSITORY" == dangdang-tech/Combo ]]');
+  const baseRefCheck = trustedJob.indexOf('[[ "$GITHUB_BASE_REF" == main ]]');
+  const mergeDerivation = trustedJob.indexOf('MERGE_SHA=$(git rev-parse HEAD)');
+  const archiveExecution = trustedJob.indexOf('git archive --format=tar "$BASE_SHA" -- scripts');
+  const trustedScriptExecution = trustedJob.indexOf(
+    'node "$RUNNER_TEMP/combo-budget-base/scripts/vnext-rebaseline-budget.mjs"',
+  );
+  assert.ok(
+    repositoryCheck > 0 &&
+      baseRefCheck > repositoryCheck &&
+      mergeDerivation > baseRefCheck &&
+      archiveExecution > mergeDerivation &&
+      trustedScriptExecution > archiveExecution,
+  );
   assert.match(trustedJob, /MERGE_SHA=\$\(git rev-parse HEAD\)/u);
   assert.match(trustedJob, /\[\[ "\$MERGE_SHA" =~ \^\[0-9a-f\]\{40\}\$ \]\]/u);
   assert.match(trustedJob, /git rev-parse HEAD\^1\)" == "\$BASE_SHA"/u);
@@ -669,6 +685,7 @@ test('PR workflow has an isolated trusted base-side retirement gate', () => {
     /\b(?:pnpm|npm|yarn|bun)\b|cache:|node scripts\/|secrets\.|permissions:/u,
   );
   assert.match(qualityJob, /if: \$\{\{ github\.event_name == 'pull_request' \}\}/u);
+  assert.doesNotMatch(qualityJob, /allow-unsafe-pr-checkout/u);
   assert.match(billingJob, /if: \$\{\{ github\.event_name == 'pull_request' \}\}/u);
   assert.match(workflow, /if: \$\{\{ hashFiles\('apps\/sandboxd\/go\.mod'\) != '' \}\}/u);
   assert.match(

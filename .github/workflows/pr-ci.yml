@@ -27,6 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          allow-unsafe-pr-checkout: true
           fetch-depth: 0
           persist-credentials: false
 
@@ -34,6 +35,8 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$GITHUB_EVENT_NAME" == pull_request_target ]]
+          [[ "$GITHUB_REPOSITORY" == dangdang-tech/Combo ]]
+          [[ "$GITHUB_BASE_REF" == main ]]
           [[ "$PULL_REQUEST_NUMBER" =~ ^[1-9][0-9]*$ ]]
           MERGE_SHA=$(git rev-parse HEAD)
           [[ "$MERGE_SHA" =~ ^[0-9a-f]{40}$ ]]
