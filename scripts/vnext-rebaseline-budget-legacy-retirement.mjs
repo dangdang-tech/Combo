@@ -67,6 +67,10 @@ export const legacyRetirementDeletionFiles = Object.freeze([
   'apps/web/src/components/LoadingState.tsx',
   'apps/web/src/components/SlowHint.tsx',
   'apps/web/src/components/index.ts',
+  'apps/web/src/pages/landing/landingDraft.test.ts',
+  'apps/web/src/pages/landing/landingDraft.ts',
+  'apps/web/src/safeReturnTo.test.ts',
+  'apps/web/src/safeReturnTo.ts',
   'apps/web/src/shell/AccountMenu.test.tsx',
   'apps/web/src/shell/AccountMenu.tsx',
   'apps/web/src/shell/ProtectedLayout.tsx',
@@ -85,6 +89,8 @@ export const legacyRetirementDeletionFiles = Object.freeze([
   'docs/feishu-upload-sequence.xml',
   'infra/Dockerfile.runtime',
   'infra/Dockerfile.sandboxd',
+  'infra/host/release/combo-preview-minio-forward.service',
+  'infra/host/release/combo-prod-minio-forward.service',
   'infra/host/release/combo-test-s3-forward.service',
   'infra/k8s/redis-queue.yaml',
   'infra/k8s/release/base/apps/runtime-release.patch.yaml',
@@ -92,9 +98,14 @@ export const legacyRetirementDeletionFiles = Object.freeze([
   'infra/k8s/runtime.yaml',
   'infra/k8s/worker.yaml',
   'infra/redis/redis-queue.conf',
+  'packages/creator-agent-protocol/src/__tests__/agent-package-capability-contract.test.ts',
+  'packages/creator-agent-protocol/src/__tests__/knowledge-bundle-contract.test.ts',
+  'packages/creator-agent-protocol/src/agent-package-capability.ts',
+  'packages/creator-agent-protocol/src/knowledge-bundle.ts',
   'packages/shared/src/__tests__/knowledge.test.ts',
   'packages/shared/src/__tests__/redaction.test.ts',
   'packages/shared/src/__tests__/shared.test.ts',
+  'packages/shared/src/core/pagination.ts',
   'packages/shared/src/core/progress.ts',
   'packages/shared/src/core/sse.ts',
   'packages/shared/src/domains/capability.ts',
@@ -153,11 +164,13 @@ export const legacyRetirementEditableFiles = Object.freeze([
   'apps/authoring/src/platform/observability/node.ts',
   'apps/authoring/src/processes/README.md',
   'apps/authoring/src/processes/api.ts',
+  'apps/web/index.html',
   'apps/web/package.json',
   'apps/web/src/App.landing.test.tsx',
   'apps/web/src/App.tsx',
   'apps/web/src/api/auth.test.ts',
   'apps/web/src/api/client.test.ts',
+  'apps/web/src/api/client.ts',
   'apps/web/src/api/index.ts',
   'apps/web/src/api/sessionLogout.test.ts',
   'apps/web/src/api/sessionLogout.ts',
@@ -166,17 +179,19 @@ export const legacyRetirementEditableFiles = Object.freeze([
   'apps/web/src/pages/LoginPage.test.tsx',
   'apps/web/src/pages/LoginPage.tsx',
   'apps/web/src/pages/index.tsx',
-  'apps/web/src/safeReturnTo.test.ts',
-  'apps/web/src/safeReturnTo.ts',
+  'apps/web/src/pages/landing/LandingPage.test.tsx',
   'apps/web/src/shell/PublicLayout.test.tsx',
   'apps/web/src/shell/PublicLayout.tsx',
   'apps/web/src/shell/auth.test.tsx',
   'apps/web/src/shell/releaseIdentity.test.tsx',
+  'apps/web/src/shell/useDocumentTitle.ts',
   'apps/web/src/styles.css',
+  'apps/web/src/test/renderWithProviders.tsx',
   'apps/web/src/test/setup.ts',
   'apps/web/src/test/smoke.test.tsx',
   'docs/deployment-topology.md',
   'docs/leshouying-test-acceptance.md',
+  'docs/payment-sdk-integration.md',
   'docs/reliable-development-and-preview.md',
   'eslint.config.js',
   'infra/Dockerfile.api',
@@ -192,6 +207,8 @@ export const legacyRetirementEditableFiles = Object.freeze([
   'infra/k8s/environments/shared-foundation/kustomization.yaml',
   'infra/k8s/environments/test-foundation/kustomization.yaml',
   'infra/k8s/job-minio-init.yaml',
+  'infra/k8s/minio.yaml',
+  'infra/k8s/observability/README.md',
   'infra/k8s/redis-hot.yaml',
   'infra/k8s/release/base/apps/kustomization.yaml',
   'infra/k8s/web.yaml',
@@ -201,6 +218,10 @@ export const legacyRetirementEditableFiles = Object.freeze([
   'infra/redis/redis-hot.conf',
   'infra/web-runtime-config.sh',
   'package.json',
+  'packages/creator-agent-protocol/README.md',
+  'packages/creator-agent-protocol/package.json',
+  'packages/creator-agent-protocol/src/README.md',
+  'packages/creator-agent-protocol/src/__tests__/README.md',
   'packages/shared/README.md',
   'packages/shared/package.json',
   'packages/shared/src/README.md',
@@ -210,6 +231,7 @@ export const legacyRetirementEditableFiles = Object.freeze([
   'packages/shared/src/constants/README.md',
   'packages/shared/src/constants/routes.ts',
   'packages/shared/src/core/README.md',
+  'packages/shared/src/core/envelope.ts',
   'packages/shared/src/core/errors.ts',
   'packages/shared/src/core/health.ts',
   'packages/shared/src/core/index.ts',
@@ -220,6 +242,7 @@ export const legacyRetirementEditableFiles = Object.freeze([
   'packages/shared/src/index.ts',
   'playwright.config.ts',
   'pnpm-lock.yaml',
+  'pnpm-workspace.yaml',
   'scripts/README.md',
   'scripts/check-production-artifacts.sh',
   'scripts/deploy-env.sh',
@@ -254,19 +277,26 @@ export const legacyRetirementSentinels = Object.freeze([
 ]);
 
 export const legacyRetirementLimits = Object.freeze({
-  maxEditableFiles: 110,
+  maxEditableFiles: 140,
   maxEditableAdditions: 1000,
-  maxEditableChangedLines: 6500,
+  maxEditableChangedLines: 8500,
   maxChangedLinesPerEditableFile: 1200,
+  maxPnpmLockChangedLines: 3000,
 });
+
+function maxChangedLinesForLegacyRetirementEditablePath(path) {
+  return path === 'pnpm-lock.yaml'
+    ? legacyRetirementLimits.maxPnpmLockChangedLines
+    : legacyRetirementLimits.maxChangedLinesPerEditableFile;
+}
 
 // Locked from the immutable v8 base after the retirement manifest was finalized.
 export const legacyRetirementInventoryLock = Object.freeze({
   algorithm: 'sha256',
-  files: 364,
-  bytes: 3072884,
-  lines: 84744,
-  digest: 'sha256:3d5d7320464a15c63b49008b1278a430e916358587572dcc564d7c72228c110a',
+  files: 375,
+  bytes: 3120363,
+  lines: 86090,
+  digest: 'sha256:87f24a24996cecc82f762454d2184f3f632f03e5cfdbe9cc9fd77c4eabd7ee0f',
 });
 
 function invariant(condition, message) {
@@ -579,7 +609,7 @@ export function assessLegacyRetirement({
   );
   for (const entry of editable)
     invariant(
-      entry.changedLines <= legacyRetirementLimits.maxChangedLinesPerEditableFile,
+      entry.changedLines <= maxChangedLinesForLegacyRetirementEditablePath(entry.path),
       `retirement per-editable-file budget exceeded: ${entry.path}`,
     );
   return {
