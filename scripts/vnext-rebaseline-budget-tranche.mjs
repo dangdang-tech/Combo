@@ -161,7 +161,7 @@ export function verifyMainlineTrancheBase({ repoRoot, baseSha, comparisonBase, e
       shaPattern.test(expectedHead ?? '') && expectedHead === head,
       'tranche checkout SHA changed',
     );
-    if (environment.GITHUB_EVENT_NAME === 'pull_request') {
+    if (['pull_request', 'pull_request_target'].includes(environment.GITHUB_EVENT_NAME)) {
       invariant(environment.GITHUB_BASE_REF === 'main', 'tranche PR must target canonical Main');
       invariant(
         shaPattern.test(environment.BASE_SHA ?? '') && environment.BASE_SHA === comparisonBase,
