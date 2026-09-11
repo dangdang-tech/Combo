@@ -53,6 +53,36 @@ const contract = parseLegacyRetirementContract({
 });
 
 const zeroObject = '0'.repeat(40);
+const addedDeletionOnlyPaths = Object.freeze([
+  'apps/web/src/api/client.test.ts',
+  'apps/web/src/pages/landing/landingDraft.test.ts',
+  'apps/web/src/pages/landing/landingDraft.ts',
+  'apps/web/src/safeReturnTo.test.ts',
+  'apps/web/src/safeReturnTo.ts',
+  'infra/host/release/combo-preview-minio-forward.service',
+  'infra/host/release/combo-prod-minio-forward.service',
+  'packages/creator-agent-protocol/src/__tests__/agent-package-capability-contract.test.ts',
+  'packages/creator-agent-protocol/src/__tests__/knowledge-bundle-contract.test.ts',
+  'packages/creator-agent-protocol/src/agent-package-capability.ts',
+  'packages/creator-agent-protocol/src/knowledge-bundle.ts',
+  'packages/shared/src/core/pagination.ts',
+]);
+const addedEditablePaths = Object.freeze([
+  'apps/web/index.html',
+  'apps/web/src/api/client.ts',
+  'apps/web/src/pages/landing/LandingPage.test.tsx',
+  'apps/web/src/shell/useDocumentTitle.ts',
+  'apps/web/src/test/renderWithProviders.tsx',
+  'docs/payment-sdk-integration.md',
+  'infra/k8s/minio.yaml',
+  'infra/k8s/observability/README.md',
+  'packages/creator-agent-protocol/README.md',
+  'packages/creator-agent-protocol/package.json',
+  'packages/creator-agent-protocol/src/README.md',
+  'packages/creator-agent-protocol/src/__tests__/README.md',
+  'packages/shared/src/core/envelope.ts',
+  'pnpm-workspace.yaml',
+]);
 
 function changed(path, status = 'M', additions = 1, deletions = 0, raw = {}) {
   return {
@@ -117,10 +147,10 @@ test('v8 contract is canonical, active, immutable, and retains the normal v7 cei
     maxChangedLinesFromBase: 15000,
   });
   assert.deepEqual(legacyRetirementLimits, {
-    maxEditableFiles: 110,
+    maxEditableFiles: 140,
     maxEditableAdditions: 1000,
-    maxEditableChangedLines: 6500,
-    maxChangedLinesPerEditableFile: 1200,
+    maxEditableChangedLines: 8500,
+    maxChangedLinesPerEditableFile: 3000,
   });
   assert.ok(policyPaths.includes(legacyRetirementContractPath));
   for (const path of archivedDesignPolicyPaths) assert.ok(policyPaths.includes(path));
@@ -205,12 +235,12 @@ test('base inventory canonical digest covers every manifest removal target', () 
   assert.deepEqual(createRetirementInventoryReceipt(inventory), legacyRetirementInventoryLock);
   assert.deepEqual(legacyRetirementInventoryLock, {
     algorithm: 'sha256',
-    files: 364,
-    bytes: 3072884,
-    lines: 84744,
-    digest: 'sha256:3d5d7320464a15c63b49008b1278a430e916358587572dcc564d7c72228c110a',
+    files: 376,
+    bytes: 3128233,
+    lines: 86296,
+    digest: 'sha256:75267179e6c467a3340e2c01fa8493b8330b685d9cafb062592682a828b6e2ce',
   });
-  assert.equal(inventory.length, 364);
+  assert.equal(inventory.length, 376);
   assert.ok(inventory.every(({ mode, type }) => type === 'blob' && /^100(644|755)$/u.test(mode)));
   assert.ok(legacyRetirementSentinels.every((path) => inventoryPaths.includes(path)));
   assert.throws(
@@ -438,6 +468,20 @@ test('retirement verifies locked deletion objects and ordinary same-mode editabl
 });
 
 test('retirement integration edits remain under tight non-deletion budgets', () => {
+  assert.equal(
+    assessLegacyRetirement({
+      entries: [...deletionEntries, changed('pnpm-lock.yaml', 'M', 0, 2674)],
+      ...retirementContext(),
+    }).editableChangedLines,
+    2674,
+  );
+  assert.equal(
+    assessLegacyRetirement({
+      entries: [...deletionEntries, changed('pnpm-lock.yaml', 'M', 0, 3000)],
+      ...retirementContext(),
+    }).editableChangedLines,
+    3000,
+  );
   assert.throws(
     () =>
       assessLegacyRetirement({
@@ -464,31 +508,46 @@ test('retirement integration edits remain under tight non-deletion budgets', () 
       }),
     /editable-file budget exceeded/,
   );
-  assert.throws(
-    () =>
-      assessLegacyRetirement({
-        entries: [
-          ...deletionEntries,
-          ...legacyRetirementEditableFiles
-            .slice(0, 6)
-            .map((path, index) => changed(path, 'M', 0, index === 0 ? 501 : 1200)),
-        ],
-        ...retirementContext(),
-      }),
-    /editable changed-line budget exceeded/,
+  const atChangedLineLimit = legacyRetirementEditableFiles
+    .slice(0, 3)
+    .map((path, index) => changed(path, 'M', 0, index === 0 ? 2500 : 3000));
+  assert.equal(
+    atChangedLineLimit.reduce((sum, entry) => sum + entry.changedLines, 0),
+    8500,
+  );
+  assert.equal(
+    assessLegacyRetirement({
+      entries: [...deletionEntries, ...atChangedLineLimit],
+      ...retirementContext(),
+    }).editableChangedLines,
+    8500,
+  );
+  const overChangedLineLimit = legacyRetirementEditableFiles
+    .slice(0, 3)
+    .map((path, index) => changed(path, 'M', 0, index === 0 ? 2501 : 3000));
+  assert.equal(
+    overChangedLineLimit.reduce((sum, entry) => sum + entry.changedLines, 0),
+    8501,
   );
   assert.throws(
     () =>
       assessLegacyRetirement({
-        entries: [
-          ...deletionEntries,
-          changed(
-            legacyRetirementEditableFiles[0],
-            'M',
-            0,
-            legacyRetirementLimits.maxChangedLinesPerEditableFile + 1,
-          ),
-        ],
+        entries: [...deletionEntries, ...overChangedLineLimit],
+        ...retirementContext(),
+      }),
+    /editable changed-line budget exceeded/,
+  );
+  const overPerFileLimit = changed(
+    legacyRetirementEditableFiles[0],
+    'M',
+    0,
+    legacyRetirementLimits.maxChangedLinesPerEditableFile + 1,
+  );
+  assert.equal(overPerFileLimit.changedLines, 3001);
+  assert.throws(
+    () =>
+      assessLegacyRetirement({
+        entries: [...deletionEntries, overPerFileLimit],
         ...retirementContext(),
       }),
     /per-editable-file budget exceeded/,
@@ -639,7 +698,16 @@ test('retirement manifest excludes preserved migrations and current product path
     'apps/web/src/pages/LoginPage.tsx',
     'apps/web/src/pages/agents/AgentReleasePage.tsx',
     'apps/web/src/pages/landing/LandingPage.tsx',
+    'infra/k8s/job-minio-init.yaml',
+    'infra/minio/init-buckets.sh',
     'packages/creator-agent-broker-journal/src/index.ts',
+    'packages/creator-agent-protocol/src/agent-context.ts',
+    'packages/creator-agent-protocol/src/agent-package-draft.ts',
+    'packages/creator-agent-protocol/src/agent-package-receiver.ts',
+    'packages/creator-agent-protocol/src/agent-package-release.ts',
+    'packages/creator-agent-protocol/src/agent-package.ts',
+    'packages/creator-agent-protocol/src/canonical.ts',
+    'packages/creator-agent-protocol/src/index.ts',
   ]) {
     assert.equal(isLegacyRetirementDeletionPath(path), false, path);
   }
@@ -662,7 +730,6 @@ test('retirement manifest classifies the corrected shared, web, and infrastructu
     'apps/authoring/src/platform/http/client-events.ts',
     'apps/web/src/api/sessionLogout.ts',
     'apps/web/src/pages/LoginPage.tsx',
-    'apps/web/src/safeReturnTo.ts',
     'infra/k8s/environments/shared-foundation/kustomization.yaml',
     'packages/shared/src/core/index.ts',
     'scripts/deploy-env.sh',
@@ -675,6 +742,35 @@ test('retirement manifest classifies the corrected shared, web, and infrastructu
   assert.equal(isLegacyRetirementDeletionPath('apps/web/src/design-claude.css'), false);
   assert.equal(legacyRetirementEditableFiles.includes('apps/web/src/design-claude.css'), false);
   assert.equal(isLegacyRetirementDeletionPath('db/migrations/0001_init.sql'), false);
+});
+
+test('follow-up classifies unused Web helpers, migration-only contracts, list support, and browser presign exposure for deletion', () => {
+  assert.deepEqual(addedDeletionOnlyPaths, [...addedDeletionOnlyPaths].sort());
+  for (const path of addedDeletionOnlyPaths) {
+    assert.equal(isLegacyRetirementDeletionPath(path), true, path);
+    assert.ok(legacyRetirementDeletionFiles.includes(path), path);
+    assert.equal(legacyRetirementEditableFiles.includes(path), false, path);
+  }
+});
+
+test('follow-up keeps exact consumers and current docs editable with zero deletion overlap', () => {
+  assert.deepEqual(addedEditablePaths, [...addedEditablePaths].sort());
+  for (const path of addedEditablePaths) {
+    assert.equal(isLegacyRetirementDeletionPath(path), false, path);
+    assert.equal(legacyRetirementDeletionFiles.includes(path), false, path);
+    assert.ok(legacyRetirementEditableFiles.includes(path), path);
+  }
+  assert.deepEqual(legacyRetirementEditableFiles.filter(isLegacyRetirementDeletionPath), []);
+});
+
+test('final correction retires the generic legacy client test and keeps workspace build policy editable', () => {
+  assert.equal(isLegacyRetirementDeletionPath('apps/web/src/api/client.test.ts'), true);
+  assert.ok(legacyRetirementDeletionFiles.includes('apps/web/src/api/client.test.ts'));
+  assert.equal(legacyRetirementEditableFiles.includes('apps/web/src/api/client.test.ts'), false);
+
+  assert.equal(isLegacyRetirementDeletionPath('pnpm-workspace.yaml'), false);
+  assert.equal(legacyRetirementDeletionFiles.includes('pnpm-workspace.yaml'), false);
+  assert.ok(legacyRetirementEditableFiles.includes('pnpm-workspace.yaml'));
 });
 
 test('reviewed retirement paths have explicit deletion, editable, and excluded classifications', () => {
