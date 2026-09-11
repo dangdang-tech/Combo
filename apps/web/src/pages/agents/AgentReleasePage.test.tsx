@@ -53,10 +53,12 @@ describe('Public Agent release', () => {
     expect(await screen.findByRole('heading', { name: 'shared-agent' })).toBeInTheDocument();
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ method: 'GET', credentials: 'omit' });
+    await userEvent.click(screen.getByText('接收要求与版本信息'));
+    expect(screen.getByText(/无需安装 Node.js 或 Bun/u)).toBeVisible();
+    await userEvent.click(screen.getByRole('button', { name: '查看完整方法' }));
     expect(screen.getByText(/<script>steal\(\)<\/script>/u)).toBeInTheDocument();
     expect(document.querySelector('script')).toBeNull();
     expect(screen.getByText('尚未试运行')).toBeInTheDocument();
-    expect(screen.getByText(/无需安装 Node.js 或 Bun/u)).toBeInTheDocument();
     expect(screen.getByText(DIGEST)).toBeInTheDocument();
     expect(document.title).toBe('shared-agent · Agent · Combo');
   });
@@ -76,10 +78,11 @@ describe('Public Agent release', () => {
     await screen.findByRole('heading', { name: 'shared-agent' });
     expect(copy).not.toHaveBeenCalled();
     expect(createUrl).not.toHaveBeenCalled();
-    await user.click(screen.getByRole('button', { name: '在 Codex 中使用 · 复制指令' }));
+    await user.click(screen.getByRole('button', { name: '复制使用指令' }));
     expect(copy).toHaveBeenCalledWith(view.acquirePrompt);
     expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(screen.getByText(/复制指令不会自动打开或操作 Codex/u)).toBeInTheDocument();
+    await user.click(screen.getByText('接收要求与版本信息'));
+    expect(screen.getByText(/复制不会自动操作客户端/u)).toBeInTheDocument();
     expect(screen.getByText(/当前支持轻量文本方法/u)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '下载包 JSON' }));
     await waitFor(() => expect(click).toHaveBeenCalledOnce());
@@ -102,6 +105,7 @@ describe('Public Agent release', () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     mount();
     await screen.findByRole('heading', { name: 'shared-agent' });
+    await user.click(screen.getByText('接收要求与版本信息'));
     await user.click(screen.getByRole('button', { name: '下载包 JSON' }));
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     expect(click).not.toHaveBeenCalled();
