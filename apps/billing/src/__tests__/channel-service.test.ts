@@ -9,11 +9,14 @@ import {
 } from '../channel-service.js';
 import {
   InvalidPaymentNotificationError,
+  PaymentGatewayUncertainError,
   type PaymentGateway,
   type VerifiedPaymentNotification,
 } from '../channel/index.js';
 
-function setup() {
+import type { PaymentDiagnosticEvent, PaymentDiagnosticSink } from '../payment-diagnostics.js';
+
+function setup(diagnostic?: PaymentDiagnosticSink) {
   const order: ChannelOrder = {
     paymentId: randomUUID(),
     userId: randomUUID(),
@@ -79,11 +82,119 @@ function setup() {
   const payments = {
     confirmPayment: vi.fn(async () => ({ kind: 'completed' as const, replayed: false })),
   };
-  const service = createPaymentChannelService({ store, payments, gateway });
+  const service = createPaymentChannelService({ store, payments, gateway, diagnostic });
   const input = { paymentId: order.paymentId, userId: order.userId, payType: 'wechat' as const };
   return { order, store, gateway, payments, service, input, notification };
 }
 describe('payment channel orchestration', () => {
+  it('retains the first prepay failure when later queries report pending without resubmitting', async () => {
+    const events: PaymentDiagnosticEvent[] = [];
+    const s = setup((event) => events.push(event));
+    vi.mocked(s.gateway.createPayment).mockRejectedValue(
+      new PaymentGatewayUncertainError({
+        reason: 'invalid_signature',
+        httpStatus: 200,
+        timeoutMs: 2000,
+      }),
+    );
+    vi.mocked(s.gateway.queryPayment).mockResolvedValue({
+      status: 'pending',
+      gatewayResultCode: 'PAY_IN_PROCESS',
+    });
+    await s.service.create(s.input, { traceId: 'req-checkout-1' });
+    await s.service.reconcile();
+    await s.service.create(s.input, { traceId: 'req-checkout-2' });
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          paymentId: s.order.paymentId,
+          traceId: 'req-checkout-1',
+          environment: 'test',
+          phase: 'prepay',
+          outcome: 'unknown',
+          reason: 'invalid_signature',
+          httpStatus: 200,
+        }),
+        expect.objectContaining({
+          paymentId: s.order.paymentId,
+          source: 'query',
+          phase: 'query',
+          outcome: 'pending',
+          gatewayResultCode: 'PAY_IN_PROCESS',
+        }),
+      ]),
+    );
+    expect(
+      events.filter((event) => event.phase === 'prepay' && event.outcome === 'started'),
+    ).toHaveLength(1);
+    expect(s.gateway.createPayment).toHaveBeenCalledTimes(1);
+    expect(s.payments.confirmPayment).not.toHaveBeenCalled();
+    const serialized = JSON.stringify(events);
+    for (const privateValue of [s.order.userId, 'merchant', 'payTraceNo', 'private-qr'])
+      expect(serialized).not.toContain(privateValue);
+  });
+  it('distinguishes saving a QR response from channel failure and never logs provider values', async () => {
+    const events: PaymentDiagnosticEvent[] = [];
+    const s = setup((event) => events.push(event));
+    const secret = 'provider-secret-qr-and-account-details';
+    vi.mocked(s.gateway.createPayment).mockResolvedValue({
+      status: 'pending',
+      gatewayResultCode: secret,
+      action: { kind: 'code_url', value: secret, expiresAt: new Date() },
+    });
+    vi.mocked(s.store.recordSubmission).mockRejectedValue(new Error(secret));
+    await expect(s.service.create(s.input)).rejects.toThrow(secret);
+    await s.service.create(s.input);
+    expect(s.gateway.createPayment).toHaveBeenCalledTimes(1);
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'prepay',
+          outcome: 'pending',
+          hasQr: true,
+          gatewayResultCode: 'OTHER',
+        }),
+        expect.objectContaining({
+          phase: 'persist_prepay',
+          outcome: 'unknown',
+          reason: 'storage_error',
+        }),
+      ]),
+    );
+    expect(JSON.stringify(events)).not.toContain(secret);
+  });
+  it('reports accounting failure separately from successful channel query', async () => {
+    const events: PaymentDiagnosticEvent[] = [];
+    const s = setup((event) => events.push(event));
+    vi.mocked(s.payments.confirmPayment).mockRejectedValue(
+      new Error('private database connection'),
+    );
+    expect(await s.service.reconcile()).toEqual({ queried: 1, failed: 1 });
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ phase: 'query', outcome: 'succeeded' }),
+        expect.objectContaining({
+          phase: 'credit_payment',
+          outcome: 'unknown',
+          reason: 'storage_error',
+        }),
+      ]),
+    );
+    expect(
+      events.some((event) => event.phase === 'credit_payment' && event.outcome === 'succeeded'),
+    ).toBe(false);
+    expect(JSON.stringify(events)).not.toContain('private database connection');
+  });
+  it('keeps payment behavior unchanged when the diagnostic sink fails', async () => {
+    const s = setup(() => {
+      throw new Error('log sink offline');
+    });
+    expect(await s.service.create(s.input)).toHaveProperty('qrContent', 'private-qr');
+    expect(await s.service.reconcile()).toEqual({ queried: 1, failed: 0 });
+    expect(s.payments.confirmPayment).toHaveBeenCalledTimes(1);
+    expect(s.gateway.createPayment).toHaveBeenCalledTimes(1);
+  });
+
   it('uses one persisted order across concurrent or repeated checkout requests', async () => {
     const s = setup();
     await Promise.all([s.service.create(s.input), s.service.create(s.input)]);

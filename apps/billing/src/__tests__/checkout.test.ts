@@ -49,7 +49,7 @@ const channelOrder: ChannelOrder = {
   expiresAt: new Date('2099-09-07'),
   completed: false,
 };
-async function setup() {
+async function setup(logLines?: string[]) {
   const payments: PaymentStore = {
     admitCall: vi.fn(),
     createPayment: vi.fn(),
@@ -71,6 +71,15 @@ async function setup() {
   });
   const renderQr = vi.fn(async () => 'data:image/png;base64,dGVzdA==');
   const app = await buildApp({
+    logger: logLines
+      ? {
+          stream: {
+            write: (line: string) => {
+              logLines.push(line);
+            },
+          },
+        }
+      : false,
     store: createFakeBillingStore().store,
     internalToken: 'test-platform-internal',
     adminToken: 'test-platform-admin',
@@ -80,6 +89,38 @@ async function setup() {
   return { app, payments, channel, authenticateUser, renderQr };
 }
 describe('authenticated Combo checkout', () => {
+  it.each(['storage', 'qr'] as const)(
+    'logs a safe %s failure with the public response trace ID',
+    async (failure) => {
+      const lines: string[] = [];
+      const s = await setup(lines);
+      const secret = 'private-qr-cookie-and-database-password';
+      try {
+        if (failure === 'qr') s.renderQr.mockRejectedValue(new Error(secret));
+        else vi.mocked(s.payments.getPayment).mockRejectedValue(new Error(secret));
+        const response = await s.app.inject({
+          url: `/v1/payment-checkouts/${paymentId}`,
+          headers: { cookie: 'test-session' },
+        });
+        expect(response.statusCode).toBe(503);
+        const events = lines
+          .map((line) => JSON.parse(line))
+          .filter((line) => line.event === 'payment_diagnostic');
+        expect(events).toHaveLength(1);
+        expect(events[0]).toMatchObject({
+          paymentId,
+          traceId: response.json().error.traceId,
+          phase: failure === 'qr' ? 'render_qr' : 'checkout_read',
+          reason: failure === 'qr' ? 'qr_render_failed' : 'storage_error',
+        });
+        for (const value of [secret, 'test-session', channelOrder.qrContent!, userId])
+          expect(lines.join('') + response.body).not.toContain(value);
+      } finally {
+        await s.app.close();
+      }
+    },
+  );
+
   it('requires current login and redirects only to the fixed same-origin login', async () => {
     const s = await setup();
     try {
@@ -164,7 +205,10 @@ describe('authenticated Combo checkout', () => {
           })
         ).statusCode,
       ).toBe(200);
-      expect(s.channel.create).toHaveBeenCalledWith({ paymentId, userId, payType: 'wechat' });
+      expect(s.channel.create).toHaveBeenCalledWith(
+        { paymentId, userId, payType: 'wechat' },
+        { traceId: expect.any(String) },
+      );
       vi.mocked(s.channel.create).mockRejectedValue(new ChannelConflictError());
       expect(
         (

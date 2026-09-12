@@ -43,6 +43,10 @@ const channel =
         store: channelStore,
         payments: paymentStore,
         gateway: new LeshouyingPaymentGateway(paymentConfig.channel),
+        diagnostic: (event): void => {
+          const level = ['started', 'accepted', 'stored'].includes(event.reason) ? 'info' : 'warn';
+          app.log[level](event, 'payment channel diagnostic');
+        },
       })
     : undefined;
 const authenticateUser = paymentConfig
