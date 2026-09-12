@@ -1,5 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { PaymentStore } from './payment-service.js';
+import {
+  elapsedMilliseconds,
+  gatewayFailure,
+  knownGatewayResult,
+  reportPaymentDiagnostic,
+  type PaymentDiagnosticContext,
+  type PaymentDiagnosticInput,
+  type PaymentDiagnosticSink,
+} from './payment-diagnostics.js';
 import type {
   PaymentGateway,
   PaymentGatewayEnvironment,
@@ -70,6 +79,7 @@ export function createPaymentChannelService(options: {
   store: ChannelOrderStore;
   payments: Pick<PaymentStore, 'confirmPayment'>;
   gateway: PaymentGateway;
+  diagnostic?: PaymentDiagnosticSink;
 }) {
   const { store, payments, gateway } = options;
   const scope = {
@@ -77,6 +87,56 @@ export function createPaymentChannelService(options: {
     institutionNo: gateway.institutionNo,
     merchantNo: gateway.merchantNo,
   };
+  type Context = PaymentDiagnosticContext & { paymentId: string; source?: 'query' | 'callback' };
+  async function step<T>(
+    phase: PaymentDiagnosticInput['phase'],
+    context: Context,
+    run: () => Promise<T>,
+    success?: (
+      result: T,
+    ) => Pick<PaymentDiagnosticInput, 'outcome' | 'reason' | 'hasQr' | 'gatewayResultCode'>,
+  ): Promise<T> {
+    const start = performance.now();
+    const report = (details: Omit<PaymentDiagnosticInput, 'phase'>) =>
+      reportPaymentDiagnostic(options.diagnostic, {
+        ...context,
+        environment: scope.environment,
+        phase,
+        elapsedMs: elapsedMilliseconds(start),
+        ...details,
+      });
+    if (phase === 'prepay') report({ outcome: 'started', reason: 'started' });
+    try {
+      const result = await run();
+      if (success) report(success(result));
+      return result;
+    } catch (error) {
+      report({
+        outcome: 'unknown',
+        ...(phase === 'prepay' || phase === 'query'
+          ? gatewayFailure(error)
+          : {
+              reason:
+                error instanceof ChannelConflictError
+                  ? ('channel_conflict' as const)
+                  : ('storage_error' as const),
+            }),
+      });
+      throw error;
+    }
+  }
+  function gatewayResult(result: PaymentQueryResult | PaymentSubmission) {
+    return {
+      outcome: result.status,
+      reason:
+        result.status === 'failed'
+          ? ('provider_rejected' as const)
+          : result.status === 'unknown'
+            ? ('provider_result_unknown' as const)
+            : ('accepted' as const),
+      gatewayResultCode: knownGatewayResult(result.gatewayResultCode),
+    };
+  }
   function matches(order: ChannelOrder) {
     return (
       order.environment === scope.environment &&
@@ -89,9 +149,13 @@ export function createPaymentChannelService(options: {
     result: PaymentQueryResult,
     event: string,
     source: 'callback' | 'query',
+    context: PaymentDiagnosticContext = {},
   ) {
-    if (!matches(order) || !(await store.recordResult(order, result, event, source)))
-      throw new ChannelConflictError();
+    const diagnosticContext = { ...context, paymentId: order.paymentId, source };
+    await step('persist_channel_result', diagnosticContext, async () => {
+      if (!matches(order) || !(await store.recordResult(order, result, event, source)))
+        throw new ChannelConflictError();
+    });
     if (result.status !== 'succeeded') return;
     if (!result.platformTradeNo) throw new ChannelConflictError();
     // Channel transaction identity is namespaced before entering the single accounting transaction.
@@ -105,41 +169,84 @@ export function createPaymentChannelService(options: {
         ]),
       )
       .digest('hex');
-    const confirmed = await payments.confirmPayment({
-      paymentRequestId: order.paymentId,
-      channelTransactionId,
-      amountCents: order.amountCents,
-    });
-    if (confirmed.kind !== 'completed') throw new ChannelConflictError();
+    await step(
+      'credit_payment',
+      diagnosticContext,
+      async () => {
+        const confirmed = await payments.confirmPayment({
+          paymentRequestId: order.paymentId,
+          channelTransactionId,
+          amountCents: order.amountCents,
+        });
+        if (confirmed.kind !== 'completed') throw new ChannelConflictError();
+      },
+      () => ({ outcome: 'succeeded', reason: 'stored' }),
+    );
   }
   return {
-    async create(input: { paymentId: string; userId: string; payType: PayType }) {
+    async create(
+      input: { paymentId: string; userId: string; payType: PayType },
+      context: PaymentDiagnosticContext = {},
+    ) {
       if (!gateway.configured) throw new ChannelUnavailableError();
-      const prepared = await store.prepare({ ...input, ...scope });
+      const diagnosticContext = { ...context, paymentId: input.paymentId };
+      const prepared = await step('prepare_order', diagnosticContext, () =>
+        store.prepare({ ...input, ...scope }),
+      );
       if (!prepared) return null;
       const order = prepared.order;
       if (!matches(order) || order.payType !== input.payType) throw new ChannelConflictError();
       if (prepared.shouldSubmit) {
         let result: PaymentSubmission;
         try {
-          result = await gateway.createPayment({
-            orderNo: order.paymentId,
-            payTraceNo: order.payTraceNo,
-            payTime: order.payTime,
-            amountCents: BigInt(order.amountCents),
-            channel: 'qr',
-            payType: order.payType,
-          });
+          result = await step(
+            'prepay',
+            diagnosticContext,
+            () =>
+              gateway.createPayment({
+                orderNo: order.paymentId,
+                payTraceNo: order.payTraceNo,
+                payTime: order.payTime,
+                amountCents: BigInt(order.amountCents),
+                channel: 'qr',
+                payType: order.payType,
+              }),
+            (result) => ({ ...gatewayResult(result), hasQr: Boolean(result.action) }),
+          );
         } catch {
           result = { status: 'unknown' };
         }
         // Failure to save a response still leaves the original pre-dispatch row. No resubmission.
-        await store.recordSubmission(order, result);
+        await step(
+          'persist_prepay',
+          diagnosticContext,
+          () => store.recordSubmission(order, result),
+          () => ({ outcome: result.status, reason: 'stored', hasQr: Boolean(result.action) }),
+        );
       }
-      return store.get(order.paymentId, input.userId);
+      return step(
+        'read_order',
+        diagnosticContext,
+        () => store.get(order.paymentId, input.userId),
+        (saved) => ({
+          outcome: saved?.completed
+            ? 'succeeded'
+            : saved?.state === 'pending' || saved?.state === 'failed'
+              ? saved.state
+              : 'unknown',
+          reason:
+            saved?.state === 'pending' && !saved.completed && !saved.qrContent
+              ? 'missing_qr'
+              : 'accepted',
+          hasQr: Boolean(saved?.qrContent),
+        }),
+      );
     },
     get: (paymentId: string, userId: string) => store.get(paymentId, userId),
-    async notify(input: unknown): Promise<'completed' | 'recorded'> {
+    async notify(
+      input: unknown,
+      context: PaymentDiagnosticContext = {},
+    ): Promise<'completed' | 'recorded'> {
       const notification = gateway.verifyPaymentNotification(input);
       if (
         notification.institutionNo !== scope.institutionNo ||
@@ -166,6 +273,7 @@ export function createPaymentChannelService(options: {
         { status, platformTradeNo: notification.platformTradeNo },
         notification.eventFingerprint,
         'callback',
+        context,
       );
       return status === 'succeeded' ? 'completed' : 'recorded';
     },
@@ -177,12 +285,18 @@ export function createPaymentChannelService(options: {
       let failed = 0;
       for (const order of rows) {
         try {
-          const result = await gateway.queryPayment({
-            payTraceNo: order.payTraceNo,
-            payTime: order.payTime,
-            amountCents: BigInt(order.amountCents),
-            ...(order.platformTradeNo ? { platformTradeNo: order.platformTradeNo } : {}),
-          });
+          const result = await step(
+            'query',
+            { paymentId: order.paymentId, source: 'query' },
+            () =>
+              gateway.queryPayment({
+                payTraceNo: order.payTraceNo,
+                payTime: order.payTime,
+                amountCents: BigInt(order.amountCents),
+                ...(order.platformTradeNo ? { platformTradeNo: order.platformTradeNo } : {}),
+              }),
+            gatewayResult,
+          );
           const event = createHash('sha256')
             .update(JSON.stringify([order.paymentId, randomUUID()]))
             .digest('hex');

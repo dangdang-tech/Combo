@@ -19,6 +19,7 @@
 - `src/payment-auth.ts` 把 Host 的当前会话交给 Authz 重新核验，再验证返回的用户断言；同时检查允许的网页来源和独立 Gateway 凭据，不接受请求体身份或 Agent 令牌作为用户身份。
 - `src/channel/` 提供乐收赢下单、查单和通知验签，不依赖旧 Hosted 钱包，也不读写业务请求。
 - `src/channel-service.ts` 只提交已保存的原渠道订单；超时后仅查询该订单，可信成功才调用唯一入账入口。支付渠道成功与 Combo 入账仍分开处理。
+- `src/payment-diagnostics.ts` 定义支付诊断事件的固定字段和枚举，过滤原始错误、渠道报文和敏感内容；日志写入失败不会改变下单、查单或入账行为。
 - `src/channel-repo.ts` 保存每支付唯一的渠道订单、已核验的低敏事件以及查单次数和租约；商户、金额、付款方式和原支付流水固定，渠道交易号只允许首次绑定。
 - `src/checkout-routes.ts` 注册已认证的收银台与付款码接口，以及独立验签的渠道通知接口。二维码由本机生成，不请求外部图片服务。
 - `src/checkout-page.ts` 展示权威金额、付款码和入账状态，不修改订单金额或直接标记付款成功；页面有严格内容安全策略，不发送来源地址。
@@ -61,3 +62,23 @@ Host 支付接口当前只接受 `cb_v2_session` Cookie，每次请求都向 Aut
 渠道模块使用追加迁移 `0017_v2_payment_channel.sql`。下单前先保存订单，进程中断、响应丢失或保存响应失败都不能再次提交新单。查单最多 120 次且只自动查询创建后 24 小时内的订单，多副本领取两分钟租约；可信晚到成功通知仍可完成原支付。调度器每三十秒最多领取二十笔，单进程不重叠。二维码只供已认证收银台读取，过期或入账后停止提供，并在后续清扫中清除内容，订单和事件事实保留。
 
 上游是模型网关（hold / settle / usage 上报）与各 Agent 的 SDK（余额查询），以及验证期的运营手工充值。下游是 PostgreSQL 的 `v2_wallets`、`v2_ledger`、`v2_orders`、`v2_packages`、`v2_holds` 与 `v2_metering_events` 六张表，使用专用角色 `combo_billing`。`v2_orders` 与 `v2_packages` 本期只建表不暴露接口。
+
+## 支付错误诊断
+
+生产进程将结构化 `payment_diagnostic` 事件写到标准日志。按 `paymentId` 查看整笔支付的事件；按收银台响应中的 `meta.traceId` 或 `error.traceId` 关联单次 HTTP 请求。后台查单带同一 `paymentId` 和 `source=query`，不会覆盖首次预下单的事件。Pino 的 `time` 是事件时间，`elapsedMs` 是当前阶段耗时。
+
+阶段依次为 `prepare_order`（保存原订单）、`prepay`（调用渠道）、`persist_prepay`（保存渠道响应）、`read_order`（读取结果）；后台有 `query`、`persist_channel_result` 和 `credit_payment`。收银台读取和本地二维码生成分别是 `checkout_read`、`render_qr`。`query/succeeded` 仅说明渠道确认成功，只有 `credit_payment/succeeded` 才表示本次入账调用已完成。
+
+- `prepay/started` 后出现 `timeout`、`transport_error` 或 `http_error`：检查耗时、`timeoutMs`、`transportCode`、`httpStatus`。只能查原订单，不可据此重新下单。
+- `invalid_json`、`invalid_signature`、`ownership_mismatch`、`missing_field`：响应解析、验签或订单绑定失败；`field` 仅指出字段名。
+- `missing_qr`、`invalid_qr`：渠道响应或保存的订单缺少可用付款码；`persist_prepay/storage_error` 则表示保存响应失败。
+- `render_qr/qr_render_failed`：已进入本地二维码渲染阶段，但图片生成失败。
+- `credit_payment/storage_error` 或 `channel_conflict`：渠道结果与入账分别排查，不能把渠道成功当成用户余额已增加。
+
+例如在已明确选择的 Test 命名空间读取日志并筛选一笔支付（将占位符替换为实际支付编号）：
+
+```sh
+kubectl -n combo-v2 logs deployment/billing --since=1h | jq -c 'select(.event == "payment_diagnostic" and .paymentId == "<payment-id>")'
+```
+
+事件不包含用户邮箱、Cookie、机构密钥、商户号、渠道流水号、二维码内容、完整 URL、渠道原始报文、异常消息或堆栈。未知渠道结果码记为 `OTHER`。日志保留时长取决于部署环境的日志采集与轮转配置；本功能不新建数据库诊断表，Pod 删除后的长期追溯需要已有日志归档。部署前未记录的首次失败无法追溯补造。

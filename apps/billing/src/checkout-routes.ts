@@ -9,6 +9,7 @@ import { ChannelConflictError, channelCheckoutView } from './channel-service.js'
 import { InvalidPaymentNotificationError } from './channel/index.js';
 import type { PaymentChannelService } from './checkout-service.js';
 import { checkoutPageHtml } from './checkout-page.js';
+import { elapsedMilliseconds, reportPaymentDiagnostic } from './payment-diagnostics.js';
 
 export interface CheckoutDependencies {
   payments: PaymentStore;
@@ -79,22 +80,37 @@ export function registerCheckoutRoutes(app: FastifyInstance, deps: CheckoutDepen
       }
       return null;
     }
-    async function payload(paymentId: string, userId: string) {
-      const payment = await deps.payments.getPayment({ paymentRequestId: paymentId, userId });
-      if (!payment) return null;
-      const order = await deps.channel.get(paymentId, userId);
-      if (!order) return { payment, checkout: null };
-      const { qrContent, ...checkout } = channelCheckoutView(order);
-      // Render the verified opaque QR content locally; never send it to an image service.
-      const qrImage =
-        payment.status === 'waiting' && qrContent
-          ? await (
-              deps.renderQr ??
-              ((value) =>
-                QRCode.toDataURL(value, { width: 280, margin: 2, errorCorrectionLevel: 'M' }))
-            )(qrContent)
-          : undefined;
-      return { payment, checkout: { ...checkout, ...(qrImage ? { qrImage } : {}) } };
+    async function payload(req: FastifyRequest, paymentId: string, userId: string) {
+      const start = performance.now();
+      let phase: 'checkout_read' | 'render_qr' = 'checkout_read';
+      try {
+        const payment = await deps.payments.getPayment({ paymentRequestId: paymentId, userId });
+        if (!payment) return null;
+        const order = await deps.channel.get(paymentId, userId);
+        if (!order) return { payment, checkout: null };
+        const { qrContent, ...checkout } = channelCheckoutView(order);
+        phase = 'render_qr';
+        // Render the verified opaque QR content locally; never send it to an image service.
+        const qrImage =
+          payment.status === 'waiting' && qrContent
+            ? await (
+                deps.renderQr ??
+                ((value) =>
+                  QRCode.toDataURL(value, { width: 280, margin: 2, errorCorrectionLevel: 'M' }))
+              )(qrContent)
+            : undefined;
+        return { payment, checkout: { ...checkout, ...(qrImage ? { qrImage } : {}) } };
+      } catch (error) {
+        reportPaymentDiagnostic((event) => req.log.warn(event, 'payment checkout diagnostic'), {
+          paymentId,
+          traceId: req.id,
+          phase,
+          outcome: 'unknown',
+          reason: phase === 'render_qr' ? 'qr_render_failed' : 'storage_error',
+          elapsedMs: elapsedMilliseconds(start),
+        });
+        throw error;
+      }
     }
     scope.get('/payments/:paymentId', async (req, reply) => {
       const params = Params.safeParse(req.params);
@@ -119,7 +135,7 @@ export function registerCheckoutRoutes(app: FastifyInstance, deps: CheckoutDepen
       if (!params.success) return fail(req, reply, 404);
       const id = await user(req, reply);
       if (!id) return;
-      const data = await payload(params.data.paymentId, id);
+      const data = await payload(req, params.data.paymentId, id);
       return data ? reply.send({ data, meta: { traceId: req.id } }) : fail(req, reply, 404);
     });
     scope.post('/v1/payment-checkouts/:paymentId', { bodyLimit: 1024 }, async (req, reply) => {
@@ -129,13 +145,16 @@ export function registerCheckoutRoutes(app: FastifyInstance, deps: CheckoutDepen
       const id = await user(req, reply);
       if (!id) return;
       try {
-        const order = await deps.channel.create({
-          paymentId: params.data.paymentId,
-          userId: id,
-          payType: body.data.payType,
-        });
+        const order = await deps.channel.create(
+          {
+            paymentId: params.data.paymentId,
+            userId: id,
+            payType: body.data.payType,
+          },
+          { traceId: req.id },
+        );
         if (!order) return fail(req, reply, 404);
-        const data = await payload(params.data.paymentId, id);
+        const data = await payload(req, params.data.paymentId, id);
         return data ? reply.send({ data, meta: { traceId: req.id } }) : fail(req, reply, 404);
       } catch (error) {
         return fail(req, reply, error instanceof ChannelConflictError ? 409 : 503);
@@ -176,7 +195,7 @@ export function registerCheckoutRoutes(app: FastifyInstance, deps: CheckoutDepen
       },
       async (req, reply) => {
         try {
-          await deps.channel.notify(req.body);
+          await deps.channel.notify(req.body, { traceId: req.id });
           return acknowledgement(reply, 200);
         } catch (error) {
           return acknowledgement(
