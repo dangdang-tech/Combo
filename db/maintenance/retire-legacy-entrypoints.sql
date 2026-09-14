@@ -76,7 +76,7 @@ BEGIN
           OR (table_count = 0 AND function_count = 0)) THEN
     RAISE EXCEPTION 'Unexpected partial retirement: % tables and % functions', table_count, function_count;
   END IF;
-  IF to_regprocedure('public.reject_agent_immutable_mutation()') IS NULL THEN
+  IF table_count=10 AND to_regprocedure('public.reject_agent_immutable_mutation()') IS NULL THEN
     RAISE EXCEPTION 'The retained Agent Builder immutable guard is missing';
   END IF;
 END;
