@@ -1,5 +1,10 @@
 # db PostgreSQL 迁移
 
+`maintenance/retire-legacy-entrypoints.sql` 是独立授权的 Test 退役步骤：删除旧上传、MCP OAuth 和
+Project 分享的十张表及七个专属函数。它不进入自动迁移、不改 `schema_migrations`，也不作用于共享库
+或 V2。历史完整结构为 42 张业务表，执行该步骤后为 32 张；下文的旧入口描述属于历史迁移结构。
+执行和备份要求见 [数据库退役维护](maintenance/README.md)。
+
 这个目录是数据库结构的唯一真源。当前源码迁移链从 `0000` 连续到 `0021`（不表示任何环境已部署）。Test 常驻数据库已经记录 `0012` 至 `0016`，因此这五个文件按原文件名和精确字节恢复为不可变兼容前缀；canonical Agent Package Registry 由后置的 `0017` 定义，受控 Test 的知识 Agent Session 与用量收据由 `0018` 追加，服务端待恢复用量由 `0019` 追加，私有编译快照元数据由 `0020` 追加，精确发布者声明、公开 Release 范围和浏览器上传授权状态由 `0021` 追加。
 
 ## 迁移文件
