@@ -9,12 +9,15 @@ import { ChannelConflictError, channelCheckoutView } from './channel-service.js'
 import { InvalidPaymentNotificationError } from './channel/index.js';
 import type { PaymentChannelService } from './checkout-service.js';
 import { checkoutPageHtml } from './checkout-page.js';
+import { recoveryPage } from './recovery-routes.js';
+import type { CheckoutRecovery } from './recovery-service.js';
 
 export interface CheckoutDependencies {
   payments: PaymentStore;
   channel: PaymentChannelService;
   authenticateUser(request: FastifyRequest): Promise<string | null>;
   testMode: boolean;
+  recovery?: CheckoutRecovery;
   renderQr?(value: string): Promise<string>;
 }
 const Params = z.object({ paymentId: z.string().uuid() }).strict();
@@ -69,8 +72,9 @@ export function registerCheckoutRoutes(app: FastifyInstance, deps: CheckoutDepen
         if (id && z.string().uuid().safeParse(id).success) return id;
         if (page) {
           const params = Params.parse(req.params);
+          const version = (req.query as { version?: string }).version === '2' ? '?version=2' : '';
           reply.redirect(
-            '/authz/login?next=' + encodeURIComponent('/payments/' + params.paymentId),
+            '/authz/login?next=' + encodeURIComponent('/payments/' + params.paymentId + version),
             303,
           );
         } else fail(req, reply, 401);
@@ -101,6 +105,11 @@ export function registerCheckoutRoutes(app: FastifyInstance, deps: CheckoutDepen
       if (!params.success) return fail(req, reply, 404);
       const id = await user(req, reply, true);
       if (!id) return;
+      if ((req.query as { version?: string }).version === '2') {
+        if (!deps.recovery || !(await deps.recovery.view(params.data.paymentId, id)))
+          return fail(req, reply, 404);
+        return recoveryPage(reply, params.data.paymentId, deps.testMode);
+      }
       if (
         !(await deps.payments.getPayment({ userId: id, paymentRequestId: params.data.paymentId }))
       )

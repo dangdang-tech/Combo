@@ -13,6 +13,8 @@ import { createPgChannelOrderStore, clearExpiredChannelActions } from './channel
 import { createPaymentChannelService } from './channel-service.js';
 import { LeshouyingPaymentGateway } from './channel/index.js';
 import { startChannelReconciler, withChannelPaymentState } from './checkout-service.js';
+import { createPgRecoveryStore } from './recovery-repo.js';
+import { createCheckoutRecovery } from './recovery-service.js';
 
 const env = loadEnv();
 
@@ -34,10 +36,12 @@ const rawPayments = paymentConfig
       checkoutBaseUrl: paymentConfig.checkoutBaseUrl,
     })
   : undefined;
-const channelStore = paymentConfig ? createPgChannelOrderStore(pool) : undefined;
+const channelStore = paymentConfig
+  ? createPgChannelOrderStore(pool, { recovery: env.PAYMENT_RECOVERY_ENABLED })
+  : undefined;
 const paymentStore =
   rawPayments && channelStore ? withChannelPaymentState(rawPayments, channelStore) : undefined;
-const channel =
+const legacyChannel =
   paymentConfig && paymentStore && channelStore
     ? createPaymentChannelService({
         store: channelStore,
@@ -45,6 +49,17 @@ const channel =
         gateway: new LeshouyingPaymentGateway(paymentConfig.channel),
       })
     : undefined;
+const recovery =
+  env.PAYMENT_RECOVERY_ENABLED && paymentConfig && rawPayments
+    ? createCheckoutRecovery({
+        store: createPgRecoveryStore(pool),
+        payments: rawPayments,
+        gateway: new LeshouyingPaymentGateway(paymentConfig.channel),
+        checkoutBaseUrl: paymentConfig.checkoutBaseUrl,
+        log: (event) => app.log.info({ event: 'checkout_recovery', ...event }, 'checkout recovery'),
+      })
+    : undefined;
+const channel = legacyChannel && recovery ? recovery.legacyChannel(legacyChannel) : legacyChannel;
 const authenticateUser = paymentConfig
   ? createPaymentUserAuthenticator({
       authzBaseUrl: paymentConfig.authzBaseUrl,
@@ -77,7 +92,18 @@ const app = await buildApp({
           channel,
           authenticateUser,
           testMode: paymentConfig.channel.environment === 'TEST',
+          ...(recovery ? { recovery } : {}),
         },
+        ...(recovery
+          ? {
+              recovery: {
+                recovery,
+                payments: rawPayments!,
+                authenticateUser,
+                testMode: paymentConfig.channel.environment === 'TEST',
+              },
+            }
+          : {}),
       }
     : {}),
   internalToken: env.INTERNAL_TOKEN,
@@ -89,6 +115,12 @@ const app = await buildApp({
       if (paymentConfig) {
         const result = await pool.query<{ ready: boolean }>(
           "SELECT to_regclass('public.v2_payment_channel_orders') IS NOT NULL AND to_regclass('public.v2_payment_channel_events') IS NOT NULL AND to_regclass('public.v2_call_attempts') IS NOT NULL AS ready",
+        );
+        if (!result.rows[0]?.ready) return false;
+      }
+      if (recovery) {
+        const result = await pool.query<{ ready: boolean }>(
+          "SELECT to_regclass('public.v2_payment_channel_attempts') IS NOT NULL AND to_regclass('public.v2_payment_recovery_jobs') IS NOT NULL AND to_regclass('public.v2_payment_channel_receipts') IS NOT NULL AND to_regclass('public.v2_payment_recovery_events') IS NOT NULL AND to_regclass('public.v2_payment_exception_entries') IS NOT NULL AS ready",
         );
         if (!result.rows[0]?.ready) return false;
       }
@@ -106,13 +138,23 @@ const channelReconciler = channel
       log: app.log,
     })
   : undefined;
+const recoveryTimer = recovery
+  ? setInterval(
+      () =>
+        void recovery.tick().catch(() => app.log.warn('checkout recovery temporarily unavailable')),
+      3000,
+    )
+  : undefined;
+recoveryTimer?.unref();
 
 async function shutdown(signal: string): Promise<void> {
   app.log.info({ signal }, 'shutting down');
   sweeper.stop();
+  clearInterval(recoveryTimer);
   const channelStopped = channelReconciler?.stop();
   await app.close().catch(() => undefined);
   await channelStopped;
+  await recovery?.stop();
   await pool.end().catch(() => undefined);
   process.exit(0);
 }

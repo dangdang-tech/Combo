@@ -11,6 +11,8 @@ import {
   PaymentGatewayUncertainError,
   PaymentGatewayUnavailableError,
   type CreatePaymentCommand,
+  type ClosePaymentCommand,
+  type ClosePaymentResult,
   type PaymentGateway,
   type PaymentGatewayEnvironment,
   type PaymentQueryResult,
@@ -215,7 +217,7 @@ export class LeshouyingPaymentGateway implements PaymentGateway {
     this.merchantNo = config.merchantNo;
   }
 
-  async #post(path: '/v3/prepay' | '/v3/queryorder', body: SigningParameters) {
+  async #post(path: '/v3/prepay' | '/v3/queryorder' | '/v3/closeorder', body: SigningParameters) {
     const signed = {
       ...body,
       sign: signPaymentParameters(body, this.#config.institutionKey),
@@ -239,7 +241,7 @@ export class LeshouyingPaymentGateway implements PaymentGateway {
       );
       if (!response.ok) {
         void response.body?.cancel().catch(() => undefined);
-        throw new PaymentGatewayUncertainError();
+        throw new PaymentGatewayUncertainError('http_error');
       }
       const responseType = response.headers.get('content-type');
       if (responseType && !responseType.toLowerCase().startsWith('application/json')) {
@@ -247,15 +249,22 @@ export class LeshouyingPaymentGateway implements PaymentGateway {
         throw new PaymentGatewayUncertainError();
       }
       const text = await readResponseText(response, controller.signal);
-      const parsed: unknown = JSON.parse(text);
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        throw new PaymentGatewayUncertainError('invalid_json');
+      }
       if (!isRecord(parsed)) throw new PaymentGatewayUncertainError();
       const signingParameters = asSigningParameters(parsed);
       if (!verifyPaymentSignature(signingParameters, this.#config.institutionKey)) {
-        throw new PaymentGatewayUncertainError();
+        throw new PaymentGatewayUncertainError('invalid_signature');
       }
       return parsed;
-    } catch {
-      throw new PaymentGatewayUncertainError();
+    } catch (error) {
+      if (controller.signal.aborted) throw new PaymentGatewayUncertainError('timeout');
+      if (error instanceof PaymentGatewayUncertainError) throw error;
+      throw new PaymentGatewayUncertainError('transport_error');
     } finally {
       clearTimeout(timeout);
     }
@@ -285,22 +294,69 @@ export class LeshouyingPaymentGateway implements PaymentGateway {
     if (returnCode !== 'SUCCESS' || resultCode === 'PAY_FAIL') {
       return { status: 'failed', ...(resultCode ? { gatewayResultCode: resultCode } : {}) };
     }
-    if (resultCode !== 'PAY_SUCCESS') {
-      return { status: 'unknown', ...(resultCode ? { gatewayResultCode: resultCode } : {}) };
-    }
-    const codeUrl = safeQrContent(requiredString(response, 'qrcode'));
     const tradeNo = optionalString(response, 'trade_no');
+    if (resultCode !== 'PAY_SUCCESS' && resultCode !== 'PAY_IN_PROCESS') {
+      return {
+        status: 'unknown',
+        ...(resultCode ? { gatewayResultCode: resultCode } : {}),
+        ...(tradeNo ? { platformTradeNo: tradeNo } : {}),
+      };
+    }
+    const code = optionalString(response, 'qrcode');
+    if (!code && resultCode === 'PAY_SUCCESS') throw new PaymentGatewayUncertainError('missing_qr');
+    const codeUrl = code ? safeQrContent(code) : undefined;
     return {
       status: 'pending',
       gatewayResultCode: resultCode,
       ...(tradeNo ? { platformTradeNo: tradeNo } : {}),
-      action: {
-        kind: 'code_url',
-        value: codeUrl,
-        // The gateway action is bearer-like, short-lived. Combo stops returning it
-        // after this bound even if the provider keeps the code valid.
-        expiresAt: new Date(Date.now() + PAYMENT_ACTION_TTL_MS),
-      },
+      ...(codeUrl
+        ? {
+            action: {
+              kind: 'code_url',
+              value: codeUrl,
+              // The gateway action is bearer-like, short-lived. Combo stops returning it
+              // after this bound even if the provider keeps the code valid.
+              expiresAt: new Date(Date.now() + PAYMENT_ACTION_TTL_MS),
+            },
+          }
+        : {}),
+    };
+  }
+
+  async closePayment(command: ClosePaymentCommand): Promise<ClosePaymentResult> {
+    if (
+      !command.platformTradeNo ||
+      !/^[A-Za-z0-9_-]{1,64}$/.test(command.closeTraceNo) ||
+      !/^[0-9]{14}$/.test(command.closeTime)
+    )
+      throw new PaymentGatewayUncertainError();
+    const response = await this.#post('/v3/closeorder', {
+      inst_no: this.institutionNo,
+      mch_no: this.merchantNo,
+      close_trace_no: command.closeTraceNo,
+      close_time: command.closeTime,
+      trade_no: command.platformTradeNo,
+    });
+    // Close replies may omit mch_no. The signed original order and close request are mandatory;
+    // recovery additionally verifies a query response including merchant, amount and original IDs.
+    for (const [field, expected] of Object.entries({
+      trade_no: command.platformTradeNo,
+      pay_trace_no: command.payTraceNo,
+      pay_time: command.payTime,
+      close_trace_no: command.closeTraceNo,
+      close_time: command.closeTime,
+    }))
+      if (requiredString(response, field) !== expected) throw new PaymentGatewayUncertainError();
+    if (
+      optionalString(response, 'mch_no') &&
+      optionalString(response, 'mch_no') !== this.merchantNo
+    )
+      throw new PaymentGatewayUncertainError();
+    if (requiredString(response, 'return_code') !== 'SUCCESS') return { status: 'unknown' };
+    // PAY_SUCCESS was verified against TEST. Do not accept the documentation's PAY_SUCEESS typo.
+    const result = optionalString(response, 'result_code');
+    return {
+      status: result === 'PAY_SUCCESS' ? 'closed' : result === 'PAY_FAIL' ? 'failed' : 'unknown',
     };
   }
 

@@ -11,10 +11,12 @@ import { z } from 'zod';
 import { HOLD_TTL_SECONDS, availableBalance, type BillingStore } from './service.js';
 import { registerPaymentRoutes, type PaymentRouteDependencies } from './payment-routes.js';
 import { registerCheckoutRoutes, type CheckoutDependencies } from './checkout-routes.js';
+import { registerRecoveryRoutes, type RecoveryRoutes } from './recovery-routes.js';
 
 export interface BillingAppDependencies {
   payments?: PaymentRouteDependencies;
   checkout?: CheckoutDependencies;
+  recovery?: RecoveryRoutes;
   store: BillingStore;
   internalToken: string;
   adminToken: string;
@@ -150,6 +152,7 @@ export async function buildApp(deps: BillingAppDependencies): Promise<FastifyIns
   app.decorate('billingDeps', deps);
   if (deps.payments) registerPaymentRoutes(app, deps.payments);
   if (deps.checkout) registerCheckoutRoutes(app, deps.checkout);
+  if (deps.recovery) registerRecoveryRoutes(app, deps.recovery);
 
   const internal = { preHandler: [requireToken('internal')] };
   const admin = { preHandler: [requireToken('admin')] };

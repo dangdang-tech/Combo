@@ -2,6 +2,7 @@
 import type { LeshouyingGatewayConfig } from './channel/index.js';
 
 export interface BillingEnv {
+  PAYMENT_RECOVERY_ENABLED: boolean;
   PAYMENTS?: {
     tokenKey: string;
     gatewayToken: string;
@@ -60,6 +61,9 @@ export function loadEnv(): BillingEnv {
   if (!['development', 'test', 'production'].includes(nodeEnv))
     throw new Error('NODE_ENV must be development, test, or production');
   const enabled = process.env.BILLING_PAYMENTS_ENABLED ?? 'false';
+  const recovery = process.env.BILLING_PAYMENT_RECOVERY_ENABLED ?? 'false';
+  if (!['true', 'false'].includes(recovery) || (recovery === 'true' && enabled !== 'true'))
+    throw new Error('payment recovery requires an enabled payment service');
   if (enabled !== 'true' && enabled !== 'false')
     throw new Error('BILLING_PAYMENTS_ENABLED must be true or false');
   let payments: BillingEnv['PAYMENTS'];
@@ -159,6 +163,7 @@ export function loadEnv(): BillingEnv {
     };
   }
   return {
+    PAYMENT_RECOVERY_ENABLED: recovery === 'true',
     NODE_ENV: nodeEnv,
     PAYMENTS: payments,
     PORT: parsePort(process.env.PORT),

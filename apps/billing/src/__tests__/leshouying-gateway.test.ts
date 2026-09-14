@@ -17,6 +17,24 @@ const CONFIG = {
   timeoutMs: 1_000,
 };
 
+const closeCommand = {
+  payTraceNo: 'CLOSE-ORIGINAL',
+  payTime: '20260914000000',
+  amountCents: 2n,
+  platformTradeNo: 'ORIGINAL-TRADE',
+  closeTraceNo: 'close-request',
+  closeTime: '20260914001000',
+};
+const closeReply = {
+  return_code: 'SUCCESS',
+  result_code: 'PAY_SUCCESS',
+  trade_no: 'ORIGINAL-TRADE',
+  pay_trace_no: 'CLOSE-ORIGINAL',
+  pay_time: '20260914000000',
+  close_trace_no: 'close-request',
+  close_time: '20260914001000',
+};
+
 function signedResponse(fields: Record<string, string | null>): Response {
   const body = { ...fields, sign: signPaymentParameters(fields, KEY) };
   return new Response(JSON.stringify(body), {
@@ -26,6 +44,83 @@ function signedResponse(fields: Record<string, string | null>): Response {
 }
 
 describe('Leshouying payment gateway', () => {
+  it('preserves a verified pending prepay identity and distinguishes an absent QR from transport failure', async () => {
+    const pending = {
+      return_code: 'SUCCESS',
+      result_code: 'PAY_IN_PROCESS',
+      pay_type: '400',
+      mch_no: CONFIG.merchantNo,
+      pay_trace_no: 'pending-trace',
+      pay_time: '20260914000000',
+      total_amount: '2',
+      trade_no: 'pending-trade',
+    };
+    const cmd = {
+      orderNo: 'pending-order',
+      payTraceNo: pending.pay_trace_no,
+      payTime: pending.pay_time,
+      amountCents: 2n,
+      channel: 'qr' as const,
+      payType: 'wechat' as const,
+    };
+    const gateway = new LeshouyingPaymentGateway(CONFIG, async () => signedResponse(pending));
+    expect(await gateway.createPayment(cmd)).toEqual({
+      status: 'pending',
+      gatewayResultCode: 'PAY_IN_PROCESS',
+      platformTradeNo: 'pending-trade',
+    });
+    const missing = new LeshouyingPaymentGateway(CONFIG, async () =>
+      signedResponse({ ...pending, result_code: 'PAY_SUCCESS' }),
+    );
+    await expect(missing.createPayment(cmd)).rejects.toMatchObject({ reason: 'missing_qr' });
+    const forged = new LeshouyingPaymentGateway(
+      CONFIG,
+      async () =>
+        new Response(JSON.stringify({ ...pending, sign: 'bad' }), {
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
+    await expect(forged.createPayment(cmd)).rejects.toMatchObject({ reason: 'invalid_signature' });
+  });
+  it('verifies a close receipt against the exact original order and close request', async () => {
+    const transport = vi.fn(async (_url: string, init: RequestInit) => {
+      const request = JSON.parse(String(init.body));
+      expect(verifyPaymentSignature(request, KEY)).toBe(true);
+      expect(request.trade_no).toBe(closeCommand.platformTradeNo);
+      expect(request.close_trace_no).toBe(closeCommand.closeTraceNo);
+      return signedResponse({ ...closeReply, mch_no: null });
+    });
+    const gateway = new LeshouyingPaymentGateway(CONFIG, transport);
+    expect(await gateway.closePayment(closeCommand)).toEqual({ status: 'closed' });
+    expect(transport.mock.calls[0]?.[0]).toBe('https://test.gdyfsk.com/yfpay/v3/closeorder');
+  });
+  it.each(['trade_no', 'pay_trace_no', 'pay_time', 'close_trace_no', 'close_time', 'mch_no'])(
+    'rejects a signed close response with a mismatched %s',
+    async (field) => {
+      const gateway = new LeshouyingPaymentGateway(CONFIG, async () =>
+        signedResponse({ ...closeReply, [field]: 'other' }),
+      );
+      await expect(gateway.closePayment(closeCommand)).rejects.toBeInstanceOf(
+        PaymentGatewayUncertainError,
+      );
+    },
+  );
+  it('does not accept a forged close signature or the documentation typo as success', async () => {
+    const unsigned = new LeshouyingPaymentGateway(
+      CONFIG,
+      async () =>
+        new Response(JSON.stringify({ ...closeReply, sign: '0'.repeat(32) }), {
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
+    await expect(unsigned.closePayment(closeCommand)).rejects.toBeInstanceOf(
+      PaymentGatewayUncertainError,
+    );
+    const typo = new LeshouyingPaymentGateway(CONFIG, async () =>
+      signedResponse({ ...closeReply, result_code: 'PAY_SUCEESS' }),
+    );
+    expect(await typo.closePayment(closeCommand)).toEqual({ status: 'unknown' });
+  });
   it('cancels a stalled response at the request deadline', async () => {
     let cancelled = false;
     const gateway = new LeshouyingPaymentGateway(
