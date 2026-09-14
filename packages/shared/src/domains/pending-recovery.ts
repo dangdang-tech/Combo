@@ -23,18 +23,17 @@ const PositiveCentsSchema = PostgresBigintCentsSchema.refine(
   'Recharge amount must be positive',
 );
 
-export const CreateRecoveryRechargeOrderBodySchema = z
+export const CreateRechargeOrderBodySchema = z
   .object({
-    recoveryUsageId: CanonicalUuidSchema.optional(),
     rechargeIntentId: CanonicalUuidSchema,
     amountCents: z.number().int().positive().max(99_999_999),
     channel: z.literal('qr'),
     payType: z.enum(['wechat', 'alipay']),
   })
   .strict();
-export type CreateRecoveryRechargeOrderBody = z.infer<typeof CreateRecoveryRechargeOrderBodySchema>;
+export type CreateRechargeOrderBody = z.infer<typeof CreateRechargeOrderBodySchema>;
 
-const RecoveryRechargeOrderStatusSchema = z.enum([
+const RechargeOrderStatusSchema = z.enum([
   'created',
   'pending',
   'unknown',
@@ -51,7 +50,7 @@ export const RechargeOrderViewSchema = z
     amountCents: PositiveCentsSchema,
     channel: z.literal('qr'),
     payType: z.enum(['wechat', 'alipay']).optional(),
-    status: RecoveryRechargeOrderStatusSchema,
+    status: RechargeOrderStatusSchema,
     reconciliationActive: z.boolean(),
     paymentAction: z
       .object({
@@ -65,8 +64,3 @@ export const RechargeOrderViewSchema = z
   })
   .strict();
 export type RechargeOrderView = z.infer<typeof RechargeOrderViewSchema>;
-
-export const RecoveryRechargeOrderViewSchema = RechargeOrderViewSchema.extend({
-  recoveryUsageId: CanonicalUuidSchema,
-}).strict();
-export type RecoveryRechargeOrderView = z.infer<typeof RecoveryRechargeOrderViewSchema>;

@@ -3,7 +3,7 @@
 // 导出分组：
 //   core/      地基：ids / 响应包络 / 错误信封 / health / trace / release
 //   constants/ 路由与探针前缀
-//   domains/   保留业务域 DTO + zod schema（auth / pending-recovery）
+//   domains/   保留业务域 DTO + zod schema（auth / ordinary recharge）
 //
 // 命名约定：每个 DTO 同时导出 `XxxSchema`（zod 真源）与 `Xxx`（z.infer 类型）。
 

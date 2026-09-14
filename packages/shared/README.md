@@ -14,7 +14,7 @@
 
 邮箱验证码登录的请求、结果、成功包络、当前用户视图、登出结果、显式 HTTPS `__Host-cb_session` 与本地 HTTP `cb_session` 策略和安全站内回跳函数统一定义在 `src/domains/auth.ts`。验证码和会话失败使用 `src/core/errors.ts` 中的安全错误映射，对外错误信封不包含内部错误码。健康契约不把邮件供应商列为就绪依赖，因此已有会话和普通业务请求不依赖新邮件投递。
 
-待恢复充值订单只保留 Authoring billing 需要的创建输入、订单视图和恢复视图。金额字符串必须是 PostgreSQL bigint 正数范围内的规范十进制表示。
+充值契约保留 Authoring billing 需要的普通创建输入与订单视图，严格拒绝旧恢复编号。金额字符串必须是 PostgreSQL bigint 正数范围内的规范十进制表示。
 
 ## 使用与验证
 

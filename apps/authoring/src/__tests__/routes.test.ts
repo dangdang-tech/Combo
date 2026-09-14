@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { ALL_ENDPOINTS } from '../bootstrap/routes.js';
 
 describe('route registry self-check', () => {
-  it('registers exactly 22 retained endpoints (including anonymous Codex receiver handoff)', () => {
-    expect(ALL_ENDPOINTS).toHaveLength(22);
+  it('registers exactly 21 retained endpoints (including anonymous Codex receiver handoff)', () => {
+    expect(ALL_ENDPOINTS).toHaveLength(21);
   });
 
   it('has no duplicate method and URL pairs', () => {
@@ -75,7 +75,7 @@ describe('route registry self-check', () => {
         endpoint.url.startsWith('/billing/') &&
         endpoint.url !== '/billing/leshouying/payment-notify',
     );
-    expect(billing).toHaveLength(5);
+    expect(billing).toHaveLength(4);
     for (const endpoint of billing) {
       expect(endpoint.preHandlers?.length).toBeGreaterThanOrEqual(2);
     }
@@ -90,6 +90,7 @@ describe('route registry self-check', () => {
   it('has no retired task, capability, connect, or legacy release endpoints', () => {
     for (const endpoint of ALL_ENDPOINTS) {
       expect(endpoint.url).not.toMatch(/^\/(?:tasks|capabilities|connect|agent-package-releases)/u);
+      expect(endpoint.url).not.toContain('/billing/recharge-orders/by-recovery/');
     }
   });
 });
