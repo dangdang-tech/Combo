@@ -88,6 +88,13 @@ describe('authenticated Combo checkout', () => {
       expect(page.headers.location).toBe(
         '/authz/login?next=' + encodeURIComponent('/payments/' + paymentId),
       );
+      const recoveryPage = await s.app.inject({
+        url: `/payments/${paymentId}?version=2&next=https://untrusted.test`,
+      });
+      expect(recoveryPage.statusCode).toBe(303);
+      expect(recoveryPage.headers.location).toBe(
+        '/authz/login?next=' + encodeURIComponent(`/payments/${paymentId}?version=2`),
+      );
       expect((await s.app.inject({ url: `/v1/payment-checkouts/${paymentId}` })).statusCode).toBe(
         401,
       );
