@@ -38,3 +38,40 @@ Agent Package 和充值接口。历史迁移、历史前缀测试以及 V2 的 `
 
 本步骤不删除账号、资金历史或 MinIO 对象。备份中的上传与分享对象引用供后续独立清理使用。
 失败会回滚本次事务；成功后如需恢复旧表，应在隔离库恢复备份，再定向恢复本批对象，不能覆盖新账目。
+
+## 第二批旧运行与 Builder
+
+`retire-legacy-runtime.sql` 在第一批完成后删除旧 `tasks`、`capabilities`、`sessions`、`turns`、
+`messages`、`artifacts`、五张旧 Builder 表和 `audit_llm_calls`，共十二张表及十二个专属函数。
+它同样只允许 Test 与隔离验证库，默认预检，不进入自动迁移；使用上述相同参数和独立的新整库备份。
+
+执行前先部署不再创建或更新旧恢复请求的 Authoring API，并确认没有旧 Runtime/Worker 连接。
+所有 usage 必须终结，钱包与免费额度预留为零，pending recovery 必须终结且请求正文已经清空。
+不符合条件时停止，不通过批量修改状态或余额伪造完成。第一批已删除的表也必须全部缺席。
+
+十六张当前认证、Agent Package、充值和资金表的原记录保持不变。四张旧历史表
+`usage_charges`、`billing_free_allowances`、`agent_usage_receipts`、`pending_usage_recoveries`
+保留原行、原 ID 和金额，并冻结普通 INSERT、UPDATE、DELETE、TRUNCATE；管理员的 DDL 能力不在此保证内。
+钱包与流水的原扣款关联、充值订单的历史 recovery 关联，以及七个金融和订单校验函数保持不变。
+历史订单仍能查单并在可信通知后正常入账；恢复任务终结不等于支付订单失效。
+
+新增的 `legacy_runtime_evidence` 只保存上述历史主体所需的原 Capability、Session、Turn 和收据指定的
+响应 Message 数据库记录。每笔 charge、每份免费额度、每条 pending recovery 各对应一份证据。
+使用完整 `to_jsonb(row)` 快照，保留 response 的完整 content，不以简写或摘要代替原记录。
+capability 的创作者可以不同于消费用户；Session 则必须精确绑定消费用户与能力。
+旧收据的 digest 原值继续保留，本步骤不补造推理结果或新的加密验收声明。
+
+证据与历史主体双向外键关联，收据的响应 ID 改为引用证据中的同一 charge、owner、Session、Turn
+和 Message。所有新外键和快照形态验证完成后，才移除指向旧运行表的八个外键。
+四张历史表和证据表拒绝普通写入，旧 Worker/Runtime 的表级和列级权限全部撤销；API 保留金融约束
+所需的既有只读权限，不获得证据正文的读取权限。账号与 V2 本身不作变更。
+
+第二批完成后共有十六张当前业务表、四张只读历史表、一张内部证据表，另有 `schema_migrations`。
+账本仍完整到 `0021`。第二批重复执行为无操作；第一批也允许在完整删除后重新检查，不要求已经随
+第二批退出的 Builder 函数继续存在。新空库仍按历史链初始化，随后按获授权环境依次执行两批维护。
+共享库旧消费者停用后，才能通过后续获授权的正式迁移统一结构。
+
+验证应覆盖：备份恢复、保留二十张表逐行不变、七个金融函数不变、全部历史主体和响应证据覆盖、
+新外键已验证、表级和列级权限收口、普通拒写、意外依赖整体回滚、两批重跑，以及实际 API 角色对
+历史非空 recovery 订单的读回和模拟可信通知入账。旧审计及不再在线保留的内容仍可从受控备份恢复；
+对象存储引用也应留在备份中，本 SQL 不删除桶或对象。
