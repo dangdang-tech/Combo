@@ -21,7 +21,6 @@ import {
 
 export interface CreateRechargeOrderInput {
   ownerUserId: string;
-  recoveryUsageId?: string;
   rechargeIntentId: string;
   amountCents: bigint;
   channel: PaymentChannel;
@@ -64,7 +63,6 @@ export function formatLeshouyingTime(date: Date): string {
 function requestFingerprint(input: CreateRechargeOrderInput, amountCents: bigint): string {
   const canonical = JSON.stringify({
     ownerUserId: input.ownerUserId,
-    ...(input.recoveryUsageId ? { recoveryUsageId: input.recoveryUsageId } : {}),
     rechargeIntentId: input.rechargeIntentId,
     amountCents: amountCents.toString(),
     channel: input.channel,
@@ -100,9 +98,9 @@ export async function createRechargeOrder(
   input: CreateRechargeOrderInput,
   clock: BillingServiceClock = SYSTEM_CLOCK,
 ): Promise<CreateRechargeOrderResult> {
+  if ('recoveryUsageId' in input) throw new BillingValidationError();
   const normalizedInput: CreateRechargeOrderInput = {
     ...input,
-    ...(input.recoveryUsageId ? { recoveryUsageId: input.recoveryUsageId.toLowerCase() } : {}),
     rechargeIntentId: input.rechargeIntentId.toLowerCase(),
   };
   validatePaymentSelection(normalizedInput);
@@ -117,9 +115,6 @@ export async function createRechargeOrder(
   const prepared = await repository.prepareRecharge({
     orderNo: `CBR${payTime}${clock.randomHex(8)}`,
     ownerUserId: input.ownerUserId,
-    ...(normalizedInput.recoveryUsageId
-      ? { recoveryUsageId: normalizedInput.recoveryUsageId }
-      : {}),
     clientIdempotencyKey: normalizedInput.rechargeIntentId,
     // 套餐体系已移除：package_id 保留为哨兵，金额由调用方直接提交。
     packageId: 'manual',
@@ -245,23 +240,6 @@ export async function getRechargeOrderByIntentWithReconciliation(
   const order = await repository.findRechargeOrderByIntent(
     input.ownerUserId,
     input.rechargeIntentId.toLowerCase(),
-  );
-  if (!order) return null;
-  return getRechargeOrderWithReconciliation(repository, gateway, {
-    ownerUserId: input.ownerUserId,
-    orderId: order.id,
-    leaseOwner: input.leaseOwner,
-  });
-}
-
-export async function getRechargeOrderByRecoveryWithReconciliation(
-  repository: BillingRepository,
-  gateway: PaymentGateway,
-  input: { ownerUserId: string; recoveryUsageId: string; leaseOwner: string },
-): Promise<RechargeOrder | null> {
-  const order = await repository.findRechargeOrderByRecovery(
-    input.ownerUserId,
-    input.recoveryUsageId.toLowerCase(),
   );
   if (!order) return null;
   return getRechargeOrderWithReconciliation(repository, gateway, {

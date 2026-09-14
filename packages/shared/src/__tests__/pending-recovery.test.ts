@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  CreateRecoveryRechargeOrderBodySchema,
-  RechargeOrderViewSchema,
-  RecoveryRechargeOrderViewSchema,
-} from '../index.js';
+import { CreateRechargeOrderBodySchema, RechargeOrderViewSchema } from '../index.js';
 
 const ORDER_ID = '01982e62-6d6e-7f4d-8fe8-b55f62720b5b';
 const INTENT_ID = '11111111-1111-4111-8111-111111111111';
@@ -24,18 +20,16 @@ function order() {
   };
 }
 
-describe('retained recharge recovery contracts', () => {
+describe('ordinary recharge contracts', () => {
   it('accepts the strict Authoring recharge request and canonicalizes UUIDs', () => {
     expect(
-      CreateRecoveryRechargeOrderBodySchema.parse({
-        recoveryUsageId: USAGE_ID.toUpperCase(),
+      CreateRechargeOrderBodySchema.parse({
         rechargeIntentId: INTENT_ID.toUpperCase(),
         amountCents: 100,
         channel: 'qr',
         payType: 'wechat',
       }),
     ).toEqual({
-      recoveryUsageId: USAGE_ID,
       rechargeIntentId: INTENT_ID,
       amountCents: 100,
       channel: 'qr',
@@ -43,11 +37,20 @@ describe('retained recharge recovery contracts', () => {
     });
   });
 
-  it('keeps recharge order views strict and extends recovery views only with usage identity', () => {
+  it('rejects retired recovery input and keeps ordinary order views strict', () => {
+    expect(
+      CreateRechargeOrderBodySchema.safeParse({
+        recoveryUsageId: USAGE_ID,
+        rechargeIntentId: INTENT_ID,
+        amountCents: 100,
+        channel: 'qr',
+        payType: 'wechat',
+      }).success,
+    ).toBe(false);
     expect(RechargeOrderViewSchema.parse(order())).toEqual(order());
     expect(
-      RecoveryRechargeOrderViewSchema.parse({ ...order(), recoveryUsageId: USAGE_ID }),
-    ).toEqual({ ...order(), recoveryUsageId: USAGE_ID });
+      RechargeOrderViewSchema.safeParse({ ...order(), recoveryUsageId: USAGE_ID }).success,
+    ).toBe(false);
     expect(RechargeOrderViewSchema.safeParse({ ...order(), gatewaySecret: 'hidden' }).success).toBe(
       false,
     );

@@ -37,10 +37,10 @@
 - `env-billing.test.ts` 验证支付默认关闭、测试配置、缺失配置失败关闭和正式网关二次开关。
 - `billing-service.test.ts` 使用内存仓储和假支付网关验证手动金额下单、充值幂等、在途预下单不重复提交或提前查单、超时查原单、通知幂等、未验签通知不持久化、金额不符和成功状态单调性。
 - `billing-reconcile.test.ts` 验证后台清理到期支付动作和查单启动即运行、进程内不重叠、关闭等待、测试配置不联网，以及网关开关关闭时只清理而不查单。
-- `billing-repo.test.ts` 验证预下单结果保存先锁充值订单，并且不会把先到的成功通知降级。
+- `billing-repo.test.ts` 验证旧恢复输入在连接数据库前被拒绝，预下单结果保存先锁充值订单，并保留历史恢复关联、不降级先到的成功通知。
 - `billing-http-boundary.test.ts` 验证支付通知不要求 Cookie 或 Origin，并且错误内容类型、畸形 JSON、请求体上限和限流始终返回固定网关响应。
-- `billing-handler.test.ts` 验证按充值意图恢复订单时使用 owner 范围查询，未找到只返回安全 404 信封。
-- `billing.pg.test.ts` 是显式开启的专用 PostgreSQL 并发测试。只有 `BILLING_PG_TEST=1` 且同时提供管理员 `BILLING_TEST_DATABASE_URL` 与 `combo_api` 的 `BILLING_AUTHORING_TEST_DATABASE_URL` 时运行；所有真实仓储 SQL 使用最小权限角色，管理员连接只负责隔离测试数据的准备和断言。它验证预下单崩溃恢复、并发幂等准备、用户订单 admission、查单退休、支付动作清理、通知与查单并发只入账一次，以及通知早于预下单结果时成功状态不被降级。
+- `billing-handler.test.ts` 验证普通充值输入、旧恢复请求在任何数据库或支付调用前被拒绝，以及按账户与充值意图查询无结果时返回空值。
+- `billing.pg.test.ts` 是显式开启的专用 PostgreSQL 并发测试。只有 `BILLING_PG_TEST=1` 且同时提供管理员 `BILLING_TEST_DATABASE_URL` 与 `combo_api` 的 `BILLING_AUTHORING_TEST_DATABASE_URL` 时运行；所有真实仓储 SQL 使用最小权限角色，管理员连接只负责隔离测试数据的准备和断言。测试只创建用户与普通充值订单，不依赖旧任务、能力、会话或待恢复用量夹具。它验证旧恢复输入拒绝、预下单崩溃恢复、并发幂等准备、用户订单 admission、查单退休、支付动作清理、通知与查单并发只入账一次，以及通知早于预下单结果时成功状态不被降级。
 
 ## 上下游
 

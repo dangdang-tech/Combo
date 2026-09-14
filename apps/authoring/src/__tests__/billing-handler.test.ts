@@ -2,12 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   CreateRechargeOrderSchema,
   getRechargeOrderByIntentHandler,
-  getRechargeOrderByRecoveryHandler,
+  createRechargeOrderHandler,
 } from '../modules/billing/handlers.js';
 
 describe('CreateRechargeOrderSchema boundary', () => {
   const base = {
-    recoveryUsageId: '00000000-0000-4000-8000-000000000001',
     rechargeIntentId: '00000000-0000-4000-8000-000000000002',
     amountCents: 100,
   };
@@ -40,7 +39,6 @@ describe('CreateRechargeOrderSchema boundary', () => {
 
   it('rejects an order without an explicit amount', () => {
     const parsed = CreateRechargeOrderSchema.safeParse({
-      recoveryUsageId: base.recoveryUsageId,
       rechargeIntentId: base.rechargeIntentId,
       channel: 'qr',
       payType: 'wechat',
@@ -85,10 +83,10 @@ describe('CreateRechargeOrderSchema boundary', () => {
 });
 
 describe('billing HTTP handlers', () => {
-  it('returns null without cross-owner leakage when no order is linked to the recovery', async () => {
-    const ownerUserId = '00000000-0000-4000-8000-000000000001';
-    const recoveryUsageId = '00000000-0000-4000-8000-000000000004';
-    const query = vi.fn(async () => ({ rows: [], rowCount: 0 }));
+  it('rejects a retired recovery request before any database or gateway operation', async () => {
+    const query = vi.fn();
+    const connect = vi.fn();
+    const createPayment = vi.fn();
     const reply = {
       statusCode: 200,
       body: undefined as unknown,
@@ -102,25 +100,24 @@ describe('billing HTTP handlers', () => {
       },
     };
     const request = {
-      id: 'trace-billing-recovery-missing',
-      auth: { userId: ownerUserId },
-      params: { recoveryUsageId },
-      log: { error: vi.fn() },
-      server: {
-        infra: {
-          db: { query, connect: vi.fn() },
-          paymentGateway: { configured: false },
-        },
+      id: 'trace-retired-recovery',
+      auth: { userId: '00000000-0000-4000-8000-000000000001' },
+      body: {
+        recoveryUsageId: '00000000-0000-4000-8000-000000000004',
+        rechargeIntentId: '00000000-0000-4000-8000-000000000002',
+        amountCents: 100,
+        channel: 'qr',
+        payType: 'alipay',
       },
+      log: { error: vi.fn() },
+      server: { infra: { db: { query, connect }, paymentGateway: { createPayment } } },
     };
-
-    await getRechargeOrderByRecoveryHandler().call({} as never, request as never, reply as never);
-
-    expect(reply.body).toEqual({ data: null, meta: { traceId: 'trace-billing-recovery-missing' } });
-    expect(query).toHaveBeenCalledWith(
-      expect.stringMatching(/ro[.]recovery_usage_id = \$2[\s\S]*pending_usage_recoveries/u),
-      [ownerUserId, recoveryUsageId],
-    );
+    await createRechargeOrderHandler().call({} as never, request as never, reply as never);
+    expect(reply.statusCode).toBe(400);
+    expect(reply.body).toMatchObject({ error: { traceId: 'trace-retired-recovery' } });
+    expect(query).not.toHaveBeenCalled();
+    expect(connect).not.toHaveBeenCalled();
+    expect(createPayment).not.toHaveBeenCalled();
   });
 
   it('returns an ordinary null result when an owner has no order for the recharge intent', async () => {
