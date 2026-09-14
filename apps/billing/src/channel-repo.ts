@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { withTransaction } from './repo.js';
+import { withTransaction, type Queryable } from './repo.js';
 import {
   ChannelConflictError,
   type ChannelOrder,
@@ -64,7 +64,23 @@ function order(row: Row): ChannelOrder {
   };
 }
 
-export function createPgChannelOrderStore(pool: Pool): ChannelOrderStore {
+export function createPgChannelOrderStore(
+  pool: Pool,
+  options: { recovery?: boolean } = {},
+): ChannelOrderStore {
+  const recovered = async (tx: Queryable, paymentId: string, userId: string) => {
+    if (!options.recovery) return undefined;
+    return (
+      await tx.query<Row>(
+        `SELECT a.payment_id,a.user_id,a.amount,a.gateway_environment,a.institution_no,a.merchant_no,
+      a.pay_trace_no,a.pay_time,a.pay_type,CASE WHEN a.state='closed' THEN 'failed' WHEN a.state IN ('submitting','pending') THEN a.state ELSE 'unknown' END AS submission_state,
+      a.platform_trade_no,a.qr_content,a.action_expires_at,a.expires_at,(p.state='completed') AS completed
+      FROM v2_payment_channel_attempts a JOIN v2_payment_requests p ON p.id=a.payment_id
+      WHERE a.payment_id=$1 AND a.user_id=$2 ORDER BY a.attempt_no LIMIT 1`,
+        [paymentId, userId],
+      )
+    ).rows[0];
+  };
   return {
     prepare: (input) =>
       withTransaction(pool, async (tx) => {
@@ -84,6 +100,8 @@ export function createPgChannelOrderStore(pool: Pool): ChannelOrderStore {
           )
         ).rows[0];
         if (!payment || payment.state === 'required') return null;
+        const adopted = await recovered(tx, payment.id, input.userId);
+        if (adopted) return { order: order(adopted), shouldSubmit: false };
         const current = (await tx.query<Row>(`${SELECT} WHERE o.payment_id=$1`, [payment.id]))
           .rows[0];
         if (current) return { order: order(current), shouldSubmit: false };
@@ -116,7 +134,8 @@ export function createPgChannelOrderStore(pool: Pool): ChannelOrderStore {
           userId,
         ])
       ).rows[0];
-      return row ? order(row) : null;
+      const fallback = (await recovered(pool, paymentId, userId)) ?? row;
+      return fallback ? order(fallback) : null;
     },
     async findNotification(n) {
       const row = (
@@ -129,6 +148,10 @@ export function createPgChannelOrderStore(pool: Pool): ChannelOrderStore {
     },
     recordSubmission: (original, result) =>
       withTransaction(pool, async (tx) => {
+        if (options.recovery)
+          await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1::text,0))', [
+            `v2-channel:${original.paymentId}`,
+          ]);
         const row = (
           await tx.query<Row>(`${SELECT} WHERE o.payment_id=$1 FOR UPDATE OF o`, [
             original.paymentId,
@@ -157,9 +180,28 @@ export function createPgChannelOrderStore(pool: Pool): ChannelOrderStore {
         action_expires_at=CASE WHEN $5::timestamptz>statement_timestamp() THEN $5 ELSE NULL END WHERE payment_id=$1`,
           [original.paymentId, result.status, result.platformTradeNo ?? null, qr, actionExpires],
         );
+        if (options.recovery)
+          await tx.query(
+            `UPDATE v2_payment_channel_attempts SET
+          state=$2,platform_trade_no=COALESCE(platform_trade_no,$3),
+          qr_content=CASE WHEN $5::timestamptz>statement_timestamp() THEN $4 ELSE NULL END,
+          action_expires_at=CASE WHEN $5::timestamptz>statement_timestamp() THEN $5 ELSE NULL END,
+          updated_at=clock_timestamp() WHERE id=$1 AND attempt_no=1 AND state='submitting'`,
+            [
+              original.paymentId,
+              result.status === 'failed' ? 'closed' : result.status,
+              result.platformTradeNo ?? null,
+              qr,
+              actionExpires,
+            ],
+          );
       }),
     recordResult: (original, result, event, source) =>
       withTransaction(pool, async (tx) => {
+        if (options.recovery)
+          await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1::text,0))', [
+            `v2-channel:${original.paymentId}`,
+          ]);
         const row = (
           await tx.query<Row>(`${SELECT} WHERE o.payment_id=$1 FOR UPDATE OF o`, [
             original.paymentId,
@@ -186,6 +228,14 @@ export function createPgChannelOrderStore(pool: Pool): ChannelOrderStore {
           `INSERT INTO v2_payment_channel_events(event_fingerprint,payment_id,source,outcome) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
           [event, original.paymentId, source, result.status],
         );
+        if (options.recovery)
+          await tx.query(
+            `UPDATE v2_payment_channel_attempts SET platform_trade_no=COALESCE(platform_trade_no,$2::text),
+          state=CASE WHEN state='succeeded' OR (state='closed' AND close_verified AND $3<>'succeeded') THEN state
+            WHEN $3='succeeded' THEN 'succeeded' WHEN state IN ('closing','manual_review') THEN state WHEN $3='failed' THEN 'closed' ELSE $3 END,
+          updated_at=clock_timestamp() WHERE id=$1 AND attempt_no=1 AND (platform_trade_no IS NULL OR $2::text IS NULL OR platform_trade_no=$2::text)`,
+            [original.paymentId, result.platformTradeNo ?? null, result.status],
+          );
         const existing = (
           await tx.query<{ payment_id: string; source: string; outcome: string }>(
             `SELECT payment_id,source,outcome FROM v2_payment_channel_events WHERE event_fingerprint=$1`,

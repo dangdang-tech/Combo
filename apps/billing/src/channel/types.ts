@@ -31,6 +31,18 @@ export interface QueryPaymentCommand {
   platformTradeNo?: string;
 }
 
+export interface ClosePaymentCommand extends QueryPaymentCommand {
+  closeTraceNo: string;
+  closeTime: string;
+}
+export interface ClosePaymentResult {
+  status: 'closed' | 'failed' | 'unknown';
+}
+
+export interface RecoveryPaymentGateway extends PaymentGateway {
+  closePayment(command: ClosePaymentCommand): Promise<ClosePaymentResult>;
+}
+
 export interface PaymentQueryResult {
   status: 'succeeded' | 'pending' | 'failed' | 'unknown';
   gatewayResultCode?: string;
@@ -73,8 +85,17 @@ export class PaymentGatewayUnavailableError extends Error {
 }
 
 /** 下单结果不确定时只能查原订单，不允许上层盲目重下。 */
+export type PaymentFailureReason =
+  | 'transport_error'
+  | 'timeout'
+  | 'http_error'
+  | 'invalid_json'
+  | 'invalid_signature'
+  | 'missing_qr'
+  | 'response_validation'
+  | 'storage_error';
 export class PaymentGatewayUncertainError extends Error {
-  constructor() {
+  constructor(readonly reason: PaymentFailureReason = 'response_validation') {
     super('payment gateway outcome is uncertain');
     this.name = 'PaymentGatewayUncertainError';
   }
