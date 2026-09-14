@@ -6,6 +6,7 @@
 
 -- Explicit Test-only stage 2. Preserve historical rows and the canonical ledger.
 BEGIN;
+SET LOCAL search_path = public;
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '60s';
 SELECT set_config('combo.retirement.expected_database', :'expected_database', true),
