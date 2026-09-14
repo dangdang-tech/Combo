@@ -91,6 +91,10 @@ Test，不接入 `foundation → migrate → apps` 或自动 Preview。操作保
 执行删除。操作前在 Tencent2 数据盘完成私密备份与隔离恢复验证，完成后保存绑定源码和备份摘要的
 执行证据。共享库后续退役须另行授权并通过正式迁移统一结构；V2 及数据库角色不在本批范围。
 
+第二批 `db/maintenance/retire-legacy-runtime.sql` 仍是 Test 专用的显式维护：先部署已退役旧充值恢复
+入口的 API，再验证备份恢复并执行。它保留当前业务、资金历史与原账本，删除十二张旧运行/Builder 表，
+通过只读历史证据承接原关联。新脚本也不加入自动迁移或 Preview；共享库旧消费者存在时不得执行。
+
 1. Preview 不建立独立 foundation；它与 Production 共享 `combo-foundation`。
 2. Test 有独立 foundation，数据常驻，不做销毁重建。
 3. 生产正式域名是 `buildwithcombo.com`，部署验证以此为准。
