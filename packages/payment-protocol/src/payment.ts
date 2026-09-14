@@ -54,7 +54,7 @@ function parseUtcTimestamp(value: string): PaymentTimestampParts | null {
   return [year, month, day, hour, minute, second, nanoseconds];
 }
 
-function compareUtcTimestamps(left: string, right: string): -1 | 0 | 1 | null {
+export function compareUtcTimestamps(left: string, right: string): -1 | 0 | 1 | null {
   const leftParts = parseUtcTimestamp(left);
   const rightParts = parseUtcTimestamp(right);
   if (!leftParts || !rightParts) return null;

@@ -15,8 +15,10 @@
 ## 文件
 
 - `src/payment.ts` 定义常量、Zod 校验器和由校验器推导的 TypeScript 类型。
+- `src/recovery.ts` 定义显式 V2 支付恢复视图和恢复请求。逻辑支付、渠道尝试与付款入口的有效期分别表达，V1 对象保持不变。
 - `src/index.ts` 是包的公开入口。
 - `openapi/payment-v1.openapi.json` 是支付 HTTP 接口的 OpenAPI 3.1 描述。
+- `openapi/payment-v2.openapi.json` 描述只由当前登录 Host 调用的恢复接口，不改变标准 402 和三字段交接。
 - `src/__tests__/payment.test.ts` 验证正常形状、状态约束和恶意输入拒绝。
 - `src/__tests__/openapi.test.ts` 验证 OpenAPI 路径、字段和状态与运行时协议一致。
 

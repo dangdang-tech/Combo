@@ -1,0 +1,732 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Combo recoverable checkout API",
+    "version": "2.0.0",
+    "description": "Opt-in extension to the unchanged v1 payment/402/three-field Host protocol. Limits: three total channel attempts, 24 hours from logical payment creation. No automatic payment or business replay."
+  },
+  "paths": {
+    "/v2/payments": {
+      "post": {
+        "operationId": "createRecoverablePayment",
+        "security": [
+          {
+            "currentSession": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Authoritative logical payment and current channel attempt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoverablePaymentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Current identity or payment could not be accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Current identity or payment could not be accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Current identity or payment could not be accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Current identity or payment could not be accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Current identity or payment could not be accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentApiErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Current identity or payment could not be accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentApiErrorResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Authoritative logical payment and current channel attempt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoverablePaymentResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePaymentBody"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/payments/{paymentId}": {
+      "get": {
+        "operationId": "getRecoverablePayment",
+        "security": [
+          {
+            "currentSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authoritative logical payment and current channel attempt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoverablePaymentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Current identity or payment could not be accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Current identity or payment could not be accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Current identity or payment could not be accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Current identity or payment could not be accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Current identity or payment could not be accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentApiErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Current identity or payment could not be accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "paymentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/v2/payments/by-request-key/{requestKey}": {
+      "get": {
+        "operationId": "findRecoverablePayment",
+        "security": [
+          {
+            "currentSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authoritative logical payment and current channel attempt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoverablePaymentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Current identity or payment could not be accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Current identity or payment could not be accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Current identity or payment could not be accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Current identity or payment could not be accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Current identity or payment could not be accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentApiErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Current identity or payment could not be accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "requestKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PaymentRequestKey"
+            }
+          }
+        ]
+      }
+    },
+    "/v2/payments/{paymentId}/recover": {
+      "post": {
+        "operationId": "recoverPayment",
+        "security": [
+          {
+            "currentSession": []
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Authoritative logical payment and current channel attempt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoverablePaymentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Current identity or payment could not be accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Current identity or payment could not be accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Current identity or payment could not be accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Current identity or payment could not be accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Current identity or payment could not be accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentApiErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Current identity or payment could not be accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecoverPaymentBody"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "paymentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "description": "Explicit user action only. Persist recoveryKey before calling. Unknown outcomes use the original key and read the same payment; never issue a new key or call the PSP from a client."
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "currentSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "cb_v2_session"
+      }
+    },
+    "schemas": {
+      "PaymentIdentifier": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:-]{0,126}[A-Za-z0-9])?$"
+      },
+      "PaymentRequestKey": {
+        "type": "string",
+        "minLength": 8,
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:-]{0,126}[A-Za-z0-9])?$"
+      },
+      "PaymentToken": {
+        "type": "string",
+        "minLength": 16,
+        "maxLength": 8192,
+        "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*$"
+      },
+      "PaymentTimestamp": {
+        "type": "string",
+        "format": "date-time",
+        "pattern": "^((?!0000)\\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])T([01]\\d|2[0-3]):([0-5]\\d):([0-5]\\d)(?:\\.(\\d{1,9}))?Z$",
+        "description": "必须是以 Z 结尾且日历日期真实存在的 UTC RFC 3339 时间。"
+      },
+      "PaymentSafeMessage": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512,
+        "pattern": "^[^\\p{Cc}\\p{Cs}\\p{Cf}\\u2028\\u2029]+$",
+        "description": "最多 512 个 Unicode 字符；不接受控制字符、隐藏格式字符、孤立代理码位或 Unicode 行分隔符。"
+      },
+      "PaymentTraceId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256,
+        "pattern": "^[!-~]+$"
+      },
+      "PaymentMoney": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["currency", "amountCents"],
+        "properties": {
+          "currency": {
+            "const": "CNY"
+          },
+          "amountCents": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 15,
+            "pattern": "^[1-9]\\d*$",
+            "description": "人民币整数分，范围 1 至 999999999999999。"
+          }
+        }
+      },
+      "PaymentErrorAction": {
+        "enum": ["retry", "change_input", "escalate", "wait", "none"]
+      },
+      "CreatePaymentBody": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["paymentToken", "requestKey"],
+        "properties": {
+          "paymentToken": {
+            "$ref": "#/components/schemas/PaymentToken"
+          },
+          "requestKey": {
+            "$ref": "#/components/schemas/PaymentRequestKey"
+          }
+        }
+      },
+      "PaymentAction": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "url", "expiresAt"],
+        "properties": {
+          "kind": {
+            "const": "open_url"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "minLength": 1,
+            "maxLength": 4096,
+            "pattern": "^https?://(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)*[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?(?::(?:[1-9]\\d{0,3}|[1-5]\\d{4}|6[0-4]\\d{3}|65[0-4]\\d{2}|655[0-2]\\d|6553[0-5]))?(?:/(?:[A-Za-z0-9._~!$&'()*+,;=:@-]|%[0-9A-Fa-f]{2})*)*(?:\\?(?:[A-Za-z0-9._~!$&'()*+,;=:@/?-]|%[0-9A-Fa-f]{2})*)?$",
+            "description": "Combo 返回的规范 HTTP(S) 收银台地址：小写 scheme 与 ASCII host，不含用户信息或 fragment。"
+          },
+          "expiresAt": {
+            "$ref": "#/components/schemas/PaymentTimestamp"
+          }
+        }
+      },
+      "PaymentApiErrorResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["userMessage", "retriable", "action", "traceId"],
+            "properties": {
+              "userMessage": {
+                "$ref": "#/components/schemas/PaymentSafeMessage"
+              },
+              "retriable": {
+                "type": "boolean"
+              },
+              "action": {
+                "$ref": "#/components/schemas/PaymentErrorAction"
+              },
+              "traceId": {
+                "$ref": "#/components/schemas/PaymentTraceId"
+              }
+            }
+          }
+        }
+      },
+      "RecoverPaymentBody": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "recoveryKey": {
+            "$ref": "#/components/schemas/PaymentRequestKey"
+          },
+          "expectedAttemptId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": ["recoveryKey", "expectedAttemptId"]
+      },
+      "RecoveryCheckout": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "attemptId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "not_started",
+              "submitting",
+              "ready",
+              "missing_qr",
+              "unknown",
+              "closing",
+              "closed",
+              "paid",
+              "manual_review"
+            ]
+          },
+          "expiresAt": {
+            "$ref": "#/components/schemas/PaymentTimestamp"
+          },
+          "canRecover": {
+            "type": "boolean"
+          }
+        },
+        "required": ["status", "canRecover"],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "not_started"
+                }
+              }
+            },
+            "then": {
+              "not": {
+                "required": ["attemptId"]
+              }
+            },
+            "else": {
+              "required": ["attemptId"]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "canRecover": {
+                  "const": true
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "status": {
+                  "enum": ["missing_qr", "unknown", "closed"]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "ready"
+                }
+              }
+            },
+            "then": {
+              "required": ["expiresAt"]
+            }
+          }
+        ]
+      },
+      "RecoverablePaymentView": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "type": "integer",
+            "const": 2
+          },
+          "paymentRequestId": {
+            "$ref": "#/components/schemas/PaymentIdentifier"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["unpaid", "completed", "closed"]
+          },
+          "amount": {
+            "$ref": "#/components/schemas/PaymentMoney"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/PaymentTimestamp"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/PaymentTimestamp"
+          },
+          "recoverableUntil": {
+            "$ref": "#/components/schemas/PaymentTimestamp"
+          },
+          "checkout": {
+            "$ref": "#/components/schemas/RecoveryCheckout"
+          },
+          "action": {
+            "$ref": "#/components/schemas/PaymentAction"
+          }
+        },
+        "required": [
+          "version",
+          "paymentRequestId",
+          "status",
+          "amount",
+          "createdAt",
+          "updatedAt",
+          "recoverableUntil",
+          "checkout"
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "enum": ["completed", "closed"]
+                }
+              }
+            },
+            "then": {
+              "not": {
+                "required": ["action"]
+              },
+              "properties": {
+                "checkout": {
+                  "properties": {
+                    "canRecover": {
+                      "const": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "completed"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "checkout": {
+                  "properties": {
+                    "status": {
+                      "const": "paid"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "description": "Version 2 is opt-in. Original v1 actions never revive. updatedAt >= createdAt; recoverableUntil > createdAt; action expiry > updatedAt and <= recoverableUntil, compared at nanosecond precision."
+      },
+      "RecoverablePaymentResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RecoverablePaymentView"
+          },
+          "meta": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "traceId": {
+                "$ref": "#/components/schemas/PaymentTraceId"
+              }
+            },
+            "required": ["traceId"]
+          }
+        },
+        "required": ["data", "meta"]
+      }
+    }
+  }
+}
