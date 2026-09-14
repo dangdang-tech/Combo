@@ -2,6 +2,58 @@ export type PaymentGatewayEnvironment = 'test' | 'production';
 export type PaymentChannel = 'qr';
 export type PayType = 'wechat' | 'alipay';
 
+export const gatewayFailureReasons = [
+  'timeout',
+  'transport_error',
+  'http_error',
+  'unexpected_content_type',
+  'response_too_large',
+  'missing_response_body',
+  'response_read_error',
+  'invalid_encoding',
+  'invalid_json',
+  'invalid_response',
+  'invalid_signature',
+  'missing_field',
+  'invalid_field',
+  'ownership_mismatch',
+  'missing_qr',
+  'invalid_qr',
+  'unexpected_error',
+] as const;
+export const gatewayDiagnosticFields = [
+  'mch_no',
+  'pay_trace_no',
+  'pay_time',
+  'total_amount',
+  'pay_type',
+  'query_trace_no',
+  'trade_no',
+  'return_code',
+  'result_code',
+  'qrcode',
+] as const;
+export const gatewayTransportCodes = [
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_BODY_TIMEOUT',
+  'UND_ERR_SOCKET',
+  'CERT_HAS_EXPIRED',
+  'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+] as const;
+export interface GatewayFailureDiagnostic {
+  reason: (typeof gatewayFailureReasons)[number];
+  field?: (typeof gatewayDiagnosticFields)[number];
+  httpStatus?: number;
+  timeoutMs?: number;
+  transportCode?: (typeof gatewayTransportCodes)[number];
+}
+
 export interface PaymentAction {
   kind: 'code_url';
   value: string;
@@ -74,7 +126,7 @@ export class PaymentGatewayUnavailableError extends Error {
 
 /** 下单结果不确定时只能查原订单，不允许上层盲目重下。 */
 export class PaymentGatewayUncertainError extends Error {
-  constructor() {
+  constructor(readonly diagnostic: GatewayFailureDiagnostic = { reason: 'unexpected_error' }) {
     super('payment gateway outcome is uncertain');
     this.name = 'PaymentGatewayUncertainError';
   }

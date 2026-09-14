@@ -10,6 +10,9 @@ import {
   InvalidPaymentNotificationError,
   PaymentGatewayUncertainError,
   PaymentGatewayUnavailableError,
+  gatewayDiagnosticFields,
+  gatewayTransportCodes,
+  type GatewayFailureDiagnostic,
   type CreatePaymentCommand,
   type PaymentGateway,
   type PaymentGatewayEnvironment,
@@ -42,10 +45,30 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+function fieldFailure(reason: GatewayFailureDiagnostic['reason'], field: string) {
+  return new PaymentGatewayUncertainError({
+    reason,
+    field: gatewayDiagnosticFields.find((known) => known === field),
+  });
+}
+
+function transportCode(error: unknown): GatewayFailureDiagnostic['transportCode'] {
+  for (const candidate of [error, isRecord(error) ? error.cause : undefined]) {
+    if (isRecord(candidate)) {
+      const known = gatewayTransportCodes.find((code) => code === candidate.code);
+      if (known) return known;
+    }
+  }
+  return undefined;
+}
+
 function requiredString(record: Record<string, unknown>, key: string): string {
   const value = record[key];
   if (typeof value !== 'string' && typeof value !== 'number') {
-    throw new PaymentGatewayUncertainError();
+    throw fieldFailure(
+      value === undefined || value === null ? 'missing_field' : 'invalid_field',
+      key,
+    );
   }
   return String(value);
 }
@@ -54,7 +77,7 @@ function optionalString(record: Record<string, unknown>, key: string): string | 
   const value = record[key];
   if (value === null || value === undefined || value === '') return undefined;
   if (typeof value !== 'string' && typeof value !== 'number') {
-    throw new PaymentGatewayUncertainError();
+    throw fieldFailure('invalid_field', key);
   }
   return String(value);
 }
@@ -89,7 +112,7 @@ function callbackString(
 }
 
 function parseAmount(value: string): bigint {
-  if (!/^(0|[1-9][0-9]{0,18})$/u.test(value)) throw new PaymentGatewayUncertainError();
+  if (!/^(0|[1-9][0-9]{0,18})$/u.test(value)) throw fieldFailure('invalid_field', 'total_amount');
   return BigInt(value);
 }
 
@@ -123,7 +146,7 @@ function parseGatewayDate(value: string | undefined): Date | undefined {
 
 function safeQrContent(value: string): string {
   if (value.length < 1 || value.length > 2_048 || containsControlCharacter(value)) {
-    throw new PaymentGatewayUncertainError();
+    throw fieldFailure('invalid_qr', 'qrcode');
   }
   return value;
 }
@@ -131,7 +154,7 @@ function safeQrContent(value: string): string {
 function gatewayPayType(payType: CreatePaymentCommand['payType']): string {
   if (payType === 'wechat') return '400';
   if (payType === 'alipay') return '300';
-  throw new PaymentGatewayUncertainError();
+  throw fieldFailure('invalid_field', 'pay_type');
 }
 
 function gatewayEnvironment(value: 'TEST' | 'PRODUCTION'): PaymentGatewayEnvironment {
@@ -142,11 +165,11 @@ async function readResponseText(response: Response, signal: AbortSignal): Promis
   const declaredLength = Number(response.headers.get('content-length') ?? 0);
   if (declaredLength > MAX_RESPONSE_BYTES) {
     await response.body?.cancel().catch(() => undefined);
-    throw new PaymentGatewayUncertainError();
+    throw new PaymentGatewayUncertainError({ reason: 'response_too_large' });
   }
 
   const body = response.body;
-  if (!body) throw new PaymentGatewayUncertainError();
+  if (!body) throw new PaymentGatewayUncertainError({ reason: 'missing_response_body' });
   const reader = body.getReader();
   const abort = () => {
     void reader.cancel().catch(() => undefined);
@@ -158,23 +181,33 @@ async function readResponseText(response: Response, signal: AbortSignal): Promis
     while (true) {
       if (signal.aborted) {
         abort();
-        throw new PaymentGatewayUncertainError();
+        throw new PaymentGatewayUncertainError({ reason: 'timeout' });
       }
       const { done, value } = await reader.read();
-      if (signal.aborted) throw new PaymentGatewayUncertainError();
+      if (signal.aborted) throw new PaymentGatewayUncertainError({ reason: 'timeout' });
       if (done) break;
       receivedBytes += value.byteLength;
       if (receivedBytes > MAX_RESPONSE_BYTES) {
         await reader.cancel().catch(() => undefined);
-        throw new PaymentGatewayUncertainError();
+        throw new PaymentGatewayUncertainError({ reason: 'response_too_large' });
       }
       chunks.push(Buffer.from(value));
     }
+  } catch (error) {
+    if (error instanceof PaymentGatewayUncertainError) throw error;
+    throw new PaymentGatewayUncertainError({
+      reason: 'response_read_error',
+      transportCode: transportCode(error),
+    });
   } finally {
     signal.removeEventListener('abort', abort);
     reader.releaseLock();
   }
-  return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks, receivedBytes));
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks, receivedBytes));
+  } catch {
+    throw new PaymentGatewayUncertainError({ reason: 'invalid_encoding' });
+  }
 }
 
 export class LeshouyingPaymentGateway implements PaymentGateway {
@@ -223,6 +256,7 @@ export class LeshouyingPaymentGateway implements PaymentGateway {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.#config.timeoutMs);
     timeout.unref?.();
+    let httpStatus: number | undefined;
     try {
       const response = await this.#fetch(
         `${LESHOUYING_BASE_URLS[this.#config.environment]}${path}`,
@@ -237,25 +271,43 @@ export class LeshouyingPaymentGateway implements PaymentGateway {
           signal: controller.signal,
         },
       );
+      httpStatus = response.status;
       if (!response.ok) {
         void response.body?.cancel().catch(() => undefined);
-        throw new PaymentGatewayUncertainError();
+        throw new PaymentGatewayUncertainError({ reason: 'http_error' });
       }
       const responseType = response.headers.get('content-type');
       if (responseType && !responseType.toLowerCase().startsWith('application/json')) {
         void response.body?.cancel().catch(() => undefined);
-        throw new PaymentGatewayUncertainError();
+        throw new PaymentGatewayUncertainError({ reason: 'unexpected_content_type' });
       }
       const text = await readResponseText(response, controller.signal);
-      const parsed: unknown = JSON.parse(text);
-      if (!isRecord(parsed)) throw new PaymentGatewayUncertainError();
-      const signingParameters = asSigningParameters(parsed);
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        throw new PaymentGatewayUncertainError({ reason: 'invalid_json' });
+      }
+      if (!isRecord(parsed)) throw new PaymentGatewayUncertainError({ reason: 'invalid_response' });
+      let signingParameters: SigningParameters;
+      try {
+        signingParameters = asSigningParameters(parsed);
+      } catch {
+        throw new PaymentGatewayUncertainError({ reason: 'invalid_response' });
+      }
       if (!verifyPaymentSignature(signingParameters, this.#config.institutionKey)) {
-        throw new PaymentGatewayUncertainError();
+        throw new PaymentGatewayUncertainError({ reason: 'invalid_signature' });
       }
       return parsed;
-    } catch {
-      throw new PaymentGatewayUncertainError();
+    } catch (error) {
+      throw new PaymentGatewayUncertainError({
+        ...(error instanceof PaymentGatewayUncertainError
+          ? error.diagnostic
+          : { reason: 'transport_error' as const, transportCode: transportCode(error) }),
+        ...(controller.signal.aborted ? { reason: 'timeout' as const } : {}),
+        httpStatus,
+        timeoutMs: this.#config.timeoutMs,
+      });
     } finally {
       clearTimeout(timeout);
     }
@@ -278,7 +330,7 @@ export class LeshouyingPaymentGateway implements PaymentGateway {
     const response = await this.#post('/v3/prepay', request);
     this.#assertResponseOwnership(response, command);
     if (requiredString(response, 'pay_type') !== gatewayPayType(command.payType)) {
-      throw new PaymentGatewayUncertainError();
+      throw fieldFailure('ownership_mismatch', 'pay_type');
     }
     const returnCode = requiredString(response, 'return_code');
     const resultCode = optionalString(response, 'result_code');
@@ -288,6 +340,8 @@ export class LeshouyingPaymentGateway implements PaymentGateway {
     if (resultCode !== 'PAY_SUCCESS') {
       return { status: 'unknown', ...(resultCode ? { gatewayResultCode: resultCode } : {}) };
     }
+    if (response.qrcode === undefined || response.qrcode === null)
+      throw fieldFailure('missing_qr', 'qrcode');
     const codeUrl = safeQrContent(requiredString(response, 'qrcode'));
     const tradeNo = optionalString(response, 'trade_no');
     return {
@@ -320,26 +374,26 @@ export class LeshouyingPaymentGateway implements PaymentGateway {
     const payTraceNo = requiredString(response, 'pay_trace_no');
     const payTime = requiredString(response, 'pay_time');
     const amount = parseAmount(requiredString(response, 'total_amount'));
-    if (
-      merchantNo !== this.merchantNo ||
-      responseQueryTraceNo !== queryTraceNo ||
-      payTraceNo !== command.payTraceNo ||
-      payTime !== command.payTime ||
-      amount !== command.amountCents
-    ) {
-      throw new PaymentGatewayUncertainError();
+    for (const [field, matches] of [
+      ['mch_no', merchantNo === this.merchantNo],
+      ['query_trace_no', responseQueryTraceNo === queryTraceNo],
+      ['pay_trace_no', payTraceNo === command.payTraceNo],
+      ['pay_time', payTime === command.payTime],
+      ['total_amount', amount === command.amountCents],
+    ] as const) {
+      if (!matches) throw fieldFailure('ownership_mismatch', field);
     }
     const returnCode = requiredString(response, 'return_code');
     const resultCode = optionalString(response, 'result_code');
     const platformTradeNo = optionalString(response, 'trade_no');
     if (command.platformTradeNo !== undefined && platformTradeNo !== command.platformTradeNo) {
-      throw new PaymentGatewayUncertainError();
+      throw fieldFailure('ownership_mismatch', 'trade_no');
     }
     if (returnCode !== 'SUCCESS') {
       return { status: 'unknown', ...(resultCode ? { gatewayResultCode: resultCode } : {}) };
     }
     if (resultCode === 'PAY_SUCCESS') {
-      if (!platformTradeNo) throw new PaymentGatewayUncertainError();
+      if (!platformTradeNo) throw fieldFailure('missing_field', 'trade_no');
       return {
         status: 'succeeded',
         gatewayResultCode: resultCode,
@@ -442,13 +496,16 @@ export class LeshouyingPaymentGateway implements PaymentGateway {
   }
 
   #assertResponseOwnership(response: Record<string, unknown>, command: CreatePaymentCommand): void {
-    if (
-      requiredString(response, 'mch_no') !== this.merchantNo ||
-      requiredString(response, 'pay_trace_no') !== command.payTraceNo ||
-      requiredString(response, 'pay_time') !== command.payTime ||
-      parseAmount(requiredString(response, 'total_amount')) !== command.amountCents
-    ) {
-      throw new PaymentGatewayUncertainError();
+    for (const [field, matches] of [
+      ['mch_no', requiredString(response, 'mch_no') === this.merchantNo],
+      ['pay_trace_no', requiredString(response, 'pay_trace_no') === command.payTraceNo],
+      ['pay_time', requiredString(response, 'pay_time') === command.payTime],
+      [
+        'total_amount',
+        parseAmount(requiredString(response, 'total_amount')) === command.amountCents,
+      ],
+    ] as const) {
+      if (!matches) throw fieldFailure('ownership_mismatch', field);
     }
   }
 }
