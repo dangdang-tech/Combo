@@ -187,7 +187,12 @@ pnpm exec playwright test --config=playwright.config.ts --tsconfig=tsconfig.e2e.
 "${COMPOSE[@]}" logs --no-color >"$LOG_FILE" 2>&1
 while IFS= read -r sentinel; do
   [[ -z "$sentinel" ]] && continue
-  if grep -Fq "$sentinel" "$LOG_FILE"; then fail 'a sensitive sentinel appeared in service logs'; fi
+  if grep -Fq -- "$sentinel" "$LOG_FILE"; then
+    fail 'a sensitive sentinel appeared in service logs'
+  else
+    sentinel_scan_exit=$?
+    [[ "$sentinel_scan_exit" == 1 ]] || fail 'sensitive service log scan failed'
+  fi
 done <"$SENTINEL_FILE"
 
 printf '%s\n' 'Resend authentication end-to-end checks passed.'
