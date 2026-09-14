@@ -85,6 +85,12 @@ API 镜像的构建阶段通过 Creator Worker 的固定 Bun 1.4.2 开发依赖�
 
 ## 9. 明确约束
 
+旧数据库入口的第一批退役通过 `db/maintenance/retire-legacy-entrypoints.sql` 显式执行，目前只允许
+Test，不接入 `foundation → migrate → apps` 或自动 Preview。操作保持 canonical `0000–0021` 账本，
+不创建或跳过新的迁移记录；Test 完成后可以继续部署同一迁移头的 main。共享库仍有旧消费者时不得
+执行删除。操作前在 Tencent2 数据盘完成私密备份与隔离恢复验证，完成后保存绑定源码和备份摘要的
+执行证据。共享库后续退役须另行授权并通过正式迁移统一结构；V2 及数据库角色不在本批范围。
+
 1. Preview 不建立独立 foundation；它与 Production 共享 `combo-foundation`。
 2. Test 有独立 foundation，数据常驻，不做销毁重建。
 3. 生产正式域名是 `buildwithcombo.com`，部署验证以此为准。
