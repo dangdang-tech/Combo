@@ -99,6 +99,18 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+# 仅本次隔离测试使用官方 Quay 上与既有测试栈相同的历史镜像摘要。
+# 覆盖文件随临时目录清理，基础 Compose 与 Kubernetes 镜像配置不变。
+MINIO_IMAGES_OVERRIDE="$TMP_DIR/minio-images.yml"
+printf '%s\n' \
+  'services:' \
+  '  minio:' \
+  '    image: quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e' \
+  '  minio_mc:' \
+  '    image: quay.io/minio/mc@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727' \
+  >"$MINIO_IMAGES_OVERRIDE"
+COMPOSE+=(-f "$MINIO_IMAGES_OVERRIDE")
+
 remember() {
   [[ -n "$1" ]] || fail 'refusing to record an empty sentinel'
   printf '%s\n' "$1" >>"$SENTINEL_FILE"
@@ -175,7 +187,12 @@ pnpm exec playwright test --config=playwright.config.ts --tsconfig=tsconfig.e2e.
 "${COMPOSE[@]}" logs --no-color >"$LOG_FILE" 2>&1
 while IFS= read -r sentinel; do
   [[ -z "$sentinel" ]] && continue
-  if grep -Fq "$sentinel" "$LOG_FILE"; then fail 'a sensitive sentinel appeared in service logs'; fi
+  if grep -Fq -- "$sentinel" "$LOG_FILE"; then
+    fail 'a sensitive sentinel appeared in service logs'
+  else
+    sentinel_scan_exit=$?
+    [[ "$sentinel_scan_exit" == 1 ]] || fail 'sensitive service log scan failed'
+  fi
 done <"$SENTINEL_FILE"
 
 printf '%s\n' 'Resend authentication end-to-end checks passed.'
