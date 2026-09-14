@@ -55,5 +55,6 @@ APPLICATION_V2_ROLE_PG_TEST=1 V2_BILLING_UPGRADE_PG_TEST=1 pnpm --dir db exec vi
 
 pnpm -F @cb/payment-protocol build
 
+# These files share one temporary database, including database-wide invariant checks.
 BILLING_V2_REPO_PG_TEST=1 BILLING_V2_TEST_DATABASE_URL="$DATABASE_URL" \
-  pnpm --dir apps/billing exec vitest run src/__tests__/repo.pg.test.ts src/__tests__/payment-repo.pg.test.ts src/__tests__/channel-repo.pg.test.ts src/__tests__/recovery.pg.test.ts
+  pnpm --dir apps/billing exec vitest run --no-file-parallelism src/__tests__/repo.pg.test.ts src/__tests__/payment-repo.pg.test.ts src/__tests__/channel-repo.pg.test.ts src/__tests__/recovery.pg.test.ts
