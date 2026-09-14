@@ -1,0 +1,66 @@
+{
+  "comboBase": "5f6c7c6679dff298540ea8f204ae441cf8b71fc2",
+  "headBeforeCommit": "5f6c7c6679dff298540ea8f204ae441cf8b71fc2",
+  "dirty": true,
+  "mode": "LOCAL_MACOS_CHECKS_WITH_MOCK_FRONTEND",
+  "node": "25.6.1",
+  "pnpm": "11.0.9",
+  "checks": [
+    {
+      "command": "pnpm -F @cb/shared build",
+      "exitCode": 0,
+      "log": "combo-shared-build.log",
+      "logSha256": "faeaa94bcf7012d86f91ca647580449f56a263fb7eaf572c54789764f60a9b8f"
+    },
+    {
+      "command": "pnpm install --frozen-lockfile",
+      "exitCode": 0,
+      "log": "combo-install.log",
+      "logSha256": "321456c2df3003f1455cda51464ecc679f9db8ac6077d047bf9caa08a49e6bc2"
+    },
+    {
+      "command": "pnpm format:check",
+      "startedAt": "2026-09-14T15:26:06.003708+00:00",
+      "finishedAt": "2026-09-14T15:26:10.733252+00:00",
+      "exitCode": 0,
+      "log": "combo-format-check-final.log",
+      "logSha256": "1d66faad74f5e8709353f7288592866bd3a9095da1174a916e7aa632949971e2"
+    },
+    {
+      "command": "pnpm lint",
+      "startedAt": "2026-09-14T15:26:10.733762+00:00",
+      "finishedAt": "2026-09-14T15:26:14.040269+00:00",
+      "exitCode": 0,
+      "log": "combo-lint-final.log",
+      "logSha256": "960f1eb37ac4d28430af9bef2c98f32333254854ffde619330f53d373ce0f632"
+    },
+    {
+      "command": "pnpm typecheck",
+      "startedAt": "2026-09-14T15:26:14.040744+00:00",
+      "finishedAt": "2026-09-14T15:26:18.608506+00:00",
+      "exitCode": 0,
+      "log": "combo-typecheck-final.log",
+      "logSha256": "991220287f3c7192d95f9586a05c8ae422746c906a7ef2c625e2f19dacf34c0d"
+    },
+    {
+      "command": "pnpm typecheck:test",
+      "startedAt": "2026-09-14T15:26:18.609006+00:00",
+      "finishedAt": "2026-09-14T15:26:25.831385+00:00",
+      "exitCode": 0,
+      "log": "combo-typecheck-test-final.log",
+      "logSha256": "4108b09fb2903a4c0ff392bd8448c7a0b33595d74e97fe0582bdc5ba4afe2198"
+    },
+    {
+      "command": "pnpm test:local",
+      "startedAt": "2026-09-14T15:26:25.831827+00:00",
+      "finishedAt": "2026-09-14T15:27:29.268566+00:00",
+      "exitCode": 0,
+      "log": "combo-test-local-final.log",
+      "logSha256": "4ef80bb11a4bd46a9e25d02144564efeded3fa3af136f2dcd26bc09c7df44f03"
+    }
+  ],
+  "rawLogs": "Retained in local acceptance artifacts; hashes supplied here.",
+  "externalWrites": 0,
+  "realPayments": 0,
+  "prReadiness": "PENDING_ROOT_COMMIT_PUSH_UPSTREAM_AND_FINAL_CHECK"
+}

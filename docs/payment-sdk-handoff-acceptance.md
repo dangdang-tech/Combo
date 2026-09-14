@@ -67,3 +67,9 @@
 - SDK 仍未发布正式 Tag、Release 与锁定工件。
 
 因此当前状态保持 `NOT_RUN / PARTIAL`，不得关闭 Issue #308。
+
+## 观照主动充值增量的前端设计入口
+
+Combo #357 已接受 ChatGua 式主动套餐、业务点数和 KOL 实收增量；这不修改本文旧 v1 的不足余额支付合同。[观照前端交接包](../tests/payment-sdk-handoff/guanzhao-ui/README.md) 提供十个可切换界面、深浅主题、窄屏布局、原问题返回和低敏浏览器证明。其金额、余额与订单均为本地模拟，真实充值、账务、持久化恢复与后端接入仍未完成。SDK 的关联增量位于 [PR #7](https://github.com/dangdang-tech/combo-agent-sdk/pull/7)，该 PR 尚未合并。
+
+本地演示已验证充值后回到原问题再确认，以及未知结果继续查询同一订单；这些记录只覆盖前端设计，不提升本文 `NOT_RUN / PARTIAL` 状态，也不授权生产支付或部署。PNG 保留于本地验收产物，仓内索引记录摘要，实际视觉可运行交接目录的独立预览。

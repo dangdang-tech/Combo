@@ -1,0 +1,28 @@
+{
+  "mode": "LOCAL_REACT_DEMO",
+  "success": {
+    "screen": "success",
+    "balance": "340点",
+    "order": "GZ-DEMO-0914-001"
+  },
+  "result": {
+    "screen": "orders",
+    "balance": "310点",
+    "orders": [
+      {
+        "id": "GZ-DEMO-0914-001",
+        "status": "已到账"
+      },
+      {
+        "id": "GZ-DEMO-0912-001",
+        "status": "已到账"
+      },
+      {
+        "id": "GZ-DEMO-0910-001",
+        "status": "已过期"
+      }
+    ],
+    "consumption": "本次使用\n\n事业 · 2027 年 · 继续解读\n\n那 2027 年呢？适合换一个工作方向吗？\n\n−30 点\n已确认"
+  },
+  "realPayments": 0
+}

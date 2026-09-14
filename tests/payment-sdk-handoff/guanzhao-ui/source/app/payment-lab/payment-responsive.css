@@ -1,0 +1,549 @@
+@media (max-width: 1050px) {
+  .gpay-header {
+    padding-inline: 32px;
+  }
+  .gpay-main {
+    padding-inline: 32px;
+  }
+  .gpay-columns {
+    gap: 28px;
+    grid-template-columns: minmax(0, 1fr) 270px;
+  }
+  .gpay-plan {
+    padding: 20px 14px;
+  }
+  .gpay-plans {
+    gap: 10px;
+  }
+  .gpay-plan-points {
+    font-size: 39px;
+  }
+  .gpay-side-card {
+    padding: 22px;
+  }
+  .gpay-section-title {
+    align-items: start;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .gpay-task-layout {
+    gap: 48px;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 390px);
+  }
+  .gpay-checkout-heading {
+    align-items: start;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .gpay-checkout-grid {
+    grid-template-columns: minmax(0, 1fr) 290px;
+    gap: 24px;
+  }
+  .gpay-payment-card {
+    padding: 28px;
+  }
+  .gpay-receipt {
+    padding: 24px;
+  }
+}
+@media (max-width: 780px) {
+  .gpay-preview {
+    padding: 10px 20px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .gpay-preview > div:first-child {
+    width: 100%;
+  }
+  .gpay-preview-note {
+    font-size: 10px;
+  }
+  .gpay-preview-controls {
+    width: 100%;
+  }
+  .gpay-preview select {
+    flex: 1;
+  }
+  .gpay-header {
+    padding: 16px 24px;
+    min-height: 82px;
+  }
+  .gpay-brand span {
+    display: none;
+  }
+  .gpay-header nav {
+    gap: 18px;
+  }
+  .gpay-header nav > button:not(.guanzhao-theme-toggle) {
+    font-size: 13px;
+  }
+  .gpay-main {
+    padding: 34px 24px 42px;
+  }
+  .gpay-intro {
+    gap: 28px;
+    padding-bottom: 30px;
+    margin-bottom: 28px;
+  }
+  .gpay-intro > div > p:last-child {
+    max-width: 260px;
+    font-size: 13px;
+  }
+  .gpay-balance {
+    min-width: 130px;
+    padding-left: 26px;
+  }
+  .gpay-balance > p {
+    font-size: 56px;
+  }
+  .gpay-columns {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 34px;
+  }
+  .gpay-section-title {
+    flex-direction: row;
+    align-items: center;
+  }
+  .gpay-plan {
+    padding: 22px 20px;
+    min-height: 245px;
+  }
+  .gpay-plan-points {
+    font-size: 43px;
+  }
+  .gpay-side-card .gpay-question {
+    gap: 14px;
+  }
+  .gpay-side-card {
+    padding: 26px;
+  }
+  .gpay-side-card .gpay-button {
+    width: auto;
+    padding-inline: 24px;
+  }
+  .gpay-task-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 32px;
+    padding-top: 0;
+  }
+  .gpay-task-intro h1 {
+    margin-bottom: 24px;
+  }
+  .gpay-task-intro > .gpay-text-link {
+    margin-top: 18px;
+  }
+  .gpay-task-intro .gpay-question {
+    max-width: none;
+  }
+  .gpay-task-intro .gpay-question > .gpay-muted {
+    display: none;
+  }
+  .gpay-action-card {
+    padding: 28px;
+  }
+  .gpay-checkout-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .gpay-receipt {
+    padding: 28px;
+  }
+  .gpay-receipt-plan {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+  .gpay-payment-card {
+    padding: 30px;
+  }
+  .gpay-simulator > span {
+    width: calc(100% - 72px);
+  }
+  .gpay-orders-heading h1 {
+    font-size: 34px;
+  }
+  .gpay-balance-small {
+    min-width: 130px;
+  }
+  .gpay-table-heading,
+  .gpay-order-row {
+    grid-template-columns: minmax(0, 1fr) 85px 70px 50px;
+    gap: 12px;
+    padding-inline: 8px;
+  }
+  .gpay-order-symbol {
+    display: none;
+  }
+  .gpay-history-foot {
+    align-items: start;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .gpay-footer {
+    padding-inline: 24px;
+  }
+}
+@media (max-width: 480px) {
+  .gpay-preview {
+    padding-inline: 16px;
+  }
+  .gpay-preview > div:first-child {
+    gap: 7px;
+    font-size: 11px;
+  }
+  .gpay-preview-note {
+    padding-left: 7px;
+  }
+  .gpay-preview-controls {
+    gap: 8px;
+  }
+  .gpay-preview-controls label {
+    font-size: 10px;
+  }
+  .gpay-preview-controls > button > span {
+    display: none;
+  }
+  .gpay-header {
+    padding: 14px 20px;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .gpay-brand {
+    font-size: 28px !important;
+  }
+  .gpay-header nav {
+    flex: 1;
+    justify-content: end;
+    gap: 16px;
+  }
+  .gpay-header nav > button:not(.guanzhao-theme-toggle) {
+    font-size: 12px;
+  }
+  .gpay-header .guanzhao-theme-toggle {
+    width: 36px;
+    min-width: 36px;
+    padding: 8px;
+  }
+  .gpay-header .guanzhao-theme-toggle span {
+    display: none;
+  }
+  .gpay-main {
+    padding-inline: 20px;
+    padding-top: 28px;
+  }
+  .gpay-intro {
+    align-items: end;
+    gap: 18px;
+  }
+  .gpay-intro h1 {
+    font-size: 32px;
+  }
+  .gpay-eyebrow {
+    font-size: 9px;
+    letter-spacing: 0.1em;
+  }
+  .gpay-intro > div > p:last-child {
+    font-size: 12px;
+    max-width: 195px;
+  }
+  .gpay-balance {
+    padding-left: 16px;
+    min-width: 93px;
+  }
+  .gpay-balance > span {
+    font-size: 11px;
+  }
+  .gpay-balance > p {
+    font-size: 43px;
+  }
+  .gpay-balance small {
+    font-size: 11px;
+    margin-left: 7px;
+  }
+  .gpay-balance button {
+    gap: 9px;
+    font-size: 11px;
+  }
+  .gpay-balance button svg {
+    width: 13px;
+  }
+  .gpay-page h2 {
+    font-size: 22px;
+  }
+  .gpay-section-title {
+    gap: 8px;
+  }
+  .gpay-demo-label {
+    font-size: 9px;
+    padding: 4px 6px;
+  }
+  .gpay-plans {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .gpay-plan {
+    padding: 18px 20px;
+    min-height: auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 100px;
+    column-gap: 14px;
+    row-gap: 7px;
+  }
+  .gpay-plan-top {
+    grid-column: 1 / -1;
+    font-size: 11px;
+  }
+  .gpay-plan-points {
+    margin-top: 4px;
+    font-size: 42px;
+    grid-column: 1;
+  }
+  .gpay-plan-price {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: end;
+    justify-content: end;
+    font-size: 20px;
+    padding-bottom: 8px;
+  }
+  .gpay-plan-note {
+    padding-top: 0;
+    grid-column: 1 / -1;
+    font-size: 11px;
+  }
+  .gpay-purchase-row {
+    gap: 14px;
+    padding-block: 22px;
+  }
+  .gpay-purchase-row strong {
+    font-size: 14px;
+  }
+  .gpay-purchase-row p {
+    font-size: 11px;
+  }
+  .gpay-button {
+    padding-inline: 16px;
+    gap: 14px;
+  }
+  .gpay-purchase-row .gpay-button {
+    white-space: nowrap;
+  }
+  .gpay-reassurance {
+    font-size: 11px;
+    padding-bottom: 20px;
+  }
+  .gpay-explainer {
+    gap: 20px;
+  }
+  .gpay-explainer h3 {
+    font-size: 17px;
+  }
+  .gpay-explainer p {
+    font-size: 11px;
+  }
+  .gpay-side-card {
+    padding: 24px;
+  }
+  .gpay-question-text {
+    font-size: 22px;
+  }
+  .gpay-task-intro h1 {
+    font-size: 35px;
+  }
+  .gpay-task-intro .gpay-question {
+    padding-left: 18px;
+  }
+  .gpay-task-intro .gpay-question-text {
+    font-size: 22px;
+  }
+  .gpay-action-card {
+    padding: 24px;
+    gap: 18px;
+  }
+  .gpay-action-card h2 {
+    font-size: 24px;
+  }
+  .gpay-back {
+    margin-top: -8px;
+    margin-bottom: 20px;
+  }
+  .gpay-checkout-heading {
+    margin-bottom: 26px;
+  }
+  .gpay-checkout-heading h1 {
+    font-size: 30px;
+  }
+  .gpay-steps {
+    gap: 18px;
+    font-size: 11px;
+  }
+  .gpay-payment-card {
+    padding: 24px;
+    gap: 18px;
+  }
+  .gpay-payment-card-title h2 {
+    font-size: 20px;
+  }
+  .gpay-payment-card > p.gpay-muted {
+    font-size: 13px;
+  }
+  .gpay-payment-card > p.gpay-small {
+    font-size: 11px;
+  }
+  .gpay-pay-amount strong {
+    font-size: 56px;
+  }
+  .gpay-checkout-placeholder {
+    padding: 24px 15px;
+  }
+  .gpay-checkout-placeholder p {
+    font-size: 12px;
+  }
+  .gpay-receipt {
+    padding: 24px;
+  }
+  .gpay-receipt-plan strong {
+    font-size: 36px;
+  }
+  .gpay-waiting {
+    padding: 16px;
+    font-size: 12px;
+  }
+  .gpay-simulator {
+    gap: 10px;
+    padding: 14px;
+    font-size: 11px;
+  }
+  .gpay-simulator > span {
+    width: calc(100% - 56px);
+  }
+  .gpay-simulator > button {
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+  .gpay-orders-heading {
+    gap: 18px;
+    align-items: end;
+    margin-bottom: 26px;
+    padding-bottom: 26px;
+  }
+  .gpay-orders-heading h1 {
+    font-size: 30px;
+  }
+  .gpay-orders-heading p.gpay-muted {
+    font-size: 12px;
+  }
+  .gpay-table-heading {
+    display: none;
+  }
+  .gpay-order-table {
+    border-top: 1px solid var(--border);
+  }
+  .gpay-order-row {
+    grid-template-columns: minmax(0, 1fr) 95px;
+    gap: 10px;
+    padding: 20px 0;
+  }
+  .gpay-order-description {
+    grid-column: 1;
+  }
+  .gpay-order-description h3 {
+    font-size: 15px;
+  }
+  .gpay-order-description h3 span {
+    font-size: 11px;
+  }
+  .gpay-order-amount {
+    grid-column: 2;
+    text-align: right;
+    align-self: start;
+  }
+  .gpay-order-row > .gpay-status {
+    grid-column: 1;
+    min-height: 36px;
+  }
+  .gpay-order-link {
+    grid-column: 2;
+  }
+  .gpay-consumption {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 20px;
+    gap: 12px;
+  }
+  .gpay-consumption > div {
+    grid-column: 1 / -1;
+  }
+  .gpay-consumption > .gpay-status {
+    justify-self: end;
+  }
+  .gpay-history-foot > p {
+    align-items: start;
+  }
+  .gpay-history-foot > p > svg {
+    margin-top: 3px;
+  }
+  .gpay-footer {
+    padding-inline: 20px;
+    font-size: 10px;
+    gap: 12px;
+  }
+}
+@media (max-width: 360px) {
+  .gpay-header {
+    gap: 5px;
+    padding-inline: 16px;
+  }
+  .gpay-header nav {
+    gap: 10px;
+  }
+  .gpay-brand {
+    font-size: 26px !important;
+  }
+  .gpay-main {
+    padding-inline: 16px;
+  }
+  .gpay-preview-note {
+    font-size: 9px;
+  }
+  .gpay-intro {
+    gap: 12px;
+  }
+  .gpay-intro h1 {
+    font-size: 28px;
+  }
+  .gpay-intro .gpay-eyebrow {
+    font-size: 8px;
+  }
+  .gpay-balance {
+    min-width: 84px;
+    padding-left: 12px;
+  }
+  .gpay-balance > p {
+    font-size: 38px;
+  }
+  .gpay-section-title h2 {
+    font-size: 20px;
+  }
+  .gpay-demo-label {
+    font-size: 8px;
+  }
+  .gpay-button {
+    font-size: 13px !important;
+    padding-inline: 13px;
+  }
+  .gpay-purchase-row {
+    gap: 10px;
+  }
+  .gpay-payment-card,
+  .gpay-action-card,
+  .gpay-receipt {
+    padding: 20px;
+  }
+  .gpay-steps {
+    gap: 12px;
+    font-size: 10px;
+  }
+  .gpay-checkout-heading h1 {
+    font-size: 27px;
+  }
+}

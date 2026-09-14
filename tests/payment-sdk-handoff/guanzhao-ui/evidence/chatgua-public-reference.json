@@ -1,0 +1,30 @@
+{
+  "retrievedAt": "2026-09-14T15:30:00Z",
+  "page": "https://chatgua.com/",
+  "asset": "https://chatgua.com/assets/index-BtwxVW7G.js",
+  "sha256": "08789a7ea83cd808ec75b6c1fe5332027c17a543ef3333b038a89ff949451920",
+  "bytes": 619271,
+  "evidenceLayer": "PUBLIC_FRONTEND_CODE_ONLY",
+  "configuredPlans": [
+    {
+      "points": 250,
+      "usd": 10
+    },
+    {
+      "points": 525,
+      "usd": 20,
+      "badge": "热门"
+    },
+    {
+      "points": 1350,
+      "usd": 50,
+      "badge": "最划算"
+    }
+  ],
+  "flowSummary": "Select package, request hosted checkout, mark pending, redirect, inspect return result, confirm the same checkout session, refresh balance.",
+  "authenticatedUi": "NOT_RUN",
+  "paymentApiCalls": 0,
+  "ordersCreated": 0,
+  "realPayments": 0,
+  "thirdPartySourceIncluded": false
+}

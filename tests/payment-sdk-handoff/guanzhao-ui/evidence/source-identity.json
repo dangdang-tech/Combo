@@ -1,0 +1,72 @@
+{
+  "recordedAt": "2026-09-14T15:21:09.457282+00:00",
+  "mode": "LOCAL_REACT_DEMO",
+  "sourceBaseline": "e39fa29d80a730dabcd229e5dae21f79c3fbc580",
+  "comboBase": "5f6c7c6679dff298540ea8f204ae441cf8b71fc2",
+  "comboBranch": "codex/357-guanzhao-payment-ui",
+  "sourceDirty": true,
+  "frontendFiles": [
+    {
+      "path": "payment-lab/page.tsx",
+      "guanzhaoSourceSha256": "703605325d5dca075b062e34ce72d554ad07774327b07756a538ceff4ea8a836",
+      "handoffSha256": "ba5b1882088b16064782a779e1487a41364e3b190c19998b7955539b737b4ce8"
+    },
+    {
+      "path": "payment-lab/payment-lab.tsx",
+      "guanzhaoSourceSha256": "9fd0e4485ddcc5c0012490c8303987583c31316ec81783c590081f5cd6d327eb",
+      "handoffSha256": "bd31f04bfc85e07546f12c7e876919831454650a837ca98314388ae54e36a630"
+    },
+    {
+      "path": "payment-lab/payment-lab.css",
+      "guanzhaoSourceSha256": "f8b63da69737e7f548077872547323206ca1259dc891bb9d5a2640a2dcd9fc84",
+      "handoffSha256": "9d31727cdfb2c042e97ad134a2c95262b4f3231793ff9a6472eb2f6944d4a422"
+    },
+    {
+      "path": "theme-toggle.tsx",
+      "guanzhaoSourceSha256": "cfea5bc9d1fc107e8dd571a2ce7eb5b4c15412bd98eca738dfb2eba4630719a8",
+      "handoffSha256": "c6a8c9557af79a43c5e0f7b32c6aee646c7e351b92cd3235dba8c40522783702"
+    }
+  ],
+  "formatting": "Repository Prettier formatting; CSS split into base and responsive files in the original cascade order; standalone handoff built and browser exercised separately.",
+  "realPayments": 0,
+  "realOrdersCreated": 0,
+  "productionChanges": 0,
+  "browserWidthThemeStateChecks": 60,
+  "browserWidthThemeStateFailures": 0,
+  "handoffLocation": "tests/payment-sdk-handoff/guanzhao-ui",
+  "styles": {
+    "orderedFiles": [
+      "source/app/payment-lab/payment-lab.css",
+      "source/app/payment-lab/payment-responsive.css"
+    ],
+    "concatenatedSha256": "f8b63da69737e7f548077872547323206ca1259dc891bb9d5a2640a2dcd9fc84",
+    "concatenatedMatchesOriginalSource": true
+  },
+  "screenshots": [
+    {
+      "file": "1512-light-wallet.png",
+      "sha256": "fcab9902ebd6c2ff24333bb929e023f08a71b1cc7563e56f778a8340dbd7fa1d",
+      "bytes": 139455
+    },
+    {
+      "file": "desktop-checkout-light.png",
+      "sha256": "921eb2c562db505ad5442a0286f2edbcab256ddeb3a71063df993b9f11423cd0",
+      "bytes": 104126
+    },
+    {
+      "file": "mobile-unknown-light.png",
+      "sha256": "abf095aa77f80234562dc3f6c23755aa64766347154736a0e0f0edb6e9934bb7",
+      "bytes": 68822
+    },
+    {
+      "file": "390-light-success.png",
+      "sha256": "44978e7c902027438acaf04f976708102681e630c3574e0dc84b70acbdaefd7d",
+      "bytes": 50964
+    },
+    {
+      "file": "390-light-confirm.png",
+      "sha256": "27ef28da721e9bb1ee07faecf8687426eac748d93b08dd9ee3b58f03f1d70de8",
+      "bytes": 65444
+    }
+  ]
+}

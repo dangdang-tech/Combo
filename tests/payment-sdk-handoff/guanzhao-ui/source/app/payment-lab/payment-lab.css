@@ -1,0 +1,996 @@
+.gpay-page {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  color: var(--foreground);
+  background: var(--background);
+  font-size: 16px;
+  line-height: 1.65;
+}
+.gpay-page :is(h1, h2, h3, p, dl, dd) {
+  margin: 0;
+}
+.gpay-page :is(h1, h2, h3) {
+  font-family: var(--font-display);
+  font-weight: 500;
+}
+.gpay-page h1 {
+  font-size: clamp(36px, 3.5vw, 54px);
+  line-height: 1.4;
+  letter-spacing: 0.025em;
+}
+.gpay-page h2 {
+  font-size: 25px;
+  line-height: 1.5;
+}
+.gpay-page h3 {
+  font-size: 19px;
+}
+.gpay-page button {
+  font: inherit;
+}
+.gpay-page button:focus-visible,
+.gpay-page select:focus-visible {
+  outline: 2px solid var(--guanzhao-selection-ring);
+  outline-offset: 4px;
+}
+.gpay-preview {
+  padding: 11px 32px;
+  background: var(--secondary);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+}
+.gpay-preview > div,
+.gpay-preview-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.gpay-preview-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--guanzhao-accent-text);
+  border-radius: 50%;
+}
+.gpay-preview-note {
+  color: var(--muted-foreground);
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+}
+.gpay-preview select {
+  padding: 8px 26px 8px 10px;
+  font: inherit;
+  background: var(--background);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  min-height: 36px;
+}
+.gpay-preview button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px;
+  min-height: 36px;
+  background: none;
+  border: 0;
+  color: var(--muted-foreground);
+}
+.gpay-header {
+  min-height: 102px;
+  padding: 20px 56px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.gpay-brand {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  background: none;
+  border: 0;
+  color: inherit;
+  padding: 0;
+  font-family: var(--font-display) !important;
+  font-size: 31px !important;
+  letter-spacing: 0.16em;
+}
+.gpay-brand span {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  color: var(--muted-foreground);
+  border-left: 1px solid var(--border);
+  padding-left: 20px;
+}
+.gpay-header nav {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+.gpay-header nav > button:not(.guanzhao-theme-toggle) {
+  min-height: 44px;
+  font-size: 14px;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: none;
+  color: var(--muted-foreground);
+  padding: 10px 0;
+}
+.gpay-header nav > button[aria-current='page'] {
+  color: var(--guanzhao-accent-text);
+  border-bottom-color: var(--guanzhao-accent-text);
+}
+.gpay-main {
+  max-width: 1248px;
+  width: 100%;
+  margin-inline: auto;
+  flex: 1;
+  padding: 58px 40px 64px;
+}
+.gpay-eyebrow {
+  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.13em;
+  color: var(--guanzhao-accent-text);
+}
+.gpay-muted {
+  color: var(--muted-foreground);
+}
+.gpay-small {
+  font-size: 13px;
+}
+.gpay-accent {
+  color: var(--guanzhao-accent-text);
+}
+.gpay-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.gpay-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--guanzhao-accent-text);
+  border: 1px solid var(--guanzhao-accent-text);
+  font-family: var(--font-display);
+}
+.gpay-intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 48px;
+  padding-bottom: 48px;
+  margin-bottom: 36px;
+  border-bottom: 1px solid var(--border);
+}
+.gpay-intro h1 {
+  margin: 14px 0 18px;
+}
+.gpay-intro > div > p:last-child {
+  color: var(--muted-foreground);
+  font-size: 15px;
+}
+.gpay-balance {
+  min-width: 230px;
+  border-left: 1px solid var(--border);
+  padding-left: 40px;
+}
+.gpay-balance > span {
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+.gpay-balance > p {
+  font-family: var(--font-display);
+  font-size: 72px;
+  line-height: 1.5;
+  letter-spacing: -0.04em;
+}
+.gpay-balance small {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  margin-left: 14px;
+  letter-spacing: 0;
+}
+.gpay-balance button {
+  background: none;
+  border: 0;
+  color: var(--muted-foreground);
+  display: inline-flex;
+  align-items: center;
+  gap: 24px;
+  min-height: 44px;
+  padding: 0;
+  font-size: 13px;
+}
+.gpay-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 304px;
+  gap: 44px;
+  align-items: start;
+}
+.gpay-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+.gpay-demo-label {
+  font-size: 11px;
+  color: var(--muted-foreground);
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.gpay-plans {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.gpay-plan {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: inherit;
+  padding: 22px 20px 24px;
+  min-height: 261px;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
+}
+.gpay-plan:hover {
+  background: var(--card);
+}
+.gpay-plan.is-selected {
+  background: var(--card);
+  border-color: var(--guanzhao-accent-text);
+  box-shadow: inset 0 3px 0 var(--guanzhao-accent-text);
+}
+.gpay-plan-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted-foreground);
+  width: 100%;
+}
+.gpay-radio {
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 16px;
+}
+.is-selected .gpay-radio {
+  background: var(--guanzhao-accent-text);
+  border-color: var(--guanzhao-accent-text);
+  color: var(--background);
+}
+.gpay-plan-points {
+  font-family: var(--font-display);
+  font-size: 46px;
+  line-height: 1.4;
+  letter-spacing: -0.035em;
+  margin-top: 28px;
+}
+.gpay-plan-points small {
+  font-size: 12px;
+  font-family: var(--font-sans);
+  margin-left: 7px;
+  letter-spacing: 0;
+}
+.gpay-plan-price {
+  font-size: 17px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.gpay-plan-price small {
+  font-size: 10px;
+  color: var(--muted-foreground);
+}
+.gpay-plan-note {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  padding-top: 22px;
+  margin-top: auto;
+}
+.gpay-purchase-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding-block: 26px;
+  border-bottom: 1px solid var(--border);
+}
+.gpay-purchase-row strong {
+  font-weight: 500;
+}
+.gpay-purchase-row p {
+  font-size: 13px;
+  margin-top: 3px;
+}
+.gpay-button {
+  min-height: 50px;
+  border: 1px solid var(--guanzhao-accent-text);
+  background: var(--guanzhao-accent-text);
+  color: var(--background);
+  padding: 12px 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  line-height: 1.5;
+  text-decoration: none;
+}
+.gpay-button:hover {
+  filter: brightness(0.93);
+}
+.gpay-button-secondary {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--foreground);
+}
+.gpay-reassurance {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--muted-foreground);
+  padding-block: 18px 30px;
+  font-size: 12px;
+}
+.gpay-reassurance svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.gpay-explainer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+  padding-top: 4px;
+}
+.gpay-explainer > div > span {
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--guanzhao-accent-text);
+}
+.gpay-explainer h3 {
+  margin-top: 7px;
+  font-size: 18px;
+}
+.gpay-explainer p {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.gpay-side-card {
+  background: var(--secondary);
+  padding: 26px;
+}
+.gpay-question {
+  display: grid;
+  gap: 18px;
+}
+.gpay-side-card > .gpay-question {
+  margin-top: 22px;
+}
+.gpay-question-text {
+  font-family: var(--font-display);
+  font-size: 23px;
+  line-height: 1.65;
+}
+.gpay-question > .gpay-muted {
+  font-size: 13px;
+}
+.gpay-question-compact {
+  gap: 12px;
+}
+.gpay-question-compact .gpay-question-text {
+  font-size: 20px;
+}
+.gpay-divider {
+  border-top: 1px solid var(--border);
+  margin-block: 26px;
+}
+.gpay-detail-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-block: 8px;
+  font-size: 13px;
+}
+.gpay-detail-row strong {
+  font-weight: 500;
+}
+.gpay-shortfall {
+  color: var(--guanzhao-accent-text);
+  font-size: 12px;
+  padding: 14px 0 20px;
+}
+.gpay-side-card .gpay-button {
+  width: 100%;
+  padding-inline: 12px;
+}
+.gpay-notice {
+  display: flex;
+  gap: 10px;
+  padding: 14px 18px;
+  border-left: 2px solid var(--guanzhao-accent-text);
+  background: var(--card);
+  margin-bottom: 28px;
+  font-size: 14px;
+}
+.gpay-notice svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+.gpay-task-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 440px);
+  gap: 100px;
+  align-items: start;
+  padding-block: 30px 48px;
+}
+.gpay-task-intro h1 {
+  margin-top: 18px;
+  margin-bottom: 40px;
+}
+.gpay-task-intro .gpay-question {
+  max-width: 450px;
+  border-left: 1px solid var(--guanzhao-accent-text);
+  padding-left: 24px;
+}
+.gpay-task-intro > .gpay-text-link {
+  margin-top: 34px;
+  width: 100%;
+  max-width: 450px;
+}
+.gpay-text-link,
+.gpay-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  background: none;
+  padding: 6px 0;
+  border: 0;
+  color: var(--muted-foreground);
+  font-size: 13px !important;
+  text-align: left;
+}
+.gpay-text-link > span {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+  gap: 6px;
+  color: var(--guanzhao-accent-text);
+}
+.gpay-text-link:hover,
+.gpay-back:hover {
+  color: var(--guanzhao-accent-text);
+}
+.gpay-center-link {
+  justify-content: center;
+}
+.gpay-action-card {
+  padding: 32px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.gpay-card-index {
+  font-size: 12px;
+  color: var(--guanzhao-accent-text);
+  letter-spacing: 0.03em;
+}
+.gpay-action-card > .gpay-muted {
+  font-size: 14px;
+}
+.gpay-action-card > .gpay-small {
+  font-size: 12px;
+}
+.gpay-cost-list {
+  padding-block: 12px;
+}
+.gpay-cost-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding-block: 13px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.gpay-cost-list > div:last-child {
+  border-bottom: 0;
+  padding-top: 18px;
+}
+.gpay-cost-list dd {
+  font-weight: 500;
+}
+.gpay-state-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 54px;
+  height: 54px;
+  border: 1px solid var(--border);
+  color: var(--guanzhao-accent-text);
+  border-radius: 50%;
+  margin-bottom: 2px;
+}
+.gpay-readback {
+  background: var(--secondary);
+  padding: 20px;
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+}
+.gpay-readback > span {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.gpay-readback strong {
+  font-weight: 500;
+}
+.gpay-readback p {
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.gpay-back {
+  margin: -16px 0 24px;
+}
+.gpay-checkout-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 30px;
+  margin-bottom: 34px;
+}
+.gpay-checkout-heading h1 {
+  margin-top: 13px;
+  font-size: 37px;
+}
+.gpay-steps {
+  display: flex;
+  gap: 20px;
+  padding: 0 0 6px;
+  margin: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.gpay-steps li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.gpay-steps li > span,
+.gpay-steps li > svg {
+  width: 19px;
+  height: 19px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  text-align: center;
+  font-size: 10px;
+  line-height: 17px;
+}
+.gpay-steps li > svg {
+  padding: 2px;
+}
+.gpay-steps .is-current {
+  color: var(--guanzhao-accent-text);
+}
+.gpay-steps .is-current > span {
+  border-color: var(--guanzhao-accent-text);
+}
+.gpay-checkout-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 36px;
+  align-items: start;
+}
+.gpay-payment-card {
+  border: 1px solid var(--border);
+  background: var(--card);
+  padding: 34px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.gpay-payment-card-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+}
+.gpay-payment-card-title h2 {
+  font-size: 22px;
+}
+.gpay-pay-amount {
+  text-align: center;
+  display: grid;
+  gap: 3px;
+  padding-top: 8px;
+}
+.gpay-pay-amount > small {
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.gpay-pay-amount strong {
+  font-family: var(--font-display);
+  font-size: 60px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1.45;
+}
+.gpay-pay-amount strong > span {
+  font-size: 24px;
+  margin-right: 8px;
+}
+.gpay-pay-amount p {
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+.gpay-checkout-placeholder {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px dashed var(--border);
+  padding: 30px 22px;
+  margin: 6px 0;
+  text-align: center;
+}
+.gpay-checkout-placeholder svg {
+  color: var(--guanzhao-accent-text);
+  margin-bottom: 8px;
+}
+.gpay-checkout-placeholder strong {
+  font-size: 15px;
+  font-weight: 500;
+}
+.gpay-checkout-placeholder p {
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+.gpay-checkout-placeholder > span {
+  color: var(--muted-foreground);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+.gpay-center {
+  text-align: center;
+}
+.gpay-payment-card > p.gpay-muted {
+  font-size: 14px;
+  max-width: 490px;
+}
+.gpay-payment-card > p.gpay-small {
+  font-size: 12px;
+}
+.gpay-receipt {
+  padding: 30px;
+  background: var(--secondary);
+}
+.gpay-receipt-plan {
+  padding: 22px 0;
+}
+.gpay-receipt-plan > span {
+  color: var(--muted-foreground);
+  font-family: var(--font-display);
+  font-size: 19px;
+}
+.gpay-receipt-plan strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 43px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.gpay-receipt-plan small {
+  font-size: 12px;
+  font-family: var(--font-sans);
+  margin-left: 12px;
+  color: var(--muted-foreground);
+}
+.gpay-receipt dl {
+  display: grid;
+  gap: 14px;
+  font-size: 12px;
+}
+.gpay-receipt dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.gpay-receipt dt {
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+.gpay-receipt dd {
+  text-align: right;
+}
+.gpay-receipt dd span {
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+.gpay-order-id {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.gpay-receipt > .gpay-question {
+  margin-top: 18px;
+}
+.gpay-receipt > .gpay-text-link {
+  margin-top: 16px;
+  width: 100%;
+  justify-content: space-between;
+}
+.gpay-waiting {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px;
+  background: var(--secondary);
+  font-size: 13px;
+}
+.gpay-wait-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--guanzhao-accent-text);
+  flex-shrink: 0;
+}
+.gpay-inline-link {
+  border: 0;
+  background: none;
+  color: var(--guanzhao-accent-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  padding: 0 0 0 3px;
+  min-height: 44px;
+}
+.gpay-arrival {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding-block: 16px;
+  border-block: 1px solid var(--border);
+  margin-block: 4px;
+}
+.gpay-arrival > span {
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+.gpay-arrival strong {
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-weight: 500;
+}
+.gpay-arrival small {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  margin-left: 8px;
+}
+.gpay-simulator {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  border: 1px dashed var(--border);
+  padding: 14px 18px;
+  margin-top: 26px;
+  font-size: 12px;
+}
+.gpay-simulator > strong {
+  font-weight: 500;
+}
+.gpay-simulator > span {
+  margin-right: auto;
+  color: var(--muted-foreground);
+}
+.gpay-simulator > button {
+  background: var(--secondary);
+  border: 1px solid var(--border);
+  color: var(--foreground);
+  padding: 9px 12px;
+  min-height: 40px;
+}
+.gpay-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+.gpay-status-paid {
+  color: var(--guanzhao-accent-text);
+}
+.gpay-orders-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 30px;
+  padding-bottom: 38px;
+  margin-bottom: 34px;
+  border-bottom: 1px solid var(--border);
+}
+.gpay-orders-heading h1 {
+  margin-block: 14px;
+  font-size: 42px;
+}
+.gpay-balance-small p {
+  font-size: 53px;
+}
+.gpay-balance-small {
+  min-width: 215px;
+}
+.gpay-table-heading,
+.gpay-order-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 135px 110px 70px;
+  gap: 22px;
+  align-items: center;
+}
+.gpay-table-heading {
+  padding: 14px 20px;
+  font-size: 12px;
+  color: var(--muted-foreground);
+  background: var(--secondary);
+}
+.gpay-order-row {
+  padding: 25px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.gpay-order-description {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.gpay-order-symbol {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  background: var(--secondary);
+  flex: 0 0 42px;
+}
+.gpay-order-description h3 {
+  font-family: var(--font-sans);
+  font-size: 16px;
+}
+.gpay-order-description h3 > span {
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.gpay-order-description p {
+  font-size: 11px;
+  color: var(--muted-foreground);
+  margin-top: 3px;
+}
+.gpay-order-description .gpay-order-id {
+  font-size: 10px;
+}
+.gpay-order-amount {
+  font-size: 15px;
+}
+.gpay-order-amount small {
+  display: block;
+  font-size: 10px;
+  color: var(--muted-foreground);
+}
+.gpay-order-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: end;
+  gap: 8px;
+  border: 0;
+  background: none;
+  padding: 6px 0;
+  color: var(--muted-foreground);
+  font-size: 13px !important;
+  min-height: 44px;
+}
+.gpay-consumption {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  padding: 24px 20px;
+  margin-top: 28px;
+  border: 1px solid var(--border);
+}
+.gpay-consumption > div {
+  margin-right: auto;
+}
+.gpay-consumption h3 {
+  margin-top: 6px;
+  font-size: 17px;
+}
+.gpay-consumption p:not(.gpay-eyebrow) {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  margin-top: 4px;
+}
+.gpay-consumption strong {
+  font-weight: 500;
+  white-space: nowrap;
+}
+.gpay-history-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  margin-top: 25px;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.gpay-history-foot > p {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.gpay-history-foot svg {
+  flex-shrink: 0;
+}
+.gpay-footer {
+  min-height: 76px;
+  border-top: 1px solid var(--border);
+  padding: 22px 56px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.gpay-spin {
+  animation: gpay-spin 2.2s linear infinite;
+}
+@keyframes gpay-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gpay-spin {
+    animation: none;
+  }
+  .gpay-plan {
+    transition: none;
+  }
+}

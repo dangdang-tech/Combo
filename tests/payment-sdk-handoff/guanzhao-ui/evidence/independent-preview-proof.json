@@ -1,0 +1,10 @@
+{
+  "mode": "LOCAL_INDEPENDENT_VITE_DEMO",
+  "theme": "dark",
+  "screen": "resumed",
+  "taskBalance": "可用310点充值",
+  "stateText": "本次解读已确认 · 30 点从「那 2027 年呢？」继续",
+  "horizontalOverflow": false,
+  "realPayments": 0,
+  "persistence": "memory_only"
+}

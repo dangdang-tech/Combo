@@ -11,3 +11,7 @@
 运行环境需要以下变量：`PAYMENT_RETRY_E2E=1`、`DATABASE_URL`、该测试库的 `POSTGRES_AUTHZ_PASSWORD` 与 `POSTGRES_BILLING_PASSWORD`，以及 `PAYMENT_SDK_DIR`（已安装包目录）、`PAYMENT_SDK_TGZ`、`PAYMENT_SDK_SHA256`、`PAYMENT_REFERENCE_LIB`。使用 Node 24 和 tsx 加载器执行脚本。
 
 脚本只输出低敏通过记录、SDK 版本和摘要、验证范围及替身边界，不输出会话凭据。测试结束后关闭 HTTP 服务与数据库连接；测试数据只留在专用测试库中，不能清理或复用用户付款记录。
+
+## 观照前端设计预览
+
+`guanzhao-ui/` 保存 Combo #357 对应的观照点数、充值、扣点确认和返回原问题的独立模拟预览，包括组件、深浅主题、响应式样式与低敏浏览器证明。它使用本地演示账户，不调用上述真实 HTTP 链路，不改变原支付 SDK 验收状态。启动方式和交接合同见该目录的 README。

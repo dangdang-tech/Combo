@@ -1,0 +1,367 @@
+{
+  "mode": "DESIGN_DEMO",
+  "checks": [
+    {
+      "width": 320,
+      "mode": "light",
+      "state": "wallet",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "mode": "light",
+      "state": "confirm",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "mode": "light",
+      "state": "insufficient",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "mode": "light",
+      "state": "checkout",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "mode": "light",
+      "state": "pending",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "mode": "light",
+      "state": "unknown",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "mode": "light",
+      "state": "expired",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "mode": "light",
+      "state": "success",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "mode": "light",
+      "state": "resumed",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "mode": "light",
+      "state": "orders",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "mode": "dark",
+      "state": "wallet",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "mode": "dark",
+      "state": "confirm",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "mode": "dark",
+      "state": "insufficient",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "mode": "dark",
+      "state": "checkout",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "mode": "dark",
+      "state": "pending",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "mode": "dark",
+      "state": "unknown",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "mode": "dark",
+      "state": "expired",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "mode": "dark",
+      "state": "success",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "mode": "dark",
+      "state": "resumed",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "mode": "dark",
+      "state": "orders",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "mode": "light",
+      "state": "wallet",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "mode": "light",
+      "state": "confirm",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "mode": "light",
+      "state": "insufficient",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "mode": "light",
+      "state": "checkout",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "mode": "light",
+      "state": "pending",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "mode": "light",
+      "state": "unknown",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "mode": "light",
+      "state": "expired",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "mode": "light",
+      "state": "success",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "mode": "light",
+      "state": "resumed",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "mode": "light",
+      "state": "orders",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "mode": "dark",
+      "state": "wallet",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "mode": "dark",
+      "state": "confirm",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "mode": "dark",
+      "state": "insufficient",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "mode": "dark",
+      "state": "checkout",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "mode": "dark",
+      "state": "pending",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "mode": "dark",
+      "state": "unknown",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "mode": "dark",
+      "state": "expired",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "mode": "dark",
+      "state": "success",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "mode": "dark",
+      "state": "resumed",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "mode": "dark",
+      "state": "orders",
+      "pass": true
+    },
+    {
+      "width": 1512,
+      "mode": "light",
+      "state": "wallet",
+      "pass": true
+    },
+    {
+      "width": 1512,
+      "mode": "light",
+      "state": "confirm",
+      "pass": true
+    },
+    {
+      "width": 1512,
+      "mode": "light",
+      "state": "insufficient",
+      "pass": true
+    },
+    {
+      "width": 1512,
+      "mode": "light",
+      "state": "checkout",
+      "pass": true
+    },
+    {
+      "width": 1512,
+      "mode": "light",
+      "state": "pending",
+      "pass": true
+    },
+    {
+      "width": 1512,
+      "mode": "light",
+      "state": "unknown",
+      "pass": true
+    },
+    {
+      "width": 1512,
+      "mode": "light",
+      "state": "expired",
+      "pass": true
+    },
+    {
+      "width": 1512,
+      "mode": "light",
+      "state": "success",
+      "pass": true
+    },
+    {
+      "width": 1512,
+      "mode": "light",
+      "state": "resumed",
+      "pass": true
+    },
+    {
+      "width": 1512,
+      "mode": "light",
+      "state": "orders",
+      "pass": true
+    },
+    {
+      "width": 1512,
+      "mode": "dark",
+      "state": "wallet",
+      "pass": true
+    },
+    {
+      "width": 1512,
+      "mode": "dark",
+      "state": "confirm",
+      "pass": true
+    },
+    {
+      "width": 1512,
+      "mode": "dark",
+      "state": "insufficient",
+      "pass": true
+    },
+    {
+      "width": 1512,
+      "mode": "dark",
+      "state": "checkout",
+      "pass": true
+    },
+    {
+      "width": 1512,
+      "mode": "dark",
+      "state": "pending",
+      "pass": true
+    },
+    {
+      "width": 1512,
+      "mode": "dark",
+      "state": "unknown",
+      "pass": true
+    },
+    {
+      "width": 1512,
+      "mode": "dark",
+      "state": "expired",
+      "pass": true
+    },
+    {
+      "width": 1512,
+      "mode": "dark",
+      "state": "success",
+      "pass": true
+    },
+    {
+      "width": 1512,
+      "mode": "dark",
+      "state": "resumed",
+      "pass": true
+    },
+    {
+      "width": 1512,
+      "mode": "dark",
+      "state": "orders",
+      "pass": true
+    }
+  ],
+  "screenshotsAreVisualEvidence": true,
+  "realPayments": 0
+}

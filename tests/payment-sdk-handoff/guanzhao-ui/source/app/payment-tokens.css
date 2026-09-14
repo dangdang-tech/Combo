@@ -1,0 +1,121 @@
+:root {
+  color-scheme: light;
+  --font-display: 'Songti SC', 'Noto Serif SC', STSong, SimSun, serif;
+  --background: #e5e3dc;
+  --foreground: #2a2926;
+  --card: #eceae3;
+  --primary: #2a2926;
+  --primary-foreground: #e5e3dc;
+  --secondary: #d9d6cc;
+  --muted: #dedbd2;
+  --muted-foreground: #4a4843;
+  --accent: #d9d6cc;
+  --destructive: #9f3d2f;
+  --destructive-solid: #9f3d2f;
+  --destructive-foreground: #ffffff;
+  --border: #b6b4aa;
+  --input: #99998e;
+  --ring: #a03b24;
+  --radius: 0;
+  --guanzhao-accent: #e14d2a;
+  --guanzhao-accent-text: #a03b24;
+  --guanzhao-accent-soft: #e4d7cc;
+  --guanzhao-selection-ring: #a03b24;
+  --guanzhao-related-ring: #807752;
+  --guanzhao-opposite-ring: #466d8a;
+  --error-background: #e6d4ca;
+  --error-border: #b88879;
+  --element-wood: #28664f;
+  --element-fire: #993e32;
+  --element-earth: #765923;
+  --element-metal: #6f6040;
+  --element-water: #355f7f;
+  --star-minor: #6e527c;
+  --star-adjective: #42647b;
+  --mutagen-lu: #176e53;
+  --mutagen-quan: #3569a8;
+  --mutagen-ke: #806019;
+  --mutagen-ji: #a83d4e;
+  --mutagen-foreground: #fff;
+  --gz-ink: var(--foreground);
+  --gz-muted: var(--muted-foreground);
+  --gz-paper: var(--secondary);
+  --gz-line: var(--border);
+  --gz-accent: var(--guanzhao-accent-text);
+  --gz-error: var(--destructive);
+}
+:root.dark {
+  color-scheme: dark;
+  --background: #242623;
+  --foreground: #ece9df;
+  --card: #2e302b;
+  --primary: #ece9df;
+  --primary-foreground: #242623;
+  --secondary: #34372f;
+  --muted: #2e302b;
+  --muted-foreground: #bdbfb3;
+  --accent: #3b3e35;
+  --destructive: #f2a28d;
+  --border: #565a50;
+  --input: #72786a;
+  --ring: #f19579;
+  --guanzhao-accent: #ed7655;
+  --guanzhao-accent-text: #f19579;
+  --guanzhao-accent-soft: #3b342d;
+  --guanzhao-selection-ring: #f19579;
+  --guanzhao-related-ring: #948c6d;
+  --guanzhao-opposite-ring: #7598b3;
+  --error-background: #3b2c26;
+  --error-border: #966d5e;
+  --element-wood: #84bc97;
+  --element-fire: #ed947b;
+  --element-earth: #cbb075;
+  --element-metal: #d0c29c;
+  --element-water: #92b9d8;
+  --star-minor: #c1a3db;
+  --star-adjective: #a0bdcf;
+}
+:root {
+  --font-sans: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-mono: 'SFMono-Regular', Consolas, monospace;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--foreground);
+  background: var(--background);
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+.guanzhao-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-shrink: 0;
+  min-height: 40px;
+  width: auto;
+  margin: 0;
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+.guanzhao-theme-toggle:hover {
+  background: var(--secondary);
+  border-color: var(--foreground);
+}
+.guanzhao-theme-toggle:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
