@@ -191,6 +191,46 @@ suite('recoverable checkout PostgreSQL and API', () => {
         .rows[0].n,
     ).toBe(1);
   });
+  it('purges expired and paid QR content in bounded batches while preserving all payment facts', async () => {
+    await createPgRecoveryStore(pool).purgeActions(1000);
+    const expired = await fixture(false),
+      paid = await fixture(false),
+      live = await fixture(false);
+    for (const f of [expired, paid, live]) await f.open();
+    const a = (await expired.store.snapshot(expired.paymentId, expired.userId))!.attempt!;
+    const b = (await paid.store.snapshot(paid.paymentId, paid.userId))!.attempt!;
+    const c = (await live.store.snapshot(live.paymentId, live.userId))!.attempt!;
+    await admin.query(
+      "UPDATE v2_payment_channel_attempts SET action_expires_at=now()-interval '1 second' WHERE id=$1",
+      [a.id],
+    );
+    await paid.paid(b);
+    const before = await Promise.all([a, b, c].map((row) => live.store.attempt(row.id)));
+    const facts = () =>
+      pool.query(`SELECT
+      (SELECT count(*)::int FROM v2_payment_requests) AS payments,
+      (SELECT count(*)::int FROM v2_payment_channel_attempts) AS attempts,
+      (SELECT count(*)::int FROM v2_payment_channel_receipts) AS receipts,
+      (SELECT count(*)::int FROM v2_payment_recovery_events) AS events,
+      (SELECT count(*)::int FROM v2_ledger) AS ledger`);
+    const counts = (await facts()).rows;
+    expect(await live.store.purgeActions(1)).toBe(1);
+    expect(await live.store.purgeActions(1)).toBe(1);
+    expect(await live.store.purgeActions(1)).toBe(0);
+    const after = await Promise.all([a, b, c].map((row) => live.store.attempt(row.id)));
+    expect(after).toEqual([
+      { ...before[0], qr_content: null, action_expires_at: null },
+      { ...before[1], qr_content: null, action_expires_at: null },
+      before[2],
+    ]);
+    expect((await facts()).rows).toEqual(counts);
+    await admin.query(
+      "UPDATE v2_payment_channel_attempts SET action_expires_at=now()-interval '1 second' WHERE id=$1",
+      [c.id],
+    );
+    await live.service.tick();
+    expect((await live.store.attempt(c.id))?.qr_content).toBeNull();
+  });
   it('serializes duplicate recovery requests and rejects changed/stale keys and other users', async () => {
     const f = await fixture();
     await f.open();

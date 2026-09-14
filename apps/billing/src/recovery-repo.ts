@@ -432,6 +432,22 @@ export function createPgRecoveryStore(pool: Pool) {
         [job.id, job.lease_owner, job.lease_version],
       );
     },
+    async purgeActions(limit: number) {
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000)
+        throw new ChannelConflictError();
+      return withTransaction(pool, async (tx) => {
+        const result = await tx.query(
+          `WITH expired AS (
+            SELECT a.id FROM v2_payment_channel_attempts a JOIN v2_payment_requests p ON p.id=a.payment_id
+            WHERE a.qr_content IS NOT NULL AND (a.action_expires_at<=statement_timestamp() OR p.state='completed')
+            LIMIT $1 FOR UPDATE OF a SKIP LOCKED
+          ) UPDATE v2_payment_channel_attempts a SET qr_content=NULL,action_expires_at=NULL
+            FROM expired WHERE a.id=expired.id`,
+          [limit],
+        );
+        return result.rowCount ?? 0;
+      });
+    },
     async queries(limit: number) {
       return withTransaction(pool, async (tx) => {
         const rows = (

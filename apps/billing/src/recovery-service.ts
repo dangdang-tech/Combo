@@ -277,6 +277,7 @@ export function createCheckoutRecovery(options: RecoveryDependencies) {
   async function tick(jobId?: string) {
     if (running) return running;
     running = (async () => {
+      await store.purgeActions(100);
       for (const receipt of await store.pendingReceipts()) {
         const a = await store.attempt(receipt.attempt_id);
         if (a) await credit(a, receipt.channel_transaction_id);
