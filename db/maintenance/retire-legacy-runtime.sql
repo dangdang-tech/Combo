@@ -75,6 +75,17 @@ BEGIN
   ]) AS target(name) WHERE to_regclass('public.'||name) IS NOT NULL) THEN
     RAISE EXCEPTION 'Complete legacy entrypoint retirement before this stage';
   END IF;
+  IF EXISTS (SELECT 1 FROM unnest(ARRAY[
+    'public.register_oauth_client(text,bytea,text,text[],text[],text[],text)',
+    'public.cleanup_expired_oauth_artifacts(integer)',
+    'public.issue_project_history_agent_confirmation(uuid,text,bigint,text,text)',
+    'public.cleanup_retired_project_history_confirmations(integer)',
+    'public.reject_project_history_agent_immutable_mutation()',
+    'public.enforce_project_history_share_insert_integrity()',
+    'public.enforce_project_history_confirmation_consumption()'
+  ]) AS target(signature) WHERE to_regprocedure(signature) IS NOT NULL) THEN
+    RAISE EXCEPTION 'Legacy entrypoint functions have not been retired';
+  END IF;
   SELECT count(*) INTO remaining FROM unnest(ARRAY[
     'agent_projects',
     'agent_revisions',
