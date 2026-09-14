@@ -50,6 +50,7 @@ V2 渲染要求 `--platform`、`--restart-life`、`--state-redis` 三个镜像�
 - `start.sh` / `smoke.sh` / `migrate.sh`：本地开发与冒烟。
 - `check-production-artifacts.sh`：CI gate，校验生产构建产物不含测试文件、测试邮件基础设施或已废弃认证栈。
 - `scripts/integration/`：CI 集成测试脚本。
+- `scripts/integration/resend-auth-e2e.sh`：在隔离 Compose 项目中验证邮箱登录与浏览器会话；临时覆盖文件把 MinIO 服务端和客户端固定到官方 Quay 的历史镜像摘要，退出时随测试资源清理。敏感日志扫描按字面量匹配凭据，命中或扫描出错都会使验证失败。
 - `scripts/integration/db-migrate.sh`：正式源码迁移头 `0021` 的空库、幂等、历史升级和角色验证；串行运行 Registry、公开发布/浏览器授权、0020→0021 升级等 DDL 测试，最后构建 authoring 编译器依赖并运行私有 Draft HTTP/PG 测试（对象存储假件）。只用于临时测试库，不能对常驻 Test/Preview/Production 执行；私有 Draft/公开发布测试另有本地连接与测试库名保护。
 - `scripts/integration/db-migrate-v2.sh`：在独立 PostgreSQL 数据库中验证 canonical `0000` 至 `0011` 加 V2 `0012` 至 `0015` 的组合链、升级兼容、safe-number 账本、计量 exact scope、正式迁移隔离和五角色权限；PR 与 main 集成门禁都会执行。
 - `render-v2.mjs`：combo-v2 验证命名空间专用，把 `infra/k8s/v2/` 清单里的镜像 digest 占位符渲染成服务器构建出的实际摘要。只在服务器手工链路使用，不进三环境部署。
