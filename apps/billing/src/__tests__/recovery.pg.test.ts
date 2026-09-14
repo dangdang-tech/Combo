@@ -13,6 +13,7 @@ import type {
   VerifiedPaymentNotification,
 } from '../channel/index.js';
 import { registerRecoveryRoutes } from '../recovery-routes.js';
+import { PaymentGatewayUncertainError } from '../channel/index.js';
 import Fastify from 'fastify';
 
 const database = process.env.BILLING_V2_TEST_DATABASE_URL;
@@ -99,7 +100,7 @@ suite('recoverable checkout PostgreSQL and API', () => {
         const old = orders.get(command.payTraceNo)!;
         expect(command.platformTradeNo).toBe(old.trade);
         old.status = 'failed';
-        if (lostClose) throw Error('controlled lost close acknowledgement');
+        if (lostClose) throw new PaymentGatewayUncertainError('timeout');
         return { status: 'closed' };
       }),
       verifyPaymentNotification: (input) => input as VerifiedPaymentNotification,
@@ -237,6 +238,46 @@ suite('recoverable checkout PostgreSQL and API', () => {
     await f.service.tick();
     expect(f.gateway.createPayment).toHaveBeenCalledTimes(1);
     expect(f.gateway.closePayment).toHaveBeenCalledTimes(1);
+    expect(
+      (
+        await pool.query(
+          "SELECT reason FROM v2_payment_recovery_events WHERE attempt_id IN (SELECT id FROM v2_payment_channel_attempts WHERE payment_id=$1) AND phase='close' AND outcome='unknown'",
+          [f.paymentId],
+        )
+      ).rows,
+    ).toEqual([{ reason: 'timeout' }]);
+  });
+  it('stores a verified QR after a query wins the race, without regressing terminal or closing states', async () => {
+    const f = await fixture(false);
+    const initial = (await f.store.initial(f.paymentId, f.userId, scope, 'wechat'))!.attempt;
+    const result = await f.gateway.createPayment({
+      payTraceNo: initial.pay_trace_no,
+      payTime: initial.pay_time,
+      amountCents: 2n,
+      orderNo: f.paymentId,
+      channel: 'qr',
+      payType: 'wechat',
+    });
+    await f.store.recordQuery(initial, {
+      status: 'pending',
+      platformTradeNo: result.platformTradeNo,
+    });
+    expect(await f.store.recordSubmission(initial, result)).toBe(true);
+    expect(await f.store.recordSubmission(initial, { ...result, platformTradeNo: undefined })).toBe(
+      true,
+    );
+    expect((await f.store.attempt(initial.id))?.platform_trade_no).toBe(result.platformTradeNo);
+    expect((await f.service.view(f.paymentId, f.userId))?.checkout.status).toBe('ready');
+    expect(await f.store.recordSubmission(initial, { status: 'unknown' })).toBe(false);
+    expect((await f.service.view(f.paymentId, f.userId))?.checkout.status).toBe('ready');
+    for (const state of ['closing', 'closed', 'manual_review', 'succeeded']) {
+      await admin.query('UPDATE v2_payment_channel_attempts SET state=$2 WHERE id=$1', [
+        initial.id,
+        state,
+      ]);
+      expect(await f.store.recordSubmission(initial, result)).toBe(false);
+      expect((await f.store.attempt(initial.id))?.state).toBe(state);
+    }
   });
   it('shares v1/v2 channel creation ownership inside the database transaction', async () => {
     const f = await fixture(false);
@@ -263,23 +304,65 @@ suite('recoverable checkout PostgreSQL and API', () => {
       release = r;
     });
     f.gateway.createPayment = vi.fn(async (cmd) => {
+      const result = await original(cmd);
       start();
       await gate;
-      return original(cmd);
+      return result;
     });
+    const legacyStore = createPgChannelOrderStore(pool, { recovery: true });
     const legacy = createPaymentChannelService({
-      store: createPgChannelOrderStore(pool, { recovery: true }),
+      store: legacyStore,
       payments: f.payments,
       gateway: f.gateway,
     });
     const sending = legacy.create({ paymentId: f.paymentId, userId: f.userId, payType: 'wechat' });
     await began;
     expect((await f.service.view(f.paymentId, f.userId))?.checkout.status).toBe('submitting');
+    const adopted = (await f.store.snapshot(f.paymentId, f.userId))!.attempt!;
+    await legacyStore.recordResult(
+      (await legacyStore.get(f.paymentId, f.userId))!,
+      { status: 'pending', platformTradeNo: f.orders.get(adopted.pay_trace_no)!.trade },
+      createHash('sha256').update(randomUUID()).digest('hex'),
+      'query',
+    );
+    expect((await f.service.view(f.paymentId, f.userId))?.checkout.status).toBe('missing_qr');
     release();
     await sending;
     expect((await f.service.view(f.paymentId, f.userId))?.checkout.status).toBe('ready');
     expect((await f.service.qr(f.paymentId, f.userId))?.qrContent).toMatch(/^qr-/);
   });
+  it.each([false, true])(
+    'blocks recovery with unresolved late money (queued=%s)',
+    async (queued) => {
+      const f = await fixture();
+      await f.open();
+      const old = (await f.store.snapshot(f.paymentId, f.userId))!.attempt!;
+      await f.recover();
+      const next = (await f.store.snapshot(f.paymentId, f.userId))!.attempt!;
+      await admin.query(
+        "UPDATE v2_payment_channel_attempts SET action_expires_at=now()-interval '1 second' WHERE id=$1",
+        [next.id],
+      );
+      const requested = queued
+        ? (await f.store.request(f.paymentId, f.userId, next.id, randomUUID()))!
+        : null;
+      const job = requested ? (await f.store.lease(requested.id))! : null;
+      vi.spyOn(f.payments, 'confirmPayment').mockResolvedValue({ kind: 'conflict' });
+      await f.paid(old);
+      expect((await f.service.view(f.paymentId, f.userId))?.checkout).toMatchObject({
+        status: 'manual_review',
+        canRecover: false,
+      });
+      await expect(
+        f.service.recover(f.paymentId, f.userId, {
+          expectedAttemptId: next.id,
+          recoveryKey: randomUUID(),
+        }),
+      ).rejects.toThrow();
+      if (job) expect(await f.store.next(job, scope)).toBeNull();
+      expect(f.gateway.createPayment).toHaveBeenCalledTimes(2);
+    },
+  );
   it('records exceptional second real payment as balanced pending customer funds, without a second business credit', async () => {
     const f = await fixture();
     await f.open();

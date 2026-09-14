@@ -174,6 +174,11 @@ export function createPgChannelOrderStore(
             : null;
         // The authoritative accounting state wins over any late prepay response.
         if (row.completed || row.submission_state === 'failed') return;
+        if (
+          row.submission_state !== 'submitting' &&
+          (!qr || !actionExpires || actionExpires.getTime() <= Date.now())
+        )
+          return;
         await tx.query(
           `UPDATE v2_payment_channel_orders SET submission_state=$2, platform_trade_no=COALESCE(platform_trade_no,$3),
         qr_content=CASE WHEN $5::timestamptz>statement_timestamp() THEN $4 ELSE NULL END,
@@ -186,7 +191,9 @@ export function createPgChannelOrderStore(
           state=$2,platform_trade_no=COALESCE(platform_trade_no,$3),
           qr_content=CASE WHEN $5::timestamptz>statement_timestamp() THEN $4 ELSE NULL END,
           action_expires_at=CASE WHEN $5::timestamptz>statement_timestamp() THEN $5 ELSE NULL END,
-          updated_at=clock_timestamp() WHERE id=$1 AND attempt_no=1 AND state='submitting'`,
+          updated_at=clock_timestamp() WHERE id=$1 AND attempt_no=1
+          AND (state='submitting' OR (state IN ('pending','unknown') AND $2='pending' AND $4::text IS NOT NULL AND $5::timestamptz>statement_timestamp()))
+          AND (platform_trade_no IS NULL OR $3::text IS NULL OR platform_trade_no=$3::text)`,
             [
               original.paymentId,
               result.status === 'failed' ? 'closed' : result.status,

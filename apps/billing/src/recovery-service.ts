@@ -103,7 +103,7 @@ export function createCheckoutRecovery(options: RecoveryDependencies) {
   async function dispatch(a: ChannelAttempt) {
     if (!matches(a)) throw new ChannelConflictError();
     const snapshot = await store.snapshot(a.payment_id, a.user_id);
-    if (!snapshot || snapshot.payment.state === 'completed') return;
+    if (!snapshot || snapshot.payment.state === 'completed' || snapshot.needsReview) return;
     // The submitting row is already committed. Neither a request replay nor a new worker re-sends it.
     await event(a, 'prepay', 'started');
     let result;
@@ -125,8 +125,8 @@ export function createCheckoutRecovery(options: RecoveryDependencies) {
     }
     await event(a, 'prepay', result.status);
     try {
-      await store.recordSubmission(a, result);
-      await event(a, 'persist_prepay', 'stored');
+      const saved = await store.recordSubmission(a, result);
+      await event(a, 'persist_prepay', saved ? 'stored' : 'unknown');
     } catch (error) {
       await event(a, 'persist_prepay', 'unknown', 'storage_error').catch(() => undefined);
       throw error;
@@ -198,6 +198,10 @@ export function createCheckoutRecovery(options: RecoveryDependencies) {
       await store.phase(job, 'done');
       return;
     }
+    if (root?.needsReview) {
+      await store.manual(job);
+      return;
+    }
     if (job.phase === 'creating') {
       if (job.result_attempt_id) {
         const a = await store.attempt(job.result_attempt_id);
@@ -225,11 +229,22 @@ export function createCheckoutRecovery(options: RecoveryDependencies) {
       }
       await store.phase(job, 'closing');
       await event(old, 'close', 'started');
-      const closed = await gateway.closePayment({
-        ...command(refreshed),
-        closeTraceNo: job.close_trace_no,
-        closeTime: job.close_time,
-      });
+      let closed;
+      try {
+        closed = await gateway.closePayment({
+          ...command(refreshed),
+          closeTraceNo: job.close_trace_no,
+          closeTime: job.close_time,
+        });
+      } catch (error) {
+        await event(
+          old,
+          'close',
+          'unknown',
+          error instanceof PaymentGatewayUncertainError ? error.reason : 'transport_error',
+        );
+        throw error;
+      }
       if (closed.status !== 'closed') {
         await store.manual(job);
         return;

@@ -88,6 +88,14 @@ async function latest(tx: Queryable, id: string): Promise<ChannelAttempt | undef
     )
   ).rows[0];
 }
+async function unresolvedFunds(tx: Queryable, id: string) {
+  return !!(
+    await tx.query(
+      "SELECT 1 FROM v2_payment_channel_receipts WHERE payment_id=$1 AND disposition<>'applied' LIMIT 1",
+      [id],
+    )
+  ).rowCount;
+}
 async function adopt(tx: Queryable, id: string): Promise<ChannelAttempt | undefined> {
   const old = await latest(tx, id);
   if (old) return old;
@@ -175,12 +183,7 @@ export function createPgRecoveryStore(pool: Pool) {
             attempt = original;
           }
         }
-        const needsReview = !!(
-          await tx.query(
-            "SELECT 1 FROM v2_payment_channel_receipts WHERE payment_id=$1 AND disposition='review_required'",
-            [id],
-          )
-        ).rowCount;
+        const needsReview = await unresolvedFunds(tx, id);
         return { payment, attempt, needsReview };
       });
     },
@@ -218,11 +221,13 @@ export function createPgRecoveryStore(pool: Pool) {
         result.status === 'pending' && result.action?.kind === 'code_url'
           ? result.action
           : undefined;
-      await pool.query(
+      const saved = await pool.query(
         `UPDATE v2_payment_channel_attempts SET state=$2,platform_trade_no=COALESCE(platform_trade_no,$3),
         qr_content=CASE WHEN $5::timestamptz>statement_timestamp() THEN $4 ELSE NULL END,
         action_expires_at=CASE WHEN $5::timestamptz>statement_timestamp() THEN LEAST($5,expires_at) ELSE NULL END,updated_at=clock_timestamp()
-        WHERE id=$1 AND state='submitting' AND (platform_trade_no IS NULL OR platform_trade_no=$3)`,
+        WHERE id=$1 AND (state='submitting' OR
+          (state IN ('pending','unknown') AND $2='pending' AND $4::text IS NOT NULL AND $5::timestamptz>statement_timestamp()))
+        AND (platform_trade_no IS NULL OR $3::text IS NULL OR platform_trade_no=$3::text)`,
         [
           a.id,
           result.status === 'failed' ? 'closed' : result.status,
@@ -231,6 +236,7 @@ export function createPgRecoveryStore(pool: Pool) {
           qr?.expiresAt ?? null,
         ],
       );
+      return saved.rowCount === 1;
     },
     async recordQuery(a: ChannelAttempt, result: PaymentQueryResult) {
       const update = await pool.query(
@@ -262,6 +268,7 @@ export function createPgRecoveryStore(pool: Pool) {
           !a ||
           a.id !== expected ||
           p.state === 'completed' ||
+          (await unresolvedFunds(tx, id)) ||
           a.attempt_no >= MAX_PAYMENT_ATTEMPTS ||
           p.created_at.getTime() + RECOVERY_WINDOW_MS <= Date.now() ||
           !['pending', 'unknown', 'closed'].includes(a.state) ||
@@ -376,7 +383,12 @@ export function createPgRecoveryStore(pool: Pool) {
             [job.source_attempt_id],
           )
         ).rows[0]!;
-        if (p.state === 'completed' || old.state === 'succeeded') return null;
+        if (
+          p.state === 'completed' ||
+          old.state === 'succeeded' ||
+          (await unresolvedFunds(tx, p.id))
+        )
+          return null;
         if (
           !old.close_verified ||
           !old.closed_query_verified ||

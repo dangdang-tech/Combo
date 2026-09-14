@@ -104,7 +104,9 @@ const legacy = createPaymentChannelService({
 const authenticateUser = async (request) => {
   if (request.method === 'POST' && request.headers.origin !== base)
     throw new PaymentAuthenticationError(403);
-  return request.headers.cookie === 'recovery-fixture' ? userId : null;
+  return request.headers.cookie?.split(';').some((value) => value.trim() === 'recovery-fixture=1')
+    ? userId
+    : null;
 };
 const app = await buildApp({
   store: createPgBillingStore(pool),
@@ -129,7 +131,7 @@ if (process.env.COMBO_RECOVERY_SDK_PATH) {
     fetchImpl: (url, init) =>
       fetch(url, {
         ...init,
-        headers: { ...init.headers, cookie: 'recovery-fixture', origin: base },
+        headers: { ...init.headers, cookie: 'recovery-fixture=1', origin: base },
       }),
   });
 }
