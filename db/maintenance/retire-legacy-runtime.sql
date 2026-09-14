@@ -115,6 +115,53 @@ BEGIN
     'public.guard_pending_usage_recovery_write()',
     'public.enforce_pending_usage_recovery_terminal()'
   ]) AS target(signature) WHERE to_regprocedure(signature) IS NOT NULL;
+  -- Stage 3 may explicitly discard the five frozen history tables afterwards.
+  IF remaining=0 AND dedicated_functions=0
+     AND NOT EXISTS (SELECT 1 FROM unnest(ARRAY[
+       'usage_charges','billing_free_allowances','agent_usage_receipts',
+       'pending_usage_recoveries','legacy_runtime_evidence'
+     ]) AS target(name) WHERE to_regclass('public.'||name) IS NOT NULL)
+     AND to_regprocedure('public.reject_legacy_runtime_history_write()') IS NULL
+     AND EXISTS (SELECT 1 FROM pg_constraint
+                 WHERE conrelid='public.billing_accounts'::regclass
+                   AND conname='ck_billing_account_no_retired_reservations'
+                   AND contype='c' AND convalidated
+                   AND pg_get_constraintdef(oid)='CHECK ((reserved_cents = 0))') THEN
+    IF EXISTS (
+      SELECT 1 FROM (VALUES
+        ('billing_accounts','trg_billing_account_ledger_equation','enforce_wallet_account_ledger_equation',29,true),
+        ('recharge_orders','trg_recharge_order_credit_equation','enforce_recharge_credit_equation',29,true),
+        ('recharge_orders','trg_recharge_order_recovery_binding_immutable','guard_recharge_order_recovery_binding',23,false),
+        ('wallet_ledger','trg_wallet_ledger_account_equation','enforce_wallet_account_ledger_equation',29,true),
+        ('wallet_ledger','trg_wallet_ledger_append_only','reject_wallet_ledger_mutation',27,false),
+        ('wallet_ledger','trg_wallet_ledger_no_truncate','reject_wallet_ledger_mutation',34,false),
+        ('wallet_ledger','trg_wallet_ledger_recharge_equation','enforce_recharge_credit_equation',29,true),
+        ('wallet_ledger','trg_wallet_ledger_writer','enforce_wallet_ledger_writer',7,false)
+      ) AS expected(table_name,trigger_name,function_name,event_type,is_deferred)
+      WHERE NOT EXISTS (
+        SELECT 1 FROM pg_trigger t
+        WHERE t.tgrelid=to_regclass('public.'||expected.table_name)
+          AND t.tgname=expected.trigger_name AND t.tgtype=expected.event_type
+          AND t.tgfoid=to_regprocedure('public.'||expected.function_name||'()')
+          AND t.tgenabled='O' AND NOT t.tgisinternal
+          AND t.tgdeferrable=expected.is_deferred AND t.tginitdeferred=expected.is_deferred
+      )
+    ) THEN
+      RAISE EXCEPTION 'Required current financial trigger is missing, disabled or changed';
+    END IF;
+    IF (SELECT count(*) FROM pg_proc WHERE pronamespace='public'::regnamespace
+        AND proname IN ('enforce_wallet_account_ledger_equation','enforce_wallet_ledger_writer',
+                        'guard_recharge_order_recovery_binding'))<>3
+       OR EXISTS (SELECT 1 FROM pg_proc WHERE pronamespace='public'::regnamespace
+                  AND (proname IN ('enforce_usage_debit_equation','enforce_free_allowance_equation')
+                       OR prosrc ~ '\m(usage_charges|billing_free_allowances|agent_usage_receipts|pending_usage_recoveries|legacy_runtime_evidence)\M'))
+       OR EXISTS (SELECT 1 FROM unnest(ARRAY['billing_accounts','wallet_ledger']) target(name)
+                  WHERE has_table_privilege('combo_runtime','public.'||name,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                     OR has_any_column_privilege('combo_runtime','public.'||name,'SELECT,INSERT,UPDATE,REFERENCES')) THEN
+      RAISE EXCEPTION 'Incomplete history retirement';
+    END IF;
+    RETURN;
+  END IF;
   IF NOT (
     (remaining=12 AND dedicated_functions=12
       AND to_regclass('public.legacy_runtime_evidence') IS NULL
@@ -408,7 +455,7 @@ DROP FUNCTION public.guard_pending_usage_recovery_write();
 DROP FUNCTION public.enforce_pending_usage_recovery_terminal();
 \endif
 COMMIT;
-\echo 'Legacy runtime retired; current business rows and historical financial records preserved.'
+\echo 'Legacy runtime retirement state verified; canonical migration ledger unchanged.'
 \else
 ROLLBACK;
 \echo 'Runtime retirement preflight passed; no changes made.'

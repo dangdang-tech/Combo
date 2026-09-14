@@ -95,6 +95,11 @@ Test，不接入 `foundation → migrate → apps` 或自动 Preview。操作保
 入口的 API，再验证备份恢复并执行。它保留当前业务、资金历史与原账本，删除十二张旧运行/Builder 表，
 通过只读历史证据承接原关联。新脚本也不加入自动迁移或 Preview；共享库旧消费者存在时不得执行。
 
+用户明确放弃旧调用历史后，第三批 `db/maintenance/retire-legacy-history.sql` 才可显式删除上述五张
+历史/证据表。该步骤仅允许 Test，要求新备份恢复验证与独立的丢弃历史确认；保留账户、订单和流水原行，
+移除旧外键并更新仍使用旧表的金融校验。历史明细此后仅在受控备份中，不提供在线查询；自动迁移、
+Preview、Production、V2 和实例级角色均不执行这一退役操作。
+
 1. Preview 不建立独立 foundation；它与 Production 共享 `combo-foundation`。
 2. Test 有独立 foundation，数据常驻，不做销毁重建。
 3. 生产正式域名是 `buildwithcombo.com`，部署验证以此为准。

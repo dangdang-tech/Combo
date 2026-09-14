@@ -2,6 +2,8 @@
 
 本目录验证迁移文件与数据库级不变量。
 
+- `legacy-history-maintenance.test.ts` 静态锁定第三批 Test 专用维护的默认预检、显式丢弃确认、精确五表范围、原账目不改、钱包完整净额、两类旧使用流水禁止、恢复标识防改及第二批后续状态识别。实际删除与充值行为另须在整库备份恢复的隔离 PostgreSQL 验证，静态测试不替代现场验收。
+
 正式源码头更新到 `0021`，迁移计划测试覆盖 `0020`→`0021`，旧 `0018`→`0019` 升级测试仍固定历史源码前缀。私有版本链的 HTTP、实际并发和角色拒绝测试位于 `apps/authoring/src/__tests__/agent-draft.pg.test.ts`，由正式迁移集成入口显式运行。
 
 - `agent-package-publication-migration.test.ts` 静态校验 0021 不改写历史、exact publisher claim、旧 controlled-Test owner、浏览器 transfer 实时钟及最小列权限。
