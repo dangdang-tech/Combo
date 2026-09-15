@@ -133,6 +133,8 @@ Preview、Production、V2 和实例级角色均不执行这一退役操作。
 
 该入口使用现有 V2 同源登录及 `/v1/commerce/` 接口，不重写请求 Origin，不代传会话到本地开发服务器，也不调用内部 `/billing/commerce/reservations`。源码 SHA、SDK SHA、静态文件摘要、修改前的 V2 配置备份及 Nginx 验证结果须随部署记录保存；回退只撤销新增静态入口与精确跳转。此页面部署不表示平台发布副本已整合主线，不执行迁移，不启用下面的独立钱包恢复开关。
 
+原观照应用尚未切换时，`public/legacy-payment-dialog.css` 为购买确认浮层补齐原账户页的主题变量。V2 自有 `mingli-combo-auth.inc` 的原 `/mingli/` HTML 代理可在 `</head>` 前加入该同源样式链接，并以源码版本作为查询参数；仅此代理关闭上游压缩以便替换 HTML，保留既有认证、请求头、路由及应用发布目录。样式只作用于 `.gz-credit-confirm`，不改支付请求、金额、状态或数据库。部署前备份该 V2 include，校验原配置摘要与 Nginx；回退移除注入或恢复该备份。原应用源码恢复维护后，应把相同变量修复移回其 commerce 样式。
+
 ### 钱包恢复配置
 
 `BILLING_PAYMENT_RECOVERY_ENABLED` 默认关闭。开启前必须按既有 V2 停机维护流程应用 `0019_v2_payment_recovery.sql`，就绪检查会核对新增表。该迁移仅属于独立 V2 数据库，不进入正式迁移链，也不改变三环境晋升方式。

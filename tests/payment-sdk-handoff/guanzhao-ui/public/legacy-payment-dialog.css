@@ -1,0 +1,14 @@
+/* The legacy confirmation portal lives outside .gz-account-page. */
+.gz-credit-confirm {
+  --gz-ink: #242824;
+  --gz-muted: #72766f;
+  --gz-paper: #f7f8f5;
+  --gz-line: #e1e4dc;
+  --gz-accent: #51634e;
+  --gz-error: #994c3f;
+}
+
+.gz-credit-confirm :is(a, button):focus-visible {
+  outline: 2px solid var(--gz-accent);
+  outline-offset: 3px;
+}
