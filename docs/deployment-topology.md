@@ -127,6 +127,14 @@ Preview、Production、V2 和实例级角色均不执行这一退役操作。
 
 ## 可恢复支付的独立 V2 配置
 
+### 观照套餐前端的 V2 验证入口
+
+`tests/payment-sdk-handoff/guanzhao-ui` 的实际构建使用 `/mingli/payment-sdk/` 资源前缀。经用户授权的 V2 接入验证可将静态构建放在独立的不可变发布目录，由 V2 自有 Nginx 配置增加这个精确前缀；保留原观照应用、API 路由、数据库与发布指针。接入原应用充值入口时，只将该 Host 的精确 `/mingli/pricing` 与 `/mingli/pricing/` 转向新入口，并保留原 `continue` 参数。
+
+该入口使用现有 V2 同源登录及 `/v1/commerce/` 接口，不重写请求 Origin，不代传会话到本地开发服务器，也不调用内部 `/billing/commerce/reservations`。源码 SHA、SDK SHA、静态文件摘要、修改前的 V2 配置备份及 Nginx 验证结果须随部署记录保存；回退只撤销新增静态入口与精确跳转。此页面部署不表示平台发布副本已整合主线，不执行迁移，不启用下面的独立钱包恢复开关。
+
+### 钱包恢复配置
+
 `BILLING_PAYMENT_RECOVERY_ENABLED` 默认关闭。开启前必须按既有 V2 停机维护流程应用 `0019_v2_payment_recovery.sql`，就绪检查会核对新增表。该迁移仅属于独立 V2 数据库，不进入正式迁移链，也不改变三环境晋升方式。
 
 恢复接口使用现有 Billing 服务和 Host 来源，路径前缀为 `/v2/payments`、`/v2/payment-checkouts`；页面使用 `/payments/{id}?version=2`。实际启用时需让该 V2 来源转发这两个新增前缀，并先协调 SDK 版本。代码与迁移提交本身不表示已修改现网路由、已部署或通过真实支付验收。
