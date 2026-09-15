@@ -140,6 +140,14 @@ jobs:
           COMBO_RUN_CONTAINER_CONTRACTS: '0'
         run: pnpm test:fast
 
+      - name: Guanzhao payment integration
+        if: ${{ hashFiles('tests/payment-sdk-handoff/guanzhao-ui/package.json') != '' }}
+        working-directory: tests/payment-sdk-handoff/guanzhao-ui
+        run: |
+          npm install --workspaces=false --package-lock=false
+          npm test
+          npm run build
+
       - name: ShellCheck scripts
         run: |
           set -euo pipefail
