@@ -5,18 +5,22 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 4597",
-    "build": "vite build"
+    "build": "tsc && vite build",
+    "typecheck": "tsc",
+    "test": "vitest run source/commerce-session.test.ts"
   },
   "dependencies": {
+    "combo-agent-sdk": "git+https://github.com/dangdang-tech/combo-agent-sdk.git#87a3a8e8ab27d3af244279e516285eb266d04135",
+    "lucide-react": "1.31.0",
     "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "lucide-react": "1.31.0"
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
-    "vite": "8.0.16",
-    "typescript": "5.9.3",
     "@types/react": "19.2.14",
-    "@types/react-dom": "19.2.3"
+    "@types/react-dom": "19.2.3",
+    "typescript": "5.9.3",
+    "vite": "8.0.16",
+    "vitest": "2.1.9"
   },
   "engines": {
     "node": ">=22.19.0"
