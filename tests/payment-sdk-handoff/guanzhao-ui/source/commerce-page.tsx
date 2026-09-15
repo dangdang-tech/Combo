@@ -122,11 +122,22 @@ export default function CommercePage() {
       });
       if (!response.ok) throw new Error('暂时无法确认原请求，请返回观照查看。');
       const body = (await response.json()) as {
-        operations?: { id: string; serviceCredits: boolean }[];
+        operations?: {
+          id: string;
+          serviceCredits: boolean;
+          status: string;
+          recoverable: boolean;
+        }[];
       };
       setOperationReady(
         Array.isArray(body.operations) &&
-          body.operations.some((item) => item.id === operationId && item.serviceCredits === true),
+          body.operations.some(
+            (item) =>
+              item.id === operationId &&
+              item.serviceCredits === true &&
+              (['ready', 'waiting_for_payment', 'completed'].includes(item.status) ||
+                (item.status === 'outcome_unknown' && item.recoverable === true)),
+          ),
       );
     }
     const existing = await session.restore();
@@ -241,6 +252,18 @@ export default function CommercePage() {
           </section>
         ) : (
           <>
+            {operationReady && (
+              <section className="gpay-notice" aria-label="继续已保存的请求">
+                <div>
+                  <strong>原请求已经保留</strong>
+                  <p>可以使用已有点数继续。观照会先核验额度，这不会创建充值订单。</p>
+                </div>
+                <a className="gpay-button" href={originalUrl}>
+                  确认继续原请求
+                  <ArrowRight size={17} />
+                </a>
+              </section>
+            )}
             {view === 'plans' && (
               <>
                 <section className="gpay-intro">
@@ -418,13 +441,8 @@ export default function CommercePage() {
                       查询原订单与余额
                       <RotateCcw size={17} />
                     </button>
-                    <a
-                      className="gpay-button gpay-button-secondary"
-                      href={order.status === 'completed' ? originalUrl : '/mingli/'}
-                    >
-                      {operationReady && order.status === 'completed'
-                        ? '确认继续原请求'
-                        : '返回观照'}
+                    <a className="gpay-button gpay-button-secondary" href="/mingli/">
+                      返回观照
                       <ArrowRight size={17} />
                     </a>
                     <p className="gpay-small gpay-muted">

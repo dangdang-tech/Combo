@@ -201,4 +201,17 @@ describe('真实套餐接入的客户端恢复边界（模拟 API）', () => {
     expect(test.client.getOrder).toHaveBeenCalledWith(orderId);
     expect(test.client.createOrder).not.toHaveBeenCalled();
   });
+
+  it('keeps paid credits available without creating an order when another page completed the purchase', async () => {
+    const test = setup();
+    test.client.getAccount.mockResolvedValue({
+      ...account,
+      availablePoints: 2,
+      orders: [{ ...order, status: 'completed' }],
+    });
+    expect(await test.session.restore()).toBeNull();
+    expect((await test.session.snapshot()).account.availablePoints).toBe(2);
+    expect(test.client.createOrder).not.toHaveBeenCalled();
+    expect(test.saved.size).toBe(0);
+  });
 });
