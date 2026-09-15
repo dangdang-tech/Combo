@@ -1,28 +1,91 @@
 {
-  "mode": "LOCAL_REACT_DEMO",
-  "success": {
-    "screen": "success",
-    "balance": "340点",
-    "order": "GZ-DEMO-0914-001"
-  },
-  "result": {
-    "screen": "orders",
-    "balance": "310点",
-    "orders": [
-      {
-        "id": "GZ-DEMO-0914-001",
-        "status": "已到账"
-      },
-      {
-        "id": "GZ-DEMO-0912-001",
-        "status": "已到账"
-      },
-      {
-        "id": "GZ-DEMO-0910-001",
-        "status": "已过期"
-      }
-    ],
-    "consumption": "本次使用\n\n事业 · 2027 年 · 继续解读\n\n那 2027 年呢？适合换一个工作方向吗？\n\n−30 点\n已确认"
-  },
-  "realPayments": 0
+  "mode": "Mock",
+  "at": "2026-09-15T05:49:42.611Z",
+  "checks": [
+    {
+      "label": "initial-account-and-2-point-send",
+      "balance": 20,
+      "screen": "question",
+      "cost": "发送，消耗 2 点",
+      "question": "那 2027 年呢？适合换一个工作方向吗？",
+      "dialogs": 0
+    },
+    {
+      "label": "standard-send-once",
+      "balance": 18,
+      "screen": "question",
+      "cost": "发送，消耗 2 点",
+      "question": "",
+      "sent": "那 2027 年呢？适合换一个工作方向吗？",
+      "dialogs": 0
+    },
+    {
+      "label": "deep-shows-20-before-send",
+      "balance": 18,
+      "screen": "question",
+      "cost": "发送，消耗 20 点",
+      "question": "2027 年换方向，我最需要先核实什么？",
+      "sent": "那 2027 年呢？适合换一个工作方向吗？",
+      "dialogs": 0
+    },
+    {
+      "label": "insufficient-no-deduction",
+      "balance": 18,
+      "screen": "insufficient",
+      "cost": "发送，消耗 20 点",
+      "question": "2027 年换方向，我最需要先核实什么？",
+      "sent": "那 2027 年呢？适合换一个工作方向吗？",
+      "dialogs": 0,
+      "insufficient": "还差 2 点，问题已保留。去充值 "
+    },
+    {
+      "label": "alipay-qr-and-preserved-question",
+      "balance": 18,
+      "screen": "checkout",
+      "qr": "支付宝演示二维码，非付款码",
+      "orderId": "GZ-DEMO-0914-003",
+      "dialogs": 0
+    },
+    {
+      "label": "query-original-no-credit",
+      "balance": 18,
+      "screen": "pending",
+      "qr": "支付宝演示二维码，非付款码",
+      "orderId": "GZ-DEMO-0914-003",
+      "dialogs": 0,
+      "notice": "正在查询这笔订单，尚未收到到账确认。无需重复付款。"
+    },
+    {
+      "label": "mock-credit-once",
+      "balance": 338,
+      "screen": "success",
+      "orderId": "GZ-DEMO-0914-003",
+      "dialogs": 0
+    },
+    {
+      "label": "resume-same-question-and-cost-once",
+      "balance": 318,
+      "screen": "question",
+      "cost": "发送，消耗 20 点",
+      "question": "",
+      "sent": "2027 年换方向，我最需要先核实什么？",
+      "dialogs": 0
+    },
+    {
+      "label": "revisit-paid-no-recredit",
+      "balance": 318,
+      "screen": "success",
+      "orderId": "GZ-DEMO-0914-003",
+      "dialogs": 0
+    },
+    {
+      "label": "return-again-no-recharge",
+      "balance": 318,
+      "screen": "question",
+      "cost": "发送，消耗 20 点",
+      "question": "",
+      "sent": "2027 年换方向，我最需要先核实什么？",
+      "dialogs": 0
+    }
+  ]
 }

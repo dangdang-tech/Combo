@@ -1,15 +1,14 @@
 {
-  "duplicateResume": {
-    "before": "310点",
-    "after": "310点"
+  "mode": "Mock",
+  "at": "2026-09-15T05:50:33.221Z",
+  "unknownReopensSameOrder": "GZ-DEMO-0914-005",
+  "unknownQrHidden": true,
+  "queryBalance": 20,
+  "countdown": {
+    "before": "15:00",
+    "after": "14:59"
   },
-  "unknownOrder": {
-    "original": "GZ-DEMO-0914-002",
-    "returned": {
-      "id": "GZ-DEMO-0914-002",
-      "screen": "unknown",
-      "notice": "你还有一笔待处理的订单。先确认这笔订单，避免重复支付。"
-    }
-  },
-  "browserRefreshPersistence": "not implemented in design prototype; production adapter responsibility"
+  "expiredQrHidden": true,
+  "expiredPaidToUnknown": true,
+  "automaticExpiryNotTimeAccelerated": true
 }

@@ -10,18 +10,17 @@ import {
   ChevronRight,
   CircleHelp,
   Clock3,
-  ExternalLink,
   FileText,
-  LoaderCircle,
   RotateCcw,
   ShieldCheck,
-  WalletCards,
 } from 'lucide-react';
 import ThemeToggle from '../theme-toggle';
+import PaymentQuestion, { type ReadingMode, type Usage } from './payment-question';
+import PaymentQr, { type PaymentMethod } from './payment-qr';
 
 type Screen =
   | 'wallet'
-  | 'confirm'
+  | 'question'
   | 'insufficient'
   | 'checkout'
   | 'pending'
@@ -43,6 +42,8 @@ type Order = {
   date: string;
   plan: Plan;
   status: OrderStatus;
+  method?: PaymentMethod;
+  expiresAt?: number;
 };
 
 const plans: Plan[] = [
@@ -72,11 +73,10 @@ const task = {
   chart: '我的命盘',
   topic: '事业 · 2027 年',
   question: '那 2027 年呢？适合换一个工作方向吗？',
-  cost: 30,
 };
 const scenes: { value: Screen; label: string }[] = [
   { value: 'wallet', label: '01 · 点数充值' },
-  { value: 'confirm', label: '02 · 扣点确认' },
+  { value: 'question', label: '02 · 问事与发送' },
   { value: 'insufficient', label: '03 · 点数不足' },
   { value: 'checkout', label: '04 · 收银台' },
   { value: 'pending', label: '05 · 等待确认' },
@@ -128,7 +128,13 @@ function Eyebrow({ children }: { children: ReactNode }) {
   return <p className="gpay-eyebrow">{children}</p>;
 }
 
-function OriginalQuestion({ compact = false }: { compact?: boolean }) {
+function OriginalQuestion({
+  compact = false,
+  text = task.question,
+}: {
+  compact?: boolean;
+  text?: string;
+}) {
   return (
     <div className={`gpay-question${compact ? ' gpay-question-compact' : ''}`}>
       <p className="gpay-meta">
@@ -139,7 +145,7 @@ function OriginalQuestion({ compact = false }: { compact?: boolean }) {
         <span>／</span>
         {task.topic}
       </p>
-      <p className="gpay-question-text">{task.question}</p>
+      <p className="gpay-question-text">{text}</p>
       {!compact && (
         <p className="gpay-muted">命盘、前文和这次的问题都会保留。充值完成后，回到这里继续。</p>
       )}
@@ -148,13 +154,20 @@ function OriginalQuestion({ compact = false }: { compact?: boolean }) {
 }
 
 export default function PaymentLab() {
-  const [screen, setScreen] = useState<Screen>('wallet');
+  const [screen, setScreen] = useState<Screen>('question');
   const [balance, setBalance] = useState(20);
   const [selectedPlan, setSelectedPlan] = useState(plans[1]);
   const [orders, setOrders] = useState<Order[]>(initialOrders);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
-  const [taskResumed, setTaskResumed] = useState(false);
+  const [mode, setMode] = useState<ReadingMode>('standard');
+  const [method, setMethod] = useState<PaymentMethod>('wechat');
+  const [question, setQuestion] = useState(task.question);
+  const [lastUsage, setLastUsage] = useState<Usage | null>(null);
+  const pendingRequest = useRef<Usage | null>(null);
+  const consumedRequests = useRef(new Set<string>());
+  const cost = mode === 'standard' ? 2 : 20;
+  const taskResumed = lastUsage !== null;
   const sequence = useRef(1);
   const creditedOrders = useRef(new Set<string>());
   const order = orders.find((item) => item.id === orderId);
@@ -189,7 +202,14 @@ export default function PaymentLab() {
     }
     const id = `GZ-DEMO-0914-${String(sequence.current++).padStart(3, '0')}`;
     setOrders((items) => [
-      { id, date: '09 月 14 日 · 刚刚', plan: selectedPlan, status: 'unpaid' },
+      {
+        id,
+        date: '刚刚',
+        plan: selectedPlan,
+        status: 'unpaid',
+        method,
+        expiresAt: Date.now() + 15 * 60_000,
+      },
       ...items,
     ]);
     setOrderId(id);
@@ -207,16 +227,33 @@ export default function PaymentLab() {
   }
 
   function returnToQuestion() {
-    navigate(taskResumed ? 'resumed' : balance < task.cost ? 'insufficient' : 'confirm');
+    navigate('question');
   }
 
-  function resumeTask() {
-    if (balance < task.cost) return navigate('insufficient');
-    if (!taskResumed) {
-      setBalance((value) => value - task.cost);
-      setTaskResumed(true);
+  function sendQuestion() {
+    if (!question.trim()) return;
+    const request = pendingRequest.current ?? {
+      id: `use-${sequence.current++}`,
+      question: question.trim(),
+      cost,
+      mode,
+    };
+    if (consumedRequests.current.has(request.id)) return;
+    if (balance < request.cost) {
+      pendingRequest.current = request;
+      return navigate('insufficient');
     }
-    navigate('resumed');
+    consumedRequests.current.add(request.id);
+    setBalance((value) => value - request.cost);
+    setLastUsage(request);
+    setQuestion('');
+    pendingRequest.current = null;
+    navigate('question');
+  }
+
+  function continueAfterPayment() {
+    if (pendingRequest.current) sendQuestion();
+    else returnToQuestion();
   }
 
   function openOrder(item: Order) {
@@ -240,16 +277,28 @@ export default function PaymentLab() {
     setSelectedPlan(plan);
     setOrders(
       needsOrder
-        ? [{ id, date: '09 月 14 日 · 刚刚', plan, status }, ...initialOrders]
+        ? [
+            { id, date: '刚刚', plan, status, method, expiresAt: Date.now() + 15 * 60_000 },
+            ...initialOrders,
+          ]
         : initialOrders,
     );
     setOrderId(needsOrder ? id : null);
     creditedOrders.current = new Set(next === 'success' ? [id] : []);
-    setBalance(next === 'confirm' ? 120 : next === 'success' ? 340 : next === 'resumed' ? 90 : 20);
-    setTaskResumed(next === 'resumed');
+    setBalance(
+      next === 'insufficient' ? 0 : next === 'success' ? 340 : next === 'resumed' ? 18 : 20,
+    );
+    setMode('standard');
+    setQuestion(next === 'resumed' ? '' : task.question);
+    const usage: Usage = { id: `use-${id}`, question: task.question, cost: 2, mode: 'standard' };
+    pendingRequest.current = next === 'success' || next === 'insufficient' ? usage : null;
+    consumedRequests.current = new Set(next === 'resumed' ? [usage.id] : []);
+    setLastUsage(next === 'resumed' ? usage : null);
     navigate(next);
   }
 
+  const originalQuestion =
+    pendingRequest.current?.question || question || lastUsage?.question || task.question;
   const isOrderScreen = ['checkout', 'pending', 'unknown', 'expired', 'success'].includes(screen);
 
   return (
@@ -273,7 +322,7 @@ export default function PaymentLab() {
               </option>
             ))}
           </select>
-          <button type="button" onClick={() => loadScene('wallet')} aria-label="重置支付预览">
+          <button type="button" onClick={() => loadScene('question')} aria-label="重置支付预览">
             <RotateCcw size={16} />
             <span>重置</span>
           </button>
@@ -289,7 +338,7 @@ export default function PaymentLab() {
             type="button"
             onClick={returnToQuestion}
             aria-current={
-              ['confirm', 'insufficient', 'resumed'].includes(screen) ? 'page' : undefined
+              ['question', 'insufficient', 'resumed'].includes(screen) ? 'page' : undefined
             }
           >
             我的问题
@@ -309,6 +358,18 @@ export default function PaymentLab() {
             订单记录
           </button>
           <ThemeToggle />
+          <button
+            type="button"
+            className="gpay-account-tab"
+            onClick={() => navigate('wallet')}
+            aria-label={`我的账户，可用 ${balance} 点`}
+          >
+            <span className="gpay-account-label">我的账户</span>
+            <strong aria-live="polite">
+              {balance}
+              <small>点</small>
+            </strong>
+          </button>
         </nav>
       </header>
 
@@ -378,6 +439,23 @@ export default function PaymentLab() {
                     </button>
                   ))}
                 </fieldset>
+                <fieldset className="gpay-payment-methods" aria-label="付款方式">
+                  <legend>付款方式</legend>
+                  <button
+                    type="button"
+                    aria-pressed={method === 'wechat'}
+                    onClick={() => setMethod('wechat')}
+                  >
+                    微信支付
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={method === 'alipay'}
+                    onClick={() => setMethod('alipay')}
+                  >
+                    支付宝
+                  </button>
+                </fieldset>
                 <div className="gpay-purchase-row">
                   <div>
                     <strong>{selectedPlan.points} 观照点</strong>
@@ -392,13 +470,13 @@ export default function PaymentLab() {
                 </div>
                 <div className="gpay-reassurance">
                   <ShieldCheck size={18} />
-                  <p>付款结果确认后，点数才会到账。充值与解读分别确认。</p>
+                  <p>付款结果确认后，点数会更新到右上角。</p>
                 </div>
                 <div className="gpay-explainer">
                   <div>
                     <span>01</span>
-                    <h3>先看清，再确认</h3>
-                    <p>每次解读都会列出点数，确认后才开始。</p>
+                    <h3>消耗写在发送按钮上</h3>
+                    <p>发出问题前，发送按钮会显示本次需要的点数。</p>
                   </div>
                   <div>
                     <span>02</span>
@@ -409,19 +487,19 @@ export default function PaymentLab() {
               </section>
               <aside className="gpay-side-card">
                 <Eyebrow>留在这里的问题</Eyebrow>
-                <OriginalQuestion />
+                <OriginalQuestion text={originalQuestion} />
                 <div className="gpay-divider" />
                 <div className="gpay-detail-row">
                   <span>本次需要</span>
-                  <strong>{task.cost} 点</strong>
+                  <strong>{cost} 点</strong>
                 </div>
                 <div className="gpay-detail-row gpay-muted">
                   <span>当前可用</span>
                   <span>{balance} 点</span>
                 </div>
                 <p className="gpay-shortfall">
-                  {balance < task.cost
-                    ? `还差 ${task.cost - balance} 点，就可以继续。`
+                  {balance < cost
+                    ? `还差 ${cost - balance} 点，就可以继续。`
                     : '点数已足够，可以继续解读。'}
                 </p>
                 <Button secondary onClick={returnToQuestion}>
@@ -433,91 +511,26 @@ export default function PaymentLab() {
           </>
         )}
 
-        {['confirm', 'insufficient', 'resumed'].includes(screen) && (
-          <section className="gpay-task-layout">
-            <div className="gpay-task-intro">
-              <Eyebrow>YOUR QUESTION · 原来的问题</Eyebrow>
-              <h1>
-                沿着这个问题，
-                <br />
-                继续往下看。
-              </h1>
-              <OriginalQuestion />
-              <button type="button" className="gpay-text-link" onClick={() => navigate('wallet')}>
-                <WalletCards size={16} />
-                可用 {balance} 点
-                <span>
-                  充值 <ChevronRight size={15} />
-                </span>
-              </button>
-            </div>
-            <div className="gpay-action-card" key={screen}>
-              {screen === 'resumed' ? (
-                <>
-                  <span className="gpay-state-icon">
-                    <Check size={25} />
-                  </span>
-                  <Eyebrow>问题已保留</Eyebrow>
-                  <h2>回到熟悉的地方</h2>
-                  <p className="gpay-muted">
-                    命盘、事业主题和 2027 年的问题都在。你可以在这里继续查看解读。
-                  </p>
-                  <div className="gpay-readback">
-                    <span>本次解读</span>
-                    <strong>已确认 · {task.cost} 点</strong>
-                    <p>从「那 2027 年呢？」继续</p>
-                  </div>
-                  <p className="gpay-muted gpay-small">无需重新排盘，也无需重复提交问题。</p>
-                  <Button secondary onClick={() => navigate('orders')}>
-                    查看点数明细 <ArrowRight size={17} />
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <span className="gpay-card-index">
-                    {screen === 'insufficient' ? '还差一点，就可以继续' : '开始之前，先与你确认'}
-                  </span>
-                  <h2>{screen === 'insufficient' ? '需要补充一些观照点' : '继续这次解读'}</h2>
-                  <p className="gpay-muted">围绕你的命盘与前文，继续看 2027 年的事业方向。</p>
-                  <dl className="gpay-cost-list">
-                    <div>
-                      <dt>本次需要</dt>
-                      <dd>{task.cost} 点</dd>
-                    </div>
-                    <div>
-                      <dt>当前可用</dt>
-                      <dd>{balance} 点</dd>
-                    </div>
-                    <div className={balance < task.cost ? 'gpay-accent' : ''}>
-                      <dt>{balance < task.cost ? '还需补充' : '确认后剩余'}</dt>
-                      <dd>{Math.abs(balance - task.cost)} 点</dd>
-                    </div>
-                  </dl>
-                  <Button
-                    onClick={screen === 'insufficient' ? () => navigate('wallet') : resumeTask}
-                  >
-                    {screen === 'insufficient' ? '补充点数，保留问题' : `确认使用 ${task.cost} 点`}
-                    <ArrowRight size={18} />
-                  </Button>
-                  <p className="gpay-small gpay-muted">
-                    {screen === 'insufficient'
-                      ? '这次尚未扣点。充值后会回到这个问题。'
-                      : '本次只确认这一条问题，继续追问时会再次提示。'}
-                  </p>
-                  <button
-                    type="button"
-                    className="gpay-text-link gpay-center-link"
-                    onClick={() => {
-                      navigate('wallet');
-                      setNotice('问题已经保留，你可以稍后回来继续。');
-                    }}
-                  >
-                    稍后再说
-                  </button>
-                </>
-              )}
-            </div>
-          </section>
+        {['question', 'insufficient', 'resumed'].includes(screen) && (
+          <PaymentQuestion
+            question={question}
+            mode={mode}
+            balance={balance}
+            insufficient={screen === 'insufficient'}
+            lastUsage={lastUsage}
+            onQuestion={(value) => {
+              setQuestion(value);
+              pendingRequest.current = null;
+              navigate('question');
+            }}
+            onMode={(value) => {
+              setMode(value);
+              pendingRequest.current = null;
+              navigate('question');
+            }}
+            onSend={sendQuestion}
+            onRecharge={() => navigate('wallet')}
+          />
         )}
 
         {isOrderScreen && (
@@ -555,78 +568,25 @@ export default function PaymentLab() {
               </ol>
             </div>
             <div className="gpay-checkout-grid">
-              <section className="gpay-payment-card" aria-live="polite">
-                {screen === 'checkout' && (
-                  <>
-                    <div className="gpay-payment-card-title">
-                      <h2>完成这次充值</h2>
-                      <span className="gpay-status">
-                        <Clock3 size={14} />
-                        待支付
-                      </span>
-                    </div>
-                    <div className="gpay-pay-amount">
-                      <small>应付金额 · 演示</small>
-                      <strong>
-                        <span>¥</span>
-                        {activePlan.yuan.toFixed(2)}
-                      </strong>
-                      <p>到账 {activePlan.points} 观照点</p>
-                    </div>
-                    <div className="gpay-checkout-placeholder">
-                      <WalletCards size={32} />
-                      <strong>在收银台选择支付方式</strong>
-                      <p>完成付款后，可以回到这里查看结果。</p>
-                      <span>设计预览 · 非付款码</span>
-                    </div>
-                    <Button
-                      onClick={() => {
-                        updateOrder('pending');
-                        navigate('pending');
-                      }}
-                    >
-                      前往收银台
-                      <ExternalLink size={17} />
-                    </Button>
-                    <p className="gpay-small gpay-muted gpay-center">请在订单有效期内完成支付。</p>
-                  </>
-                )}
-                {screen === 'pending' && (
-                  <>
-                    <span className="gpay-state-icon">
-                      <LoaderCircle size={27} className="gpay-spin" />
-                    </span>
-                    <h2>付款后，稍等片刻</h2>
-                    <p className="gpay-muted">
-                      支付结果确认后，点数会自动到账。你可以先回到问题，也可以留在这里查看结果。
-                    </p>
-                    <div className="gpay-waiting">
-                      <span className="gpay-wait-dot" />
-                      <span>正在等待这笔订单的付款结果</span>
-                    </div>
-                    <Button
-                      onClick={() =>
-                        setNotice('还没有收到付款成功的确认，请稍后再查看。无需重复付款。')
-                      }
-                    >
-                      我已付款，查看结果
-                      <RotateCcw size={17} />
-                    </Button>
-                    <Button secondary onClick={returnToQuestion}>
-                      先回到原问题
-                      <ArrowRight size={17} />
-                    </Button>
-                    <p className="gpay-small gpay-muted">
-                      没有完成付款？
-                      <button
-                        type="button"
-                        className="gpay-inline-link"
-                        onClick={() => navigate('checkout')}
-                      >
-                        返回同一笔订单的收银台
-                      </button>
-                    </p>
-                  </>
+              <section className="gpay-payment-card">
+                {['checkout', 'pending'].includes(screen) && order && (
+                  <PaymentQr
+                    orderId={order.id}
+                    pending={screen === 'pending'}
+                    method={order.method ?? 'wechat'}
+                    amount={activePlan.yuan}
+                    points={activePlan.points}
+                    expiresAt={order.expiresAt ?? Date.now()}
+                    onExpired={() => {
+                      updateOrder('expired');
+                      navigate('expired');
+                    }}
+                    onQuery={() => {
+                      updateOrder('pending');
+                      setScreen('pending');
+                      setNotice('正在查询这笔订单，尚未收到到账确认。无需重复付款。');
+                    }}
+                  />
                 )}
                 {screen === 'unknown' && (
                   <>
@@ -703,17 +663,15 @@ export default function PaymentLab() {
                         <small>点</small>
                       </strong>
                     </div>
-                    <Button onClick={returnToQuestion}>
-                      回到原问题
+                    <Button onClick={continueAfterPayment}>
+                      {pendingRequest.current ? '继续原来的解读' : '回到问事'}
                       <ArrowRight size={18} />
                     </Button>
                     <Button secondary onClick={() => navigate('orders')}>
                       查看充值记录
                       <FileText size={17} />
                     </Button>
-                    <p className="gpay-small gpay-muted">
-                      充值不会直接开始解读，回到问题后再确认使用点数。
-                    </p>
+                    <p className="gpay-small gpay-muted">原来的问题和对话都在，继续接着聊。</p>
                   </>
                 )}
               </section>
@@ -744,7 +702,7 @@ export default function PaymentLab() {
                 </dl>
                 <div className="gpay-divider" />
                 <p className="gpay-meta">充值后，继续这个问题</p>
-                <OriginalQuestion compact />
+                <OriginalQuestion compact text={originalQuestion} />
                 <button type="button" className="gpay-text-link" onClick={returnToQuestion}>
                   回到原问题 <ArrowRight size={16} />
                 </button>
@@ -851,9 +809,9 @@ export default function PaymentLab() {
                 <div>
                   <Eyebrow>本次使用</Eyebrow>
                   <h3>{task.topic} · 继续解读</h3>
-                  <p>{task.question}</p>
+                  <p>{lastUsage?.question}</p>
                 </div>
-                <strong>−{task.cost} 点</strong>
+                <strong>−{lastUsage?.cost} 点</strong>
                 <span className="gpay-status">已确认</span>
               </section>
             )}

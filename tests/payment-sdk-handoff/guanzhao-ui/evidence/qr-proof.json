@@ -1,0 +1,56 @@
+{
+  "decoder": "zxing-cpp 2.3.0",
+  "source": "actual browser screenshots",
+  "cases": [
+    {
+      "file": "1512-light-checkout.png",
+      "decoded": "GUANZHAO DEMO - NOT FOR PAYMENT"
+    },
+    {
+      "file": "1512-light-pending.png",
+      "decoded": "GUANZHAO DEMO - NOT FOR PAYMENT"
+    },
+    {
+      "file": "1512-dark-checkout.png",
+      "decoded": "GUANZHAO DEMO - NOT FOR PAYMENT"
+    },
+    {
+      "file": "1512-dark-pending.png",
+      "decoded": "GUANZHAO DEMO - NOT FOR PAYMENT"
+    },
+    {
+      "file": "390-light-checkout.png",
+      "decoded": "GUANZHAO DEMO - NOT FOR PAYMENT"
+    },
+    {
+      "file": "390-light-pending.png",
+      "decoded": "GUANZHAO DEMO - NOT FOR PAYMENT"
+    },
+    {
+      "file": "390-dark-checkout.png",
+      "decoded": "GUANZHAO DEMO - NOT FOR PAYMENT"
+    },
+    {
+      "file": "390-dark-pending.png",
+      "decoded": "GUANZHAO DEMO - NOT FOR PAYMENT"
+    },
+    {
+      "file": "320-light-checkout.png",
+      "decoded": "GUANZHAO DEMO - NOT FOR PAYMENT"
+    },
+    {
+      "file": "320-light-pending.png",
+      "decoded": "GUANZHAO DEMO - NOT FOR PAYMENT"
+    },
+    {
+      "file": "320-dark-checkout.png",
+      "decoded": "GUANZHAO DEMO - NOT FOR PAYMENT"
+    },
+    {
+      "file": "320-dark-pending.png",
+      "decoded": "GUANZHAO DEMO - NOT FOR PAYMENT"
+    }
+  ],
+  "passed": 12,
+  "realPayment": false
+}

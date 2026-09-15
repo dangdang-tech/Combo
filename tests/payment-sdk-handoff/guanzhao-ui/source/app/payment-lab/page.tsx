@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import PaymentLab from './payment-lab';
 import './payment-lab.css';
 import './payment-responsive.css';
+import './payment-revision.css';
 
 export const metadata: Metadata = {
   title: '观照 · 点数与支付流程预览',

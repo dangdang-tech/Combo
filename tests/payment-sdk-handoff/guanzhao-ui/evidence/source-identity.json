@@ -1,72 +1,118 @@
 {
-  "recordedAt": "2026-09-14T15:21:09.457282+00:00",
-  "mode": "LOCAL_REACT_DEMO",
-  "sourceBaseline": "e39fa29d80a730dabcd229e5dae21f79c3fbc580",
-  "comboBase": "5f6c7c6679dff298540ea8f204ae441cf8b71fc2",
-  "comboBranch": "codex/357-guanzhao-payment-ui",
-  "sourceDirty": true,
-  "frontendFiles": [
-    {
-      "path": "payment-lab/page.tsx",
-      "guanzhaoSourceSha256": "703605325d5dca075b062e34ce72d554ad07774327b07756a538ceff4ea8a836",
-      "handoffSha256": "ba5b1882088b16064782a779e1487a41364e3b190c19998b7955539b737b4ce8"
-    },
-    {
-      "path": "payment-lab/payment-lab.tsx",
-      "guanzhaoSourceSha256": "9fd0e4485ddcc5c0012490c8303987583c31316ec81783c590081f5cd6d327eb",
-      "handoffSha256": "bd31f04bfc85e07546f12c7e876919831454650a837ca98314388ae54e36a630"
-    },
-    {
-      "path": "payment-lab/payment-lab.css",
-      "guanzhaoSourceSha256": "f8b63da69737e7f548077872547323206ca1259dc891bb9d5a2640a2dcd9fc84",
-      "handoffSha256": "9d31727cdfb2c042e97ad134a2c95262b4f3231793ff9a6472eb2f6944d4a422"
-    },
-    {
-      "path": "theme-toggle.tsx",
-      "guanzhaoSourceSha256": "cfea5bc9d1fc107e8dd571a2ce7eb5b4c15412bd98eca738dfb2eba4630719a8",
-      "handoffSha256": "c6a8c9557af79a43c5e0f7b32c6aee646c7e351b92cd3235dba8c40522783702"
-    }
-  ],
-  "formatting": "Repository Prettier formatting; CSS split into base and responsive files in the original cascade order; standalone handoff built and browser exercised separately.",
-  "realPayments": 0,
-  "realOrdersCreated": 0,
-  "productionChanges": 0,
-  "browserWidthThemeStateChecks": 60,
-  "browserWidthThemeStateFailures": 0,
-  "handoffLocation": "tests/payment-sdk-handoff/guanzhao-ui",
-  "styles": {
-    "orderedFiles": [
-      "source/app/payment-lab/payment-lab.css",
-      "source/app/payment-lab/payment-responsive.css"
-    ],
-    "concatenatedSha256": "f8b63da69737e7f548077872547323206ca1259dc891bb9d5a2640a2dcd9fc84",
-    "concatenatedMatchesOriginalSource": true
+  "mode": "Mock",
+  "at": "2026-09-15T05:57:59.373476+00:00",
+  "baseline": "5f6c7c6679dff298540ea8f204ae441cf8b71fc2",
+  "preRevisionHead": "2cdc31c05c8ebb292dadfca42346f1ea37dfef44",
+  "worktree": "/Users/benzema/Developer/Combo-wt-guanzhao-payment-ui",
+  "runtime": {
+    "directory": "/tmp/guanzhao-payment-refinement-20260915",
+    "url": "http://127.0.0.1:4597/",
+    "listenPid": 39491,
+    "command": "vite --host 127.0.0.1 --port 4597",
+    "freshStartAfterSourceChange": true
   },
-  "screenshots": [
-    {
-      "file": "1512-light-wallet.png",
-      "sha256": "fcab9902ebd6c2ff24333bb929e023f08a71b1cc7563e56f778a8340dbd7fa1d",
-      "bytes": 139455
-    },
-    {
-      "file": "desktop-checkout-light.png",
-      "sha256": "921eb2c562db505ad5442a0286f2edbcab256ddeb3a71063df993b9f11423cd0",
-      "bytes": 104126
-    },
-    {
-      "file": "mobile-unknown-light.png",
-      "sha256": "abf095aa77f80234562dc3f6c23755aa64766347154736a0e0f0edb6e9934bb7",
-      "bytes": 68822
-    },
-    {
-      "file": "390-light-success.png",
-      "sha256": "44978e7c902027438acaf04f976708102681e630c3574e0dc84b70acbdaefd7d",
-      "bytes": 50964
-    },
-    {
-      "file": "390-light-confirm.png",
-      "sha256": "27ef28da721e9bb1ee07faecf8687426eac748d93b08dd9ee3b58f03f1d70de8",
-      "bytes": 65444
+  "sourceFiles": {
+    "main.tsx": "dcc23577f154da52ce6fc9a304133e1dc9556c0ea234823683a841b78ac58807",
+    "index.html": "2d122eed40fd21fdb86bf63076ff33e08e6c5cf8bcfc2455ac6c06058cc1c583",
+    "vite.config.ts": "35b2114f37d707d9ffaa856f32e04acc8e1e201dd448148a1ba4775d4a8d073d",
+    "package.json": "f70df50bc10158479bcb26bb4061afe4d8aa9939d6e82a38889246a31e3ef163",
+    "source/app/payment-tokens.css": "874c379bacbfc0498d7d6ee2590467bbfdbfe1bf9af934ce5c3b08199dffd4aa",
+    "source/app/theme-toggle.tsx": "c6a8c9557af79a43c5e0f7b32c6aee646c7e351b92cd3235dba8c40522783702",
+    "source/app/payment-lab/payment-responsive.css": "eae2ccbd41c3dc8738154bd992f3bd0505e059aff66231dc1785ffd6b6741288",
+    "source/app/payment-lab/payment-revision.css": "f4b546a995a280ba643fe94ff87c925a5d09443ee80fc7ca9aebbc570aeb72d6",
+    "source/app/payment-lab/payment-lab.tsx": "7807fbe391aa03058183f37739841b0888084db8acd82f86f0fa3d5ddf4f7e97",
+    "source/app/payment-lab/payment-qr.tsx": "f48c9334a94b3ec1d76f5fe10c2694b67b64f718f6174906f9b518f68ba99e78",
+    "source/app/payment-lab/payment-question.tsx": "4ee0ebbc6789b45dafc9d6094e41093d79af6f0160a725623eb79a1759954278",
+    "source/app/payment-lab/page.tsx": "2829ff4b9cd87f98854f113c6f10d10b9715dd2e1457f23a3b0a502947b06449",
+    "source/app/payment-lab/payment-lab.css": "9d31727cdfb2c042e97ad134a2c95262b4f3231793ff9a6472eb2f6944d4a422"
+  },
+  "screenshots": {
+    "1512-dark-checkout.png": "2388f12db74fc849a985f64b9b8ca1278955aa3097d5f99ddf58aa16beab4815",
+    "1512-dark-expired.png": "33bce1eda5a80349cb8c8790c58e7deb8a88d1faec6124b48a4e698522b0a443",
+    "1512-dark-insufficient.png": "45e3332d646adb57bc2dfe8066578f83f6aeb1f2325b28a83b229a2ccca4ccc7",
+    "1512-dark-orders.png": "277621fb17b4266fa3d235dbaa6486298510bfd3ec2707d2915fbc714a01c09b",
+    "1512-dark-pending.png": "4feedb236087861720f2b07632ee0b55a96e6c029c885564b7243c085dbae7be",
+    "1512-dark-question.png": "74899466276b3dc781ffef45424ac9de7e056f9b9e1f0471ebcd6c725677de6c",
+    "1512-dark-resumed.png": "cf7f387f604ae6a409e54d8c63b4841896f918eecfcdae3d3d1de6c0fc600365",
+    "1512-dark-success.png": "bad5ffb97bea5935cb45bfe23bc6608e7ab8d5c784521e8efaf119b82032e7dc",
+    "1512-dark-unknown.png": "4caab234f4c3b618499620d85fa3d6f4bdf18d59f4870718fb4e53defa5af0e1",
+    "1512-dark-wallet.png": "90eb75526ca03431f394e8dd89ab5e748f23748b384ade1805c26ee2bcd5652e",
+    "1512-light-checkout.png": "4e9da65e62603531f9ef62f7ecd59a792f00175971a65f7978f6567066e90bfc",
+    "1512-light-expired.png": "bb369f7f419fff990ba9ccdb1350caa2c7f6d59af395f125560f42451218dce9",
+    "1512-light-insufficient.png": "cad9b69eb3a3c31191db66195bcec13126fc05d3d2f850c3222cb18b399c066b",
+    "1512-light-orders.png": "9e4b79429c1cd98a1fb2248cca93870a3bce5b7fe90b429fa6b1c98af75f5582",
+    "1512-light-pending.png": "86a505222ba396b90e610e88ade4991ef6e63b90a5af38765464402870ba4fd1",
+    "1512-light-question.png": "57f8b6197bad85930502bb59fddf2120b55f5f942938a88510a787dd92386cd4",
+    "1512-light-resumed.png": "c53be878f9be77a52545fcc0169bf0ef015bad4fa8872ff2aee0ae6a4a3a33df",
+    "1512-light-success.png": "60bb459bef6f27533dc26204e183e83134db976cf80d282214b807aacec3a933",
+    "1512-light-unknown.png": "ed243b731bddfab52be950f2cf43f2f4ca2dbd391dd5f22fbc359914c4e43b77",
+    "1512-light-wallet.png": "fe8fc91ed9854d8fa10a2a578edf91e66dec7e2da81d267fcb0620a043dbca76",
+    "320-dark-checkout.png": "8c2027c7382f620798c6995faa235b4afe731405cedace2c44a513f1164a8f2b",
+    "320-dark-expired.png": "ae0e7961b9451e52a318eba050f02a29ddaf0eed20af90bc4a3a7d15c6616aa5",
+    "320-dark-insufficient.png": "d9fb72e99114fc62d5650281aa8071f1a898efe5d9be93926d9da93b27ee1115",
+    "320-dark-orders.png": "7b6ebe271659c33232bbb734eefcced1b28067d16c1ad3c0a9cb51ec8cadb327",
+    "320-dark-pending.png": "72a9c0e55ed93ca10c797fd7ebb5e1a8bc8785477a2a17aec557c02f1d1e3a86",
+    "320-dark-question.png": "18f6248257006a105271c0e021434e9635c393dee7f953b76aceadf6ef227e2e",
+    "320-dark-resumed.png": "16b12cdbaeb5c452ae6c114f0ffe4f8465b8150383b462442073b48d5303a56c",
+    "320-dark-success.png": "2b4cb1afaceae1d1cc53ec7c5693569584279b26a63538445fe7c0403604b214",
+    "320-dark-unknown.png": "9ed67a5cea498bdec1d9f1ccd20cab51f09f29fd86e534c9ff7671484518fb17",
+    "320-dark-wallet.png": "60248e2ddbcb972f0dd4ebdd4908c6976675831d92794bbf7cf3359956509d90",
+    "320-light-checkout.png": "308277fe8a26f5f7340e31968c5153bb6eae206378a80a94ffdc468ec36e710c",
+    "320-light-expired.png": "cb7b3020da214695eba2f0bb26e9cb5eb146f03b75b3af731e1ba9a29aadb689",
+    "320-light-insufficient.png": "d55fc6ea93c280a3dd347d43e46f53f0fa1fb0a4f0de4c7b57063f09b77c7068",
+    "320-light-orders.png": "97416af3a2d4fe2e627c8ffc371d659385ddd4574dfb2a70a0d36aa4ed13daa5",
+    "320-light-pending.png": "915e22818893bb26c1b541726e2bbfcf983dfaea83c86ff1a14ac17fb9dd2695",
+    "320-light-question.png": "28f3a09edc7dccf8e575815e00a2eeed66fb69f70d01d8ccc3236e48e516490e",
+    "320-light-resumed.png": "35f31a456c2caeed152729aa0dd7eed00e689b45d9faa2e96df934e7163a0dfb",
+    "320-light-success.png": "0518e9e00cc298a8e4d85938eeeea0dd5284d6a571d93d552a9b8ea02b929617",
+    "320-light-unknown.png": "bad9695feb832cca11814270f561a292749467e5db6f50632ca293c6f854c143",
+    "320-light-wallet.png": "3fce81136ebe1f9be44f08f5ee017ecd9ebdf2b373f145e0cc6ce8961ae18bb4",
+    "390-dark-checkout.png": "5ed576fd186012ab11933ea2858ef85b6d87a96d5d1968a5dc0c413bbbe0224b",
+    "390-dark-expired.png": "a8ecb00ed33cf8db799c2422874a1ef9896480c9bfe265046de45a8125226575",
+    "390-dark-insufficient.png": "1da8feb09dd589b0a64a224bdb89f060811f0e40ab4705f1d86ac24133a797bf",
+    "390-dark-orders.png": "78219815877238f7ce7a37670d59977a4395f86fac36daee0fdff27074ec6f36",
+    "390-dark-pending.png": "2f1704ea38dda13820e1400eb119a597df925e1629853ded8f45bfeb62794c51",
+    "390-dark-question.png": "ba6b985af2973e7a0f9d562f1baa1b064a0950a68c8061fccb1a48625ea624fa",
+    "390-dark-resumed.png": "51cfb0dc9dbf958512b006ed497d76d2d3285c229500bdb2ef894eac86aac7a5",
+    "390-dark-success.png": "6522577255d7495d4b336a03c1114a3302437ebac94d68e742f6c3dc36d1dcca",
+    "390-dark-unknown.png": "12b0ad6bf837f2067e6a9e2c5b29840edccc74d017515c0418403359df2c4ba5",
+    "390-dark-wallet.png": "a41d3420e3fb1580b3e238c99932c0f8a43baa5cd186f38da4d04176fa5571a6",
+    "390-light-checkout.png": "b03c91e3035a3f296f50527f0e75cfc59eaa1a2aca6b9f87a4c8829e596ba4a0",
+    "390-light-expired.png": "329cdad4a416e6c663d8c8c7e85a2481e1a5d922df462fd584f3d7aa2d33d1d5",
+    "390-light-insufficient.png": "e4ac6a7143fac2618d0bfc30d23e4b75942a3490cf99f624ff1c1822bff54916",
+    "390-light-orders.png": "d8b53024a6f4a0dafaccd014fa2c1c9335718a5e3e485ac6c5a164fa5b49159f",
+    "390-light-pending.png": "a8312b837658f95fb14195b5722ac30f533f11886c93efb15c433e8c44df80c8",
+    "390-light-question.png": "34a0b9d7b800b50759d5c19ac2b8dc2b8e0ff685962a5ca25f4da77a478cfa41",
+    "390-light-resumed.png": "402d8aef8a3068a823a58f783146cf75bf1bff19ef62e0044c3d119ec95627c4",
+    "390-light-success.png": "655506c26a771378c0501bbbac3ecf70c15b2d018f19d9e1edb2f148d4290786",
+    "390-light-unknown.png": "00c4b6ad3a779301cf2ba313fdc29d889bfc826b19f4f2dbb6285a56bb4aa864",
+    "390-light-wallet.png": "52b7f2b6b3b57d9be869dca030b85de429554a7289ab06418fabbc5a99ede1a8",
+    "390-light-deep-send.png": "8688d2451ff6b18244530c792f2a5a7973a0073fa263076ebf97ea2bae6452d5"
+  },
+  "qrReference": {
+    "path": "app/commerce-view.tsx",
+    "blob": "51de2a0d116484452cf0b7c1005cb35f41f75f22"
+  },
+  "standaloneBuild": "PASS",
+  "standaloneTypecheck": "PASS",
+  "productionPayment": false,
+  "runtimeCopyMatchesAllSources": true,
+  "importCleanup": {
+    "change": "Remove unused WalletCards import after browser capture",
+    "capturePaymentLabSha256": "60438e58531133fd0c36c1700b5aa88dd56d94ad247315ba6b9fd2f4c06ffefa",
+    "compiledAssetsUnchanged": true,
+    "compiledAssetSha256": {
+      "index-C9aQi3L5.css": "d38330ea2ac85dbead9749c72ac9f5b1aad285f590bfc95e650288817aa564c8",
+      "index-DsRwNwgL.js": "574328c1a1c8b25843f5e99f6ffccc5f28a44feb6779ab1c48465e03712dce63"
     }
-  ]
+  },
+  "finalSourceSmoke": {
+    "mode": "Mock",
+    "at": "2026-09-15T06:05:02.928Z",
+    "balance": "0点",
+    "screen": "question",
+    "sent": "那 2027 年呢？适合换一个工作方向吗？",
+    "sendDisabled": true,
+    "dialogs": 0
+  }
 }
